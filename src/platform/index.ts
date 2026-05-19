@@ -14,9 +14,21 @@ export interface MedicalSourceQuery {
   maxResults?: number;
 }
 
-export interface MedicalSourceResult {
+export interface EvidenceItem {
   source: 'pubmed' | 'europepmc' | 'openalex' | 'ctgov' | 'openfda' | 'rxnorm';
-  results: unknown[]; // shape varies per source; normalized by Synthesizer
+  title: string;
+  year?: number | string | null;
+  authors: string[];
+  identifiers: Record<string, string>;
+  url?: string | null;
+  snippet?: string | null;
+  fetchedAt: string;
+  provenanceHash: string;
+}
+
+export interface MedicalSourceResult {
+  source: EvidenceItem['source'];
+  results: EvidenceItem[];
   fetchedAt: string;
   provenanceHash: string;
 }

@@ -2,6 +2,7 @@
 //! Every call gates through security::guard and emits an audit entry.
 
 use crate::audit::store as audit;
+use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,9 @@ pub struct HttpResponse {
 #[tauri::command]
 pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     let parsed = Url::parse(&url).map_err(|e| AppError::InvalidInput(e.to_string()))?;
-    let host = parsed.host_str().ok_or_else(|| AppError::InvalidInput("no host".into()))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| AppError::InvalidInput("no host".into()))?;
     check(Action::Net { host })?;
 
     let client = reqwest::Client::builder()
@@ -28,12 +31,19 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     let resp = client.get(&url).send().await?;
     let status = resp.status().as_u16();
     let body = resp.text().await?;
+    let mut redacted = parsed.clone();
+    redacted.set_query(None);
 
     let _ = audit::append(
         "net",
         host,
         "get",
-        &serde_json::json!({ "url": url, "status": status, "bytes": body.len() }),
+        &serde_json::json!({
+            "url": redacted.as_str(),
+            "query_hash": parsed.query().map(|q| sha256_hex(q.as_bytes())),
+            "status": status,
+            "bytes": body.len()
+        }),
     );
 
     Ok(HttpResponse { status, body })

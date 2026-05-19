@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
+import type { EvidenceItem, Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
 import type { AuditEntry } from '@core/bus/events';
 
 const detectPlatform = (): Platform['env']['platform'] => {
@@ -13,15 +13,16 @@ const detectPlatform = (): Platform['env']['platform'] => {
 const mkMedical =
   (source: MedicalSourceResult['source'], cmd: string) =>
   async (q: MedicalSourceQuery): Promise<MedicalSourceResult> => {
-    const results = await invoke<unknown[]>(cmd, {
+    const results = await invoke<EvidenceItem[]>(cmd, {
       query: q.query,
       maxResults: q.maxResults ?? 25,
     });
+    const first = results[0];
     return {
       source,
       results,
-      fetchedAt: new Date().toISOString(),
-      provenanceHash: '', // TODO Phase 4 — Rust populates this
+      fetchedAt: first?.fetchedAt ?? new Date().toISOString(),
+      provenanceHash: first?.provenanceHash ?? '',
     };
   };
 
@@ -45,24 +46,27 @@ export const tauriPlatform: Platform = {
     openalex: mkMedical('openalex', 'openalex_query'),
     ctgov: mkMedical('ctgov', 'ctgov_search'),
     openfda: async (endpoint, q) => {
-      const results = await invoke<unknown[]>('openfda_query', {
+      const results = await invoke<EvidenceItem[]>('openfda_query', {
         endpoint,
         query: q.query,
+        maxResults: q.maxResults ?? 25,
       });
+      const first = results[0];
       return {
         source: 'openfda',
         results,
-        fetchedAt: new Date().toISOString(),
-        provenanceHash: '',
+        fetchedAt: first?.fetchedAt ?? new Date().toISOString(),
+        provenanceHash: first?.provenanceHash ?? '',
       };
     },
     rxnorm: async (drug) => {
-      const results = await invoke<unknown[]>('rxnorm_lookup', { drug });
+      const results = await invoke<EvidenceItem[]>('rxnorm_lookup', { drug });
+      const first = results[0];
       return {
         source: 'rxnorm',
         results,
-        fetchedAt: new Date().toISOString(),
-        provenanceHash: '',
+        fetchedAt: first?.fetchedAt ?? new Date().toISOString(),
+        provenanceHash: first?.provenanceHash ?? '',
       };
     },
   },

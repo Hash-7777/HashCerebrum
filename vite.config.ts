@@ -43,5 +43,16 @@ export default defineConfig({
     target: process.env['TAURI_ENV_PLATFORM'] === 'windows' ? 'chrome105' : 'safari13',
     minify: !process.env['TAURI_ENV_DEBUG'] ? 'esbuild' : false,
     sourcemap: !!process.env['TAURI_ENV_DEBUG'],
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ['three'],
+          r3f: ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
+          react: ['react', 'react-dom'],
+          zustand: ['zustand'],
+        },
+      },
+    },
   },
 });

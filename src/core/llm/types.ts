@@ -1,3 +1,17 @@
+export type LlmProviderId =
+  | 'ollama'
+  | 'groq'
+  | 'gemini'
+  | 'openrouter'
+  | 'cerebras'
+  | 'samba'
+  | 'openai'
+  | 'anthropic'
+  | 'moonshot'
+  | 'deepseek'
+  | 'mistral'
+  | 'nvidia';
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
@@ -32,7 +46,7 @@ export interface LlmResponse {
 }
 
 export interface LlmProvider {
-  id: 'anthropic' | 'openai' | 'ollama';
+  id: LlmProviderId;
   label: string;
   defaultModel: string;
   models: string[];

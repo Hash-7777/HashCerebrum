@@ -75,6 +75,13 @@ cache/
 *.exe
 
 # =============================================================
+# 3D model assets — kept in git so a clone is buildable without an
+# external download. Pre-commit hook whitelists this path past the
+# 5 MB guard. Always commit the LICENSE/README alongside the asset.
+# =============================================================
+# (no GLB/GLTF/BIN ignore here — they belong to the repo)
+
+# =============================================================
 # Log files
 # =============================================================
 *.log

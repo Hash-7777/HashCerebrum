@@ -51,17 +51,24 @@ $(staged_files)
 EOF
 
 # -------------------------------------------------------------
-# 2. Block large files (>5 MB) — usually committed-by-mistake binaries
+# 2. Block large files (>5 MB) — usually committed-by-mistake binaries.
+#    Exception: licensed 3D model assets under public/models/. These
+#    must ship with the repo so a clone is buildable.
 # -------------------------------------------------------------
 MAX_BYTES=$((5 * 1024 * 1024))
+LARGE_FILE_ALLOWED_REGEX='^public/models/.*\.(glb|gltf|bin)$'
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   [ -f "$f" ] || continue
+  if echo "$f" | grep -qE "$LARGE_FILE_ALLOWED_REGEX"; then
+    continue
+  fi
   bytes=$(wc -c <"$f" | tr -d ' ')
   if [ "$bytes" -gt "$MAX_BYTES" ]; then
     fail "file >5 MB: $f ($bytes bytes)
         Large binaries do not belong in git. If this is a model/asset,
-        store it externally and document the source in docs/."
+        place it under public/models/ (whitelisted) and add a LICENSE
+        next to it."
   fi
 done <<EOF
 $(staged_files)

@@ -1,10 +1,76 @@
 //! PubMed via NCBI E-utilities.
 //! Docs: https://www.ncbi.nlm.nih.gov/books/NBK25501/
 
+use crate::commands::medical::{
+    evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+};
 use crate::error::AppResult;
+use url::Url;
 
 #[tauri::command]
-pub async fn pubmed_search(_query: String, _max_results: u32) -> AppResult<serde_json::Value> {
-    // TODO Phase 4 — call esearch.fcgi + esummary.fcgi, parse to normalized shape
-    Ok(serde_json::json!({ "results": [] }))
+pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<EvidenceItem>> {
+    let limit = clamp_max_results(max_results, 8, 20);
+    let mut search_url =
+        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").unwrap();
+    search_url
+        .query_pairs_mut()
+        .append_pair("db", "pubmed")
+        .append_pair("retmode", "json")
+        .append_pair("retmax", &limit.to_string())
+        .append_pair("term", &query);
+    let search = fetch_json(search_url).await?;
+    let ids: Vec<String> = search
+        .pointer("/esearchresult/idlist")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut summary_url =
+        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi").unwrap();
+    summary_url
+        .query_pairs_mut()
+        .append_pair("db", "pubmed")
+        .append_pair("retmode", "json")
+        .append_pair("id", &ids.join(","));
+    let summary = fetch_json(summary_url).await?;
+    let mut out = Vec::new();
+    for id in ids {
+        let item = &summary["result"][&id];
+        let title = item["title"]
+            .as_str()
+            .unwrap_or("Untitled PubMed record")
+            .to_string();
+        let year = item["pubdate"]
+            .as_str()
+            .and_then(|s| s.get(0..4))
+            .map(str::to_string);
+        let authors = item["authors"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| a["name"].as_str().map(str::to_string))
+                    .take(8)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let url = Some(format!("https://pubmed.ncbi.nlm.nih.gov/{id}/"));
+        let snippet = item["fulljournalname"].as_str().map(str::to_string);
+        out.push(evidence(
+            "pubmed",
+            title,
+            year,
+            authors,
+            serde_json::json!({ "pmid": id, "doi": item["elocationid"].as_str() }),
+            url,
+            snippet,
+        ));
+    }
+    Ok(out)
 }

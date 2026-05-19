@@ -34,13 +34,24 @@ const ALLOWED_HOSTS: &[&str] = &[
     // LLM providers (only used if user opts into backend-proxied LLM)
     "api.anthropic.com",
     "api.openai.com",
+    "api.groq.com",
+    "generativelanguage.googleapis.com",
+    "openrouter.ai",
+    "api.cerebras.ai",
+    "api.sambanova.ai",
+    "api.moonshot.ai",
+    "api.deepseek.com",
+    "api.mistral.ai",
+    "integrate.api.nvidia.com",
     // Ollama (local)
     "localhost",
     "127.0.0.1",
 ];
 
 pub fn load_default() -> AppResult<()> {
-    let _ = POLICY.set(Policy { allowed_hosts: ALLOWED_HOSTS });
+    let _ = POLICY.set(Policy {
+        allowed_hosts: ALLOWED_HOSTS,
+    });
     Ok(())
 }
 

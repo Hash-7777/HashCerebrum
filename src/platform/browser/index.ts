@@ -1,11 +1,32 @@
 // Browser mock — lets `vite dev` run without the Tauri shell so we can
 // iterate on UI without rebuilding Rust. Returns deterministic fake data.
 
-import type { Platform } from '../index';
+import type { EvidenceItem, Platform } from '../index';
 
-const empty = (source: any) => ({
+const sourceUrl: Record<EvidenceItem['source'], string> = {
+  pubmed: 'https://pubmed.ncbi.nlm.nih.gov/',
+  europepmc: 'https://europepmc.org/',
+  openalex: 'https://openalex.org/',
+  ctgov: 'https://clinicaltrials.gov/',
+  openfda: 'https://open.fda.gov/',
+  rxnorm: 'https://rxnav.nlm.nih.gov/',
+};
+
+const sample = (source: EvidenceItem['source'], title: string): EvidenceItem => ({
   source,
-  results: [],
+  title,
+  year: 2025,
+  authors: ['Browser mock'],
+  identifiers: { mock: `${source}-demo` },
+  url: sourceUrl[source],
+  snippet: 'Deterministic browser-mode fixture. Run in the Tauri shell to fetch live medical sources through the Rust guard.',
+  fetchedAt: new Date().toISOString(),
+  provenanceHash: `mock-${source}`,
+});
+
+const mocked = (source: EvidenceItem['source'], title: string) => ({
+  source,
+  results: [sample(source, title)],
   fetchedAt: new Date().toISOString(),
   provenanceHash: 'mock',
 });
@@ -31,12 +52,12 @@ export const browserPlatform: Platform = {
     verify: async () => null,
   },
   medical: {
-    pubmed: async () => empty('pubmed'),
-    europepmc: async () => empty('europepmc'),
-    openalex: async () => empty('openalex'),
-    ctgov: async () => empty('ctgov'),
-    openfda: async () => empty('openfda'),
-    rxnorm: async () => empty('rxnorm'),
+    pubmed: async () => mocked('pubmed', 'Mock PubMed literature result'),
+    europepmc: async () => mocked('europepmc', 'Mock Europe PMC literature result'),
+    openalex: async () => mocked('openalex', 'Mock OpenAlex knowledge graph result'),
+    ctgov: async () => mocked('ctgov', 'Mock ClinicalTrials.gov study result'),
+    openfda: async () => mocked('openfda', 'Mock OpenFDA safety signal result'),
+    rxnorm: async () => mocked('rxnorm', 'Mock RxNorm concept result'),
   },
   pdf: {
     extractText: async () => '',
