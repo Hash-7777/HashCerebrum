@@ -6,11 +6,13 @@
 //! requirement on every CI image.
 
 use crate::error::{AppError, AppResult};
+use crate::security::guard::{check, Action};
 use lopdf::Document;
 use std::path::PathBuf;
 
 #[tauri::command]
 pub async fn pdf_extract_text(path: String) -> AppResult<String> {
+    check(Action::Fs { path: &path })?;
     let path: PathBuf = path.into();
     if !path.exists() {
         return Err(AppError::InvalidInput(format!(

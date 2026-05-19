@@ -6,7 +6,7 @@
 #   1. Files whose names look like secrets (.env, *.pem, *.key, etc.)
 #   2. Content matching known secret shapes (sk-, sk-ant-, AKIA..., etc.)
 #   3. Files larger than 5 MB (likely committed-by-mistake binaries)
-#   4. Anything inside audit/ or cache/ (runtime state, not source)
+#   4. Root-level audit/ or cache/ runtime state (not Rust source modules)
 #
 # Enable once per clone:
 #   git config core.hooksPath .githooks
@@ -33,7 +33,8 @@ staged_files() {
 # -------------------------------------------------------------
 # 1. Block files by name
 # -------------------------------------------------------------
-BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/|audit/|cache/)'
+BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/)'
+RUNTIME_STATE_REGEX='^(audit|cache)/'
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -45,6 +46,11 @@ while IFS= read -r f; do
     fail "blocked filename: $f
         Filename matches secret / runtime-state pattern.
         If this is intentional and safe, rename or remove from staging."
+  fi
+  if echo "$f" | grep -qE "$RUNTIME_STATE_REGEX"; then
+    fail "blocked runtime-state path: $f
+        Root-level audit/ and cache/ are runtime data. Source modules
+        under src-tauri/src/audit or src-tauri/src/cache are allowed."
   fi
 done <<EOF
 $(staged_files)

@@ -9,8 +9,7 @@
 // instead of taking the workspace down.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { AgentId, RegionId } from '@config/agents';
-import { AGENTS } from '@config/agents';
+import type { RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import {
   resolveDefaultModel,
@@ -33,83 +32,18 @@ import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/S
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL, partForRegion } from './data/modelParts';
 import { regionById } from './data/regions';
+import {
+  dedupeEvidence,
+  fallbackAnswer,
+  isResearchQuery,
+  labelForModel,
+  shortLabelForModel,
+  sourceArgs,
+  SOURCE_AGENT_LABEL,
+  summarizeEvidence,
+  TOPIC_THROTTLE_MS,
+} from './researchPipeline';
 import { useLitRegions } from './useLitRegions';
-
-const SOURCE_AGENT_LABEL = Object.fromEntries(AGENTS.map((agent) => [agent.id, agent.label])) as Record<AgentId, string>;
-
-function summarizeEvidence(items: EvidenceItem[]) {
-  if (items.length === 0) {
-    return 'No source records returned. Try a narrower biomedical query or run inside the Tauri app for live guarded fetching.';
-  }
-  return items
-    .slice(0, 8)
-    .map((item, index) => {
-      const year = item.year ? ` (${item.year})` : '';
-      const snippet = item.snippet ? ` ${item.snippet}` : '';
-      return `[S${index + 1}] ${item.source.toUpperCase()}${year}: ${item.title}.${snippet}`;
-    })
-    .join('\n');
-}
-
-function fallbackAnswer(query: string, evidence: EvidenceItem[], reason: string) {
-  return [
-    `Source records are ready for "${query}", but the model could not draft the synthesis: ${reason}`,
-    '',
-    'Evidence snapshot:',
-    summarizeEvidence(evidence),
-    '',
-    'Use this as source triage, not medical advice. Pick an available Ollama model or add a provider key in Settings.',
-  ].join('\n');
-}
-
-function isResearchQuery(value: string) {
-  const compact = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (compact.length < 3) return false;
-  return !new Set(['hi', 'hello', 'hey', 'yo', 'test', 'thanks', 'thank you']).has(compact);
-}
-
-function sourceArgs(source: SourceStatus, query: string) {
-  if (source.id === 'openfda') return { endpoint: 'drug/event', query, maxResults: 5 };
-  if (source.id === 'rxnorm') return { drug: query };
-  return { query, maxResults: 5 };
-}
-
-function dedupeEvidence(items: EvidenceItem[]) {
-  const seen = new Set<string>();
-  return items.filter((item, index) => {
-    const key = item.url || item.identifiers.pmid || item.identifiers.doi || item.provenanceHash || `${item.source}-${index}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function labelForModel(modelValue: string): string {
-  for (const group of MODEL_GROUPS) {
-    const option = group.models.find((m) => m.value === modelValue);
-    if (option) return option.label;
-  }
-  return modelValue;
-}
-
-function shortLabelForModel(modelValue: string): string {
-  for (const group of MODEL_GROUPS) {
-    const option = group.models.find((m) => m.value === modelValue);
-    if (option) return option.shortLabel;
-  }
-  return modelValue;
-}
-
-// Throttle topic classification during a stream — otherwise every
-// token triggers a full classify+emit, which thrashes Zustand and the
-// canvas useFrame at ~60 Hz on a long answer. 400 ms feels live while
-// keeping the region store quiet.
-const TOPIC_THROTTLE_MS = 400;
 
 export function BrainMode() {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);

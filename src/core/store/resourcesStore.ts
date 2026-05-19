@@ -1,15 +1,13 @@
-// Resources store — saved evidence items, tags, notes. Persisted to
-// localStorage as a single JSON blob keyed by hc.resources.v1.
-//
-// This is intentionally a v1 store: localStorage, no migrations, no
-// remote sync. A future swap to Tauri's store plugin only needs to
-// replace the `loadInitial`/`persist` calls — nothing in the store
-// shape changes.
+// Resources store — saved evidence items, tags, notes. The same state
+// shape is persisted through the platform storage adapter: Tauri Store
+// in the desktop shell, localStorage in browser dev.
 
 import { create } from 'zustand';
 import type { EvidenceItem } from '@platform/index';
+import { platform } from '@platform/index';
 
-const STORAGE_KEY = 'hc.resources.v1';
+const STORAGE_KEY = 'resources.v1';
+const LEGACY_LOCAL_STORAGE_KEY = 'hc.resources.v1';
 
 export interface SavedResource {
   id: string;
@@ -32,6 +30,8 @@ interface PersistShape {
 }
 
 interface ResourcesStore extends PersistShape {
+  hydrated: boolean;
+  hydrate: () => Promise<void>;
   add: (evidence: EvidenceItem, collectionId?: string) => SavedResource | null;
   remove: (id: string) => void;
   updateNotes: (id: string, notes: string) => void;
@@ -48,31 +48,61 @@ const defaultCollection: Collection = {
   createdAt: new Date(0).toISOString(),
 };
 
-function loadInitial(): PersistShape {
-  if (typeof localStorage === 'undefined') return { resources: [], collections: [defaultCollection] };
+const emptyShape = (): PersistShape => ({ resources: [], collections: [defaultCollection] });
+
+function normalizeShape(shape: Partial<PersistShape> | null | undefined): PersistShape {
+  return {
+    resources: Array.isArray(shape?.resources) ? shape.resources : [],
+    collections:
+      Array.isArray(shape?.collections) && shape.collections.length > 0
+        ? shape.collections
+        : [defaultCollection],
+  };
+}
+
+function mergeShapes(disk: PersistShape, current: PersistShape): PersistShape {
+  const collectionIds = new Set<string>();
+  const collections = [...disk.collections, ...current.collections].filter((collection) => {
+    if (collectionIds.has(collection.id)) return false;
+    collectionIds.add(collection.id);
+    return true;
+  });
+
+  const resourceKeys = new Set<string>();
+  const resources = [...current.resources, ...disk.resources].filter((resource) => {
+    const key = evidenceKey(resource.evidence);
+    if (resourceKeys.has(key)) return false;
+    resourceKeys.add(key);
+    return true;
+  });
+
+  return { resources, collections: collections.length > 0 ? collections : [defaultCollection] };
+}
+
+function loadLegacyLocalStorage(): PersistShape | null {
+  if (typeof localStorage === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { resources: [], collections: [defaultCollection] };
+    const raw = localStorage.getItem(LEGACY_LOCAL_STORAGE_KEY);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistShape>;
-    return {
-      resources: Array.isArray(parsed.resources) ? parsed.resources : [],
-      collections:
-        Array.isArray(parsed.collections) && parsed.collections.length > 0
-          ? parsed.collections
-          : [defaultCollection],
-    };
+    return normalizeShape(parsed);
   } catch {
-    return { resources: [], collections: [defaultCollection] };
+    return null;
+  }
+}
+
+async function loadPersisted(): Promise<PersistShape> {
+  try {
+    const stored = await platform().storage.get<PersistShape>(STORAGE_KEY);
+    if (stored) return normalizeShape(stored);
+    return loadLegacyLocalStorage() ?? emptyShape();
+  } catch {
+    return loadLegacyLocalStorage() ?? emptyShape();
   }
 }
 
 function persist(shape: PersistShape) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(shape));
-  } catch {
-    /* quota or disabled — accept silent drop, this is v1 */
-  }
+  void platform().storage.set(STORAGE_KEY, shape).catch(() => undefined);
 }
 
 function evidenceKey(evidence: EvidenceItem): string {
@@ -86,9 +116,18 @@ function evidenceKey(evidence: EvidenceItem): string {
 }
 
 export const useResourcesStore = create<ResourcesStore>((set, get) => {
-  const initial = loadInitial();
+  const initial = emptyShape();
   return {
     ...initial,
+    hydrated: false,
+    hydrate: async () => {
+      const disk = await loadPersisted();
+      set((state) => {
+        const next = mergeShapes(disk, { resources: state.resources, collections: state.collections });
+        persist(next);
+        return { ...state, ...next, hydrated: true };
+      });
+    },
     add: (evidence, collectionId = 'inbox') => {
       const dedupe = evidenceKey(evidence);
       const existing = get().resources.find((r) => evidenceKey(r.evidence) === dedupe);

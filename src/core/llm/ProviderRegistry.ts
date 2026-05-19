@@ -1,6 +1,14 @@
 import { platform } from '@platform/index';
 import { DEFAULT_MODEL, MODEL_GROUPS, parseModelRef, providerKeyName } from './modelCatalog';
 import { findBestFailover, isRetriableError, type FailoverCandidate } from './failover';
+import {
+  normalizeOpenAiToolCalls,
+  parseAnthropicStreamLine,
+  parseGeminiResponse,
+  parseGeminiStreamLine,
+  parseOllamaStreamLine,
+  parseOpenAiStreamLine,
+} from './streamParsers';
 import type { LlmProvider, LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, LlmToolSpec } from './types';
 
 const OLLAMA_HOST_KEY = 'hc.ollamaHost';
@@ -44,29 +52,6 @@ function asOpenAiTools(tools: LlmToolSpec[] = []) {
       parameters: tool.parameters,
     },
   }));
-}
-
-function parseToolArgs(args: unknown): Record<string, unknown> {
-  if (!args) return {};
-  if (typeof args === 'string') {
-    try {
-      return JSON.parse(args) as Record<string, unknown>;
-    } catch {
-      return {};
-    }
-  }
-  return args as Record<string, unknown>;
-}
-
-function normalizeOpenAiToolCalls(calls: any[] | undefined): LlmToolCall[] {
-  if (!Array.isArray(calls)) return [];
-  return calls
-    .map((call, index) => ({
-      id: call.id || `call_${Date.now()}_${index}`,
-      name: call.function?.name || call.name,
-      args: parseToolArgs(call.function?.arguments ?? call.arguments),
-    }))
-    .filter((call) => !!call.name);
 }
 
 async function requireKey(providerId: LlmProviderId): Promise<string> {
@@ -187,8 +172,7 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
   return { content, toolCalls };
 }
 
-async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
-  const key = await requireKey('gemini');
+function toGeminiBody(req: LlmRequest): Record<string, unknown> {
   const system = req.messages.find((m) => m.role === 'system')?.content;
   const contents = req.messages
     .filter((m) => m.role !== 'system')
@@ -196,7 +180,7 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content || '' }],
     }));
-  const body: Record<string, unknown> = {
+  return {
     contents,
     generationConfig: { temperature: req.temperature ?? 0.4 },
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
@@ -212,6 +196,11 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
         }
       : {}),
   };
+}
+
+async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
+  const key = await requireKey('gemini');
+  const body = toGeminiBody(req);
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:generateContent`,
     {
@@ -223,19 +212,8 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
   );
   if (!response.ok) throw new Error(`gemini HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
   const data = await response.json();
-  let content = '';
-  const toolCalls: LlmToolCall[] = [];
-  for (const part of data.candidates?.[0]?.content?.parts ?? []) {
-    if (part.text) content += part.text;
-    if (part.functionCall) {
-      toolCalls.push({
-        id: `call_${Date.now()}_${toolCalls.length}`,
-        name: part.functionCall.name,
-        args: part.functionCall.args ?? {},
-      });
-    }
-  }
-  return { content, toolCalls };
+  const parsed = parseGeminiResponse(data);
+  return { content: parsed.delta, toolCalls: parsed.toolCalls };
 }
 
 // ----- Streaming ------------------------------------------------------
@@ -293,19 +271,13 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   let content = '';
   const toolCalls: LlmToolCall[] = [];
   await readStream(response, (line) => {
-    try {
-      const json = JSON.parse(line);
-      const delta = json.message?.content ?? '';
-      if (delta) {
-        content += delta;
-        opts.onToken(delta);
-      }
-      if (Array.isArray(json.message?.tool_calls)) {
-        toolCalls.push(...normalizeOpenAiToolCalls(json.message.tool_calls));
-      }
-    } catch {
-      // Ignore malformed lines mid-stream.
+    const parsed = parseOllamaStreamLine(line);
+    if (!parsed) return;
+    if (parsed.delta) {
+      content += parsed.delta;
+      opts.onToken(parsed.delta);
     }
+    toolCalls.push(...parsed.toolCalls);
   });
   return { content, toolCalls };
 }
@@ -346,22 +318,13 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
   let content = '';
   const toolCalls: LlmToolCall[] = [];
   await readStream(response, (line) => {
-    if (!line.startsWith('data:')) return;
-    const payload = line.slice(5).trim();
-    if (payload === '[DONE]') return;
-    try {
-      const json = JSON.parse(payload);
-      const delta = json.choices?.[0]?.delta;
-      if (delta?.content) {
-        content += delta.content;
-        opts.onToken(delta.content);
-      }
-      if (Array.isArray(delta?.tool_calls)) {
-        toolCalls.push(...normalizeOpenAiToolCalls(delta.tool_calls));
-      }
-    } catch {
-      /* tolerate keepalives and partial JSON */
+    const parsed = parseOpenAiStreamLine(line);
+    if (!parsed) return;
+    if (parsed.delta) {
+      content += parsed.delta;
+      opts.onToken(parsed.delta);
     }
+    toolCalls.push(...parsed.toolCalls);
   });
   return { content, toolCalls };
 }
@@ -399,21 +362,44 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
 
   let content = '';
   await readStream(response, (line) => {
-    if (!line.startsWith('data:')) return;
-    const payload = line.slice(5).trim();
-    if (!payload || payload === '[DONE]') return;
-    try {
-      const json = JSON.parse(payload);
-      if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-        const text = json.delta.text || '';
-        content += text;
-        if (text) opts.onToken(text);
-      }
-    } catch {
-      /* tolerate event lines like `event: message_start` */
-    }
+    const parsed = parseAnthropicStreamLine(line);
+    if (!parsed?.delta) return;
+    content += parsed.delta;
+    opts.onToken(parsed.delta);
   });
   return { content, toolCalls: [] };
+}
+
+async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
+  const key = await requireKey('gemini');
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        'x-goog-api-key': key,
+      },
+      body: JSON.stringify(toGeminiBody(req)),
+      referrerPolicy: 'no-referrer',
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    },
+  );
+  if (!response.ok) throw new Error(`gemini HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+
+  let content = '';
+  const toolCalls: LlmToolCall[] = [];
+  await readStream(response, (line) => {
+    const parsed = parseGeminiStreamLine(line);
+    if (!parsed) return;
+    if (parsed.delta) {
+      content += parsed.delta;
+      opts.onToken(parsed.delta);
+    }
+    toolCalls.push(...parsed.toolCalls);
+  });
+  return { content, toolCalls };
 }
 
 export async function streamWithModel(
@@ -428,13 +414,7 @@ export async function streamWithModel(
   const request = { ...req, model: parsed.model };
   if (parsed.provider === 'ollama') return streamOllama(request, opts);
   if (parsed.provider === 'anthropic') return streamAnthropic(request, opts);
-  if (parsed.provider === 'gemini') {
-    // Gemini streaming uses a different protocol — fall back to a
-    // single non-streaming response and replay it as one chunk.
-    const response = await completeGemini(request);
-    if (response.content) opts.onToken(response.content);
-    return response;
-  }
+  if (parsed.provider === 'gemini') return streamGemini(request, opts);
   return streamOpenAiCompatible(parsed.provider, request, opts);
 }
 

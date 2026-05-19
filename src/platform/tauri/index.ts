@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { Store } from '@tauri-apps/plugin-store';
 import type { CacheStats, EvidenceItem, Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
 import type { AuditEntry } from '@core/bus/events';
 
@@ -26,6 +27,13 @@ const mkMedical =
     };
   };
 
+let appStore: Promise<Store> | null = null;
+
+function store() {
+  appStore ??= Store.load('hashcerebrum.store.json');
+  return appStore;
+}
+
 export const tauriPlatform: Platform = {
   keychain: {
     store: (key, value) => invoke('keychain_store', { key, value }),
@@ -36,7 +44,14 @@ export const tauriPlatform: Platform = {
   audit: {
     append: (category, subject, action, payload) =>
       invoke<AuditEntry>('audit_log_append', { category, subject, action, payload }),
-    read: () => invoke<AuditEntry[]>('audit_log_read'),
+    read: (options) =>
+      options
+        ? invoke<AuditEntry[]>('audit_log_read_page', {
+            offset: options.offset ?? 0,
+            limit: options.limit ?? 100,
+          })
+        : invoke<AuditEntry[]>('audit_log_read'),
+    count: () => invoke<number>('audit_log_count'),
     verify: () => invoke<number | null>('audit_log_verify'),
   },
 
@@ -79,6 +94,23 @@ export const tauriPlatform: Platform = {
     stats: () => invoke<CacheStats>('cache_stats'),
     clear: () => invoke<number>('cache_clear'),
     clearExpired: () => invoke<number>('cache_clear_expired'),
+  },
+
+  storage: {
+    get: async <T,>(key: string) => {
+      const s = await store();
+      return (await s.get<T>(key)) ?? null;
+    },
+    set: async <T,>(key: string, value: T) => {
+      const s = await store();
+      await s.set(key, value);
+      await s.save();
+    },
+    delete: async (key: string) => {
+      const s = await store();
+      await s.delete(key);
+      await s.save();
+    },
   },
 
   env: {

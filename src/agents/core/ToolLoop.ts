@@ -1,9 +1,6 @@
 // Tool-calling loop. LLM produces tool_calls; we execute them; we feed
 // results back; repeat until the model stops calling tools or max
 // iterations is reached.
-//
-// Phase 3 implements this fully. Stub returns the input unchanged so
-// callers can be wired today.
 
 import type { AgentContext, AgentTurn } from './types';
 import { bus } from '@core/bus/EventBus';

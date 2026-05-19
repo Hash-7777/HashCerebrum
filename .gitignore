@@ -57,8 +57,8 @@ coverage/
 # at runtime, not the repo. Keeping these patterns blocks any
 # accidental redirect into the working tree.
 # =============================================================
-audit/
-cache/
+/audit/
+/cache/
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal

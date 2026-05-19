@@ -31,6 +31,8 @@ const mocked = (source: EvidenceItem['source'], title: string) => ({
   provenanceHash: 'mock',
 });
 
+const storageKey = (key: string) => `hc.storage.${key}`;
+
 export const browserPlatform: Platform = {
   keychain: {
     store: async () => {},
@@ -49,6 +51,7 @@ export const browserPlatform: Platform = {
       entry_hash: 'mock',
     }),
     read: async () => [],
+    count: async () => 0,
     verify: async () => null,
   },
   medical: {
@@ -66,6 +69,23 @@ export const browserPlatform: Platform = {
     stats: async () => ({ rows: 0, bytes: 0, hosts: [] }),
     clear: async () => 0,
     clearExpired: async () => 0,
+  },
+  storage: {
+    get: async <T,>(key: string) => {
+      const raw = localStorage.getItem(storageKey(key));
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    },
+    set: async <T,>(key: string, value: T) => {
+      localStorage.setItem(storageKey(key), JSON.stringify(value));
+    },
+    delete: async (key: string) => {
+      localStorage.removeItem(storageKey(key));
+    },
   },
   env: {
     isTauri: false,

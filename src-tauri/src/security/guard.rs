@@ -4,11 +4,12 @@
 //! Categories:
 //!   - Net(host)      — outbound HTTP to a host
 //!   - Keychain(key)  — read/write/delete a keychain item
-//!   - Fs(path)       — read/write the filesystem (Phase 4+)
+//!   - Fs(path)       — guarded file reads such as PDF extraction
 //!   - Llm(provider)  — invoke an LLM provider
 
 use crate::error::{AppError, AppResult};
 use crate::security::{denylist, policy};
+use std::path::Path;
 use tauri::AppHandle;
 
 #[derive(Debug, Clone)]
@@ -27,8 +28,6 @@ pub fn init(_app: &AppHandle) -> AppResult<()> {
 
 /// Returns Ok(()) if allowed, AppError::PermissionDenied otherwise.
 ///
-/// Implementation deferred to Phase 3 — currently allow-all for the
-/// hosts on the medical-source allowlist, deny everything else.
 pub fn check(action: Action<'_>) -> AppResult<()> {
     match action {
         Action::Net { host } => {
@@ -40,8 +39,41 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
             }
             Ok(())
         }
-        Action::Keychain { .. } => Ok(()),
-        Action::Fs { .. } => Ok(()),
-        Action::Llm { .. } => Ok(()),
+        Action::Keychain { key } => {
+            if !policy::keychain_key_allowed(key) {
+                return Err(AppError::PermissionDenied(format!(
+                    "keychain key not allowlisted: {key}"
+                )));
+            }
+            Ok(())
+        }
+        Action::Fs { path } => {
+            let path = Path::new(path);
+            let is_pdf = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("pdf"))
+                .unwrap_or(false);
+            if !is_pdf {
+                return Err(AppError::PermissionDenied(
+                    "filesystem read denied: only PDF extraction is allowed".into(),
+                ));
+            }
+            if !path.is_file() {
+                return Err(AppError::PermissionDenied(format!(
+                    "filesystem read denied: not a file: {}",
+                    path.display()
+                )));
+            }
+            Ok(())
+        }
+        Action::Llm { provider } => {
+            if !policy::llm_provider_allowed(provider) {
+                return Err(AppError::PermissionDenied(format!(
+                    "LLM provider not allowlisted: {provider}"
+                )));
+            }
+            Ok(())
+        }
     }
 }

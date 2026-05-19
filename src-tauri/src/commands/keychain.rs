@@ -3,7 +3,7 @@
 //! On macOS we use security-framework directly (binary-bound ACL avoidance).
 //! On Linux/Windows we use the keyring crate.
 //!
-//! Stub implementations for the first public phase.
+//! Every operation is guarded by the key allowlist before touching the OS store.
 
 use crate::audit::store as audit;
 use crate::error::{AppError, AppResult};

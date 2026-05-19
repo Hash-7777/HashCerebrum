@@ -56,7 +56,8 @@ export interface Platform {
   // Audit — hash-chained log
   audit: {
     append(category: string, subject: string, action: string, payload: unknown): Promise<AuditEntry>;
-    read(): Promise<AuditEntry[]>;
+    read(options?: { offset?: number; limit?: number }): Promise<AuditEntry[]>;
+    count(): Promise<number>;
     verify(): Promise<number | null>; // returns broken seq or null if intact
   };
 
@@ -81,6 +82,14 @@ export interface Platform {
     stats(): Promise<CacheStats>;
     clear(): Promise<number>;
     clearExpired(): Promise<number>;
+  };
+
+  // App storage — durable UI data that is not secret. Tauri uses the
+  // store plugin; browser dev uses localStorage through the mock.
+  storage: {
+    get<T>(key: string): Promise<T | null>;
+    set<T>(key: string, value: T): Promise<void>;
+    delete(key: string): Promise<void>;
   };
 
   // Environment

@@ -28,7 +28,9 @@ mod ratelimit;
 mod security;
 
 use commands::{
-    audit::{audit_log_append, audit_log_read, audit_log_verify},
+    audit::{
+        audit_log_append, audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify,
+    },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
     medical::{
@@ -72,6 +74,8 @@ pub fn run() {
             // Audit log (hash-chained, tamper-evident)
             audit_log_append,
             audit_log_read,
+            audit_log_read_page,
+            audit_log_count,
             audit_log_verify,
             // Network (generic GET — all external HTTP gates through guard)
             net_get,

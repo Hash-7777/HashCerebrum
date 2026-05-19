@@ -104,13 +104,14 @@ mod tests {
     #[tokio::test]
     async fn bucket_drains_and_refills() {
         // Drain a small bucket fast, then confirm subsequent requests wait.
-        let host = "test.example";
-        for _ in 0..2 {
+        let host = "test-drain.example";
+        for _ in 0..5 {
             acquire(host).await;
         }
         let started = Instant::now();
         acquire(host).await;
-        // Default for unknown hosts is rate=2/s — third request should take ~500ms.
+        // Default for unknown hosts is capacity=5 and rate=2/s; the sixth
+        // request should wait for a refill.
         assert!(started.elapsed() >= Duration::from_millis(300));
     }
 }

@@ -1,7 +1,7 @@
 // Audit-view modal — replays the hash-chained audit log and surfaces
 // any broken link. The Rust side's `audit_log_verify` returns the
-// first sequence number whose entry_hash does not match the expected
-// chain hash; null means the chain is intact end-to-end.
+// first sequence number whose prev_hash does not match the expected
+// previous entry hash; null means the chain is intact end-to-end.
 //
 // Opening the modal triggers a fresh verify + read. We do not poll;
 // the audit log only changes on guarded actions, so a manual refresh
@@ -15,17 +15,25 @@ import { Icon } from '@ui/icons';
 type LoadState =
   | { state: 'idle' }
   | { state: 'loading' }
-  | { state: 'ready'; entries: AuditEntry[]; brokenSeq: number | null }
+  | { state: 'ready'; entries: AuditEntry[]; brokenSeq: number | null; total: number }
   | { state: 'error'; message: string };
+
+const PAGE_SIZE = 100;
 
 export function AuditModal({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<LoadState>({ state: 'idle' });
+  const [page, setPage] = useState(0);
 
   const refresh = async () => {
     setLoad({ state: 'loading' });
     try {
-      const [entries, brokenSeq] = await Promise.all([platform().audit.read(), platform().audit.verify()]);
-      setLoad({ state: 'ready', entries, brokenSeq });
+      const offset = page * PAGE_SIZE;
+      const [entries, total, brokenSeq] = await Promise.all([
+        platform().audit.read({ offset, limit: PAGE_SIZE }),
+        platform().audit.count(),
+        platform().audit.verify(),
+      ]);
+      setLoad({ state: 'ready', entries, total, brokenSeq });
     } catch (error) {
       setLoad({ state: 'error', message: error instanceof Error ? error.message : String(error) });
     }
@@ -33,7 +41,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [page]);
 
   return (
     <div className="audit-modal-backdrop" role="dialog" aria-modal="true" aria-label="Audit log">
@@ -72,7 +80,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
             <div className="audit-summary" data-broken={load.brokenSeq !== null}>
               {load.brokenSeq === null ? (
                 <>
-                  <Icon name="check" size={14} /> Chain intact · {load.entries.length} entries
+                  <Icon name="check" size={14} /> Chain intact · {load.total} entries
                 </>
               ) : (
                 <>
@@ -84,29 +92,48 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
             {load.entries.length === 0 ? (
               <p className="audit-status">No guarded actions yet.</p>
             ) : (
-              <ol className="audit-list">
-                {load.entries.slice(0, 200).map((entry) => (
-                  <li
-                    key={`${entry.seq}-${entry.entry_hash}`}
-                    data-broken={load.brokenSeq !== null && entry.seq >= load.brokenSeq}
-                  >
-                    <header>
-                      <span className="audit-seq">#{entry.seq}</span>
-                      <time>{new Date(entry.ts).toLocaleString()}</time>
-                    </header>
-                    <div className="audit-action">
-                      <strong>{entry.category}</strong>
-                      <span>{entry.subject}</span>
-                      <span className="audit-verb">{entry.action}</span>
-                    </div>
-                    <div className="audit-hashes">
-                      <code title="entry_hash">{entry.entry_hash.slice(0, 16)}…</code>
-                      <span className="audit-arrow">←</span>
-                      <code title="prev_hash">{entry.prev_hash.slice(0, 16)}…</code>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+              <>
+                <div className="audit-pager">
+                  <span>
+                    {page * PAGE_SIZE + 1}-{page * PAGE_SIZE + load.entries.length} of {load.total}
+                  </span>
+                  <div>
+                    <button type="button" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={(page + 1) * PAGE_SIZE >= load.total}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+                <ol className="audit-list">
+                  {load.entries.map((entry) => (
+                    <li
+                      key={`${entry.seq}-${entry.entry_hash}`}
+                      data-broken={load.brokenSeq !== null && entry.seq >= load.brokenSeq}
+                    >
+                      <header>
+                        <span className="audit-seq">#{entry.seq}</span>
+                        <time>{new Date(entry.ts).toLocaleString()}</time>
+                      </header>
+                      <div className="audit-action">
+                        <strong>{entry.category}</strong>
+                        <span>{entry.subject}</span>
+                        <span className="audit-verb">{entry.action}</span>
+                      </div>
+                      <div className="audit-hashes">
+                        <code title="entry_hash">{entry.entry_hash.slice(0, 16)}...</code>
+                        <span className="audit-arrow">&lt;-</span>
+                        <code title="prev_hash">{entry.prev_hash.slice(0, 16)}...</code>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </>
             )}
           </>
         )}
