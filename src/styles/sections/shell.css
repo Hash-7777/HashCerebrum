@@ -47,7 +47,7 @@
   letter-spacing: 0.04em;
 }
 
-.app-body { display: grid; grid-template-columns: 176px minmax(0, 1fr) 248px; flex: 1; min-height: 0; }
+.app-body { display: grid; grid-template-columns: 176px minmax(0, 1fr); flex: 1; min-height: 0; }
 
 .mode-rail {
   position: relative;

@@ -1,4 +1,5 @@
 import { labelForModelValue, shortLabelForModelValue } from '@core/store/modelCatalogStore';
+import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 
 export const TOPIC_THROTTLE_MS = 400;
@@ -36,7 +37,11 @@ export function isResearchQuery(value: string) {
     .replace(/\s+/g, ' ')
     .trim();
   if (compact.length < 3) return false;
-  return !new Set(['hi', 'hello', 'hey', 'yo', 'test', 'thanks', 'thank you']).has(compact);
+  if (new Set(['hi', 'hello', 'hey', 'yo', 'test', 'thanks', 'thank you']).has(compact)) return false;
+  if (classify(value).length > 0) return true;
+  return /\b(pubmed|europe pmc|openalex|clinical trial|trial|openfda|rxnorm|mesh|citation|systematic review|meta analysis|biomarker|diagnos[ei]s|treatment|therapy|drug|dose|adverse|safety|disease|syndrome|cancer|tumou?r|infection|vaccine|clinical|patient|cohort|case control|randomi[sz]ed|placebo|fda|medicine|medical|biomedical|neuro|brain)\b/i.test(
+    compact,
+  );
 }
 
 export function labelForModel(modelValue: string): string {

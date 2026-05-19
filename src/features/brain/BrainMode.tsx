@@ -27,7 +27,7 @@ import { Icon } from '@ui/icons';
 
 import { BrainCanvas } from './components/BrainCanvas';
 import { BrainLegend } from './components/BrainLegend';
-import { Composer } from './components/Composer';
+import { Composer, type ChatRouteMode } from './components/Composer';
 import { EvidenceList } from './components/EvidenceList';
 import { SettingsPanel } from './components/SettingsPanel';
 import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/SourceRunner';
@@ -49,6 +49,7 @@ export function BrainMode() {
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [routeMode, setRouteMode] = useState<ChatRouteMode>('auto');
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
 
@@ -76,7 +77,7 @@ export function BrainMode() {
       id: 'welcome',
       role: 'system',
       content:
-        'Ask a biomedical research question. Source agents will fetch guarded evidence, store the run, light the linked brain meshes, and then the synthesizer will draft from that stored evidence.',
+        'Ask normally for chat, or ask a biomedical research question to run source agents that fetch guarded evidence, store the run, and synthesize from the stored records.',
     },
   ]);
   const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
@@ -121,16 +122,92 @@ export function BrainMode() {
     setSourceStatuses(INITIAL_SOURCES.map((source) => ({ ...source, state: 'idle', count: 0 })));
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: cleanQuery }]);
 
-    if (!isResearchQuery(cleanQuery)) {
+    const shouldRunResearch = routeMode === 'research' || (routeMode === 'auto' && isResearchQuery(cleanQuery));
+
+    if (!shouldRunResearch) {
+      if (!availableModels.some((model) => model.value === selectedModel)) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: 'No connected model is available yet. Connect Ollama or save a provider key in Settings, then refresh models.',
+          },
+        ]);
+        return;
+      }
+
+      setIsRunning(true);
+      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: 'normal chat' });
+      const assistantId = crypto.randomUUID();
       setMessages((current) => [
         ...current,
         {
-          id: crypto.randomUUID(),
+          id: assistantId,
           role: 'assistant',
-          content:
-            'I only run the medical-source pipeline for a real biomedical research question. Try a disease, drug, trial, biomarker, or safety signal.',
+          content: '',
+          modelLabel,
+          isStreaming: true,
         },
       ]);
+      let buffer = '';
+      try {
+        const response = await streamWithModelChain(
+          selectedModel,
+          {
+            temperature: 0.45,
+            maxTokens: 1100,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'You are HashCerebrum, a concise desktop assistant. Chat normally. If the user asks for biomedical evidence, say research mode can fetch guarded sources; do not invent citations.',
+              },
+              { role: 'user', content: cleanQuery },
+            ],
+          },
+          {
+            onToken: (delta) => {
+              buffer += delta;
+              setMessages((current) =>
+                current.map((m) => (m.id === assistantId ? { ...m, content: buffer } : m)),
+              );
+            },
+          },
+          (progress) => {
+            bus.emit('agent:activity', {
+              agentId: 'synthesizer',
+              phase: 'tool_call',
+              detail: `Failover ${progress.attempt}: ${shortLabelForModel(progress.from)} → ${progress.to.shortLabel}`,
+            });
+          },
+        );
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content: response.content || buffer,
+                  modelLabel: labelForModel(response.modelUsed),
+                  isStreaming: false,
+                }
+              : m,
+          ),
+        );
+        bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(response.modelUsed) });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: buffer || `Chat unavailable: ${detail}`, isStreaming: false, error: detail }
+              : m,
+          ),
+        );
+        bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'error', detail });
+      } finally {
+        setIsRunning(false);
+      }
       return;
     }
 
@@ -406,6 +483,8 @@ export function BrainMode() {
             setSelectedModel={setSelectedModel}
             isRunning={isRunning}
             canSubmit={canSubmit}
+            routeMode={routeMode}
+            setRouteMode={setRouteMode}
             onSubmit={submit}
             onOpenSettings={() => setSettingsOpen(true)}
           />

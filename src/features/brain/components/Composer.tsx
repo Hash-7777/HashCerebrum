@@ -4,6 +4,7 @@ import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iP/i.test(navigator.platform);
 const shortcut = isMac ? '⌘ ⏎' : 'Ctrl ⏎';
+export type ChatRouteMode = 'auto' | 'chat' | 'research';
 
 export function Composer({
   query,
@@ -12,6 +13,8 @@ export function Composer({
   setSelectedModel,
   isRunning,
   canSubmit,
+  routeMode,
+  setRouteMode,
   onSubmit,
   onOpenSettings,
 }: {
@@ -21,6 +24,8 @@ export function Composer({
   setSelectedModel: (value: string) => void;
   isRunning: boolean;
   canSubmit: boolean;
+  routeMode: ChatRouteMode;
+  setRouteMode: (value: ChatRouteMode) => void;
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
 }) {
@@ -55,6 +60,19 @@ export function Composer({
           <Icon name="settings" size={13} /> Settings
         </button>
       </div>
+      <div className="composer-route" role="group" aria-label="Conversation route">
+        {(['auto', 'chat', 'research'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            data-active={routeMode === mode}
+            disabled={isRunning}
+            onClick={() => setRouteMode(mode)}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
       <div className="composer-input-row">
         <textarea
           value={query}
@@ -77,7 +95,7 @@ export function Composer({
           aria-label={isRunning ? 'Running' : 'Research'}
         >
           <Icon name={isRunning ? 'spinner' : 'send'} size={13} />
-          <span>{isRunning ? 'Running' : 'Research'}</span>
+          <span>{isRunning ? 'Running' : routeMode === 'research' ? 'Research' : 'Send'}</span>
         </button>
       </div>
     </form>

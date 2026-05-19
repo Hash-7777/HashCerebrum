@@ -8,7 +8,7 @@ import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
 import { ModeRail } from './ModeRail';
-import { ActivityLog } from './ActivityLog';
+import { ExecutionTrace } from './ExecutionTrace';
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
@@ -52,8 +52,8 @@ export function AppShell() {
             </Suspense>
           </ModeErrorBoundary>
         </main>
-        <ActivityLog />
       </div>
+      <ExecutionTrace />
     </div>
   );
 }

@@ -290,6 +290,31 @@
   color: var(--hc-fg-muted);
 }
 .composer-controls .composer-settings:hover { color: var(--hc-fg); }
+.composer-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-pill);
+  background: rgba(4, 8, 14, 0.66);
+}
+.composer-route button {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--hc-radius-pill);
+  background: transparent;
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.composer-route button[data-active="true"] {
+  border-color: rgba(61, 209, 191, 0.42);
+  background: rgba(61, 209, 191, 0.13);
+  color: var(--hc-fg-strong);
+}
 .composer-input-row {
   position: relative;
   min-height: 100px;

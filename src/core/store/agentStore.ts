@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AgentId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 
-interface ActivityRecord {
+export interface ActivityRecord {
   id: string;
   agentId: AgentId;
   phase: string;
