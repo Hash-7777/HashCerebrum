@@ -1,0 +1,88 @@
+# ==============================================================
+# HashCerebrum — Rust crate
+# ==============================================================
+[package]
+name        = "hashcerebrum"
+version     = "0.1.0"
+description = "HashCerebrum — Medical research agent app with 3D anatomical brain"
+authors     = ["Dr Seif Hashish"]
+edition     = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name       = "hashcerebrum_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = ["config-json5"] }
+
+# ==============================================================
+# Runtime dependencies — every new dep is attack surface.
+# Add deliberately, document the WHY inline, never just because.
+# ==============================================================
+[dependencies]
+tauri = { version = "2", features = ["config-json5"] }
+
+# Tauri plugins — only what we actually use
+tauri-plugin-dialog       = "2"
+tauri-plugin-fs           = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener       = "2"
+tauri-plugin-shell        = "2"
+tauri-plugin-store        = "2"
+
+# Serde — required by Tauri IPC
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Time / dates — audit log timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+# Paths — cross-platform data dirs (audit log, sqlite cache)
+dirs        = "5"
+shellexpand = "3"
+
+# OS keychain — keyring crate for Linux/Windows; macOS uses
+# security-framework directly (see target block) to avoid
+# binary-bound ACLs that lose keys after each rebuild.
+keyring = "3"
+
+# HTTP — all external network goes through Rust, never the renderer
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
+tokio   = { version = "1", features = ["full"] }
+
+# SQLite — source cache, audit log, future RAG store
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+
+# Async helpers
+async-trait = "0.1"
+futures     = "0.3"
+
+# Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
+sha2 = "0.10"
+hex  = "0.4"
+
+# Logging — structured, never prints secrets
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Error handling
+thiserror = "1"
+anyhow    = "1"
+
+# URL parsing for net guard host allowlist
+url = "2"
+
+# macOS: direct keychain access (avoid binary-bound ACL)
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2"
+
+[profile.release]
+strip     = true
+opt-level = 3
+lto       = true
+codegen-units = 1
+panic     = "abort"
+
+[profile.dev]
+incremental = true

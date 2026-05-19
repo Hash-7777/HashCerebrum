@@ -1,0 +1,47 @@
+/* HashCerebrum design tokens — clinical palette.
+   Deep navy + surgical teal + bone-white. No cartoon medical.        */
+
+:root {
+  /* Surfaces */
+  --hc-bg:           #0a0e14;
+  --hc-bg-elev:     #11161f;
+  --hc-bg-rail:    #0d121a;
+  --hc-border:    #1d2533;
+  --hc-border-strong: #2a3447;
+
+  /* Type */
+  --hc-fg:         #e6ecf3;
+  --hc-fg-muted:  #8593a8;
+  --hc-fg-dim:   #5a6678;
+
+  /* Accents */
+  --hc-accent:      #5fb3a8;   /* surgical teal */
+  --hc-accent-soft: #2c4a4a;
+  --hc-warn:        #f0a868;
+  --hc-danger:      #ff6b6b;
+  --hc-info:        #5b8def;
+
+  /* Region glows reuse REGIONS[] colors — declared inline by Three.js */
+
+  /* Typography */
+  --hc-font-sans: ui-sans-serif, system-ui, -apple-system, "Inter", sans-serif;
+  --hc-font-serif: "Iowan Old Style", "Georgia", serif;
+  --hc-font-mono: ui-monospace, "JetBrains Mono", "SF Mono", monospace;
+
+  /* Radii */
+  --hc-radius-sm: 6px;
+  --hc-radius:   10px;
+  --hc-radius-lg: 14px;
+
+  /* Spacing scale */
+  --hc-space-1: 4px;
+  --hc-space-2: 8px;
+  --hc-space-3: 12px;
+  --hc-space-4: 16px;
+  --hc-space-6: 24px;
+  --hc-space-8: 32px;
+
+  /* Shadows */
+  --hc-shadow-1: 0 1px 2px rgba(0,0,0,0.4);
+  --hc-shadow-2: 0 8px 24px rgba(0,0,0,0.5);
+}

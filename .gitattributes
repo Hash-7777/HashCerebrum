@@ -1,0 +1,40 @@
+# Normalize line endings — text files always LF in the repo, regardless of OS
+* text=auto eol=lf
+
+# Source — always text/LF
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.json      text eol=lf
+*.json5     text eol=lf
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.md        text eol=lf
+*.sh        text eol=lf
+
+# Shell scripts always Unix-style
+*.sh        text eol=lf
+
+# Lockfiles — text, but don't try to diff them
+package-lock.json   linguist-generated=true -diff
+Cargo.lock          linguist-generated=true -diff
+
+# Binary assets — Three.js models, icons. Never line-end converted.
+*.glb       binary
+*.gltf      binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.icns      binary
+*.ico       binary
+*.pdf       binary
+*.sqlite    binary
+*.dmg       binary
+*.exe       binary
+*.app       binary
+*.msi       binary
+*.AppImage  binary
+*.deb       binary

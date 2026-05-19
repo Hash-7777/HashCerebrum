@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# =============================================================
+# HashCerebrum — pre-commit secret + safety scanner
+#
+# Blocks a commit that contains:
+#   1. Files whose names look like secrets (.env, *.pem, *.key, etc.)
+#   2. Content matching known secret shapes (sk-, sk-ant-, AKIA..., etc.)
+#   3. Files larger than 5 MB (likely committed-by-mistake binaries)
+#   4. Anything inside audit/ or cache/ (runtime state, not source)
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Bypass (only after reviewing the diff line-by-line):
+#   git commit --no-verify
+# =============================================================
+
+set -u
+
+RED=$'\033[0;31m'
+YEL=$'\033[0;33m'
+GRN=$'\033[0;32m'
+RST=$'\033[0m'
+
+fail() { echo "${RED}✗ pre-commit:${RST} $*" >&2; exit 1; }
+warn() { echo "${YEL}⚠ pre-commit:${RST} $*" >&2; }
+ok()   { echo "${GRN}✓ pre-commit:${RST} $*" >&2; }
+
+staged_files() {
+  git diff --cached --name-only --diff-filter=ACMR
+}
+
+# -------------------------------------------------------------
+# 1. Block files by name
+# -------------------------------------------------------------
+BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/|audit/|cache/)'
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  # Allow .env.example explicitly — that's a docs file
+  case "$f" in
+    .env.example|*/\.env.example) continue ;;
+  esac
+  if echo "$f" | grep -qE "$BLOCKED_NAMES_REGEX"; then
+    fail "blocked filename: $f
+        Filename matches secret / runtime-state pattern.
+        If this is intentional and safe, rename or remove from staging."
+  fi
+done <<EOF
+$(staged_files)
+EOF
+
+# -------------------------------------------------------------
+# 2. Block large files (>5 MB) — usually committed-by-mistake binaries
+# -------------------------------------------------------------
+MAX_BYTES=$((5 * 1024 * 1024))
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  [ -f "$f" ] || continue
+  bytes=$(wc -c <"$f" | tr -d ' ')
+  if [ "$bytes" -gt "$MAX_BYTES" ]; then
+    fail "file >5 MB: $f ($bytes bytes)
+        Large binaries do not belong in git. If this is a model/asset,
+        store it externally and document the source in docs/."
+  fi
+done <<EOF
+$(staged_files)
+EOF
+
+# -------------------------------------------------------------
+# 3. Scan content for secret-shaped strings
+#
+# Patterns selected for high signal / low false positive:
+#   sk-[A-Za-z0-9_-]{20,}         — OpenAI live key
+#   sk-ant-[A-Za-z0-9_-]{20,}    — Anthropic live key
+#   AKIA[0-9A-Z]{16}             — AWS access key
+#   ASIA[0-9A-Z]{16}             — AWS STS
+#   ghp_[A-Za-z0-9]{30,}         — GitHub PAT
+#   gho_[A-Za-z0-9]{30,}         — GitHub OAuth
+#   ghs_[A-Za-z0-9]{30,}         — GitHub server-to-server
+#   xox[bp]-[A-Za-z0-9-]{20,}    — Slack
+#   -----BEGIN [A-Z ]*PRIVATE KEY----- — any private key
+#   eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}  — JWT
+#   (api[_-]?key|apikey|secret|password|token)\s*[:=]\s*['"][^'"\s]{16,}['"]
+#       — generic assignment with 16+ char value
+# -------------------------------------------------------------
+SECRET_PATTERNS=(
+  'sk-[A-Za-z0-9_-]{20,}'
+  'sk-ant-[A-Za-z0-9_-]{20,}'
+  'AKIA[0-9A-Z]{16}'
+  'ASIA[0-9A-Z]{16}'
+  'ghp_[A-Za-z0-9]{30,}'
+  'gho_[A-Za-z0-9]{30,}'
+  'ghs_[A-Za-z0-9]{30,}'
+  'xox[bp]-[A-Za-z0-9-]{20,}'
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}'
+  '(api[_-]?key|apikey|secret|password|token)[[:space:]]*[:=][[:space:]]*[\"'"'"'][^\"'"'"' [:space:]]{16,}[\"'"'"']'
+)
+
+hit_count=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  [ -f "$f" ] || continue
+
+  # Skip the hook itself + this file's regex examples — they would
+  # otherwise self-trigger on patterns in the source.
+  case "$f" in
+    .githooks/pre-commit) continue ;;
+    SECURITY.md|docs/SECURITY.md|.env.example) continue ;;
+  esac
+
+  # Skip pure-binary files quickly
+  if LC_ALL=C grep -qPI '^$|.' "$f" 2>/dev/null; then
+    :
+  else
+    continue
+  fi
+
+  for pat in "${SECRET_PATTERNS[@]}"; do
+    if grep -nE "$pat" "$f" >/dev/null 2>&1; then
+      lines=$(grep -nE "$pat" "$f" | head -3)
+      warn "secret-shaped content in $f:"
+      echo "$lines" | sed 's/^/        /' >&2
+      hit_count=$((hit_count + 1))
+    fi
+  done
+done <<EOF
+$(staged_files)
+EOF
+
+if [ "$hit_count" -gt 0 ]; then
+  fail "$hit_count file(s) contain content that looks like a secret.
+        Move real keys to the OS keychain via the in-app Settings.
+        If these are documentation examples, redact them or add a
+        skip rule in .githooks/pre-commit."
+fi
+
+ok "no secrets, no oversized files, no runtime-state files staged."
+exit 0

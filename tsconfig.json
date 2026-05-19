@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "useDefineForClassFields": true,
+    "verbatimModuleSyntax": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["./*"],
+      "@core/*": ["./core/*"],
+      "@agents/*": ["./agents/*"],
+      "@modes/*": ["./modes/*"],
+      "@features/*": ["./features/*"],
+      "@platform/*": ["./platform/*"],
+      "@ui/*": ["./ui/*"],
+      "@lib/*": ["./lib/*"],
+      "@config/*": ["./config/*"]
+    },
+    "outDir": "./dist"
+  },
+  "include": ["src", "tests"],
+  "exclude": ["node_modules", "dist", "src-tauri"]
+}

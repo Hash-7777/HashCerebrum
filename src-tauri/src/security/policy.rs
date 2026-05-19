@@ -1,0 +1,52 @@
+//! Declarative policy — allowed hosts, allowed keychain keys, etc.
+//!
+//! Loaded once at startup; checked on every `guard::check()` call.
+//! Lives in code (not config) so it cannot be tampered with at runtime
+//! by a compromised renderer.
+
+use crate::error::AppResult;
+use std::sync::OnceLock;
+
+#[derive(Debug)]
+pub struct Policy {
+    pub allowed_hosts: &'static [&'static str],
+}
+
+static POLICY: OnceLock<Policy> = OnceLock::new();
+
+/// Hosts the app is allowed to talk to. ANYTHING not in this list is rejected
+/// by the guard. To add a new medical source, edit this list and the CSP.
+const ALLOWED_HOSTS: &[&str] = &[
+    // NCBI / PubMed
+    "eutils.ncbi.nlm.nih.gov",
+    "www.ncbi.nlm.nih.gov",
+    // Europe PMC
+    "www.ebi.ac.uk",
+    "europepmc.org",
+    // OpenAlex
+    "api.openalex.org",
+    // ClinicalTrials.gov
+    "clinicaltrials.gov",
+    // FDA
+    "api.fda.gov",
+    // RxNorm
+    "rxnav.nlm.nih.gov",
+    // LLM providers (only used if user opts into backend-proxied LLM)
+    "api.anthropic.com",
+    "api.openai.com",
+    // Ollama (local)
+    "localhost",
+    "127.0.0.1",
+];
+
+pub fn load_default() -> AppResult<()> {
+    let _ = POLICY.set(Policy { allowed_hosts: ALLOWED_HOSTS });
+    Ok(())
+}
+
+pub fn host_allowed(host: &str) -> bool {
+    POLICY
+        .get()
+        .map(|p| p.allowed_hosts.iter().any(|h| *h == host))
+        .unwrap_or(false)
+}
