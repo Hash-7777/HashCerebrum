@@ -34,11 +34,63 @@ function store() {
   return appStore;
 }
 
+const DEV_KEYCHAIN_PREFIX = 'dev.keychain.';
+
+function devKeychainEnabled(): boolean {
+  return import.meta.env.DEV;
+}
+
+function devKeychainKey(key: string): string {
+  return `${DEV_KEYCHAIN_PREFIX}${key}`;
+}
+
+async function devKeychainStore(key: string, value: string): Promise<void> {
+  if (!devKeychainEnabled()) return;
+  const s = await store();
+  await s.set(devKeychainKey(key), value);
+  await s.save();
+}
+
+async function devKeychainRetrieve(key: string): Promise<string | null> {
+  if (!devKeychainEnabled()) return null;
+  const s = await store();
+  return (await s.get<string>(devKeychainKey(key))) ?? null;
+}
+
+async function devKeychainDelete(key: string): Promise<void> {
+  if (!devKeychainEnabled()) return;
+  const s = await store();
+  await s.delete(devKeychainKey(key));
+  await s.save();
+}
+
 export const tauriPlatform: Platform = {
   keychain: {
-    store: (key, value) => invoke('keychain_store', { key, value }),
-    retrieve: (key) => invoke('keychain_retrieve', { key }),
-    delete: (key) => invoke('keychain_delete', { key }),
+    store: async (key, value) => {
+      try {
+        await invoke('keychain_store', { key, value });
+      } catch (error) {
+        if (!devKeychainEnabled()) throw error;
+      }
+      await devKeychainStore(key, value);
+    },
+    retrieve: async (key) => {
+      try {
+        const value = await invoke<string | null>('keychain_retrieve', { key });
+        if (value) return value;
+      } catch (error) {
+        if (!devKeychainEnabled()) throw error;
+      }
+      return devKeychainRetrieve(key);
+    },
+    delete: async (key) => {
+      try {
+        await invoke('keychain_delete', { key });
+      } catch (error) {
+        if (!devKeychainEnabled()) throw error;
+      }
+      await devKeychainDelete(key);
+    },
   },
 
   audit: {
