@@ -17,19 +17,21 @@ attacks on dependencies.
 
 ## Invariants
 
-1. **All outbound HTTP originates in Rust.** The renderer never calls
-   `fetch()` to a medical or LLM host. (CSP allows the hosts only as a
-   fail-safe for explicit user opt-in to direct-stream mode.)
+1. **Medical-source HTTP originates in Rust.** The renderer never calls
+   `fetch()` to a medical source host. LLM provider calls currently stream
+   from the renderer so tokens can arrive live; those hosts are CSP-gated
+   and provider IDs remain allowlisted. A backend LLM proxy is tracked as
+   post-v1 work if keys must never enter renderer memory.
 2. **Every privileged action passes `security::guard::check`.**
    Categories: `Net`, `Keychain`, `Fs`, `Llm`. Denials and approvals
    are both audited.
 3. **Audit log is hash-chained.** Each entry hashes the previous entry's
    hash. `audit_log_verify` walks the chain and returns the first broken
    sequence number, or `null` if intact.
-4. **API keys live in the OS keychain only.** Never in files (`.env` is
-   in `.gitignore`), never logged, never crossed back into JS except at
-   the moment of an LLM call (and then preferably only if the user opts
-   into front-end direct streaming).
+4. **API keys live in the OS keychain only at rest.** Never in files
+   (`.env` is in `.gitignore`), never logged, and never stored in model
+   metadata. The renderer retrieves a key only at the moment it calls a
+   configured LLM provider or fetches that provider's model list.
 5. **CSP is strict.** No external `script-src`, no `'unsafe-inline'` on
    scripts. Style allows `'unsafe-inline'` for dynamic theme tokens only.
 6. **`withGlobalTauri: false`.** No implicit `window.__TAURI__`. The

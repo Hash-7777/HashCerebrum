@@ -42,10 +42,9 @@
       // 'unsafe-inline' on style-src is needed for runtime theme tokens
       // and Three.js/R3F dynamic styles.
       //
-      // LLM provider hosts are listed in connect-src so the renderer can
-      // stream directly when the user opts into "frontend mode" for an
-      // API provider. For "backend mode" (default), Rust proxies the call
-      // and the connect-src entry is unused but kept for opt-in flexibility.
+      // LLM provider hosts are listed in connect-src because provider
+      // adapters stream directly from the renderer for live tokens. Medical
+      // source HTTP remains Rust-only behind the audited guard.
       "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost https://api.anthropic.com https://api.openai.com https://api.groq.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.cerebras.ai https://api.sambanova.ai https://api.moonshot.ai https://api.deepseek.com https://api.mistral.ai https://integrate.api.nvidia.com http://localhost:11434 http://127.0.0.1:11434; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },

@@ -9,7 +9,7 @@
 // one tier at a time. Free-tier providers are preferred at equal tier
 // to avoid burning paid credit on a hot path.
 
-import { MODEL_GROUPS, parseModelRef } from './modelCatalog';
+import { parseModelRef, type ModelGroup } from './modelCatalog';
 import type { LlmProviderId } from './types';
 
 export interface FailoverCandidate {
@@ -46,9 +46,12 @@ export function modelTier(modelValue: string, label = ''): number {
   return 100;
 }
 
-export function listCloudCandidates(hasKey: (provider: LlmProviderId) => boolean): FailoverCandidate[] {
+export function listCloudCandidates(
+  hasKey: (provider: LlmProviderId) => boolean,
+  modelGroups: ModelGroup[],
+): FailoverCandidate[] {
   const out: FailoverCandidate[] = [];
-  for (const group of MODEL_GROUPS) {
+  for (const group of modelGroups) {
     if (group.provider === 'ollama') continue;
     if (group.keyName && !hasKey(group.provider)) continue;
     for (const model of group.models) {
@@ -68,11 +71,12 @@ export function findBestFailover(
   currentModel: string,
   excluded: Set<string>,
   hasKey: (provider: LlmProviderId) => boolean,
+  modelGroups: ModelGroup[],
 ): FailoverCandidate | null {
   const current = parseModelRef(currentModel);
   if (current.kind !== 'cloud') return null;
   const currentTier = modelTier(currentModel);
-  const available = listCloudCandidates(hasKey).filter(
+  const available = listCloudCandidates(hasKey, modelGroups).filter(
     (candidate) => candidate.value !== currentModel && !excluded.has(candidate.value),
   );
   if (available.length === 0) return null;
@@ -88,9 +92,22 @@ export function findBestFailover(
   );
 }
 
-const RETRIABLE = /\b(rate ?limit|overloaded|server error|429|503|529|502|504)\b|HTTP 5\d\d/i;
+const RETRIABLE = /\b(rate ?limit|quota|too many|capacity|overloaded|unavailable|timeout|timed ?out|network|failed to fetch|server error|429|503|529|502|504)\b|HTTP 5\d\d/i;
+const SAME_PROVIDER_RETRY = /\b(rate ?limit|too many|capacity|overloaded|temporar|try again|timeout|timed ?out|network|failed to fetch|429|503|529|502|504)\b|HTTP 5\d\d/i;
+const QUOTA = /\b(quota|free ?tier|insufficient ?credits|billing|exceeded)\b/i;
+const HARD_PROVIDER = /tool.{0,10}call(ing)?.{0,10}(not supported|unsupported|unavailable|disabled)|function.{0,10}call(ing)?.{0,10}not supported|does not support.{0,10}tool|tools?.{0,10}not.{0,10}supported|invalid_request_error|jsondecodeerror|expecting property name enclosed in double quotes|invalid.{0,20}(tool|function).{0,20}(json|arguments)|context.{0,10}length|maximum.{0,10}token|model.{0,10}not.{0,10}found|no such model/i;
 
 export function isRetriableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return RETRIABLE.test(message);
+}
+
+export function isHardProviderError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return HARD_PROVIDER.test(message);
+}
+
+export function shouldRetrySameProvider(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return SAME_PROVIDER_RETRY.test(message) && !QUOTA.test(message);
 }

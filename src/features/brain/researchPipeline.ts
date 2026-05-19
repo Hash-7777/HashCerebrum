@@ -1,4 +1,4 @@
-import { MODEL_GROUPS } from '@core/llm/modelCatalog';
+import { labelForModelValue, shortLabelForModelValue } from '@core/store/modelCatalogStore';
 import type { EvidenceItem } from '@platform/index';
 
 export const TOPIC_THROTTLE_MS = 400;
@@ -40,17 +40,9 @@ export function isResearchQuery(value: string) {
 }
 
 export function labelForModel(modelValue: string): string {
-  for (const group of MODEL_GROUPS) {
-    const option = group.models.find((model) => model.value === modelValue);
-    if (option) return option.label;
-  }
-  return modelValue;
+  return labelForModelValue(modelValue);
 }
 
 export function shortLabelForModel(modelValue: string): string {
-  for (const group of MODEL_GROUPS) {
-    const option = group.models.find((model) => model.value === modelValue);
-    if (option) return option.shortLabel;
-  }
-  return modelValue;
+  return shortLabelForModelValue(modelValue);
 }

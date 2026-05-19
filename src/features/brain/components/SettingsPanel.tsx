@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
-import { DEFAULT_MODEL, MODEL_GROUPS, parseModelRef, providerKeyName } from '@core/llm/modelCatalog';
+import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from '@core/llm/modelCatalog';
+import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { Icon } from '@ui/icons';
@@ -23,12 +24,21 @@ export function SettingsPanel({
 }) {
   const [keyStatus, setKeyStatus] = useState<Partial<Record<LlmProviderId, boolean>>>({});
   const [apiKeys, setApiKeys] = useState<Partial<Record<LlmProviderId, string>>>({});
+  const [keyErrors, setKeyErrors] = useState<Partial<Record<LlmProviderId, string>>>({});
   const [host, setHost] = useState(getOllamaHost());
   const [localOnly, setLocalOnly] = useState(getPrivacyLocalOnly());
   const [saving, setSaving] = useState<LlmProviderId | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const modelGroups = useModelCatalogStore((s) => s.groups);
+  const modelStatuses = useModelCatalogStore((s) => s.statuses);
+  const refreshingModels = useModelCatalogStore((s) => s.refreshing);
+  const refreshAllModels = useModelCatalogStore((s) => s.refreshAll);
+  const refreshProviderModels = useModelCatalogStore((s) => s.refreshProvider);
+  const removeProviderModels = useModelCatalogStore((s) => s.removeProvider);
+  const availableModels = modelGroups.flatMap((group) => group.models);
+  const selectedModelAvailable = availableModels.some((model) => model.value === selectedModel);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -57,10 +67,9 @@ export function SettingsPanel({
   useEffect(() => {
     let cancelled = false;
     void Promise.all(
-      MODEL_GROUPS.map(async (group) => {
-        const keyName = providerKeyName(group.provider);
-        if (!keyName) return [group.provider, false] as const;
-        const value = await platform().keychain.retrieve(keyName);
+      PROVIDER_DEFS.map(async (group) => {
+        if (!group.keyName) return [group.provider, false] as const;
+        const value = await platform().keychain.retrieve(group.keyName);
         return [group.provider, !!value] as const;
       }),
     ).then((entries) => {
@@ -80,19 +89,39 @@ export function SettingsPanel({
     setLocalOnly(value);
     setPrivacyLocalOnly(value);
     if (value && parseModelRef(selectedModel).kind === 'cloud') {
-      setSelectedModel(DEFAULT_MODEL);
+      setSelectedModel(
+        availableModels.find((model) => parseModelRef(model.value).kind === 'local')?.value ?? DEFAULT_MODEL,
+      );
     }
   };
+
+  const fallbackModel = (excludedProvider?: LlmProviderId) =>
+    availableModels.find((model) => parseModelRef(model.value).provider !== excludedProvider)?.value ?? DEFAULT_MODEL;
 
   const saveKey = async (provider: LlmProviderId) => {
     const keyName = providerKeyName(provider);
     const value = apiKeys[provider]?.trim();
     if (!keyName || !value) return;
     setSaving(provider);
+    setKeyErrors((current) => ({ ...current, [provider]: '' }));
     try {
       await platform().keychain.store(keyName, value);
+      const verified = await platform().keychain.retrieve(keyName);
+      if (verified !== value) {
+        throw new Error('Keychain verification failed. The key was not readable after saving.');
+      }
       setApiKeys((current) => ({ ...current, [provider]: '' }));
       setKeyStatus((current) => ({ ...current, [provider]: true }));
+      const status = await refreshProviderModels(provider);
+      if (status.state !== 'connected') {
+        setKeyErrors((current) => ({
+          ...current,
+          [provider]: `Key saved, but model fetch failed: ${status.error ?? 'no compatible chat models returned'}`,
+        }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setKeyErrors((current) => ({ ...current, [provider]: message }));
     } finally {
       setSaving(null);
     }
@@ -102,9 +131,12 @@ export function SettingsPanel({
     const keyName = providerKeyName(provider);
     if (!keyName) return;
     setSaving(provider);
+    setKeyErrors((current) => ({ ...current, [provider]: '' }));
     try {
       await platform().keychain.delete(keyName);
       setKeyStatus((current) => ({ ...current, [provider]: false }));
+      removeProviderModels(provider);
+      if (parseModelRef(selectedModel).provider === provider) setSelectedModel(fallbackModel(provider));
     } finally {
       setSaving(null);
     }
@@ -126,8 +158,13 @@ export function SettingsPanel({
 
       <label className="field">
         <span>Active model</span>
-        <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
-          {MODEL_GROUPS.map((group) => (
+        <select
+          value={selectedModelAvailable ? selectedModel : ''}
+          onChange={(event) => setSelectedModel(event.target.value)}
+          disabled={modelGroups.length === 0}
+        >
+          {modelGroups.length === 0 && <option value="">Connect a provider to load models</option>}
+          {modelGroups.map((group) => (
             <optgroup key={group.provider} label={group.label}>
               {group.models.map((model) => {
                 const disabled = localOnly && parseModelRef(model.value).kind === 'cloud';
@@ -141,6 +178,17 @@ export function SettingsPanel({
           ))}
         </select>
       </label>
+
+      <div className="settings-model-tools">
+        <span>
+          {refreshingModels
+            ? 'checking providers'
+            : `${availableModels.length} live model${availableModels.length === 1 ? '' : 's'} loaded`}
+        </span>
+        <button type="button" disabled={refreshingModels} onClick={() => void refreshAllModels()}>
+          Refresh models
+        </button>
+      </div>
 
       <label className="toggle-row">
         <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
@@ -200,18 +248,27 @@ export function SettingsPanel({
       </section>
 
       <div className="provider-key-list">
-        {MODEL_GROUPS.filter((group) => !!group.keyName).map((group) => (
+        {PROVIDER_DEFS.filter((group) => !!group.keyName).map((group) => {
+          const status = modelStatuses[group.provider];
+          const statusLabel = keyStatus[group.provider]
+            ? status?.state === 'connected'
+              ? `${status.modelCount} models`
+              : status?.state === 'checking'
+                ? 'checking'
+                : 'fetch failed'
+            : 'no key';
+          return (
           <section key={group.provider} className="provider-key-row">
             <header>
               <strong>{group.label}</strong>
-              <span data-ready={keyStatus[group.provider] === true}>
-                {keyStatus[group.provider] ? (
+              <span data-ready={keyStatus[group.provider] === true && status?.state === 'connected'}>
+                {keyStatus[group.provider] && status?.state === 'connected' ? (
                   <>
-                    <Icon name="check" size={11} /> key saved
+                    <Icon name="check" size={11} /> {statusLabel}
                   </>
                 ) : (
                   <>
-                    <Icon name="alert" size={11} /> no key
+                    <Icon name="alert" size={11} /> {statusLabel}
                   </>
                 )}
               </span>
@@ -220,7 +277,7 @@ export function SettingsPanel({
               <input
                 type="password"
                 value={apiKeys[group.provider] ?? ''}
-                autoComplete="off"
+                autoComplete="new-password"
                 spellCheck={false}
                 placeholder={`${group.label} API key`}
                 onChange={(event) => setApiKeys((current) => ({ ...current, [group.provider]: event.target.value }))}
@@ -236,8 +293,10 @@ export function SettingsPanel({
                 Remove
               </button>
             </div>
+            {keyErrors[group.provider] && <p className="provider-key-error">{keyErrors[group.provider]}</p>}
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}

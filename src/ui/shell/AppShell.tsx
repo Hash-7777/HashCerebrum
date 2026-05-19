@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
+import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResourcesStore } from '@core/store/resourcesStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { getModeComponent } from '@modes/registry';
@@ -12,14 +13,16 @@ import { ActivityLog } from './ActivityLog';
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  const refreshModels = useModelCatalogStore((s) => s.refreshAll);
   const hydrateResources = useResourcesStore((s) => s.hydrate);
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
   const View = getModeComponent(mode);
 
   useEffect(() => {
+    void refreshModels();
     void hydrateResources();
     void hydrateResearchRuns();
-  }, [hydrateResources, hydrateResearchRuns]);
+  }, [hydrateResources, hydrateResearchRuns, refreshModels]);
 
   // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
   // reflects this binding (⌘1, ⌘2, …).

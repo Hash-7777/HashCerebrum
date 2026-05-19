@@ -10,10 +10,27 @@ use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
 
 const SERVICE: &str = "com.hashcerebrum.app";
+const MAX_SECRET_LEN: usize = 8192;
+
+fn validate_secret(value: &str) -> AppResult<()> {
+    if value.trim().is_empty() {
+        return Err(AppError::InvalidInput("api key is empty".into()));
+    }
+    if value.len() > MAX_SECRET_LEN {
+        return Err(AppError::InvalidInput("api key is too long".into()));
+    }
+    if value.chars().any(|c| c.is_control()) {
+        return Err(AppError::InvalidInput(
+            "api key contains invalid control characters".into(),
+        ));
+    }
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn keychain_store(key: String, value: String) -> AppResult<()> {
     check(Action::Keychain { key: &key })?;
+    validate_secret(&value)?;
     let entry = keyring::Entry::new(SERVICE, &key).map_err(|e| AppError::Keychain(e.to_string()))?;
     entry.set_password(&value).map_err(|e| AppError::Keychain(e.to_string()))?;
     let _ = audit::append("keychain", &key, "store", &serde_json::Value::Null);

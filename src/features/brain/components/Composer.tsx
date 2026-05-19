@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { Icon } from '@ui/icons';
-import { MODEL_GROUPS } from '@core/llm/modelCatalog';
+import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iP/i.test(navigator.platform);
 const shortcut = isMac ? '⌘ ⏎' : 'Ctrl ⏎';
@@ -24,13 +24,23 @@ export function Composer({
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
 }) {
+  const modelGroups = useModelCatalogStore((s) => s.groups);
+  const availableModels = modelGroups.flatMap((group) => group.models);
+  const selectedModelAvailable = availableModels.some((model) => model.value === selectedModel);
+
   return (
     <form className="research-composer" onSubmit={onSubmit}>
       <div className="composer-controls">
         <label>
           <span>Model</span>
-          <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} aria-label="Composer model">
-            {MODEL_GROUPS.map((group) => (
+          <select
+            value={selectedModelAvailable ? selectedModel : ''}
+            onChange={(event) => setSelectedModel(event.target.value)}
+            aria-label="Composer model"
+            disabled={modelGroups.length === 0}
+          >
+            {modelGroups.length === 0 && <option value="">No connected models</option>}
+            {modelGroups.map((group) => (
               <optgroup key={group.provider} label={group.label}>
                 {group.models.map((model) => (
                   <option key={model.value} value={model.value}>

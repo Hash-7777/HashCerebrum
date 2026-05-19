@@ -26,6 +26,25 @@
   border-radius: var(--hc-radius);
   background: rgba(11, 17, 26, 0.55);
 }
+.settings-model-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--hc-radius-sm);
+  background: rgba(11, 17, 26, 0.42);
+}
+.settings-model-tools span {
+  color: var(--hc-fg-muted);
+  font: 11px var(--hc-font-mono);
+}
+.settings-model-tools button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
 .settings-cache header,
 .settings-audit header {
   display: flex;
@@ -316,4 +335,10 @@
 }
 .provider-key-row input {
   min-width: 0;
+}
+.provider-key-error {
+  margin: 0;
+  color: var(--hc-danger);
+  font-size: 10.5px;
+  line-height: 1.35;
 }

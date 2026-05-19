@@ -1,6 +1,15 @@
 import { platform } from '@platform/index';
-import { DEFAULT_MODEL, MODEL_GROUPS, parseModelRef, providerKeyName } from './modelCatalog';
-import { findBestFailover, isRetriableError, type FailoverCandidate } from './failover';
+import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from './modelCatalog';
+import {
+  findBestFailover,
+  isHardProviderError,
+  isRetriableError,
+  shouldRetrySameProvider,
+  type FailoverCandidate,
+} from './failover';
+import { allDiscoveredModels, useModelCatalogStore } from '@core/store/modelCatalogStore';
+import { OPENAI_COMPAT_CHAT_URL } from './providerEndpoints';
+import { getOllamaHost, getPrivacyLocalOnly } from './providerSettings';
 import {
   normalizeOpenAiToolCalls,
   parseAnthropicStreamLine,
@@ -11,37 +20,7 @@ import {
 } from './streamParsers';
 import type { LlmProvider, LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, LlmToolSpec } from './types';
 
-const OLLAMA_HOST_KEY = 'hc.ollamaHost';
-const PRIVACY_LOCAL_KEY = 'hc.privacyLocalOnly';
-
-const OPENAI_COMPAT_URL: Partial<Record<LlmProviderId, string>> = {
-  groq: 'https://api.groq.com/openai/v1/chat/completions',
-  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
-  cerebras: 'https://api.cerebras.ai/v1/chat/completions',
-  samba: 'https://api.sambanova.ai/v1/chat/completions',
-  openai: 'https://api.openai.com/v1/chat/completions',
-  moonshot: 'https://api.moonshot.ai/v1/chat/completions',
-  deepseek: 'https://api.deepseek.com/v1/chat/completions',
-  mistral: 'https://api.mistral.ai/v1/chat/completions',
-  nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
-};
-
-export function getOllamaHost(): string {
-  return localStorage.getItem(OLLAMA_HOST_KEY) || 'http://localhost:11434';
-}
-
-export function setOllamaHost(host: string) {
-  const normalized = host.trim().replace(/\/+$/, '') || 'http://localhost:11434';
-  localStorage.setItem(OLLAMA_HOST_KEY, normalized);
-}
-
-export function getPrivacyLocalOnly(): boolean {
-  return localStorage.getItem(PRIVACY_LOCAL_KEY) === 'true';
-}
-
-export function setPrivacyLocalOnly(value: boolean) {
-  localStorage.setItem(PRIVACY_LOCAL_KEY, String(value));
-}
+export { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from './providerSettings';
 
 function asOpenAiTools(tools: LlmToolSpec[] = []) {
   return tools.map((tool) => ({
@@ -72,7 +51,7 @@ function toTextMessages(req: LlmRequest) {
 }
 
 async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest): Promise<LlmResponse> {
-  const url = OPENAI_COMPAT_URL[providerId];
+  const url = OPENAI_COMPAT_CHAT_URL[providerId];
   if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
   const key = await requireKey(providerId);
   const headers: Record<string, string> = {
@@ -283,7 +262,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
 }
 
 async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
-  const url = OPENAI_COMPAT_URL[providerId];
+  const url = OPENAI_COMPAT_CHAT_URL[providerId];
   if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
   const key = await requireKey(providerId);
   const headers: Record<string, string> = {
@@ -433,6 +412,7 @@ export async function streamWithModelChain(
   const switchedTo: string[] = [];
 
   const keyCache = new Map<LlmProviderId, boolean>();
+  const providerRetries = new Map<LlmProviderId, number>();
   const hasKey = async (provider: LlmProviderId) => {
     let cached = keyCache.get(provider);
     if (cached === undefined) {
@@ -442,9 +422,11 @@ export async function streamWithModelChain(
     return cached;
   };
   const hasKeySync = (provider: LlmProviderId) => keyCache.get(provider) === true;
-  await Promise.all(MODEL_GROUPS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
+  await Promise.all(PROVIDER_DEFS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
+  const modelGroups = useModelCatalogStore.getState().groups;
 
-  for (let attempt = 0; attempt <= MAX_FAILOVERS; attempt++) {
+  let failovers = 0;
+  while (failovers <= MAX_FAILOVERS) {
     tried.add(current);
     let receivedAny = false;
     try {
@@ -463,14 +445,22 @@ export async function streamWithModelChain(
     } catch (error) {
       lastError = error;
       if (receivedAny) break; // mid-stream failure — cannot retry without duplicating tokens
-      if (!isRetriableError(error)) break;
-      const next = findBestFailover(current, tried, hasKeySync);
+      const parsed = parseModelRef(current);
+      const retries = providerRetries.get(parsed.provider) ?? 0;
+      if (shouldRetrySameProvider(error) && retries < 1) {
+        providerRetries.set(parsed.provider, retries + 1);
+        await delay(RETRY_WAIT_MS);
+        continue;
+      }
+      if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      const next = findBestFailover(current, tried, hasKeySync, modelGroups);
       if (!next) break;
+      failovers++;
       switchedTo.push(next.value);
       onProgress?.({
         from: current,
         to: next,
-        attempt: attempt + 1,
+        attempt: failovers,
         reason: error instanceof Error ? error.message : String(error),
       });
       current = next.value;
@@ -481,8 +471,8 @@ export async function streamWithModelChain(
 
 // Default-model resolver — used by BrainMode on mount. Order:
 //   1. If Ollama has a loaded model (warm via /api/ps), prefer that.
-//   2. Else, pick the first cloud provider that has a saved API key.
-//   3. Else fall back to DEFAULT_MODEL (first option in the catalog).
+//   2. Else, pick the first freshly discovered model in the dynamic catalog.
+//   3. Else fall back to the local default value.
 // This mirrors the HashCortX `defaultLLM()` UX so the user doesn't see
 // a "no key" wall on first launch when they already have Ollama running.
 export async function resolveDefaultModel(): Promise<string> {
@@ -501,16 +491,11 @@ export async function resolveDefaultModel(): Promise<string> {
     /* no local Ollama running — fall through */
   }
 
-  // First cloud provider with a stored key.
-  for (const group of MODEL_GROUPS) {
-    if (!group.keyName) continue;
-    try {
-      const stored = await platform().keychain.retrieve(group.keyName);
-      if (stored && group.models[0]) return group.models[0].value;
-    } catch {
-      /* ignore */
-    }
-  }
+  const discovered = allDiscoveredModels();
+  const local = discovered.find((option) => parseModelRef(option.value).kind === 'local');
+  if (local) return local.value;
+  const cloud = discovered.find((option) => parseModelRef(option.value).kind === 'cloud');
+  if (cloud) return cloud.value;
 
   return DEFAULT_MODEL;
 }
@@ -545,6 +530,11 @@ export interface FailoverResult extends LlmResponse {
 }
 
 const MAX_FAILOVERS = 4;
+const RETRY_WAIT_MS = 2000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function hasStoredKey(provider: LlmProviderId): Promise<boolean> {
   const keyName = providerKeyName(provider);
@@ -573,6 +563,7 @@ export async function completeWithModelChain(
   const switchedTo: string[] = [];
 
   const keyCache = new Map<LlmProviderId, boolean>();
+  const providerRetries = new Map<LlmProviderId, number>();
   const hasKey = async (provider: LlmProviderId) => {
     let cached = keyCache.get(provider);
     if (cached === undefined) {
@@ -582,9 +573,11 @@ export async function completeWithModelChain(
     return cached;
   };
   const hasKeySync = (provider: LlmProviderId) => keyCache.get(provider) === true;
-  await Promise.all(MODEL_GROUPS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
+  await Promise.all(PROVIDER_DEFS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
+  const modelGroups = useModelCatalogStore.getState().groups;
 
-  for (let attempt = 0; attempt <= MAX_FAILOVERS; attempt++) {
+  let failovers = 0;
+  while (failovers <= MAX_FAILOVERS) {
     tried.add(current);
     try {
       const response = await completeWithModel(current, req);
@@ -595,14 +588,22 @@ export async function completeWithModelChain(
       };
     } catch (error) {
       lastError = error;
-      if (!isRetriableError(error)) break;
-      const next = findBestFailover(current, tried, hasKeySync);
+      const parsed = parseModelRef(current);
+      const retries = providerRetries.get(parsed.provider) ?? 0;
+      if (shouldRetrySameProvider(error) && retries < 1) {
+        providerRetries.set(parsed.provider, retries + 1);
+        await delay(RETRY_WAIT_MS);
+        continue;
+      }
+      if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      const next = findBestFailover(current, tried, hasKeySync, modelGroups);
       if (!next) break;
+      failovers++;
       switchedTo.push(next.value);
       onProgress?.({
         from: current,
         to: next,
-        attempt: attempt + 1,
+        attempt: failovers,
         reason: error instanceof Error ? error.message : String(error),
       });
       current = next.value;
@@ -611,23 +612,22 @@ export async function completeWithModelChain(
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'unknown LLM error'));
 }
 
-const PROVIDERS: Record<LlmProviderId, LlmProvider> = Object.fromEntries(
-  MODEL_GROUPS.map((group) => [
-    group.provider,
-    {
-      id: group.provider,
-      label: group.label,
-      defaultModel: group.models[0]?.value ?? DEFAULT_MODEL,
-      models: group.models.map((model) => model.value),
-      complete: (req: LlmRequest) => completeWithModel(group.models[0]?.value ?? DEFAULT_MODEL, req),
-    },
-  ]),
-) as Record<LlmProviderId, LlmProvider>;
-
 export function getProvider(id: LlmProviderId): LlmProvider {
-  return PROVIDERS[id];
+  const def = PROVIDER_DEFS.find((provider) => provider.provider === id) ?? PROVIDER_DEFS[0]!;
+  const models = useModelCatalogStore
+    .getState()
+    .groups.find((group) => group.provider === id)
+    ?.models.map((model) => model.value) ?? [];
+  const defaultModel = models[0] ?? DEFAULT_MODEL;
+  return {
+    id,
+    label: def.label,
+    defaultModel,
+    models,
+    complete: (req: LlmRequest) => completeWithModel(defaultModel, req),
+  };
 }
 
 export function listProviders(): LlmProvider[] {
-  return Object.values(PROVIDERS);
+  return PROVIDER_DEFS.map((provider) => getProvider(provider.provider));
 }

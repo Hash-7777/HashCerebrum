@@ -46,7 +46,7 @@ export interface CacheStats {
 }
 
 export interface Platform {
-  // Keychain — API keys never leave Rust
+  // Keychain — secret values are stored in the OS keychain at rest.
   keychain: {
     store(key: string, value: string): Promise<void>;
     retrieve(key: string): Promise<string | null>;

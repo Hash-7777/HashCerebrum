@@ -32,12 +32,18 @@ const mocked = (source: EvidenceItem['source'], title: string) => ({
 });
 
 const storageKey = (key: string) => `hc.storage.${key}`;
+const devKeychain = new Map<string, string>();
 
 export const browserPlatform: Platform = {
   keychain: {
-    store: async () => {},
-    retrieve: async () => null,
-    delete: async () => {},
+    store: async (key, value) => {
+      if (value) devKeychain.set(key, value);
+      else devKeychain.delete(key);
+    },
+    retrieve: async (key) => devKeychain.get(key) ?? null,
+    delete: async (key) => {
+      devKeychain.delete(key);
+    },
   },
   audit: {
     append: async (category, subject, action) => ({

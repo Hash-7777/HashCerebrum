@@ -17,7 +17,8 @@ import {
   streamWithModelChain,
   type FailoverProgress,
 } from '@core/llm/ProviderRegistry';
-import { DEFAULT_MODEL, MODEL_GROUPS } from '@core/llm/modelCatalog';
+import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
+import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
@@ -48,6 +49,8 @@ export function BrainMode() {
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const modelGroups = useModelCatalogStore((s) => s.groups);
+  const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
 
   // Resolve default model on mount — Ollama-first if a local model is
   // loaded, else first cloud key, else fall back to catalog default.
@@ -60,6 +63,13 @@ export function BrainMode() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    if (!availableModels.some((model) => model.value === selectedModel)) {
+      setSelectedModel(availableModels[0]!.value);
+    }
+  }, [availableModels, selectedModel]);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -361,8 +371,14 @@ export function BrainMode() {
             <h1>Chat-first workspace</h1>
           </div>
           <div className="toolbar-actions">
-            <select value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)} aria-label="Model">
-              {MODEL_GROUPS.map((group) => (
+            <select
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              aria-label="Model"
+              disabled={modelGroups.length === 0}
+            >
+              {modelGroups.length === 0 && <option value={selectedModel}>No connected models</option>}
+              {modelGroups.map((group) => (
                 <optgroup key={group.provider} label={group.label}>
                   {group.models.map((model) => (
                     <option key={model.value} value={model.value}>
