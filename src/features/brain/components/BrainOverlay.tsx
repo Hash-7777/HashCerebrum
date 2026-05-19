@@ -33,20 +33,9 @@ function project(camera: THREE.Camera, anchor: [number, number, number], width: 
 }
 
 export function BrainOverlay({ cameraRef, containerRef, hoveredRegion, selectedRegion }: OverlayProps) {
-  const [, force] = useState(0);
   const [delayedHover, setDelayedHover] = useState<RegionId | null>(null);
   const hoverTimer = useRef<number | null>(null);
-
-  // Repaint on every animation frame so labels track camera motion.
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      force((n) => (n + 1) % 1_000_000);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  const labelRef = useRef<HTMLDivElement>(null);
 
   // Debounce hover so labels don't strobe while the cursor sweeps.
   useEffect(() => {
@@ -61,27 +50,50 @@ export function BrainOverlay({ cameraRef, containerRef, hoveredRegion, selectedR
     };
   }, [hoveredRegion]);
 
-  const camera = cameraRef.current;
-  const container = containerRef.current;
-  if (!camera || !container) return null;
-  const rect = container.getBoundingClientRect();
-  const width = rect.width;
-  const height = rect.height;
-  if (width === 0 || height === 0) return null;
-
   const visibleId = delayedHover ?? selectedRegion;
-  if (!visibleId) return null;
-  const region = regionById(visibleId);
-  const pos = project(camera, region.anchor, width, height);
-  if (!pos.visible) return null;
+  const region = visibleId ? regionById(visibleId) : null;
 
-  // Clamp inside the viewport so an off-screen region still surfaces a hint
-  const clampedX = Math.min(Math.max(pos.x, 12), width - 12);
-  const clampedY = Math.min(Math.max(pos.y, 12), height - 12);
+  // Track the camera without forcing React to repaint every animation frame.
+  useEffect(() => {
+    if (!visibleId || !region) return;
+    let raf = 0;
+    const loop = () => {
+      const camera = cameraRef.current;
+      const container = containerRef.current;
+      const label = labelRef.current;
+      if (!camera || !container || !label) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      const rect = container.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+      if (width === 0 || height === 0) {
+        label.style.opacity = '0';
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      const pos = project(camera, region.anchor, width, height);
+      if (!pos.visible) {
+        label.style.opacity = '0';
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      const clampedX = Math.min(Math.max(pos.x, 12), width - 12);
+      const clampedY = Math.min(Math.max(pos.y, 12), height - 12);
+      label.style.opacity = '1';
+      label.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0)`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [cameraRef, containerRef, region, visibleId]);
+
+  if (!region) return null;
 
   return (
     <div className="brain-overlay" aria-hidden="true">
-      <div className="brain-label" style={{ transform: `translate3d(${clampedX}px, ${clampedY}px, 0)` }}>
+      <div ref={labelRef} className="brain-label">
         <span className="brain-label-dot" style={{ background: region.emissive, boxShadow: `0 0 12px ${region.emissive}` }} />
         <div className="brain-label-body">
           <strong>{region.label}</strong>

@@ -14,7 +14,7 @@ interface RegionState {
 interface BrainStore {
   regions: Record<RegionId, RegionState>;
   setRegion: (region: RegionId, source: 'agent' | 'topic', intensity: number, ttlMs: number) => void;
-  tick: () => void;
+  tick: (decayFactor?: number) => void;
 }
 
 const initialRegion = (): RegionState => ({ base: 0, accent: 0, decayUntil: 0 });
@@ -48,19 +48,22 @@ export const useBrainStore = create<BrainStore>((set) => ({
         },
       },
     })),
-  tick: () =>
+  tick: (decayFactor = 0.92) =>
     set((state) => {
       const now = Date.now();
       const next: Record<RegionId, RegionState> = { ...state.regions };
+      let changed = false;
       for (const r of REGIONS) {
         const cur = next[r];
         if (cur.decayUntil > 0 && now > cur.decayUntil) {
-          next[r] = { base: cur.base * 0.92, accent: cur.accent * 0.92, decayUntil: cur.decayUntil };
+          changed = true;
+          next[r] = { base: cur.base * decayFactor, accent: cur.accent * decayFactor, decayUntil: cur.decayUntil };
           if (next[r].base < 0.01 && next[r].accent < 0.01) {
             next[r] = initialRegion();
           }
         }
       }
+      if (!changed) return state;
       return { regions: next };
     }),
 }));

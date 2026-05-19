@@ -25,7 +25,8 @@ export type IconName =
   | 'check'
   | 'alert'
   | 'lock'
-  | 'eye';
+  | 'eye'
+  | 'gauge';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -151,6 +152,13 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
     <svg viewBox="0 0 24 24" {...p}>
       <path d="M2.5 12C5 7.5 8.5 5.5 12 5.5s7 2 9.5 6.5C19 16.5 15.5 18.5 12 18.5S5 16.5 2.5 12Z" />
       <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
+  gauge: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M4.2 16a8.5 8.5 0 1 1 15.6 0" />
+      <path d="M12 12.5 16 8" />
+      <path d="M8 19h8" />
     </svg>
   ),
 };
