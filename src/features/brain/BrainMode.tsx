@@ -1,6 +1,6 @@
-// Brain workspace — chat-first research surface that fans queries out
-// to every registered medical source, lights the corresponding brain
-// regions, and asks the selected LLM to draft a cited synthesis with
+// Brain workspace — chat-first research surface that runs an agentic
+// pipeline: source agents fetch guarded evidence, the run store persists
+// the evidence, then the synthesizer drafts from the stored run with
 // automatic failover when a cloud provider is rate-limited or 5xxs.
 //
 // The mode is intentionally split into small components (Composer,
@@ -10,6 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { RegionId } from '@config/agents';
+import { runAgenticEvidencePass } from '@agents/research/ResearchOrchestrator';
 import { bus } from '@core/bus/EventBus';
 import {
   resolveDefaultModel,
@@ -17,9 +18,9 @@ import {
   type FailoverProgress,
 } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL, MODEL_GROUPS } from '@core/llm/modelCatalog';
+import { useResearchRunStore } from '@core/store/researchRunStore';
 import { classify } from '@core/topic/MeshClassifier';
-import { tools } from '@core/tools/ToolRegistry';
-import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
+import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 import { Icon } from '@ui/icons';
 
@@ -33,13 +34,10 @@ import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL, partForRegion } from './data/modelParts';
 import { regionById } from './data/regions';
 import {
-  dedupeEvidence,
   fallbackAnswer,
   isResearchQuery,
   labelForModel,
   shortLabelForModel,
-  sourceArgs,
-  SOURCE_AGENT_LABEL,
   summarizeEvidence,
   TOPIC_THROTTLE_MS,
 } from './researchPipeline';
@@ -68,14 +66,17 @@ export function BrainMode() {
       id: 'welcome',
       role: 'system',
       content:
-        'Ask a biomedical research question. HashCerebrum will query guarded medical sources, light the linked brain meshes, and draft a cited synthesis.',
+        'Ask a biomedical research question. Source agents will fetch guarded evidence, store the run, light the linked brain meshes, and then the synthesizer will draft from that stored evidence.',
     },
   ]);
   const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const regions = useLitRegions();
-  const canSubmit = isResearchQuery(query);
+  const getResearchRun = useResearchRunStore((s) => s.getRun);
+  const storeSummary = useResearchRunStore((s) => s.storeSummary);
+  const failResearchRun = useResearchRunStore((s) => s.failRun);
+  const canSubmit = query.trim().length > 0;
   const modelLabel = useMemo(() => labelForModel(selectedModel), [selectedModel]);
 
   // Clicking the same region twice clears the selection.
@@ -101,35 +102,6 @@ export function BrainMode() {
     setSourceStatuses((current) => current.map((source) => (source.id === id ? { ...source, ...update } : source)));
   };
 
-  const runSource = async (source: SourceStatus, cleanQuery: string) => {
-    const tool = tools.get(source.tool);
-    if (!tool) throw new Error(`Tool not registered: ${source.tool}`);
-    updateSource(source.id, { state: 'running', count: 0, detail: SOURCE_AGENT_LABEL[source.agentId] });
-    bus.emit('agent:activity', { agentId: source.agentId, phase: 'tool_call', detail: source.label });
-    bus.emit('region:light', {
-      region: source.region,
-      source: 'agent',
-      agentId: source.agentId,
-      intensity: 0.75,
-      ttlMs: 9000,
-    });
-    try {
-      const result = (await tool.execute(sourceArgs(source, cleanQuery))) as MedicalSourceResult;
-      updateSource(source.id, { state: 'done', count: result.results.length, detail: `${result.results.length} records` });
-      bus.emit('agent:activity', {
-        agentId: source.agentId,
-        phase: 'tool_result',
-        detail: `${source.label}: ${result.results.length}`,
-      });
-      return result.results;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      updateSource(source.id, { state: 'error', count: 0, detail });
-      bus.emit('agent:activity', { agentId: source.agentId, phase: 'error', detail: source.label });
-      return [];
-    }
-  };
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const cleanQuery = query.trim();
@@ -153,27 +125,25 @@ export function BrainMode() {
     }
 
     setIsRunning(true);
-    bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: 'brain research turn' });
-    bus.emit('region:light', {
-      region: 'parietal',
-      source: 'agent',
-      agentId: 'synthesizer',
-      intensity: 0.8,
-      ttlMs: 9000,
-    });
 
-    const sourceResults = await Promise.all(INITIAL_SOURCES.map((source) => runSource(source, cleanQuery)));
-    const nextEvidence = dedupeEvidence(sourceResults.flat());
+    const { runId, evidence: nextEvidence } = await runAgenticEvidencePass({
+      query: cleanQuery,
+      sources: INITIAL_SOURCES,
+      onSourceUpdate: updateSource,
+    });
     setEvidence(nextEvidence);
 
-    const evidenceContext = summarizeEvidence(nextEvidence);
+    const storedRun = getResearchRun(runId);
+    const storedEvidence = storedRun?.evidence ?? nextEvidence;
+    const evidenceContext = summarizeEvidence(storedEvidence);
     const prompt = [
       `Research question: ${cleanQuery}`,
+      `Stored research run: ${runId}`,
       '',
-      'Evidence records:',
+      'Stored evidence records:',
       evidenceContext,
       '',
-      'Write a concise research answer. Use bracket citations like [S1] and include uncertainty when records are weak or absent.',
+      'Write a concise research answer from the stored evidence only. Use bracket citations like [S1] and include uncertainty when records are weak or absent.',
     ].join('\n');
 
     const failoverNotes: string[] = [];
@@ -189,6 +159,14 @@ export function BrainMode() {
 
     // Pre-create the assistant bubble so tokens stream into it as they
     // arrive. We update its content via setMessages on every token.
+    bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: `summarize stored run ${runId}` });
+    bus.emit('region:light', {
+      region: 'parietal',
+      source: 'agent',
+      agentId: 'synthesizer',
+      intensity: 0.8,
+      ttlMs: 9000,
+    });
     const assistantId = crypto.randomUUID();
     setMessages((current) => [
       ...current,
@@ -252,6 +230,7 @@ export function BrainMode() {
       flushTopicHits(response.content || streamedContent);
 
       const finalContent = response.content || streamedContent || summarizeEvidence(nextEvidence);
+      storeSummary(runId, finalContent, response.modelUsed);
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId
@@ -269,12 +248,15 @@ export function BrainMode() {
       bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(response.modelUsed) });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      const fallback = streamedContent || fallbackAnswer(cleanQuery, nextEvidence, detail);
+      storeSummary(runId, fallback);
+      failResearchRun(runId, detail);
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId
             ? {
                 ...m,
-                content: streamedContent || fallbackAnswer(cleanQuery, nextEvidence, detail),
+                content: fallback,
                 citations: nextEvidence.slice(0, 12),
                 error: detail,
                 isStreaming: false,

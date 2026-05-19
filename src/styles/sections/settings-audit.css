@@ -251,7 +251,6 @@
   gap: 6px;
 }
 .composer-send svg { color: currentColor; }
-.composer-send[disabled] svg { animation: spin 1.2s linear infinite; }
 .settings-panel .field,
 .settings-panel .field label {
   display: grid;

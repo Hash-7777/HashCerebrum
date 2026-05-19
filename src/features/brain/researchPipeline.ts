@@ -1,13 +1,5 @@
-import type { AgentId } from '@config/agents';
-import { AGENTS } from '@config/agents';
 import { MODEL_GROUPS } from '@core/llm/modelCatalog';
 import type { EvidenceItem } from '@platform/index';
-import type { SourceStatus } from './components/SourceRunner';
-
-export const SOURCE_AGENT_LABEL = Object.fromEntries(AGENTS.map((agent) => [agent.id, agent.label])) as Record<
-  AgentId,
-  string
->;
 
 export const TOPIC_THROTTLE_MS = 400;
 
@@ -45,22 +37,6 @@ export function isResearchQuery(value: string) {
     .trim();
   if (compact.length < 3) return false;
   return !new Set(['hi', 'hello', 'hey', 'yo', 'test', 'thanks', 'thank you']).has(compact);
-}
-
-export function sourceArgs(source: SourceStatus, query: string) {
-  if (source.id === 'openfda') return { endpoint: 'drug/event', query, maxResults: 5 };
-  if (source.id === 'rxnorm') return { drug: query };
-  return { query, maxResults: 5 };
-}
-
-export function dedupeEvidence(items: EvidenceItem[]) {
-  const seen = new Set<string>();
-  return items.filter((item, index) => {
-    const key = item.url || item.identifiers.pmid || item.identifiers.doi || item.provenanceHash || `${item.source}-${index}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 export function labelForModel(modelValue: string): string {

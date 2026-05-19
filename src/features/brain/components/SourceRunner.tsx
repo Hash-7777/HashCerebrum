@@ -39,7 +39,7 @@ export function SourceRunner({
     <section className="source-runner" aria-label="Medical source status">
       <header>
         <h3>
-          <Icon name="database" size={12} /> Sources
+          <Icon name="database" size={12} /> Source agents
         </h3>
         <span>{evidenceCount} records</span>
       </header>

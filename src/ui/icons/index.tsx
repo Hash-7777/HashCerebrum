@@ -85,7 +85,9 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   ),
   send: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
-      <path d="M4 12 20 4l-4 16-4-7-8-1Z" />
+      <path d="M5 12h13" />
+      <path d="m13 6 6 6-6 6" />
+      <path d="M5 5.5v13" />
     </svg>
   ),
   settings: (p) => (
