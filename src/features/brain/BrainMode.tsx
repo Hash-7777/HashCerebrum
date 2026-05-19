@@ -8,11 +8,15 @@
 // SettingsPanel) so a crash in one stays contained by FeatureBoundary
 // instead of taking the workspace down.
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentId, RegionId } from '@config/agents';
 import { AGENTS } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
-import { completeWithModelChain, type FailoverProgress } from '@core/llm/ProviderRegistry';
+import {
+  resolveDefaultModel,
+  streamWithModelChain,
+  type FailoverProgress,
+} from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL, MODEL_GROUPS } from '@core/llm/modelCatalog';
 import { classify } from '@core/topic/MeshClassifier';
 import { tools } from '@core/tools/ToolRegistry';
@@ -101,11 +105,29 @@ function shortLabelForModel(modelValue: string): string {
   return modelValue;
 }
 
+// Throttle topic classification during a stream — otherwise every
+// token triggers a full classify+emit, which thrashes Zustand and the
+// canvas useFrame at ~60 Hz on a long answer. 400 ms feels live while
+// keeping the region store quiet.
+const TOPIC_THROTTLE_MS = 400;
+
 export function BrainMode() {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Resolve default model on mount — Ollama-first if a local model is
+  // loaded, else first cloud key, else fall back to catalog default.
+  useEffect(() => {
+    let cancelled = false;
+    void resolveDefaultModel().then((value) => {
+      if (!cancelled) setSelectedModel(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -231,8 +253,42 @@ export function BrainMode() {
       });
     };
 
+    // Pre-create the assistant bubble so tokens stream into it as they
+    // arrive. We update its content via setMessages on every token.
+    const assistantId = crypto.randomUUID();
+    setMessages((current) => [
+      ...current,
+      {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        modelLabel: modelLabel,
+        isStreaming: true,
+      },
+    ]);
+
+    let streamedContent = '';
+    let lastTopicAt = 0;
+    const seenTerms = new Set<string>();
+    const flushTopicHits = (text: string) => {
+      const now = Date.now();
+      if (now - lastTopicAt < TOPIC_THROTTLE_MS) return;
+      lastTopicAt = now;
+      for (const hit of classify(text)) {
+        if (seenTerms.has(hit.term)) continue;
+        seenTerms.add(hit.term);
+        bus.emit('topic:detected', hit);
+        bus.emit('region:light', {
+          region: hit.region,
+          source: 'topic',
+          intensity: hit.confidence * 0.55,
+          ttlMs: 9000,
+        });
+      }
+    };
+
     try {
-      const response = await completeWithModelChain(
+      const response = await streamWithModelChain(
         selectedModel,
         {
           temperature: 0.2,
@@ -246,39 +302,127 @@ export function BrainMode() {
             { role: 'user', content: prompt },
           ],
         },
+        {
+          onToken: (delta) => {
+            streamedContent += delta;
+            setMessages((current) =>
+              current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)),
+            );
+            flushTopicHits(streamedContent);
+          },
+        },
         onProgress,
       );
-      for (const hit of classify(response.content)) {
-        bus.emit('topic:detected', hit);
-        bus.emit('region:light', { region: hit.region, source: 'topic', intensity: hit.confidence * 0.55, ttlMs: 9000 });
-      }
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: response.content || summarizeEvidence(nextEvidence),
-          citations: nextEvidence.slice(0, 12),
-          modelLabel: labelForModel(response.modelUsed),
-          ...(failoverNotes.length > 0 ? { failoverNote: failoverNotes[failoverNotes.length - 1] } : {}),
-        },
-      ]);
+      // Final pass — classify the complete answer in case the throttle
+      // missed a term that only appeared at the end.
+      flushTopicHits(response.content || streamedContent);
+
+      const finalContent = response.content || streamedContent || summarizeEvidence(nextEvidence);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: finalContent,
+                citations: nextEvidence.slice(0, 12),
+                modelLabel: labelForModel(response.modelUsed),
+                isStreaming: false,
+                ...(failoverNotes.length > 0 ? { failoverNote: failoverNotes[failoverNotes.length - 1] } : {}),
+              }
+            : m,
+        ),
+      );
       bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(response.modelUsed) });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: fallbackAnswer(cleanQuery, nextEvidence, detail),
-          citations: nextEvidence.slice(0, 12),
-          error: detail,
-        },
-      ]);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: streamedContent || fallbackAnswer(cleanQuery, nextEvidence, detail),
+                citations: nextEvidence.slice(0, 12),
+                error: detail,
+                isStreaming: false,
+              }
+            : m,
+        ),
+      );
       bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'error', detail });
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const critiquedRef = useRef(new Set<string>());
+
+  const runCritique = async (messageId: string) => {
+    const target = messages.find((m) => m.id === messageId);
+    if (!target || critiquedRef.current.has(messageId)) return;
+    critiquedRef.current.add(messageId);
+
+    bus.emit('agent:activity', { agentId: 'critic', phase: 'start', detail: 'on-demand critique' });
+    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'critic', intensity: 0.85, ttlMs: 9000 });
+
+    const critiqueId = crypto.randomUUID();
+    setMessages((current) => [
+      ...current,
+      {
+        id: critiqueId,
+        role: 'assistant',
+        content: '',
+        modelLabel: 'Critic',
+        critiqueOf: messageId,
+        isStreaming: true,
+      },
+    ]);
+
+    let buffer = '';
+    try {
+      const response = await streamWithModelChain(
+        selectedModel,
+        {
+          temperature: 0.15,
+          maxTokens: 800,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are the HashCerebrum Critic. Review the assistant reply below for evidence-hierarchy rigor, citation-claim alignment, and potential hallucination. Be specific: name the claim, name the supporting [S#], flag the gap. Do not rewrite the answer.',
+            },
+            {
+              role: 'user',
+              content: `Assistant reply to critique:\n\n${target.content}`,
+            },
+          ],
+        },
+        {
+          onToken: (delta) => {
+            buffer += delta;
+            setMessages((current) =>
+              current.map((m) => (m.id === critiqueId ? { ...m, content: buffer } : m)),
+            );
+          },
+        },
+      );
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === critiqueId
+            ? { ...m, content: response.content || buffer, isStreaming: false }
+            : m,
+        ),
+      );
+      bus.emit('agent:activity', { agentId: 'critic', phase: 'done' });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === critiqueId
+            ? { ...m, content: buffer || `Critic unavailable: ${detail}`, isStreaming: false, error: detail }
+            : m,
+        ),
+      );
+      bus.emit('agent:activity', { agentId: 'critic', phase: 'error', detail });
     }
   };
 
@@ -319,7 +463,7 @@ export function BrainMode() {
         </header>
 
         <FeatureBoundary name="Transcript">
-          <Transcript messages={messages} modelLabel={modelLabel} isRunning={isRunning} />
+          <Transcript messages={messages} modelLabel={modelLabel} isRunning={isRunning} onCritique={runCritique} />
         </FeatureBoundary>
 
         <FeatureBoundary name="Composer">

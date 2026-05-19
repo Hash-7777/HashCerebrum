@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL, MODEL_GROUPS, parseModelRef, providerKeyName } from '@core/llm/modelCatalog';
 import type { LlmProviderId } from '@core/llm/types';
-import { platform } from '@platform/index';
+import { platform, type CacheStats } from '@platform/index';
 import { Icon } from '@ui/icons';
+import { AuditModal } from './AuditModal';
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 export function SettingsPanel({
   selectedModel,
@@ -19,6 +26,33 @@ export function SettingsPanel({
   const [host, setHost] = useState(getOllamaHost());
   const [localOnly, setLocalOnly] = useState(getPrivacyLocalOnly());
   const [saving, setSaving] = useState<LlmProviderId | null>(null);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+
+  const refreshCacheStats = useCallback(async () => {
+    try {
+      const stats = await platform().cache.stats();
+      setCacheStats(stats);
+    } catch {
+      setCacheStats(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCacheStats();
+  }, [refreshCacheStats]);
+
+  const clearCache = async (expiredOnly: boolean) => {
+    setCacheBusy(true);
+    try {
+      if (expiredOnly) await platform().cache.clearExpired();
+      else await platform().cache.clear();
+      await refreshCacheStats();
+    } finally {
+      setCacheBusy(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +159,46 @@ export function SettingsPanel({
         </button>
       </div>
 
+      <section className="settings-cache" aria-label="Source cache">
+        <header>
+          <strong>Source cache</strong>
+          <span>
+            {cacheStats
+              ? `${cacheStats.rows} rows · ${formatBytes(cacheStats.bytes)}`
+              : 'not available'}
+          </span>
+        </header>
+        {cacheStats && cacheStats.hosts.length > 0 && (
+          <ul>
+            {cacheStats.hosts.slice(0, 6).map((host) => (
+              <li key={host.host}>
+                <span>{host.host}</span>
+                <span>{host.rows}</span>
+                <span>{formatBytes(host.bytes)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="settings-cache-actions">
+          <button type="button" disabled={cacheBusy} onClick={() => clearCache(true)}>
+            Clear expired
+          </button>
+          <button type="button" disabled={cacheBusy} onClick={() => clearCache(false)}>
+            Clear all
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-audit" aria-label="Audit log">
+        <header>
+          <strong>Audit log</strong>
+          <button type="button" onClick={() => setAuditOpen(true)} className="settings-audit-button">
+            <Icon name="shield" size={12} /> Open
+          </button>
+        </header>
+        <p>Hash-chained log of every guarded action. Verify to confirm the chain is intact.</p>
+      </section>
+
       <div className="provider-key-list">
         {MODEL_GROUPS.filter((group) => !!group.keyName).map((group) => (
           <section key={group.provider} className="provider-key-row">
@@ -165,6 +239,8 @@ export function SettingsPanel({
           </section>
         ))}
       </div>
+
+      {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
     </aside>
   );
 }

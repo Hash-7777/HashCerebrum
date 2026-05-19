@@ -33,6 +33,18 @@ export interface MedicalSourceResult {
   provenanceHash: string;
 }
 
+export interface CacheHostStat {
+  host: string;
+  rows: number;
+  bytes: number;
+}
+
+export interface CacheStats {
+  rows: number;
+  bytes: number;
+  hosts: CacheHostStat[];
+}
+
 export interface Platform {
   // Keychain — API keys never leave Rust
   keychain: {
@@ -61,6 +73,14 @@ export interface Platform {
   // PDF extraction
   pdf: {
     extractText(path: string): Promise<string>;
+  };
+
+  // SQLite cache controls — surfaced in Settings so the user can see
+  // per-host row/byte counts and clear expired or all rows.
+  cache: {
+    stats(): Promise<CacheStats>;
+    clear(): Promise<number>;
+    clearExpired(): Promise<number>;
   };
 
   // Environment

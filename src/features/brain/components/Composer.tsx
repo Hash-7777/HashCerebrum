@@ -2,6 +2,9 @@ import type { FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { MODEL_GROUPS } from '@core/llm/modelCatalog';
 
+const isMac = typeof navigator !== 'undefined' && /Mac|iP/i.test(navigator.platform);
+const shortcut = isMac ? '⌘ ⏎' : 'Ctrl ⏎';
+
 export function Composer({
   query,
   setQuery,
@@ -38,7 +41,7 @@ export function Composer({
             ))}
           </select>
         </label>
-        <button type="button" onClick={onOpenSettings} className="composer-settings">
+        <button type="button" onClick={onOpenSettings} className="composer-settings" aria-label="Open settings">
           <Icon name="settings" size={13} /> Settings
         </button>
       </div>
@@ -55,8 +58,15 @@ export function Composer({
             }
           }}
         />
-        <button type="submit" disabled={isRunning || !canSubmit} className="composer-send">
-          <Icon name={isRunning ? 'spinner' : 'send'} size={14} />
+        <span className="composer-hint" aria-hidden="true">{shortcut} to send</span>
+        <button
+          type="submit"
+          disabled={isRunning || !canSubmit}
+          className="composer-send"
+          data-running={isRunning ? 'true' : 'false'}
+          aria-label={isRunning ? 'Running' : 'Research'}
+        >
+          <Icon name={isRunning ? 'spinner' : 'send'} size={13} />
           <span>{isRunning ? 'Running' : 'Research'}</span>
         </button>
       </div>

@@ -9,6 +9,8 @@ export interface ChatMessage {
   modelLabel?: string;
   failoverNote?: string;
   error?: string;
+  critiqueOf?: string;
+  isStreaming?: boolean;
 }
 
 function evidenceKey(item: EvidenceItem, index: number) {
@@ -18,11 +20,12 @@ function evidenceKey(item: EvidenceItem, index: number) {
 export function Transcript({
   messages,
   modelLabel,
-  isRunning,
+  onCritique,
 }: {
   messages: ChatMessage[];
   modelLabel: string;
   isRunning: boolean;
+  onCritique?: (messageId: string) => void;
 }) {
   return (
     <div className="transcript" aria-live="polite">
@@ -46,7 +49,10 @@ export function Transcript({
             </span>
             {message.failoverNote && <span className="chat-failover">{message.failoverNote}</span>}
           </header>
-          <p>{message.content}</p>
+          <p>
+            {message.content}
+            {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
+          </p>
           {message.citations && message.citations.length > 0 && (
             <div className="inline-citations">
               {message.citations.slice(0, 6).map((item, index) => (
@@ -56,18 +62,15 @@ export function Transcript({
               ))}
             </div>
           )}
+          {message.role === 'assistant' && !message.isStreaming && !message.critiqueOf && onCritique && (
+            <footer className="chat-message-actions">
+              <button type="button" onClick={() => onCritique(message.id)} className="chat-action">
+                <Icon name="shield" size={12} /> Critique
+              </button>
+            </footer>
+          )}
         </article>
       ))}
-      {isRunning && (
-        <article className="chat-message chat-pending" data-role="assistant" aria-live="polite">
-          <header>
-            <span className="chat-role">
-              <Icon name="spinner" size={12} /> {modelLabel}
-            </span>
-          </header>
-          <p className="chat-pending-text">Querying medical sources and drafting synthesis…</p>
-        </article>
-      )}
     </div>
   );
 }

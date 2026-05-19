@@ -1,12 +1,14 @@
-import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Bloom, EffectComposer, Outline, Selection, Select, Vignette } from '@react-three/postprocessing';
 import { Html, OrbitControls, useGLTF } from '@react-three/drei';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { RegionId } from '@config/agents';
 import { useBrainStore } from '@core/store/brainStore';
+import { Icon } from '@ui/icons';
 import { BRAIN_MODEL, PARTS_BY_NODE, partColor, primaryRegionForPart, type BrainModelPart } from '../data/modelParts';
-import { regionById } from '../data/regions';
+import { BrainOverlay } from './BrainOverlay';
 
 interface BrainCanvasProps {
   selectedRegion: RegionId | null;
@@ -36,9 +38,6 @@ function cloneMaterial(source: THREE.Material | THREE.Material[]): THREE.MeshSta
   });
 }
 
-// Centers the model around the origin, scales it to a known size, and
-// pre-bakes the world matrix into each mesh's geometry so we can mount
-// them as siblings without inheriting the source GLB's nested transforms.
 function useBrainMeshParts(): BrainMeshPart[] {
   const gltf = useGLTF(BRAIN_MODEL.path);
 
@@ -120,23 +119,6 @@ function BrainMesh({
 
   const primaryRegion = primaryRegionForPart(meshPart.part);
 
-  const handleOver = (event: ThreeEvent<PointerEvent>) => {
-    event.stopPropagation();
-    onHover(primaryRegion);
-    document.body.style.cursor = 'pointer';
-  };
-
-  const handleOut = (event: ThreeEvent<PointerEvent>) => {
-    event.stopPropagation();
-    onHover(null);
-    document.body.style.cursor = '';
-  };
-
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation();
-    onSelect(primaryRegion);
-  };
-
   return (
     <Select enabled={selected || hovered || intensity > 0.12}>
       <mesh
@@ -145,37 +127,43 @@ function BrainMesh({
         material={material}
         castShadow
         receiveShadow
-        onPointerOver={handleOver}
-        onPointerOut={handleOut}
-        onClick={handleClick}
+        onPointerOver={(event: ThreeEvent<PointerEvent>) => {
+          event.stopPropagation();
+          onHover(primaryRegion);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={(event: ThreeEvent<PointerEvent>) => {
+          event.stopPropagation();
+          onHover(null);
+          document.body.style.cursor = '';
+        }}
+        onClick={(event: ThreeEvent<MouseEvent>) => {
+          event.stopPropagation();
+          onSelect(primaryRegion);
+        }}
       />
     </Select>
   );
 }
 
-function HoverLabel({ hoveredRegion }: { hoveredRegion: RegionId | null }) {
-  if (!hoveredRegion) return null;
-  const region = regionById(hoveredRegion);
-  return (
-    <Html position={region.anchor} center distanceFactor={6} zIndexRange={[100, 0]}>
-      <div className="brain-tooltip">
-        <strong>{region.label}</strong>
-        <span>{region.description}</span>
-      </div>
-    </Html>
-  );
+interface BrainModelProps extends BrainCanvasProps {
+  rotateEnabled: boolean;
 }
 
-function BrainModel(props: BrainCanvasProps) {
+function BrainModel({ rotateEnabled, ...props }: BrainModelProps) {
   const tick = useBrainStore((store) => store.tick);
   const groupRef = useRef<THREE.Group>(null);
   const parts = useBrainMeshParts();
 
+  // Slow ambient drift, paused while the user is interacting with the
+  // OrbitControls (otherwise the wobble fights the drag).
   useFrame((state) => {
     tick();
     if (!groupRef.current) return;
-    groupRef.current.rotation.y = -0.34 + Math.sin(state.clock.elapsedTime * 0.14) * 0.035;
-    groupRef.current.rotation.x = 0.12 + Math.sin(state.clock.elapsedTime * 0.1) * 0.012;
+    if (rotateEnabled) {
+      groupRef.current.rotation.y = -0.34 + Math.sin(state.clock.elapsedTime * 0.14) * 0.035;
+      groupRef.current.rotation.x = 0.12 + Math.sin(state.clock.elapsedTime * 0.1) * 0.012;
+    }
   });
 
   return (
@@ -190,29 +178,54 @@ function BrainModel(props: BrainCanvasProps) {
           onSelect={props.onSelectRegion}
         />
       ))}
-      <HoverLabel hoveredRegion={props.hoveredRegion} />
     </group>
   );
 }
 
-function BrainScene(props: BrainCanvasProps) {
+interface SceneProps extends BrainCanvasProps {
+  cameraRef: React.MutableRefObject<THREE.Camera | null>;
+  controlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
+}
+
+function CameraCapture({ cameraRef }: { cameraRef: React.MutableRefObject<THREE.Camera | null> }) {
+  const camera = useThree((state) => state.camera);
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera, cameraRef]);
+  return null;
+}
+
+function BrainScene({ cameraRef, controlsRef, ...props }: SceneProps) {
+  const [rotateEnabled, setRotateEnabled] = useState(true);
   return (
     <Selection>
-      <BrainModel {...props} />
+      <CameraCapture cameraRef={cameraRef} />
+      <BrainModel {...props} rotateEnabled={rotateEnabled} />
       <EffectComposer multisampling={4} autoClear={false}>
-        <Outline blur edgeStrength={3.1} pulseSpeed={0.25} visibleEdgeColor={0x7ed3b2} hiddenEdgeColor={0x1d2533} />
-        <Bloom intensity={0.38} luminanceThreshold={0.28} luminanceSmoothing={0.48} mipmapBlur />
-        <Vignette eskil={false} offset={0.18} darkness={0.72} />
+        <Outline blur edgeStrength={3.4} pulseSpeed={0.25} visibleEdgeColor={0x3dd1bf} hiddenEdgeColor={0x1d2533} />
+        <Bloom intensity={0.42} luminanceThreshold={0.28} luminanceSmoothing={0.48} mipmapBlur />
+        <Vignette eskil={false} offset={0.18} darkness={0.7} />
       </EffectComposer>
+      <OrbitControls
+        ref={controlsRef as React.MutableRefObject<OrbitControlsImpl>}
+        enablePan
+        enableZoom
+        enableDamping
+        dampingFactor={0.12}
+        rotateSpeed={0.55}
+        zoomSpeed={0.85}
+        panSpeed={0.6}
+        minDistance={2.2}
+        maxDistance={16}
+        screenSpacePanning
+        onStart={() => setRotateEnabled(false)}
+        onEnd={() => setRotateEnabled(true)}
+      />
     </Selection>
   );
 }
 
-// Detect a missing GLB ahead of useGLTF's suspense throw so we can show
-// a useful message instead of an opaque Three error. We probe with HEAD
-// once on mount; if absent we render a "model missing" panel and let the
-// rest of the app continue.
-function useModelPresence(): { ready: boolean; missing: boolean; error: string | null } {
+function useModelPresence() {
   const [state, setState] = useState<{ ready: boolean; missing: boolean; error: string | null }>({
     ready: false,
     missing: false,
@@ -237,16 +250,40 @@ function useModelPresence(): { ready: boolean; missing: boolean; error: string |
   return state;
 }
 
+const INITIAL_CAMERA: [number, number, number] = [0, 0.18, 5.6];
+
 export function BrainCanvas(props: BrainCanvasProps) {
   const presence = useModelPresence();
+  const cameraRef = useRef<THREE.Camera | null>(null);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const resetView = () => {
+    const controls = controlsRef.current;
+    const camera = cameraRef.current;
+    if (!controls || !camera) return;
+    camera.position.set(...INITIAL_CAMERA);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === '0') {
+        event.preventDefault();
+        resetView();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (presence.missing) {
     return (
       <div className="brain-empty" role="status">
         <p className="brain-empty-title">Brain model not bundled</p>
         <p className="brain-empty-detail">
-          Expected{' '}
-          <code>{BRAIN_MODEL.path}</code>
+          Expected <code>{BRAIN_MODEL.path}</code>
           {presence.error ? ` (${presence.error}).` : '.'} Drop a licensed GLB at that path or run{' '}
           <code>npm run validate:brain-model</code> to confirm node names.
         </p>
@@ -263,30 +300,39 @@ export function BrainCanvas(props: BrainCanvasProps) {
   }
 
   return (
-    <Canvas
-      camera={{ position: [0, 0.18, 5.6], fov: 30 }}
-      dpr={[1, 2]}
-      shadows
-      onPointerMissed={() => props.onSelectRegion(null)}
-    >
-      <color attach="background" args={['#06080c']} />
-      <fog attach="fog" args={['#06080c', 5.4, 8.4]} />
-      <ambientLight intensity={0.44} />
-      <hemisphereLight args={['#d8fff6', '#16202a', 0.68]} />
-      <directionalLight position={[2.8, 4.2, 3.5]} intensity={2.25} color="#f3eee2" castShadow />
-      <directionalLight position={[-3.4, 0.6, -2.4]} intensity={0.92} color="#4cc9c2" />
-      <Suspense fallback={<LoadingModel />}>
-        <BrainScene {...props} />
-      </Suspense>
-      <OrbitControls
-        enablePan={false}
-        enableDamping
-        dampingFactor={0.08}
-        minDistance={3.9}
-        maxDistance={7.4}
-        rotateSpeed={0.42}
+    <div ref={containerRef} className="brain-canvas-host">
+      <Canvas
+        camera={{ position: INITIAL_CAMERA, fov: 32 }}
+        dpr={[1, 2]}
+        shadows
+        onPointerMissed={() => props.onSelectRegion(null)}
+      >
+        <color attach="background" args={['#04070d']} />
+        <fog attach="fog" args={['#04070d', 6.4, 12]} />
+        <ambientLight intensity={0.5} />
+        <hemisphereLight args={['#d8fff6', '#0d1722', 0.72]} />
+        <directionalLight position={[2.8, 4.2, 3.5]} intensity={2.25} color="#f3eee2" castShadow />
+        <directionalLight position={[-3.4, 0.6, -2.4]} intensity={0.96} color="#5fdcd0" />
+        <Suspense fallback={<LoadingModel />}>
+          <BrainScene cameraRef={cameraRef} controlsRef={controlsRef} {...props} />
+        </Suspense>
+      </Canvas>
+      <BrainOverlay
+        cameraRef={cameraRef}
+        containerRef={containerRef}
+        hoveredRegion={props.hoveredRegion}
+        selectedRegion={props.selectedRegion}
       />
-    </Canvas>
+      <button
+        type="button"
+        className="brain-reset"
+        onClick={resetView}
+        title="Reset view (⌘0)"
+        aria-label="Reset view"
+      >
+        <Icon name="eye" size={13} />
+      </button>
+    </div>
   );
 }
 

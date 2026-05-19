@@ -4,6 +4,7 @@ import { Icon, type IconName } from '@ui/icons';
 
 const MODE_ICONS: Record<ModeId, IconName> = {
   brain: 'brain',
+  resources: 'book',
 };
 
 export function ModeRail() {

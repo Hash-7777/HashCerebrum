@@ -8,6 +8,7 @@
 //!   5. Document the failure modes in the docstring
 
 pub mod audit;
+pub mod cache;
 pub mod keychain;
 pub mod medical;
 pub mod net;

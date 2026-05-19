@@ -62,6 +62,11 @@ export const browserPlatform: Platform = {
   pdf: {
     extractText: async () => '',
   },
+  cache: {
+    stats: async () => ({ rows: 0, bytes: 0, hosts: [] }),
+    clear: async () => 0,
+    clearExpired: async () => 0,
+  },
   env: {
     isTauri: false,
     platform: 'browser',

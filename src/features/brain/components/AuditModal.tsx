@@ -1,0 +1,116 @@
+// Audit-view modal — replays the hash-chained audit log and surfaces
+// any broken link. The Rust side's `audit_log_verify` returns the
+// first sequence number whose entry_hash does not match the expected
+// chain hash; null means the chain is intact end-to-end.
+//
+// Opening the modal triggers a fresh verify + read. We do not poll;
+// the audit log only changes on guarded actions, so a manual refresh
+// button covers the rare "view live" case.
+
+import { useEffect, useState } from 'react';
+import { platform } from '@platform/index';
+import type { AuditEntry } from '@core/bus/events';
+import { Icon } from '@ui/icons';
+
+type LoadState =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'ready'; entries: AuditEntry[]; brokenSeq: number | null }
+  | { state: 'error'; message: string };
+
+export function AuditModal({ onClose }: { onClose: () => void }) {
+  const [load, setLoad] = useState<LoadState>({ state: 'idle' });
+
+  const refresh = async () => {
+    setLoad({ state: 'loading' });
+    try {
+      const [entries, brokenSeq] = await Promise.all([platform().audit.read(), platform().audit.verify()]);
+      setLoad({ state: 'ready', entries, brokenSeq });
+    } catch (error) {
+      setLoad({ state: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <div className="audit-modal-backdrop" role="dialog" aria-modal="true" aria-label="Audit log">
+      <aside className="audit-modal">
+        <header>
+          <div>
+            <p className="eyebrow">
+              <Icon name="shield" size={10} /> Audit
+            </p>
+            <h3>Hash-chained log</h3>
+          </div>
+          <div className="audit-actions">
+            <button type="button" onClick={() => void refresh()} aria-label="Refresh audit log">
+              <Icon name="pulse" size={13} /> Refresh
+            </button>
+            <button type="button" className="icon-button" onClick={onClose} aria-label="Close audit log">
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        </header>
+
+        {load.state === 'loading' && (
+          <p className="audit-status">
+            <Icon name="spinner" size={13} /> Replaying chain…
+          </p>
+        )}
+
+        {load.state === 'error' && (
+          <p className="audit-status audit-status-error">
+            <Icon name="alert" size={13} /> {load.message}
+          </p>
+        )}
+
+        {load.state === 'ready' && (
+          <>
+            <div className="audit-summary" data-broken={load.brokenSeq !== null}>
+              {load.brokenSeq === null ? (
+                <>
+                  <Icon name="check" size={14} /> Chain intact · {load.entries.length} entries
+                </>
+              ) : (
+                <>
+                  <Icon name="alert" size={14} /> Chain broken at seq {load.brokenSeq}
+                </>
+              )}
+            </div>
+
+            {load.entries.length === 0 ? (
+              <p className="audit-status">No guarded actions yet.</p>
+            ) : (
+              <ol className="audit-list">
+                {load.entries.slice(0, 200).map((entry) => (
+                  <li
+                    key={`${entry.seq}-${entry.entry_hash}`}
+                    data-broken={load.brokenSeq !== null && entry.seq >= load.brokenSeq}
+                  >
+                    <header>
+                      <span className="audit-seq">#{entry.seq}</span>
+                      <time>{new Date(entry.ts).toLocaleString()}</time>
+                    </header>
+                    <div className="audit-action">
+                      <strong>{entry.category}</strong>
+                      <span>{entry.subject}</span>
+                      <span className="audit-verb">{entry.action}</span>
+                    </div>
+                    <div className="audit-hashes">
+                      <code title="entry_hash">{entry.entry_hash.slice(0, 16)}…</code>
+                      <span className="audit-arrow">←</span>
+                      <code title="prev_hash">{entry.prev_hash.slice(0, 16)}…</code>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}

@@ -29,6 +29,7 @@ mod security;
 
 use commands::{
     audit::{audit_log_append, audit_log_read, audit_log_verify},
+    cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
     medical::{
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
@@ -83,6 +84,10 @@ pub fn run() {
             rxnorm_lookup,
             // PDF extraction (used by Librarian agent)
             pdf_extract_text,
+            // Cache inspection / clear (surfaced in Settings)
+            cache_stats,
+            cache_clear,
+            cache_clear_expired,
         ])
         .run(tauri::generate_context!())
         .expect("error while running HashCerebrum");

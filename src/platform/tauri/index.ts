@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { EvidenceItem, Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
+import type { CacheStats, EvidenceItem, Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
 import type { AuditEntry } from '@core/bus/events';
 
 const detectPlatform = (): Platform['env']['platform'] => {
@@ -73,6 +73,12 @@ export const tauriPlatform: Platform = {
 
   pdf: {
     extractText: (path) => invoke<string>('pdf_extract_text', { path }),
+  },
+
+  cache: {
+    stats: () => invoke<CacheStats>('cache_stats'),
+    clear: () => invoke<number>('cache_clear'),
+    clearExpired: () => invoke<number>('cache_clear_expired'),
   },
 
   env: {

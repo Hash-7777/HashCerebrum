@@ -30,6 +30,12 @@ export const MODES = defineModes([
     shortcut: '⌘1',
     description: '3D anatomical brain — regions light per active agent + topic',
   },
+  {
+    id: 'resources',
+    label: 'Resources',
+    shortcut: '⌘2',
+    description: 'Saved papers, collections, tags, notes, export',
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];

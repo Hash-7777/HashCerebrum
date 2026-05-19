@@ -1,4 +1,5 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
+import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
 import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
@@ -8,7 +9,24 @@ import { ActivityLog } from './ActivityLog';
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
+  const setMode = useModeStore((s) => s.setMode);
   const View = getModeComponent(mode);
+
+  // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
+  // reflects this binding (⌘1, ⌘2, …).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const idx = Number(event.key);
+      if (Number.isInteger(idx) && idx >= 1 && idx <= MODES.length) {
+        event.preventDefault();
+        const next = MODES[idx - 1]!.id as ModeId;
+        setMode(next);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setMode]);
 
   return (
     <div className="app-shell">

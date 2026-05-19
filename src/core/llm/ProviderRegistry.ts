@@ -238,6 +238,303 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
   return { content, toolCalls };
 }
 
+// ----- Streaming ------------------------------------------------------
+//
+// Each provider speaks a slightly different streaming protocol. Rather
+// than building a leaky abstraction, we ship one parser per provider
+// and they all converge on the same simple shape: `onToken(text)` is
+// called with each delta as it arrives, and the returned promise
+// resolves with the assembled final response (so callers can keep
+// using `completeWithModel` shapes downstream).
+
+export interface StreamOptions {
+  onToken: (delta: string) => void;
+  signal?: AbortSignal;
+}
+
+async function readStream(response: Response, parse: (chunk: string) => void) {
+  if (!response.body) throw new Error('Streaming response has no body');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // Split on newline; SSE uses double-newline event boundaries but a
+    // single \n boundary is safe to handle line-by-line since each line
+    // is independently parseable.
+    let nl = buffer.indexOf('\n');
+    while (nl !== -1) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) parse(line);
+      nl = buffer.indexOf('\n');
+    }
+  }
+  if (buffer.trim()) parse(buffer.trim());
+}
+
+async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
+  const response = await fetch(`${getOllamaHost()}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: req.model,
+      messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+      stream: true,
+      keep_alive: -1,
+      tools: req.tools?.length ? asOpenAiTools(req.tools) : undefined,
+      options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
+    }),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+  if (!response.ok) throw new Error(`Ollama HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+  let content = '';
+  const toolCalls: LlmToolCall[] = [];
+  await readStream(response, (line) => {
+    try {
+      const json = JSON.parse(line);
+      const delta = json.message?.content ?? '';
+      if (delta) {
+        content += delta;
+        opts.onToken(delta);
+      }
+      if (Array.isArray(json.message?.tool_calls)) {
+        toolCalls.push(...normalizeOpenAiToolCalls(json.message.tool_calls));
+      }
+    } catch {
+      // Ignore malformed lines mid-stream.
+    }
+  });
+  return { content, toolCalls };
+}
+
+async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
+  const url = OPENAI_COMPAT_URL[providerId];
+  if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
+  const key = await requireKey(providerId);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+    Authorization: `Bearer ${key}`,
+  };
+  if (providerId === 'openrouter') {
+    headers['HTTP-Referer'] = 'hashcerebrum://local';
+    headers['X-Title'] = 'HashCerebrum';
+  }
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: toTextMessages(req),
+    temperature: req.temperature ?? 0.4,
+    stream: true,
+  };
+  if (req.maxTokens) body.max_tokens = req.maxTokens;
+  if (req.tools?.length) {
+    body.tools = asOpenAiTools(req.tools);
+    body.tool_choice = 'auto';
+  }
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    referrerPolicy: 'no-referrer',
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+  if (!response.ok) throw new Error(`${providerId} HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+
+  let content = '';
+  const toolCalls: LlmToolCall[] = [];
+  await readStream(response, (line) => {
+    if (!line.startsWith('data:')) return;
+    const payload = line.slice(5).trim();
+    if (payload === '[DONE]') return;
+    try {
+      const json = JSON.parse(payload);
+      const delta = json.choices?.[0]?.delta;
+      if (delta?.content) {
+        content += delta.content;
+        opts.onToken(delta.content);
+      }
+      if (Array.isArray(delta?.tool_calls)) {
+        toolCalls.push(...normalizeOpenAiToolCalls(delta.tool_calls));
+      }
+    } catch {
+      /* tolerate keepalives and partial JSON */
+    }
+  });
+  return { content, toolCalls };
+}
+
+async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
+  const key = await requireKey('anthropic');
+  const system = req.messages.find((m) => m.role === 'system')?.content;
+  const messages = req.messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: [{ type: 'text', text: m.content || '' }],
+    }));
+  const body: Record<string, unknown> = {
+    model: req.model,
+    max_tokens: req.maxTokens ?? 4096,
+    stream: true,
+    messages,
+    ...(system ? { system } : {}),
+    ...(typeof req.temperature === 'number' ? { temperature: req.temperature } : {}),
+  };
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+    referrerPolicy: 'no-referrer',
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+  if (!response.ok) throw new Error(`anthropic HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+
+  let content = '';
+  await readStream(response, (line) => {
+    if (!line.startsWith('data:')) return;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === '[DONE]') return;
+    try {
+      const json = JSON.parse(payload);
+      if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+        const text = json.delta.text || '';
+        content += text;
+        if (text) opts.onToken(text);
+      }
+    } catch {
+      /* tolerate event lines like `event: message_start` */
+    }
+  });
+  return { content, toolCalls: [] };
+}
+
+export async function streamWithModel(
+  modelValue: string,
+  req: Omit<LlmRequest, 'model'>,
+  opts: StreamOptions,
+): Promise<LlmResponse> {
+  const parsed = parseModelRef(modelValue || DEFAULT_MODEL);
+  if (parsed.kind === 'cloud' && getPrivacyLocalOnly()) {
+    throw new Error('Privacy Local Only is enabled. Select an Ollama model or turn it off in Settings.');
+  }
+  const request = { ...req, model: parsed.model };
+  if (parsed.provider === 'ollama') return streamOllama(request, opts);
+  if (parsed.provider === 'anthropic') return streamAnthropic(request, opts);
+  if (parsed.provider === 'gemini') {
+    // Gemini streaming uses a different protocol — fall back to a
+    // single non-streaming response and replay it as one chunk.
+    const response = await completeGemini(request);
+    if (response.content) opts.onToken(response.content);
+    return response;
+  }
+  return streamOpenAiCompatible(parsed.provider, request, opts);
+}
+
+// Streaming variant of completeWithModelChain — same failover semantics
+// applied to a streaming endpoint. We do not retry once the stream has
+// started emitting tokens (a partial response is not retriable).
+export async function streamWithModelChain(
+  modelValue: string,
+  req: Omit<LlmRequest, 'model'>,
+  opts: StreamOptions,
+  onProgress?: (progress: FailoverProgress) => void,
+): Promise<FailoverResult> {
+  const tried = new Set<string>();
+  let current = modelValue || DEFAULT_MODEL;
+  let lastError: unknown;
+  const switchedTo: string[] = [];
+
+  const keyCache = new Map<LlmProviderId, boolean>();
+  const hasKey = async (provider: LlmProviderId) => {
+    let cached = keyCache.get(provider);
+    if (cached === undefined) {
+      cached = await hasStoredKey(provider);
+      keyCache.set(provider, cached);
+    }
+    return cached;
+  };
+  const hasKeySync = (provider: LlmProviderId) => keyCache.get(provider) === true;
+  await Promise.all(MODEL_GROUPS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
+
+  for (let attempt = 0; attempt <= MAX_FAILOVERS; attempt++) {
+    tried.add(current);
+    let receivedAny = false;
+    try {
+      const response = await streamWithModel(current, req, {
+        onToken: (token) => {
+          receivedAny = true;
+          opts.onToken(token);
+        },
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      });
+      return {
+        ...response,
+        modelUsed: current,
+        failover: { attempted: switchedTo.length, switchedTo },
+      };
+    } catch (error) {
+      lastError = error;
+      if (receivedAny) break; // mid-stream failure — cannot retry without duplicating tokens
+      if (!isRetriableError(error)) break;
+      const next = findBestFailover(current, tried, hasKeySync);
+      if (!next) break;
+      switchedTo.push(next.value);
+      onProgress?.({
+        from: current,
+        to: next,
+        attempt: attempt + 1,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      current = next.value;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'unknown LLM error'));
+}
+
+// Default-model resolver — used by BrainMode on mount. Order:
+//   1. If Ollama has a loaded model (warm via /api/ps), prefer that.
+//   2. Else, pick the first cloud provider that has a saved API key.
+//   3. Else fall back to DEFAULT_MODEL (first option in the catalog).
+// This mirrors the HashCortX `defaultLLM()` UX so the user doesn't see
+// a "no key" wall on first launch when they already have Ollama running.
+export async function resolveDefaultModel(): Promise<string> {
+  // Ollama check — fast, no auth, fails closed on connection errors.
+  try {
+    const res = await fetch(`${getOllamaHost()}/api/ps`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      const loaded = Array.isArray(data?.models) ? data.models : Array.isArray(data?.processes) ? data.processes : [];
+      const first: unknown = loaded[0]?.model ?? loaded[0]?.name;
+      if (typeof first === 'string' && first.length > 0) {
+        return `local:ollama:${first}`;
+      }
+    }
+  } catch {
+    /* no local Ollama running — fall through */
+  }
+
+  // First cloud provider with a stored key.
+  for (const group of MODEL_GROUPS) {
+    if (!group.keyName) continue;
+    try {
+      const stored = await platform().keychain.retrieve(group.keyName);
+      if (stored && group.models[0]) return group.models[0].value;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return DEFAULT_MODEL;
+}
+
 export async function completeWithModel(modelValue: string, req: Omit<LlmRequest, 'model'>): Promise<LlmResponse> {
   const parsed = parseModelRef(modelValue || DEFAULT_MODEL);
   if (parsed.kind === 'cloud' && getPrivacyLocalOnly()) {

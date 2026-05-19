@@ -1,8 +1,15 @@
-// Topic classifier — MeSH-subset dictionary mapped to anatomical regions.
-// Lightweight keyword pass over streaming output; throttled in caller.
-// Real MeSH data loaded from data/mesh-subset.json (Phase 5).
+// Topic classifier — substring scan over a curated MeSH-subset
+// dictionary, mapping each hit to an anatomical region. Designed for
+// streaming: callers pass the running content buffer each chunk and
+// the classifier returns hits (caller dedupes / throttles).
+//
+// Why substring not regex word-boundary: MeSH terms include
+// hyphens, single-letter shorthand ("CT scan"), and multi-word phrases
+// where the previous-character context is irrelevant. Substring keeps
+// it predictable.
 
 import type { RegionId } from '@config/agents';
+import data from './data/mesh-subset.json';
 
 interface MeshTerm {
   term: string;
@@ -10,36 +17,38 @@ interface MeshTerm {
   weight: number;
 }
 
-// Tiny seed set; Phase 5 replaces this with a loaded JSON of ~1k terms.
-const SEED_TERMS: MeshTerm[] = [
-  { term: 'cardiology', region: 'brainstem', weight: 0.8 },
-  { term: 'cardiac', region: 'brainstem', weight: 0.7 },
-  { term: 'neurology', region: 'frontal', weight: 0.9 },
-  { term: 'neural', region: 'frontal', weight: 0.8 },
-  { term: 'pharmacology', region: 'basal_ganglia', weight: 0.85 },
-  { term: 'drug', region: 'basal_ganglia', weight: 0.6 },
-  { term: 'memory', region: 'hippocampus', weight: 0.9 },
-  { term: 'imaging', region: 'occipital', weight: 0.8 },
-  { term: 'mri', region: 'occipital', weight: 0.8 },
-  { term: 'ct', region: 'occipital', weight: 0.7 },
-  { term: 'pathology', region: 'temporal', weight: 0.7 },
-  { term: 'oncology', region: 'temporal', weight: 0.75 },
-  { term: 'motor', region: 'cerebellum', weight: 0.8 },
-  { term: 'coordination', region: 'cerebellum', weight: 0.7 },
-  { term: 'fear', region: 'amygdala', weight: 0.8 },
-  { term: 'emotion', region: 'amygdala', weight: 0.7 },
-  { term: 'attention', region: 'parietal', weight: 0.8 },
-  { term: 'sensation', region: 'parietal', weight: 0.7 },
-  { term: 'thalamus', region: 'thalamus', weight: 1.0 },
-];
+interface MeshDict {
+  version: number;
+  terms: MeshTerm[];
+}
 
-export function classify(text: string): { region: RegionId; confidence: number; term: string }[] {
+// Pre-process: lower-case once, sort by length DESC so a multi-word
+// term ("temporal lobe") fires before its shorter sibling ("temporal").
+const TERMS: MeshTerm[] = (data as MeshDict).terms
+  .map((t) => ({ term: t.term.toLowerCase(), region: t.region, weight: t.weight }))
+  .sort((a, b) => b.term.length - a.term.length);
+
+export interface ClassifyHit {
+  region: RegionId;
+  confidence: number;
+  term: string;
+}
+
+export function classify(text: string): ClassifyHit[] {
+  if (!text) return [];
   const lc = text.toLowerCase();
-  const hits: { region: RegionId; confidence: number; term: string }[] = [];
-  for (const t of SEED_TERMS) {
+  const hits: ClassifyHit[] = [];
+  const seen = new Set<string>();
+  for (const t of TERMS) {
+    if (seen.has(t.term)) continue;
     if (lc.includes(t.term)) {
+      seen.add(t.term);
       hits.push({ region: t.region, confidence: t.weight, term: t.term });
     }
   }
   return hits;
+}
+
+export function classifierSize(): number {
+  return TERMS.length;
 }
