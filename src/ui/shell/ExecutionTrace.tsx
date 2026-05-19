@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
 import { Icon, type IconName } from '@ui/icons';
 
@@ -47,10 +47,6 @@ export function ExecutionTrace() {
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);
   const startTime = visible[0]?.ts ?? Date.now();
-
-  useEffect(() => {
-    if (state === 'running') setExpanded(true);
-  }, [state, activity[0]?.id]);
 
   return (
     <aside className={`execution-trace ${expanded ? 'expanded' : 'collapsed'}`} aria-label="Execution trace">

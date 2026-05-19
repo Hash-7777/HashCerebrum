@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import { useEffect, useRef, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 
@@ -32,6 +32,14 @@ export function Composer({
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = modelGroups.flatMap((group) => group.models);
   const selectedModelAvailable = availableModels.some((model) => model.value === selectedModel);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 42), 164)}px`;
+  }, [query]);
 
   return (
     <form className="research-composer" onSubmit={onSubmit}>
@@ -75,10 +83,11 @@ export function Composer({
       </div>
       <div className="composer-input-row">
         <textarea
+          ref={textareaRef}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Ask about a disease, drug, clinical trial, biomarker, or safety signal"
-          rows={3}
+          placeholder="Message HashCerebrum"
+          rows={1}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
               event.preventDefault();

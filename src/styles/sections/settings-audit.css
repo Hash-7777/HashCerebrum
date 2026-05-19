@@ -1,3 +1,9 @@
+.settings-popover-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+}
+
 .settings-panel {
   position: absolute;
   z-index: 20;

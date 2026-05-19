@@ -509,13 +509,20 @@ export function BrainMode() {
       </section>
 
       {settingsOpen && (
-        <FeatureBoundary name="Settings">
-          <SettingsPanel
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            onClose={() => setSettingsOpen(false)}
-          />
-        </FeatureBoundary>
+        <div
+          className="settings-popover-layer"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSettingsOpen(false);
+          }}
+        >
+          <FeatureBoundary name="Settings">
+            <SettingsPanel
+              selectedModel={selectedModel}
+              setSelectedModel={setSelectedModel}
+              onClose={() => setSettingsOpen(false)}
+            />
+          </FeatureBoundary>
+        </div>
       )}
     </div>
   );
