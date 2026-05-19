@@ -441,34 +441,10 @@ export function BrainMode() {
     <div className="mode brain-mode brain-workspace">
       <section className="research-chat" aria-label="Brain research chat">
         <header className="workspace-toolbar">
-          <div>
-            <p className="eyebrow">
-              <Icon name="brain" size={10} /> Brain Research
-            </p>
-            <h1>Chat-first workspace</h1>
-          </div>
-          <div className="toolbar-actions">
-            <select
-              value={selectedModel}
-              onChange={(event) => setSelectedModel(event.target.value)}
-              aria-label="Model"
-              disabled={modelGroups.length === 0}
-            >
-              {modelGroups.length === 0 && <option value={selectedModel}>No connected models</option>}
-              {modelGroups.map((group) => (
-                <optgroup key={group.provider} label={group.label}>
-                  {group.models.map((model) => (
-                    <option key={model.value} value={model.value}>
-                      {model.shortLabel}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <button type="button" onClick={() => setSettingsOpen(true)} className="toolbar-icon-button" aria-label="Settings">
-              <Icon name="settings" size={14} />
-            </button>
-          </div>
+          <p className="eyebrow">
+            <Icon name="brain" size={10} /> Brain Research
+          </p>
+          <h1>Chat-first workspace</h1>
         </header>
 
         <FeatureBoundary name="Transcript">

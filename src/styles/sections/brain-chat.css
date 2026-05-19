@@ -15,10 +15,9 @@
   position: sticky;
   top: 0;
   z-index: 8;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
   min-height: 60px;
   padding: 6px 0 12px;
   background: linear-gradient(180deg, rgba(6, 10, 18, 0.99) 65%, rgba(6, 10, 18, 0.0));
@@ -34,14 +33,6 @@
   letter-spacing: -0.01em;
   color: var(--hc-fg-strong);
 }
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.toolbar-actions select,
-.toolbar-actions button,
 .research-composer button:not(.composer-send),
 .research-composer select,
 .settings-panel button,
@@ -54,27 +45,18 @@
   color: var(--hc-fg);
   transition: border-color 140ms var(--hc-ease), background 140ms var(--hc-ease), color 140ms var(--hc-ease);
 }
-.toolbar-actions select {
-  max-width: 168px;
-  min-height: 34px;
-  padding: 0 8px;
-  font-size: 12px;
-}
-.toolbar-actions button,
 .research-composer button,
 .settings-panel button {
   min-height: 34px;
   padding: 0 10px;
   font-size: 12px;
 }
-.toolbar-actions button:hover,
 .research-composer button:not(.composer-send):hover,
 .settings-panel button:hover:not(:disabled) {
   border-color: var(--hc-border-accent);
   background: rgba(61, 209, 191, 0.10);
   color: var(--hc-fg-strong);
 }
-.toolbar-actions select:focus-visible,
 .research-composer select:focus-visible,
 .settings-panel input:focus-visible,
 .settings-panel select:focus-visible {
@@ -82,7 +64,6 @@
   border-color: var(--hc-border-accent);
   box-shadow: var(--hc-shadow-focus);
 }
-.toolbar-actions button:disabled,
 .research-composer button:disabled,
 .settings-panel button:disabled {
   cursor: not-allowed;
