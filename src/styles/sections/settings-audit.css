@@ -3,8 +3,8 @@
   z-index: 20;
   inset: 14px 14px 14px auto;
   width: min(460px, calc(100% - 28px));
-  display: grid;
-  grid-template-rows: auto auto auto auto auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   border: 1px solid var(--hc-border-strong);
@@ -15,6 +15,7 @@
   box-shadow: var(--hc-shadow-3), var(--hc-shadow-inset);
   user-select: text;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-cache,
@@ -301,17 +302,19 @@
   min-height: 16px;
 }
 .provider-key-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 9px;
-  min-height: 0;
-  overflow: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   padding-top: 2px;
 }
 .provider-key-row {
   display: grid;
   gap: 7px;
+  flex: 0 0 auto;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 9px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;

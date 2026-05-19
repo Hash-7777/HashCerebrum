@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '@platform/index';
 import { Icon } from '@ui/icons';
 import { useResourcesStore } from '@core/store/resourcesStore';
+import { useMemo } from 'react';
 
 function evidenceKey(item: EvidenceItem, index: number) {
   return item.provenanceHash || `${item.source}-${item.title}-${index}`;
@@ -17,9 +18,8 @@ function dedupeKey(item: EvidenceItem) {
 }
 
 export function EvidenceList({ items }: { items: EvidenceItem[] }) {
-  const savedKeys = useResourcesStore((s) =>
-    new Set(s.resources.map((r) => dedupeKey(r.evidence))),
-  );
+  const resources = useResourcesStore((s) => s.resources);
+  const savedKeys = useMemo(() => new Set(resources.map((r) => dedupeKey(r.evidence))), [resources]);
   const add = useResourcesStore((s) => s.add);
 
   return (
