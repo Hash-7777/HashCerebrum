@@ -9,6 +9,8 @@ export function Composer({
   setSelectedModel,
   isRunning,
   canSubmit,
+  editing = false,
+  onCancelEdit,
   onSubmit,
   onOpenSettings,
 }: {
@@ -18,6 +20,8 @@ export function Composer({
   setSelectedModel: (value: string) => void;
   isRunning: boolean;
   canSubmit: boolean;
+  editing?: boolean;
+  onCancelEdit?: () => void;
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
 }) {
@@ -35,6 +39,16 @@ export function Composer({
 
   return (
     <form className="research-composer" onSubmit={onSubmit}>
+      {editing && (
+        <div className="composer-editing">
+          <span>
+            <Icon name="edit" size={12} /> Editing earlier prompt
+          </span>
+          <button type="button" onClick={onCancelEdit}>
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="composer-controls">
         <label>
           <span>Model</span>
@@ -83,10 +97,10 @@ export function Composer({
           disabled={isRunning || !canSubmit}
           className="composer-send"
           data-running={isRunning ? 'true' : 'false'}
-          aria-label={isRunning ? 'Running' : 'Send'}
+          aria-label={isRunning ? 'Running' : editing ? 'Save edit' : 'Send'}
         >
           <Icon name={isRunning ? 'spinner' : 'send'} size={13} />
-          <span>{isRunning ? 'Running' : 'Send'}</span>
+          <span>{isRunning ? 'Running' : editing ? 'Save' : 'Send'}</span>
         </button>
       </div>
     </form>

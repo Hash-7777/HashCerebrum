@@ -27,7 +27,11 @@ export type IconName =
   | 'lock'
   | 'eye'
   | 'gauge'
-  | 'plus';
+  | 'plus'
+  | 'copy'
+  | 'edit'
+  | 'refresh'
+  | 'download';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -165,6 +169,33 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   plus: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  copy: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M4 16V6a2 2 0 0 1 2-2h10" />
+    </svg>
+  ),
+  edit: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  ),
+  refresh: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M20 6v5h-5" />
+      <path d="M4 18v-5h5" />
+      <path d="M18 11a6.5 6.5 0 0 0-11-3.8L4 10" />
+      <path d="M6 13a6.5 6.5 0 0 0 11 3.8l3-2.8" />
+    </svg>
+  ),
+  download: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M12 3v11" />
+      <path d="m7 9 5 5 5-5" />
+      <path d="M5 20h14" />
     </svg>
   ),
 };

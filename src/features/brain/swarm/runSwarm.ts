@@ -7,6 +7,7 @@
 import { agentById } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import { bossChat, planResearch, synthesize } from './boss';
+import { buildSourceGroundedPaperFallback, detectPaperRequest, fallbackPaperTasks } from './paper';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SwarmOptions, SwarmResult } from './types';
 
@@ -61,9 +62,15 @@ function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: st
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks } = opts;
   const bossModel = modelFor('boss');
+  const paperRequest = detectPaperRequest(question);
 
   callbacks.onBossPhase('routing');
-  const plan = await planResearch(bossModel, question, conversation);
+  let plan = await planResearch(bossModel, question, conversation);
+  if (paperRequest && plan.mode === 'chat') {
+    plan = { mode: 'research', tasks: fallbackPaperTasks(question) };
+  } else if (paperRequest && plan.mode === 'research' && plan.tasks.length < 2) {
+    plan = { mode: 'research', tasks: fallbackPaperTasks(question) };
+  }
 
   if (plan.mode === 'chat') {
     callbacks.onBossPhase('answering');
@@ -82,12 +89,15 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   callbacks.onBossPhase('synthesizing');
   let synth;
   try {
-    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken);
+    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken, paperRequest);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
+    const answer = paperRequest
+      ? buildSourceGroundedPaperFallback(question, paperRequest, merged, specialists, detail)
+      : sourceOnlyAnswer(question, merged, detail);
     return {
       kind: 'research',
-      answer: sourceOnlyAnswer(question, merged, detail),
+      answer,
       evidence: merged,
       specialists,
       modelUsed: bossModel,

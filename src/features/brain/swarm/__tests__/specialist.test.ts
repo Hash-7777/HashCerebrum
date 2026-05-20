@@ -120,6 +120,31 @@ describe('runSwarm', () => {
     expect(result.specialists[0]?.error).toContain('planner unavailable');
   });
 
+  it('returns a structured manuscript fallback when a paper request reaches source-only recovery', async () => {
+    llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
+    llmMocks.streamWithModelChain.mockRejectedValue(new Error('boss synthesis unavailable'));
+
+    const result = await runSwarm({
+      question: 'make a full research paper about NSAIDs and warfarin',
+      conversation: [],
+      modelFor: () => 'openrouter:test-model',
+      callbacks: callbacks(),
+    });
+
+    expect(result.kind).toBe('research');
+    expect(result.specialists.map((specialist) => specialist.agentId)).toEqual([
+      'literature',
+      'pharmacology',
+      'trials',
+      'public_health',
+    ]);
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.answer).toContain('# Manuscript Draft');
+    expect(result.answer).toContain('## Structured Abstract');
+    expect(result.answer).toContain('## References');
+    expect(result.answer).toContain('boss synthesis unavailable');
+  });
+
   it('lets the boss route ordinary messages to chat without running specialists', async () => {
     llmMocks.completeWithModelChain.mockResolvedValue({ content: '{"mode":"chat"}', toolCalls: [] });
     llmMocks.streamWithModelChain.mockImplementation(async (_model, _req, opts) => {

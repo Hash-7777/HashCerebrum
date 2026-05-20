@@ -74,6 +74,7 @@ export function BrainMode() {
   }, [availableModels, selectedModel]);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
@@ -130,16 +131,8 @@ export function BrainMode() {
     useChatHistoryStore.getState().saveActive(messages);
   }, [isRunning, messages]);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const cleanQuery = query.trim();
-    if (!cleanQuery || isRunning) return;
-
-    setQuery('');
-    setSourceStatuses(INITIAL_SOURCES.map((source) => ({ ...source, state: 'idle', count: 0 })));
-    setEvidence([]);
-
-    const conversation = messages.flatMap<LlmMessage>((message) => {
+  const toConversation = (turns: ChatMessage[]): LlmMessage[] =>
+    turns.flatMap<LlmMessage>((message) => {
       if (message.role === 'user') return [{ role: 'user', content: message.content }];
       if (message.role === 'assistant' && !message.critiqueOf && message.content.trim()) {
         return [{ role: 'assistant', content: message.content }];
@@ -147,11 +140,22 @@ export function BrainMode() {
       return [];
     });
 
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: cleanQuery }]);
+  const runTurn = async (cleanQuery: string, baseMessages: ChatMessage[], appendUser: boolean) => {
+    if (!cleanQuery || isRunning) return;
+
+    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: cleanQuery };
+    const nextMessages = appendUser ? [...baseMessages, userMessage] : baseMessages;
+    const conversation = toConversation(appendUser ? baseMessages : baseMessages.slice(0, -1));
+
+    setQuery('');
+    setEditingMessageId(null);
+    setSourceStatuses(INITIAL_SOURCES.map((source) => ({ ...source, state: 'idle', count: 0 })));
+    setEvidence([]);
+    setMessages(nextMessages);
 
     if (availableModels.length === 0) {
-      setMessages((current) => [
-        ...current,
+      setMessages([
+        ...nextMessages,
         {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -164,8 +168,8 @@ export function BrainMode() {
     setIsRunning(true);
     const runs = useResearchRunStore.getState();
     const assistantId = crypto.randomUUID();
-    setMessages((current) => [
-      ...current,
+    setMessages([
+      ...nextMessages,
       { id: assistantId, role: 'assistant', content: '', modelLabel, isStreaming: true },
     ]);
 
@@ -340,6 +344,43 @@ export function BrainMode() {
     }
   };
 
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanQuery = query.trim();
+    if (!cleanQuery || isRunning) return;
+
+    if (editingMessageId) {
+      const editIndex = messages.findIndex((message) => message.id === editingMessageId && message.role === 'user');
+      await runTurn(cleanQuery, editIndex >= 0 ? messages.slice(0, editIndex) : messages, true);
+      return;
+    }
+
+    await runTurn(cleanQuery, messages, true);
+  };
+
+  const editMessage = (messageId: string) => {
+    if (isRunning) return;
+    const target = messages.find((message) => message.id === messageId && message.role === 'user');
+    if (!target) return;
+    setEditingMessageId(messageId);
+    setQuery(target.content);
+  };
+
+  const regenerateMessage = (messageId: string) => {
+    if (isRunning) return;
+    const assistantIndex = messages.findIndex((message) => message.id === messageId && message.role === 'assistant');
+    if (assistantIndex <= 0) return;
+    const userIndex = messages
+      .slice(0, assistantIndex)
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }) => message.role === 'user')?.index;
+    if (userIndex === undefined) return;
+    const userMessage = messages[userIndex];
+    if (!userMessage) return;
+    void runTurn(userMessage.content, messages.slice(0, userIndex + 1), false);
+  };
+
   const critiquedRef = useRef(new Set<string>());
 
   const runCritique = async (messageId: string) => {
@@ -430,7 +471,14 @@ export function BrainMode() {
         </header>
 
         <FeatureBoundary name="Transcript">
-          <Transcript messages={messages} modelLabel={modelLabel} isRunning={isRunning} onCritique={runCritique} />
+          <Transcript
+            messages={messages}
+            modelLabel={modelLabel}
+            isRunning={isRunning}
+            onCritique={runCritique}
+            onRegenerate={regenerateMessage}
+            onEdit={editMessage}
+          />
         </FeatureBoundary>
 
         <FeatureBoundary name="Composer">
@@ -441,6 +489,11 @@ export function BrainMode() {
             setSelectedModel={setSelectedModel}
             isRunning={isRunning}
             canSubmit={canSubmit}
+            editing={!!editingMessageId}
+            onCancelEdit={() => {
+              setEditingMessageId(null);
+              setQuery('');
+            }}
             onSubmit={submit}
             onOpenSettings={() => setSettingsOpen(true)}
           />

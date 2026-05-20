@@ -160,19 +160,23 @@
 
 .chat-message-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 .chat-action {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
+  min-height: 24px;
+  padding: 3px 8px;
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius-pill);
   background: rgba(139, 158, 255, 0.08);
   color: var(--hc-fg-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   cursor: pointer;
   transition: color 140ms var(--hc-ease), border-color 140ms var(--hc-ease), background 140ms var(--hc-ease);
 }
@@ -232,6 +236,29 @@
 .research-composer:focus-within {
   border-color: var(--hc-border-accent);
   box-shadow: var(--hc-shadow-2), var(--hc-shadow-inset), 0 0 0 1px rgba(61, 209, 191, 0.22);
+}
+.composer-editing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(245, 191, 110, 0.24);
+  border-radius: 8px;
+  background: rgba(245, 191, 110, 0.08);
+  color: var(--hc-warn);
+  font-size: 11px;
+}
+.composer-editing span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.composer-editing button {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 10.5px;
 }
 .composer-controls {
   display: flex;

@@ -7,6 +7,7 @@ import { completeWithModelChain, streamWithModelChain } from '@core/llm/Provider
 import { SPECIALIST_AGENTS, type AgentId } from '@config/agents';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
+import { paperSystemInstruction, type PaperRequest } from './paper';
 import type { SpecialistResult, SpecialistTask } from './types';
 
 const SNIPPET_CHARS = 240;
@@ -66,6 +67,7 @@ ${rosterText()}
 
 - If the message is small talk, a greeting, a thank-you, or a non-biomedical request, set "mode" to "chat".
 - If it asks for biomedical facts, evidence, drugs, conditions, trials, or anything that needs sources, set "mode" to "research": break it into focused sub-questions and assign each to the most relevant specialist. Use only the specialists that fit (1 to ${MAX_TASKS} tasks).
+- If it asks for a full research paper, manuscript, journal article, publication-style article, or publishable draft, always set "mode" to "research" and delegate enough specialist tasks to support a manuscript.
 
 Reply with ONLY a JSON object and nothing else:
 {"mode":"chat"}
@@ -129,6 +131,7 @@ export async function synthesize(
   specialists: SpecialistResult[],
   mergedEvidence: EvidenceItem[],
   onToken: (delta: string) => void,
+  paperRequest?: PaperRequest | null,
 ): Promise<{ content: string; modelUsed: string }> {
   const evidenceBlock =
     mergedEvidence.length > 0
@@ -146,7 +149,9 @@ export async function synthesize(
   const messages: LlmMessage[] = [
     {
       role: 'system',
-      content: `You are the Boss of HashCerebrum. Your specialists have researched the question and retrieved records. Write the final answer for the user.
+      content: paperRequest
+        ? paperSystemInstruction(paperRequest)
+        : `You are the Boss of HashCerebrum. Your specialists have researched the question and retrieved records. Write the final answer for the user.
 
 Hard rules:
 - Use only the retrieved records and specialist findings below. Never add a fact, statistic, drug effect, dose, or citation that is not supported there.
@@ -157,7 +162,16 @@ Hard rules:
     },
     {
       role: 'user',
-      content: `Question: ${question}
+      content: paperRequest ? `Manuscript request: ${question}
+
+Retrieved records:
+${evidenceBlock}
+
+Specialist findings:
+${specialistBlock}
+
+Write the full manuscript draft now. Use the required sections exactly. Cite factual claims with [S#] markers and include a References section mapped to the retrieved records.`
+        : `Question: ${question}
 
 Retrieved records:
 ${evidenceBlock}
@@ -168,6 +182,10 @@ ${specialistBlock}
 Write the final, well-structured research answer now, citing [S#] markers for every claim.`,
     },
   ];
-  const res = await streamWithModelChain(model, { messages, temperature: 0.25, maxTokens: 1600 }, { onToken });
+  const res = await streamWithModelChain(
+    model,
+    { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 3800 : 1600 },
+    { onToken },
+  );
   return { content: res.content, modelUsed: res.modelUsed };
 }
