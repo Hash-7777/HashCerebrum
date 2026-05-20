@@ -10,11 +10,12 @@
 //   crypto::*       — sha256/hex helpers used by audit chain + provenance
 //
 // SECURITY INVARIANTS:
-//   1. Medical/source HTTP is initiated from Rust. LLM provider adapters are
-//      the only renderer-side external HTTP exception and are CSP-gated.
+//   1. All external HTTP — medical sources and LLM providers — is initiated
+//      from Rust. The renderer's connect-src has no external hosts.
 //   2. Every Rust network call passes through security::guard::check().
 //   3. Every guarded action emits an audit entry chained to the previous.
-//   4. API keys live in the OS keychain at rest — never in files or logs.
+//   4. API keys live in the renderer keychain bundle; Rust receives them
+//      per call inside request headers and never logs header values.
 //   5. The renderer cannot bypass any of this — capabilities.json restricts
 //      it to the small allowlist of commands registered below.
 // ==============================================================
