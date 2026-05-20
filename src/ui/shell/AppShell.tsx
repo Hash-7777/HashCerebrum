@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -9,6 +9,24 @@ import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
 import { ModeRail } from './ModeRail';
 import { ExecutionTrace } from './ExecutionTrace';
+
+const RegionBindingEditor = lazy(() =>
+  import('@features/brain/components/RegionBindingEditor').then((module) => ({
+    default: module.RegionBindingEditor,
+  })),
+);
+
+// Dev-only tools are reached via ?dev=<tool>. The import.meta.env.DEV
+// guard means a production build never renders them, so the lazy chunk
+// is emitted but never fetched.
+function activeDevTool(): string | null {
+  if (!import.meta.env.DEV) return null;
+  try {
+    return new URLSearchParams(window.location.search).get('dev');
+  } catch {
+    return null;
+  }
+}
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
@@ -39,6 +57,14 @@ export function AppShell() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [setMode]);
+
+  if (activeDevTool() === 'bindings') {
+    return (
+      <Suspense fallback={<div className="mode mode-loading">Loading region editor</div>}>
+        <RegionBindingEditor />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="app-shell">

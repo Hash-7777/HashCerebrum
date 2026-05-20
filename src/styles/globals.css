@@ -7,4 +7,5 @@
 @import './sections/settings-audit.css';
 @import './sections/resources.css';
 @import './sections/execution-trace.css';
+@import './sections/region-editor.css';
 @import './sections/system.css';
