@@ -2,8 +2,6 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iP/i.test(navigator.platform);
-const shortcut = isMac ? '⌘ ⏎' : 'Ctrl ⏎';
 export type ChatRouteMode = 'auto' | 'chat' | 'research';
 
 export function Composer({
@@ -89,13 +87,16 @@ export function Composer({
           placeholder="Message HashCerebrum"
           rows={1}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            // Enter sends; Shift+Enter inserts a newline. isComposing guards
+            // IME input (CJK and similar) so a mid-composition Enter does not
+            // submit a half-typed message.
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
               if (canSubmit && !isRunning) onSubmit(event as unknown as FormEvent);
             }
           }}
         />
-        <span className="composer-hint" aria-hidden="true">{shortcut} to send</span>
+        <span className="composer-hint" aria-hidden="true">Enter to send · Shift+Enter for newline</span>
         <button
           type="submit"
           disabled={isRunning || !canSubmit}
