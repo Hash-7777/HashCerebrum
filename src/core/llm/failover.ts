@@ -92,7 +92,10 @@ export function findBestFailover(
   );
 }
 
-const RETRIABLE = /\b(rate ?limit|quota|too many|capacity|overloaded|unavailable|timeout|timed ?out|network|failed to fetch|server error|429|503|529|502|504)\b|HTTP 5\d\d/i;
+// Billing/credit errors (402, "insufficient credits") are retriable in the
+// sense that the chain should fail OVER to another provider — just never
+// retried on the same provider (QUOTA blocks that in shouldRetrySameProvider).
+const RETRIABLE = /\b(rate ?limit|quota|too many|capacity|overloaded|unavailable|timeout|timed ?out|network|failed to fetch|server error|insufficient ?credits|payment ?required|billing|402|429|503|529|502|504)\b|HTTP 5\d\d/i;
 const SAME_PROVIDER_RETRY = /\b(rate ?limit|too many|capacity|overloaded|temporar|try again|timeout|timed ?out|network|failed to fetch|429|503|529|502|504)\b|HTTP 5\d\d/i;
 const QUOTA = /\b(quota|free ?tier|insufficient ?credits|billing|exceeded)\b/i;
 const HARD_PROVIDER = /tool.{0,10}call(ing)?.{0,10}(not supported|unsupported|unavailable|disabled)|function.{0,10}call(ing)?.{0,10}not supported|does not support.{0,10}tool|tools?.{0,10}not.{0,10}supported|invalid_request_error|jsondecodeerror|expecting property name enclosed in double quotes|invalid.{0,20}(tool|function).{0,20}(json|arguments)|context.{0,10}length|maximum.{0,10}token|model.{0,10}not.{0,10}found|no such model/i;

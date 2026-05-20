@@ -43,6 +43,16 @@ describe('LLM failover', () => {
     expect(shouldRetrySameProvider(new Error('quota exceeded, update billing'))).toBe(false);
   });
 
+  it('fails over on a billing/credit error instead of surfacing it', () => {
+    const creditError = new Error(
+      'openrouter HTTP 402: {"error":{"message":"Insufficient credits.","code":402}}',
+    );
+    // Retriable -> the chain switches providers...
+    expect(isRetriableError(creditError)).toBe(true);
+    // ...but never retries the same broke provider.
+    expect(shouldRetrySameProvider(creditError)).toBe(false);
+  });
+
   it('treats model incompatibility as failover-worthy', () => {
     expect(isHardProviderError(new Error('model not found'))).toBe(true);
     expect(isHardProviderError(new Error('tool calling not supported'))).toBe(true);

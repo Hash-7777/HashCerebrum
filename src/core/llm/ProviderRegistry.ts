@@ -162,6 +162,22 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
   return { content, toolCalls };
 }
 
+// Gemini's functionDeclarations schema is a restricted OpenAPI subset that
+// rejects standard JSON-Schema keys (e.g. additionalProperties), 400-ing the
+// whole request. Strip the keys it does not understand before sending.
+function sanitizeGeminiSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeGeminiSchema);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'additionalProperties' || key === '$schema' || key === 'default') continue;
+      out[key] = sanitizeGeminiSchema(entry);
+    }
+    return out;
+  }
+  return value;
+}
+
 function toGeminiBody(req: LlmRequest): Record<string, unknown> {
   const system = req.messages.find((m) => m.role === 'system')?.content;
   const contents = req.messages
@@ -180,7 +196,7 @@ function toGeminiBody(req: LlmRequest): Record<string, unknown> {
             functionDeclarations: req.tools.map((tool) => ({
               name: tool.name,
               description: tool.description,
-              parameters: tool.parameters,
+              parameters: sanitizeGeminiSchema(tool.parameters),
             })),
           }],
         }
