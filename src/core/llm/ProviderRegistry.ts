@@ -51,6 +51,27 @@ function toTextMessages(req: LlmRequest) {
   }));
 }
 
+// Non-streaming chat POST through the Rust proxy (guard + rate-limit +
+// audit). Returns the parsed JSON body; throws on a non-2xx status.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function postJson(
+  provider: LlmProviderId,
+  url: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  const { status, body: text } = await platform().llm.httpPost(provider, url, headers, JSON.stringify(body));
+  if (status < 200 || status >= 300) {
+    throw new Error(`${provider} HTTP ${status}: ${text.slice(0, 240)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${provider} returned a non-JSON response`);
+  }
+}
+
 async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest): Promise<LlmResponse> {
   const url = OPENAI_COMPAT_CHAT_URL[providerId];
   if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
@@ -74,11 +95,7 @@ async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmReque
     body.tools = asOpenAiTools(req.tools);
     body.tool_choice = 'auto';
   }
-  const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), referrerPolicy: 'no-referrer' });
-  if (!response.ok) {
-    throw new Error(`${providerId} HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-  }
-  const data = await response.json();
+  const data = await postJson(providerId, url, headers, body);
   const message = data.choices?.[0]?.message ?? {};
   const result: LlmResponse = {
     content: message.content || '',
@@ -91,20 +108,15 @@ async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmReque
 }
 
 async function completeOllama(req: LlmRequest): Promise<LlmResponse> {
-  const response = await fetch(`${getOllamaHost()}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: req.model,
-      messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: false,
-      keep_alive: -1,
-      tools: req.tools?.length ? asOpenAiTools(req.tools) : undefined,
-      options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
-    }),
-  });
-  if (!response.ok) throw new Error(`Ollama HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-  const data = await response.json();
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: false,
+    keep_alive: -1,
+    options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
+  };
+  if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
+  const data = await postJson('ollama', `${getOllamaHost()}/api/chat`, { 'Content-Type': 'application/json' }, body);
   const message = data.message ?? {};
   return {
     content: message.content || '',
@@ -135,14 +147,12 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
       input_schema: tool.parameters,
     }));
   }
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify(body),
-    referrerPolicy: 'no-referrer',
-  });
-  if (!response.ok) throw new Error(`anthropic HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-  const data = await response.json();
+  const data = await postJson(
+    'anthropic',
+    'https://api.anthropic.com/v1/messages',
+    { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body,
+  );
   const toolCalls: LlmToolCall[] = [];
   let content = '';
   for (const block of data.content ?? []) {
@@ -180,18 +190,12 @@ function toGeminiBody(req: LlmRequest): Record<string, unknown> {
 
 async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
   const key = await requireKey('gemini');
-  const body = toGeminiBody(req);
-  const response = await fetch(
+  const data = await postJson(
+    'gemini',
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify(body),
-      referrerPolicy: 'no-referrer',
-    },
+    { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    toGeminiBody(req),
   );
-  if (!response.ok) throw new Error(`gemini HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-  const data = await response.json();
   const parsed = parseGeminiResponse(data);
   return { content: parsed.delta, toolCalls: parsed.toolCalls };
 }
@@ -207,58 +211,34 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
 
 export interface StreamOptions {
   onToken: (delta: string) => void;
-  signal?: AbortSignal;
-}
-
-async function readStream(response: Response, parse: (chunk: string) => void) {
-  if (!response.body) throw new Error('Streaming response has no body');
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    // Split on newline; SSE uses double-newline event boundaries but a
-    // single \n boundary is safe to handle line-by-line since each line
-    // is independently parseable.
-    let nl = buffer.indexOf('\n');
-    while (nl !== -1) {
-      const line = buffer.slice(0, nl).trim();
-      buffer = buffer.slice(nl + 1);
-      if (line) parse(line);
-      nl = buffer.indexOf('\n');
-    }
-  }
-  if (buffer.trim()) parse(buffer.trim());
 }
 
 async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
-  const response = await fetch(`${getOllamaHost()}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: req.model,
-      messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: true,
-      keep_alive: -1,
-      tools: req.tools?.length ? asOpenAiTools(req.tools) : undefined,
-      options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
-    }),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  });
-  if (!response.ok) throw new Error(`Ollama HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+  const body: Record<string, unknown> = {
+    model: req.model,
+    messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+    keep_alive: -1,
+    options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
+  };
+  if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
   let content = '';
   const accumulator = new ToolCallAccumulator();
-  await readStream(response, (line) => {
-    const parsed = parseOllamaStreamLine(line);
-    if (!parsed) return;
-    if (parsed.delta) {
-      content += parsed.delta;
-      opts.onToken(parsed.delta);
-    }
-    accumulator.ingest(parsed.toolCallDeltas);
-  });
+  await platform().llm.chatStream(
+    'ollama',
+    `${getOllamaHost()}/api/chat`,
+    { 'Content-Type': 'application/json' },
+    JSON.stringify(body),
+    (line) => {
+      const parsed = parseOllamaStreamLine(line);
+      if (!parsed) return;
+      if (parsed.delta) {
+        content += parsed.delta;
+        opts.onToken(parsed.delta);
+      }
+      accumulator.ingest(parsed.toolCallDeltas);
+    },
+  );
   return { content, toolCalls: accumulator.collect() };
 }
 
@@ -286,18 +266,9 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
     body.tools = asOpenAiTools(req.tools);
     body.tool_choice = 'auto';
   }
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    referrerPolicy: 'no-referrer',
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  });
-  if (!response.ok) throw new Error(`${providerId} HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-
   let content = '';
   const accumulator = new ToolCallAccumulator();
-  await readStream(response, (line) => {
+  await platform().llm.chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
     const parsed = parseOpenAiStreamLine(line);
     if (!parsed) return;
     if (parsed.delta) {
@@ -326,59 +297,50 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
     ...(system ? { system } : {}),
     ...(typeof req.temperature === 'number' ? { temperature: req.temperature } : {}),
   };
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
+  let content = '';
+  await platform().llm.chatStream(
+    'anthropic',
+    'https://api.anthropic.com/v1/messages',
+    {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
       'x-api-key': key,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify(body),
-    referrerPolicy: 'no-referrer',
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  });
-  if (!response.ok) throw new Error(`anthropic HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-
-  let content = '';
-  await readStream(response, (line) => {
-    const parsed = parseAnthropicStreamLine(line);
-    if (!parsed?.delta) return;
-    content += parsed.delta;
-    opts.onToken(parsed.delta);
-  });
+    JSON.stringify(body),
+    (line) => {
+      const parsed = parseAnthropicStreamLine(line);
+      if (!parsed?.delta) return;
+      content += parsed.delta;
+      opts.onToken(parsed.delta);
+    },
+  );
   return { content, toolCalls: [] };
 }
 
 async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
   const key = await requireKey('gemini');
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        'x-goog-api-key': key,
-      },
-      body: JSON.stringify(toGeminiBody(req)),
-      referrerPolicy: 'no-referrer',
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    },
-  );
-  if (!response.ok) throw new Error(`gemini HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
-
   let content = '';
   const toolCalls: LlmToolCall[] = [];
-  await readStream(response, (line) => {
-    const parsed = parseGeminiStreamLine(line);
-    if (!parsed) return;
-    if (parsed.delta) {
-      content += parsed.delta;
-      opts.onToken(parsed.delta);
-    }
-    toolCalls.push(...parsed.toolCalls);
-  });
+  await platform().llm.chatStream(
+    'gemini',
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`,
+    {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      'x-goog-api-key': key,
+    },
+    JSON.stringify(toGeminiBody(req)),
+    (line) => {
+      const parsed = parseGeminiStreamLine(line);
+      if (!parsed) return;
+      if (parsed.delta) {
+        content += parsed.delta;
+        opts.onToken(parsed.delta);
+      }
+      toolCalls.push(...parsed.toolCalls);
+    },
+  );
   return { content, toolCalls };
 }
 
@@ -436,7 +398,6 @@ export async function streamWithModelChain(
           receivedAny = true;
           opts.onToken(token);
         },
-        ...(opts.signal ? { signal: opts.signal } : {}),
       });
       return {
         ...response,
@@ -479,9 +440,9 @@ export async function streamWithModelChain(
 export async function resolveDefaultModel(): Promise<string> {
   // Ollama check — fast, no auth, fails closed on connection errors.
   try {
-    const res = await fetch(`${getOllamaHost()}/api/ps`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
+    const { status, body } = await platform().llm.httpGet('ollama', `${getOllamaHost()}/api/ps`, {});
+    if (status >= 200 && status < 300) {
+      const data = JSON.parse(body);
       const loaded = Array.isArray(data?.models) ? data.models : Array.isArray(data?.processes) ? data.processes : [];
       const first: unknown = loaded[0]?.model ?? loaded[0]?.name;
       if (typeof first === 'string' && first.length > 0) {

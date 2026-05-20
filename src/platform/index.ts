@@ -94,13 +94,27 @@ export interface Platform {
 
   // LLM provider HTTP — proxied through Rust so the guard, rate limiter,
   // and audit log cover provider calls. The renderer supplies the auth
-  // headers per call; Rust never logs them.
+  // headers per call; Rust never logs them. chatStream resolves once the
+  // stream ends and rejects if the provider returned an error.
   llm: {
     httpGet(
       provider: string,
       url: string,
       headers: Record<string, string>,
     ): Promise<{ status: number; body: string }>;
+    httpPost(
+      provider: string,
+      url: string,
+      headers: Record<string, string>,
+      body: string,
+    ): Promise<{ status: number; body: string }>;
+    chatStream(
+      provider: string,
+      url: string,
+      headers: Record<string, string>,
+      body: string,
+      onLine: (line: string) => void,
+    ): Promise<void>;
   };
 
   // Environment

@@ -128,6 +128,45 @@ export const browserPlatform: Platform = {
       const response = await fetch(url, { headers, cache: 'no-store', referrerPolicy: 'no-referrer' });
       return { status: response.status, body: await response.text() };
     },
+    httpPost: async (_provider, url, headers, body) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+      });
+      return { status: response.status, body: await response.text() };
+    },
+    chatStream: async (_provider, url, headers, body, onLine) => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
+      }
+      if (!response.body) throw new Error('Streaming response has no body');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl = buffer.indexOf('\n');
+        while (nl !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (line) onLine(line);
+          nl = buffer.indexOf('\n');
+        }
+      }
+      if (buffer.trim()) onLine(buffer.trim());
+    },
   },
   env: {
     isTauri: false,

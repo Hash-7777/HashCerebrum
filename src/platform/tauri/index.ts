@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
 import type { CacheStats, EvidenceItem, Platform, MedicalSourceQuery, MedicalSourceResult } from '../index';
 import type { AuditEntry } from '@core/bus/events';
@@ -153,6 +153,18 @@ export const tauriPlatform: Platform = {
   llm: {
     httpGet: (provider, url, headers) =>
       invoke<{ status: number; body: string }>('llm_http_get', { provider, url, headers }),
+    httpPost: (provider, url, headers, body) =>
+      invoke<{ status: number; body: string }>('llm_http_post', { provider, url, headers, body }),
+    chatStream: async (provider, url, headers, body, onLine) => {
+      const channel = new Channel<{ kind: 'line'; text: string } | { kind: 'error'; message: string }>();
+      let streamError: string | null = null;
+      channel.onmessage = (event) => {
+        if (event.kind === 'line') onLine(event.text);
+        else streamError = event.message;
+      };
+      await invoke('llm_chat_stream', { provider, url, headers, body, onEvent: channel });
+      if (streamError) throw new Error(streamError);
+    },
   },
 
   env: {
