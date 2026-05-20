@@ -170,7 +170,7 @@ ${evidenceBlock}
 Specialist findings:
 ${specialistBlock}
 
-Write the full manuscript draft now. Use the required sections exactly. Cite factual claims with [S#] markers and include a References section mapped to the retrieved records.`
+Write the full, in-depth manuscript draft now. Use the required Markdown structure exactly, develop every section into substantial paragraphs, and cite factual claims inline with [S#] markers. Do not write a References section — inline [S#] citation is enough.`
         : `Question: ${question}
 
 Retrieved records:
@@ -184,7 +184,7 @@ Write the final, well-structured research answer now, citing [S#] markers for ev
   ];
   const res = await streamWithModelChain(
     model,
-    { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 3800 : 1600 },
+    { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 8000 : 1600 },
     { onToken },
   );
   return { content: res.content, modelUsed: res.modelUsed };

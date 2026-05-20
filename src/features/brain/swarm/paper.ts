@@ -57,33 +57,35 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
 }
 
 export function paperSystemInstruction(request: PaperRequest): string {
-  return `Write a full source-grounded biomedical manuscript draft using the ${request.label} form.
+  return `Write a full, in-depth, source-grounded biomedical manuscript using the ${request.label} form. It must read like a genuine journal article — thorough and comprehensive, never a short summary.
 
-Use journal-manuscript structure, not a short answer. Follow the closest EQUATOR-style reporting family:
-- IMRaD for narrative evidence reviews.
-- PRISMA-style search/reporting language for review requests.
-- CONSORT-aware structure for trial-report requests.
-- STROBE-aware structure for observational/cohort requests.
-- CARE-aware structure for case-report requests.
+Formatting (Markdown — follow exactly):
+- Begin with the article title on its own line as "# Title".
+- Every section heading is a Markdown "## Heading"; use "### Sub-heading" where a section needs parts.
+- Write flowing academic prose in full paragraphs. Use lists only where a list is genuinely clearer than prose.
+- Do not number the sections and do not repeat the title anywhere except the opening "# Title" line.
 
-Required sections:
-1. Title
-2. Structured Abstract: Background, Objective, Methods, Results, Conclusions
-3. Keywords
-4. Introduction
-5. Methods: design, data sources, search strategy, eligibility criteria, extraction/synthesis approach
-6. Results: evidence map, source yield, major findings, safety/outcome findings
-7. Discussion: interpretation, clinical/research implications, uncertainty
-8. Limitations
-9. Conclusion
-10. Declarations: ethics, funding, conflicts of interest, data availability
-11. References
+Required sections, in this order:
+## Abstract — a structured abstract covering Background, Objective, Methods, Results, and Conclusions.
+## Keywords
+## Introduction — establish the clinical problem, its scope, and why the review matters.
+## Methods — design, data sources, search strategy, eligibility criteria, and the extraction and synthesis approach.
+## Results — the evidence map, source yield, and the major findings grouped by theme.
+## Discussion — interpret the evidence in depth: mechanisms, the magnitude and consistency of effects, conflicting findings, clinical and research implications, and remaining uncertainty.
+## Limitations
+## Conclusion
+## Declarations — ethics, funding, conflicts of interest, and data availability.
+
+Depth requirements:
+- Introduction, Results, and Discussion must each run to several substantial paragraphs; aim for a comprehensive review of roughly 1500-2500 words overall.
+- Develop every point fully: state the finding, the supporting evidence, the strength of that evidence, and its clinical meaning.
 
 Hard rules:
-- Use only retrieved records and specialist findings supplied below.
-- Cite factual claims with [S#] markers.
+- Use only the retrieved records and specialist findings supplied below.
+- Cite every factual claim inline with its [S#] marker.
 - Never invent authors, PMIDs, DOIs, years, statistics, trial outcomes, or guidelines.
-- If evidence is insufficient for a publishable conclusion, write that limitation plainly.
+- Do NOT write a References or Bibliography section — the application appends the canonical numbered reference list automatically. Inline [S#] citation is all that is required.
+- If the evidence is insufficient for a publishable conclusion, say so plainly.
 - This is a manuscript draft for expert review, not medical advice and not a guaranteed publishable paper.`;
 }
 

@@ -292,7 +292,7 @@ export function BrainMode() {
                 content: finalContent,
                 modelLabel: labelForModel(result.modelUsed),
                 isStreaming: false,
-                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 12) } : {}),
+                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
               }
             : m,
         ),

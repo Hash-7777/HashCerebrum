@@ -215,7 +215,7 @@ export async function runSpecialist(
           ? 'Write a concise findings summary for your specialty using only the retrieved records above. State what the evidence shows and note any gaps.'
           : 'No records were retrieved. State plainly that the databases returned no strong evidence for your part of the question. Do not answer from memory.',
     });
-    const final = await completeWithModelChain(model, { messages, temperature: 0.2, maxTokens: 900 });
+    const final = await completeWithModelChain(model, { messages, temperature: 0.2, maxTokens: 1300 });
 
     callbacks.onSpecialistDone(agent.id, evidence.length);
     return { agentId: agent.id, label: agent.label, subQuery, findings: final.content, evidence, toolCalls };

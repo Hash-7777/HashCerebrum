@@ -54,6 +54,14 @@ function parseBlocks(markdown: string): Block[] {
       blocks.push({ kind: 'numbered', marker: `${numbered[1]}.`, text: numbered[2]!.trim() });
       continue;
     }
+    // A line that is nothing but a bold phrase is a section heading the
+    // model wrote as "**Heading**" instead of "## Heading".
+    const boldHeading = line.match(/^\*\*([^*]+?)\*\*:?\s*$/);
+    if (boldHeading) {
+      flush();
+      blocks.push({ kind: 'h2', text: boldHeading[1]!.trim() });
+      continue;
+    }
     paragraph.push(line);
   }
   flush();
@@ -69,15 +77,20 @@ function plain(text: string): string {
     .trim();
 }
 
+// Loose comparison key so a leading heading that just repeats the title
+// can be detected and skipped.
+function normalizeHeading(text: string): string {
+  return plain(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 function formatReference(record: EvidenceItem, index: number): string {
   const year = record.year ? ` (${record.year})` : '';
   const id = record.identifiers?.pmid
-    ? ` PMID:${record.identifiers.pmid}`
+    ? ` PMID: ${record.identifiers.pmid}`
     : record.identifiers?.doi
-      ? ` DOI:${record.identifiers.doi}`
+      ? ` DOI: ${record.identifiers.doi}`
       : '';
-  const url = record.url ? ` ${record.url}` : '';
-  return `[S${index + 1}] ${record.source.toUpperCase()}${year}. ${record.title}.${id}${url}`;
+  return `[S${index + 1}] ${record.source.toUpperCase()}${year}. ${record.title}.${id}`;
 }
 
 export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
@@ -178,7 +191,10 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     lines.forEach((line, i) => {
       ensureSpace(BODY_LEADING);
       const isLast = i === lines.length - 1;
-      if (!isLast && lines.length > 1) {
+      // Never justify a line dominated by one long unbreakable token (a URL
+      // or DOI) — justification would stretch it into ugly letter-spacing.
+      const longToken = line.split(/\s+/).some((token) => token.length > 38);
+      if (!isLast && lines.length > 1 && !longToken) {
         doc.text(line, x, y, { align: 'justify', maxWidth: width });
       } else {
         doc.text(line, x, y);
@@ -206,9 +222,17 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   };
 
   const blocks = parseBlocks(input.content);
+  const titleKey = normalizeHeading(input.title);
   blocks.forEach((block, index) => {
-    // The document title is already rendered, so skip a leading H1.
-    if (index === 0 && block.kind === 'h1') return;
+    // The title is already rendered as the document title — skip a leading
+    // heading that merely repeats it.
+    if (
+      index === 0 &&
+      (block.kind === 'h1' || block.kind === 'h2' || block.kind === 'h3') &&
+      normalizeHeading(block.text) === titleKey
+    ) {
+      return;
+    }
     if (block.kind === 'h1' || block.kind === 'h2') heading(block.text, 2);
     else if (block.kind === 'h3') heading(block.text, 3);
     else if (block.kind === 'bullet') listItem('•', block.text);
