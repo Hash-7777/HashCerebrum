@@ -22,20 +22,6 @@
 .brain-model-panel .brain-stage::after {
   opacity: 0.28;
 }
-.brain-model-panel .brain-hero {
-  top: 14px;
-  left: 14px;
-  width: min(300px, calc(100% - 28px));
-}
-.brain-model-panel .brain-hero h2 {
-  margin: 0;
-  font-family: var(--hc-font-serif);
-  font-size: 22px;
-  font-weight: 500;
-}
-.brain-model-panel .brain-hero .model-line {
-  max-width: 280px;
-}
 .source-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

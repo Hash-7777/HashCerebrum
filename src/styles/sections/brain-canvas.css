@@ -20,52 +20,18 @@
   mask-image: radial-gradient(circle at 50% 45%, transparent 0 34%, black 75%);
   opacity: 0.38;
 }
-.brain-hero {
+/* Asset credit — plain text, bottom-right of the canvas, no panel. */
+.brain-credit-line {
   position: absolute;
-  left: 20px;
-  top: 20px;
-  width: min(300px, calc(100% - 40px));
-  pointer-events: none;
-  padding: 13px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(8, 12, 18, 0.82);
-  backdrop-filter: blur(7px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
-}
-.brain-hero .eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 6px;
-  color: var(--hc-accent-strong);
-  font-family: var(--hc-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.brain-hero h2 {
+  right: 14px;
+  bottom: 11px;
   margin: 0;
-  font-family: var(--hc-font-serif);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.15;
-  color: var(--hc-fg-strong);
-}
-.brain-hero .model-line {
-  margin: 8px 0 0;
-  color: var(--hc-fg-muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.brain-hero .brain-credit {
-  margin: 6px 0 0;
+  pointer-events: none;
   color: var(--hc-fg-dim);
   font-family: var(--hc-font-mono);
   font-size: 9px;
-  line-height: 1.45;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
 }
 .brain-mode .brain-legend {
   position: absolute;

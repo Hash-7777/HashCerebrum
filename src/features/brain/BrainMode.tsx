@@ -30,8 +30,7 @@ import { EvidenceList } from './components/EvidenceList';
 import { SettingsPanel } from './components/SettingsPanel';
 import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/SourceRunner';
 import { Transcript, type ChatMessage } from './components/Transcript';
-import { BRAIN_MODEL, partForRegion } from './data/modelParts';
-import { regionById } from './data/regions';
+import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { runResearchAgent } from './researchAgent';
 import {
@@ -424,7 +423,6 @@ export function BrainMode() {
     }
   };
 
-  const selectedPart = selectedRegion ? partForRegion(selectedRegion) : null;
   const focusEvidence = selectedRegion
     ? evidence.filter((item) => {
         const match = sourceStatuses.find((s) => s.id === item.source);
@@ -472,20 +470,9 @@ export function BrainMode() {
                 onSelectRegion={toggleRegion}
                 onHoverRegion={setHoveredRegion}
               />
-              <section className="brain-hero">
-                <p className="eyebrow">
-                  <Icon name="brain" size={10} /> Mesh-linked atlas
-                </p>
-                <h2>{selectedPart ? selectedPart.label : 'Click a region to focus'}</h2>
-                <p className="model-line">
-                  {selectedPart
-                    ? `Linked to ${selectedPart.regionIds.map((region) => regionById(region).label).join(', ')}.`
-                    : 'Hover for region info. Selecting a region filters evidence cards.'}
-                </p>
-                <p className="brain-credit">
-                  {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
-                </p>
-              </section>
+              <p className="brain-credit-line">
+                {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
+              </p>
             </div>
           </div>
         </FeatureBoundary>
