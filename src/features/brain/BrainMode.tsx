@@ -10,13 +10,8 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { RegionId } from '@config/agents';
-import { runAgenticEvidencePass } from '@agents/research/ResearchOrchestrator';
 import { bus } from '@core/bus/EventBus';
-import {
-  resolveDefaultModel,
-  streamWithModelChain,
-  type FailoverProgress,
-} from '@core/llm/ProviderRegistry';
+import { resolveDefaultModel, streamWithModelChain } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -35,8 +30,9 @@ import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/S
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL, partForRegion } from './data/modelParts';
 import { regionById } from './data/regions';
+import { SOURCE_DEFS } from './data/sources';
+import { runResearchAgent } from './researchAgent';
 import {
-  fallbackAnswer,
   isResearchQuery,
   labelForModel,
   shortLabelForModel,
@@ -86,9 +82,6 @@ export function BrainMode() {
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const regions = useLitRegions();
-  const getResearchRun = useResearchRunStore((s) => s.getRun);
-  const storeSummary = useResearchRunStore((s) => s.storeSummary);
-  const failResearchRun = useResearchRunStore((s) => s.failRun);
   const canSubmit = query.trim().length > 0;
   const modelLabel = useMemo(() => labelForModel(selectedModel), [selectedModel]);
 
@@ -230,58 +223,14 @@ export function BrainMode() {
     }
 
     setIsRunning(true);
+    bus.emit('agent:activity', { agentId: 'librarian', phase: 'start', detail: 'agentic research' });
 
-    const { runId, evidence: nextEvidence } = await runAgenticEvidencePass({
-      query: cleanQuery,
-      sources: INITIAL_SOURCES,
-      onSourceUpdate: updateSource,
-    });
-    setEvidence(nextEvidence);
-
-    const storedRun = getResearchRun(runId);
-    const storedEvidence = storedRun?.evidence ?? nextEvidence;
-    const evidenceContext = summarizeEvidence(storedEvidence);
-    const prompt = [
-      `Research question: ${cleanQuery}`,
-      `Stored research run: ${runId}`,
-      '',
-      'Stored evidence records:',
-      evidenceContext,
-      '',
-      'Write a concise research answer from the stored evidence only. Use bracket citations like [S1] and include uncertainty when records are weak or absent.',
-    ].join('\n');
-
-    const failoverNotes: string[] = [];
-    const onProgress = (progress: FailoverProgress) => {
-      const note = `Failover ${progress.attempt}: ${shortLabelForModel(progress.from)} → ${progress.to.shortLabel}`;
-      failoverNotes.push(note);
-      bus.emit('agent:activity', {
-        agentId: 'synthesizer',
-        phase: 'tool_call',
-        detail: note,
-      });
-    };
-
-    // Pre-create the assistant bubble so tokens stream into it as they
-    // arrive. We update its content via setMessages on every token.
-    bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: `summarize stored run ${runId}` });
-    bus.emit('region:light', {
-      region: 'parietal',
-      source: 'agent',
-      agentId: 'synthesizer',
-      intensity: 0.8,
-      ttlMs: 9000,
-    });
+    const runs = useResearchRunStore.getState();
+    const run = runs.startRun(cleanQuery, []);
     const assistantId = crypto.randomUUID();
     setMessages((current) => [
       ...current,
-      {
-        id: assistantId,
-        role: 'assistant',
-        content: '',
-        modelLabel: modelLabel,
-        isStreaming: true,
-      },
+      { id: assistantId, role: 'assistant', content: '', modelLabel, isStreaming: true },
     ]);
 
     let streamedContent = '';
@@ -295,78 +244,71 @@ export function BrainMode() {
         if (seenTerms.has(hit.term)) continue;
         seenTerms.add(hit.term);
         bus.emit('topic:detected', hit);
-        bus.emit('region:light', {
-          region: hit.region,
-          source: 'topic',
-          intensity: hit.confidence * 0.55,
-          ttlMs: 9000,
-        });
+        bus.emit('region:light', { region: hit.region, source: 'topic', intensity: hit.confidence * 0.55, ttlMs: 9000 });
       }
     };
 
-    try {
-      const response = await streamWithModelChain(
-        selectedModel,
-        {
-          temperature: 0.2,
-          maxTokens: 1400,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are HashCerebrum Brain Research. Use only the provided source records for factual claims. Do not provide personal medical advice. Cite claims with [S#].',
-            },
-            { role: 'user', content: prompt },
-          ],
-        },
-        {
-          onToken: (delta) => {
-            streamedContent += delta;
-            setMessages((current) =>
-              current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)),
-            );
-            flushTopicHits(streamedContent);
-          },
-        },
-        onProgress,
-      );
-      // Final pass — classify the complete answer in case the throttle
-      // missed a term that only appeared at the end.
-      flushTopicHits(response.content || streamedContent);
+    const sourceForTool = (toolName: string) => SOURCE_DEFS.find((def) => def.tool === toolName);
 
-      const finalContent = response.content || streamedContent || summarizeEvidence(nextEvidence);
-      storeSummary(runId, finalContent, response.modelUsed);
+    try {
+      const result = await runResearchAgent(cleanQuery, selectedModel, {
+        onToolCall: (toolName) => {
+          const def = sourceForTool(toolName);
+          if (!def) return;
+          updateSource(def.id, { state: 'running', count: 0, detail: 'fetching' });
+          bus.emit('agent:activity', { agentId: def.agentId, phase: 'tool_call', detail: def.label });
+          bus.emit('region:light', { region: def.region, source: 'agent', agentId: def.agentId, intensity: 0.78, ttlMs: 10_000 });
+        },
+        onToolResult: (toolName, count) => {
+          const def = sourceForTool(toolName);
+          if (!def) return;
+          updateSource(def.id, { state: 'done', count, detail: `${count} record${count === 1 ? '' : 's'}` });
+          bus.emit('agent:activity', { agentId: def.agentId, phase: 'tool_result', detail: `${def.label}: ${count}` });
+        },
+        onToolError: (toolName, message) => {
+          const def = sourceForTool(toolName);
+          if (!def) return;
+          updateSource(def.id, { state: 'error', count: 0, detail: message });
+          bus.emit('agent:activity', { agentId: def.agentId, phase: 'error', detail: def.label });
+        },
+        onPhase: (phase) => {
+          if (phase !== 'answering') return;
+          bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: 'synthesize' });
+          bus.emit('region:light', { region: 'parietal', source: 'agent', agentId: 'synthesizer', intensity: 0.8, ttlMs: 9000 });
+        },
+        onAnswerToken: (delta) => {
+          streamedContent += delta;
+          setMessages((current) => current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)));
+          flushTopicHits(streamedContent);
+        },
+      });
+
+      flushTopicHits(result.answer || streamedContent);
+      setEvidence(result.evidence);
+      runs.storeEvidence(run.id, result.evidence);
+      const finalContent = result.answer || streamedContent || summarizeEvidence(result.evidence);
+      runs.storeSummary(run.id, finalContent, result.modelUsed);
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId
             ? {
                 ...m,
                 content: finalContent,
-                citations: nextEvidence.slice(0, 12),
-                modelLabel: labelForModel(response.modelUsed),
+                citations: result.evidence.slice(0, 12),
+                modelLabel: labelForModel(result.modelUsed),
                 isStreaming: false,
-                ...(failoverNotes.length > 0 ? { failoverNote: failoverNotes[failoverNotes.length - 1] } : {}),
               }
             : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(response.modelUsed) });
+      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(result.modelUsed) });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const fallback = streamedContent || fallbackAnswer(cleanQuery, nextEvidence, detail);
-      storeSummary(runId, fallback);
-      failResearchRun(runId, detail);
+      const fallback = streamedContent || `Research could not complete: ${detail}`;
+      runs.failRun(run.id, detail);
       setMessages((current) =>
         current.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                content: fallback,
-                citations: nextEvidence.slice(0, 12),
-                error: detail,
-                isStreaming: false,
-              }
-            : m,
+          m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
         ),
       );
       bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'error', detail });
