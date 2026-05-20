@@ -1,12 +1,10 @@
-// Brain workspace — chat-first research surface that runs an agentic
-// pipeline: source agents fetch guarded evidence, the run store persists
-// the evidence, then the synthesizer drafts from the stored run with
-// automatic failover when a cloud provider is rate-limited or 5xxs.
+// Brain workspace — the boss-swarm research surface. The boss routes each
+// message, delegates research to topic specialists, and synthesizes one
+// cited answer; failover covers a rate-limited or dead-credit provider.
 //
-// The mode is intentionally split into small components (Composer,
-// Transcript, BrainCanvas, SourceRunner, EvidenceList, BrainLegend,
-// SettingsPanel) so a crash in one stays contained by FeatureBoundary
-// instead of taking the workspace down.
+// The mode is split into small components (Composer, Transcript,
+// BrainCanvas, AgentPanel, EvidenceList, SettingsPanel) so a crash in one
+// stays contained by FeatureBoundary instead of taking the workspace down.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { agentById, type AgentId, type RegionId } from '@config/agents';
@@ -23,25 +21,23 @@ import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
+import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { BrainCanvas } from './components/BrainCanvas';
-import { BrainLegend } from './components/BrainLegend';
 import { Composer } from './components/Composer';
 import { EvidenceList } from './components/EvidenceList';
 import { SettingsPanel } from './components/SettingsPanel';
-import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/SourceRunner';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
-import { useLitRegions } from './useLitRegions';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'system',
   content:
-    'Ask normally for chat, or ask a biomedical research question to run source agents that fetch guarded evidence, store the run, and synthesize from the stored records.',
+    'Ask the boss anything. It routes plain questions to a quick chat reply, and research questions to a swarm of medical specialists that fetch guarded evidence and answer with citations.',
 };
 
 export function BrainMode() {
@@ -55,10 +51,9 @@ export function BrainMode() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
-  const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const regions = useLitRegions();
   const canSubmit = query.trim().length > 0;
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
@@ -83,8 +78,10 @@ export function BrainMode() {
     return () => window.removeEventListener('keydown', onKey);
   }, [settingsOpen]);
 
-  const updateSource = (id: SourceStatus['id'], update: Partial<SourceStatus>) => {
-    setSourceStatuses((current) => current.map((source) => (source.id === id ? { ...source, ...update } : source)));
+  const updateAgentStatus = (agentId: AgentId, update: Partial<AgentStatus>) => {
+    setAgentStatuses((current) =>
+      current.map((status) => (status.agentId === agentId ? { ...status, ...update } : status)),
+    );
   };
 
   // Load a transcript when one is opened from the left rail. activeChatId
@@ -129,7 +126,7 @@ export function BrainMode() {
 
     setQuery('');
     setEditingMessageId(null);
-    setSourceStatuses(INITIAL_SOURCES.map((source) => ({ ...source, state: 'idle', count: 0 })));
+    setAgentStatuses(initialAgentStatuses());
     setEvidence([]);
     setMessages(nextMessages);
 
@@ -169,7 +166,6 @@ export function BrainMode() {
     };
 
     const sourceForTool = (toolName: string) => SOURCE_DEFS.find((def) => def.tool === toolName);
-    const sourceCounts = new Map<SourceStatus['id'], number>();
     let activeRunId: string | null = null;
     const ensureResearchRun = () => {
       if (!activeRunId) activeRunId = runs.startRun(cleanQuery, []).id;
@@ -197,6 +193,7 @@ export function BrainMode() {
     const callbacks: SwarmCallbacks = {
       onBossPhase: (phase) => {
         if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
+        updateAgentStatus('boss', { state: 'running', detail: bossDetail[phase] });
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: phase === 'routing' || phase === 'answering' ? 'start' : 'tool_call',
@@ -206,34 +203,30 @@ export function BrainMode() {
       },
       onSpecialistStart: (agentId, subQuery) => {
         ensureResearchRun();
+        updateAgentStatus(agentId, { state: 'running', detail: subQuery });
         bus.emit('agent:activity', { agentId, phase: 'start', detail: subQuery });
         lightAgent(agentId);
       },
       onSpecialistDone: (agentId, recordCount) => {
+        updateAgentStatus(agentId, {
+          state: 'done',
+          detail: `${recordCount} record${recordCount === 1 ? '' : 's'}`,
+        });
         bus.emit('agent:activity', { agentId, phase: 'done', detail: `${recordCount} records` });
       },
       onSpecialistError: (agentId, message) => {
+        updateAgentStatus(agentId, { state: 'error', detail: message });
         bus.emit('agent:activity', { agentId, phase: 'error', detail: message });
       },
       onToolCall: (agentId, toolName) => {
         const def = sourceForTool(toolName);
         if (def) {
-          updateSource(def.id, { state: 'running', detail: 'fetching' });
           bus.emit('region:light', { region: def.region, source: 'agent', agentId, intensity: 0.78, ttlMs: 4000 });
         }
         bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
       },
       onToolResult: (agentId, toolName, count) => {
         const def = sourceForTool(toolName);
-        if (def) {
-          const total = (sourceCounts.get(def.id) ?? 0) + count;
-          sourceCounts.set(def.id, total);
-          updateSource(def.id, {
-            state: 'done',
-            count: total,
-            detail: `${total} record${total === 1 ? '' : 's'}`,
-          });
-        }
         bus.emit('agent:activity', {
           agentId,
           phase: 'tool_result',
@@ -304,6 +297,10 @@ export function BrainMode() {
             : m,
         ),
       );
+      updateAgentStatus('boss', {
+        state: 'done',
+        detail: result.kind === 'research' ? 'synthesis complete' : 'reply complete',
+      });
       bus.emit('agent:activity', {
         agentId: 'boss',
         phase: 'done',
@@ -313,6 +310,7 @@ export function BrainMode() {
       const detail = error instanceof Error ? error.message : String(error);
       const fallback = streamedContent || `HashCerebrum could not complete the request: ${detail}`;
       if (activeRunId) runs.failRun(activeRunId, detail);
+      updateAgentStatus('boss', { state: 'error', detail });
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
@@ -434,10 +432,9 @@ export function BrainMode() {
   };
 
   const focusEvidence = selectedRegion
-    ? evidence.filter((item) => {
-        const match = sourceStatuses.find((s) => s.id === item.source);
-        return match?.region === selectedRegion;
-      })
+    ? evidence.filter(
+        (item) => SOURCE_DEFS.find((def) => def.id === item.source)?.region === selectedRegion,
+      )
     : evidence;
 
   return (
@@ -493,11 +490,8 @@ export function BrainMode() {
         </FeatureBoundary>
 
         <div className="source-panel">
-          <FeatureBoundary name="Sources">
-            <SourceRunner statuses={sourceStatuses} evidenceCount={evidence.length} onSelectRegion={toggleRegion} />
-          </FeatureBoundary>
-          <FeatureBoundary name="Region legend">
-            <BrainLegend regions={regions} selectedRegion={selectedRegion} onSelectRegion={toggleRegion} />
+          <FeatureBoundary name="Agents">
+            <AgentPanel statuses={agentStatuses} />
           </FeatureBoundary>
           <FeatureBoundary name="Evidence">
             <EvidenceList items={focusEvidence} />

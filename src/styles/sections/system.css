@@ -9,7 +9,7 @@
   .brain-side {
     /* One-column layout: the whole workspace scrolls, so the side column
        grows to fit every panel rather than scrolling on its own. */
-    min-height: 940px;
+    min-height: 780px;
     overflow-y: visible;
   }
 }
