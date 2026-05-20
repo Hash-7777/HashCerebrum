@@ -1,48 +1,78 @@
 # HashCerebrum
 
-Medical research agent app for source-grounded clinical literature work.
-This is an early Tauri v2 desktop starting point for a researcher-audience tool.
+Medical research agent desktop app for source-grounded clinical literature
+work. A 3D anatomical brain is the workspace: anatomical regions light up as a
+streaming answer touches the topics they map to, and an agent swarm fetches and
+synthesizes evidence from guarded medical sources.
 
 ## Stack
 
-- **Frontend:** Vite + React 18 + TypeScript (strict) + R3F (Three.js)
+- **Frontend:** Vite + React 18 + TypeScript (strict) + React Three Fiber (Three.js)
 - **State:** Zustand stores + typed EventBus (no globals)
 - **Backend:** Tauri v2 + Rust (tokio + reqwest + rusqlite)
-- **Atlas:** lightweight agent signal scaffold, lit by agent + topic blend
-- **Audit:** Hash-chained SQLite append-only log (the name pays off)
-- **Keys:** OS keychain only — never in files, never in JS
+- **Audit:** hash-chained SQLite append-only log, verifiable from Settings
+- **Window state:** position and size restored across launches
 
-This starter commit intentionally does not bundle a 3D anatomical model asset
-or third-party model license files. Add a reviewed, licensed GLB later.
+## What it does
+
+- **Brain mode** — chat against the brain. `Auto` routes biomedical prompts
+  through an agentic evidence pipeline, `Chat` forces plain conversation,
+  `Research` forces the source-backed pipeline. Anatomical regions glow live as
+  a curated 1000-term MeSH-subset classifier tags the streaming text.
+- **Resources mode** — saved evidence hub: collections, per-card tags and
+  notes, fuzzy search, and Markdown / BibTeX / CSL-JSON export.
+- **Agent swarm** — six bounded agents (Librarian, Trialist, Pharmacologist,
+  Synthesizer, Citation, Critic) with fixed tool permissions.
+- **Guarded sources** — PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov,
+  openFDA, and RxNorm fetched from Rust behind a host allowlist, per-host rate
+  limiter, and SQLite response cache.
+
+## Provider keys
+
+Provider API keys are entered in Settings and stored in renderer `localStorage`
+as a single JSON bundle. Tauri's WebKit data directory is keyed by the bundle
+identifier, not the binary signature, so keys survive every rebuild and signed
+update without an OS keychain prompt. Keys are never written to the repository,
+the audit log, or the source cache. LLM provider adapters currently stream
+directly from the renderer; the medical-source HTTP path is Rust-only.
 
 ## Hard caps (compile-time)
 
-- The atlas is the only active mode right now
-- 5 modes max — `src/config/modes.ts` rejects a sixth mode
-- 6 agents — `src/config/agents.ts` same pattern
-
-These exist to keep the first public phase intentionally bounded.
-
-## Mode build order
-
-Modes are isolated by folder and loaded through `src/modes/registry.ts`.
-New modes should only be registered when their own module can typecheck and
-render independently. The first build focuses on the atlas scaffold only.
+- 5 modes max — `src/config/modes.ts` rejects a sixth (2 registered: Brain, Resources)
+- 6 agents — `src/config/agents.ts` enforces the same tuple cap (all 6 in use)
 
 ## Run
 
 ```sh
 npm install
-npm run dev                # desktop dev app
-npm run dev:web            # browser-only Vite, only when needed
+npm run dev                # desktop dev app (Tauri)
+npm run dev:web            # browser-only Vite with mock platform
 npm run build              # production macOS .app
-npm run build:app:debug    # debug .app bundle, no browser workflow
+npm run build:app:debug    # debug .app bundle
 npm run build:web          # production frontend bundle only
-npm run build:all          # all Tauri bundle targets for this OS
+npm run build:dmg          # macOS .dmg
+npm test                   # Vitest
+npm run typecheck          # tsc, both project + node configs
+npm run validate:brain-model   # list the GLB's mesh node names
 ```
 
 Tauri dev uses a local Vite server internally for hot reload. Packaged `.app`
-builds load the compiled files from `dist` and do not use localhost.
+builds load compiled files from `dist` and do not use localhost.
+
+### Dev tools
+
+`npm run dev:web` then open `http://localhost:1420/?dev=bindings` for the
+brain region binding editor — bind GLB mesh nodes to anatomical regions and
+export an updated `region-map.json`. Dev builds only; never reachable in a
+production build.
+
+## 3D model
+
+The bundled brain GLB lives at `public/models/brain/` under CC0-1.0; see
+`public/models/brain/LICENSE.md` and [docs/LICENSES.md](docs/LICENSES.md). To
+swap it: drop a new GLB at the path declared in
+`src/features/brain/data/region-map.json`, run `npm run validate:brain-model`
+to confirm node names, then update the bindings — no code change needed.
 
 ## Docs
 
