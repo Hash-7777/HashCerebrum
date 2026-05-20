@@ -11,8 +11,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { agentById, type AgentId, type RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
-import { resolveDefaultModel, streamWithModelChain } from '@core/llm/ProviderRegistry';
-import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
+import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 import type { LlmMessage } from '@core/llm/types';
 import { agentModelFor } from '@core/store/agentModelStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
@@ -49,29 +48,9 @@ const WELCOME_MESSAGE: ChatMessage = {
 export function BrainMode() {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
-
-  // Resolve default model on mount — Ollama-first if a local model is
-  // loaded, else first cloud key, else fall back to catalog default.
-  useEffect(() => {
-    let cancelled = false;
-    void resolveDefaultModel().then((value) => {
-      if (!cancelled) setSelectedModel(value);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (availableModels.length === 0) return;
-    if (!availableModels.some((model) => model.value === selectedModel)) {
-      setSelectedModel(availableModels[0]!.value);
-    }
-  }, [availableModels, selectedModel]);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -82,7 +61,9 @@ export function BrainMode() {
   const [isRunning, setIsRunning] = useState(false);
   const regions = useLitRegions();
   const canSubmit = query.trim().length > 0;
-  const modelLabel = useMemo(() => labelForModel(selectedModel), [selectedModel]);
+  // Placeholder label for a pending bubble — the boss model. The final
+  // bubble is relabelled with the model that actually answered.
+  const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
 
   // Clicking the same region twice clears the selection.
   const toggleRegion = (region: RegionId | null) => {
@@ -407,7 +388,7 @@ export function BrainMode() {
     let buffer = '';
     try {
       const response = await streamWithModelChain(
-        selectedModel,
+        agentModelFor('boss'),
         {
           temperature: 0.15,
           maxTokens: 800,
@@ -485,8 +466,6 @@ export function BrainMode() {
           <Composer
             query={query}
             setQuery={setQuery}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
             isRunning={isRunning}
             canSubmit={canSubmit}
             editing={!!editingMessageId}
@@ -538,11 +517,7 @@ export function BrainMode() {
           }}
         >
           <FeatureBoundary name="Settings">
-            <SettingsPanel
-              selectedModel={selectedModel}
-              setSelectedModel={setSelectedModel}
-              onClose={() => setSettingsOpen(false)}
-            />
+            <SettingsPanel onClose={() => setSettingsOpen(false)} />
           </FeatureBoundary>
         </div>
       )}

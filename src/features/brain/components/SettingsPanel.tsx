@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
-import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from '@core/llm/modelCatalog';
+import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
@@ -14,15 +14,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function SettingsPanel({
-  selectedModel,
-  setSelectedModel,
-  onClose,
-}: {
-  selectedModel: string;
-  setSelectedModel: (model: string) => void;
-  onClose: () => void;
-}) {
+export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [keyStatus, setKeyStatus] = useState<Partial<Record<LlmProviderId, boolean>>>({});
   const [apiKeys, setApiKeys] = useState<Partial<Record<LlmProviderId, string>>>({});
   const [keyErrors, setKeyErrors] = useState<Partial<Record<LlmProviderId, string>>>({});
@@ -39,7 +31,6 @@ export function SettingsPanel({
   const refreshProviderModels = useModelCatalogStore((s) => s.refreshProvider);
   const removeProviderModels = useModelCatalogStore((s) => s.removeProvider);
   const availableModels = modelGroups.flatMap((group) => group.models);
-  const selectedModelAvailable = availableModels.some((model) => model.value === selectedModel);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -89,15 +80,7 @@ export function SettingsPanel({
   const toggleLocalOnly = (value: boolean) => {
     setLocalOnly(value);
     setPrivacyLocalOnly(value);
-    if (value && parseModelRef(selectedModel).kind === 'cloud') {
-      setSelectedModel(
-        availableModels.find((model) => parseModelRef(model.value).kind === 'local')?.value ?? DEFAULT_MODEL,
-      );
-    }
   };
-
-  const fallbackModel = (excludedProvider?: LlmProviderId) =>
-    availableModels.find((model) => parseModelRef(model.value).provider !== excludedProvider)?.value ?? DEFAULT_MODEL;
 
   const saveKey = async (provider: LlmProviderId) => {
     const keyName = providerKeyName(provider);
@@ -137,7 +120,6 @@ export function SettingsPanel({
       await platform().keychain.delete(keyName);
       setKeyStatus((current) => ({ ...current, [provider]: false }));
       removeProviderModels(provider);
-      if (parseModelRef(selectedModel).provider === provider) setSelectedModel(fallbackModel(provider));
     } finally {
       setSaving(null);
     }
@@ -156,29 +138,6 @@ export function SettingsPanel({
           <Icon name="close" size={14} />
         </button>
       </header>
-
-      <label className="field">
-        <span>Active model</span>
-        <select
-          value={selectedModelAvailable ? selectedModel : ''}
-          onChange={(event) => setSelectedModel(event.target.value)}
-          disabled={modelGroups.length === 0}
-        >
-          {modelGroups.length === 0 && <option value="">Connect a provider to load models</option>}
-          {modelGroups.map((group) => (
-            <optgroup key={group.provider} label={group.label}>
-              {group.models.map((model) => {
-                const disabled = localOnly && parseModelRef(model.value).kind === 'cloud';
-                return (
-                  <option key={model.value} value={model.value} disabled={disabled}>
-                    {model.label}
-                  </option>
-                );
-              })}
-            </optgroup>
-          ))}
-        </select>
-      </label>
 
       <div className="settings-model-tools">
         <span>

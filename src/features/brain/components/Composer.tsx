@@ -1,12 +1,12 @@
 import { useEffect, useRef, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
-import { useModelCatalogStore } from '@core/store/modelCatalogStore';
+
+// The composer no longer carries a model picker — every agent's model is
+// resolved per-agent (auto-assigned, overridable in Settings → Agent models).
 
 export function Composer({
   query,
   setQuery,
-  selectedModel,
-  setSelectedModel,
   isRunning,
   canSubmit,
   editing = false,
@@ -16,8 +16,6 @@ export function Composer({
 }: {
   query: string;
   setQuery: (value: string) => void;
-  selectedModel: string;
-  setSelectedModel: (value: string) => void;
   isRunning: boolean;
   canSubmit: boolean;
   editing?: boolean;
@@ -25,9 +23,6 @@ export function Composer({
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
 }) {
-  const modelGroups = useModelCatalogStore((s) => s.groups);
-  const availableModels = modelGroups.flatMap((group) => group.models);
-  const selectedModelAvailable = availableModels.some((model) => model.value === selectedModel);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -50,26 +45,6 @@ export function Composer({
         </div>
       )}
       <div className="composer-controls">
-        <label>
-          <span>Model</span>
-          <select
-            value={selectedModelAvailable ? selectedModel : ''}
-            onChange={(event) => setSelectedModel(event.target.value)}
-            aria-label="Composer model"
-            disabled={modelGroups.length === 0}
-          >
-            {modelGroups.length === 0 && <option value="">No connected models</option>}
-            {modelGroups.map((group) => (
-              <optgroup key={group.provider} label={group.label}>
-                {group.models.map((model) => (
-                  <option key={model.value} value={model.value}>
-                    {model.shortLabel}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
         <button type="button" onClick={onOpenSettings} className="composer-settings" aria-label="Open settings">
           <Icon name="settings" size={13} /> Settings
         </button>
