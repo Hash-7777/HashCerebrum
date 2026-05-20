@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findBestFailover,
+  isBillingError,
   isHardProviderError,
   isRetriableError,
   shouldRetrySameProvider,
@@ -51,6 +52,9 @@ describe('LLM failover', () => {
     expect(isRetriableError(creditError)).toBe(true);
     // ...but never retries the same broke provider.
     expect(shouldRetrySameProvider(creditError)).toBe(false);
+    // ...and is recognised as account-wide so the whole provider is dropped.
+    expect(isBillingError(creditError)).toBe(true);
+    expect(isBillingError(new Error('HTTP 429 rate limit'))).toBe(false);
   });
 
   it('treats model incompatibility as failover-worthy', () => {

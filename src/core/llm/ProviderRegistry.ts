@@ -2,6 +2,7 @@ import { platform } from '@platform/index';
 import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from './modelCatalog';
 import {
   findBestFailover,
+  isBillingError,
   isHardProviderError,
   isRetriableError,
   shouldRetrySameProvider,
@@ -447,6 +448,15 @@ export async function streamWithModelChain(
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      if (isBillingError(error)) {
+        // A billing/credit failure is account-wide — abandon every model
+        // from this provider so the chain escapes to a working one.
+        for (const group of modelGroups) {
+          if (group.provider === parsed.provider) {
+            for (const model of group.models) tried.add(model.value);
+          }
+        }
+      }
       const next = findBestFailover(current, tried, hasKeySync, modelGroups);
       if (!next) break;
       failovers++;
@@ -590,6 +600,15 @@ export async function completeWithModelChain(
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      if (isBillingError(error)) {
+        // A billing/credit failure is account-wide — abandon every model
+        // from this provider so the chain escapes to a working one.
+        for (const group of modelGroups) {
+          if (group.provider === parsed.provider) {
+            for (const model of group.models) tried.add(model.value);
+          }
+        }
+      }
       const next = findBestFailover(current, tried, hasKeySync, modelGroups);
       if (!next) break;
       failovers++;

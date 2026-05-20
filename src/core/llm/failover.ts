@@ -110,6 +110,16 @@ export function isHardProviderError(error: unknown): boolean {
   return HARD_PROVIDER.test(message);
 }
 
+// Account-level billing failures (no credits / payment required). The whole
+// provider is dead, not just one model — the chain must abandon every model
+// from that provider, not just fail over to a sibling model.
+const BILLING_DEAD = /\b(insufficient ?credits|payment ?required|402)\b/i;
+
+export function isBillingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return BILLING_DEAD.test(message);
+}
+
 export function shouldRetrySameProvider(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return SAME_PROVIDER_RETRY.test(message) && !QUOTA.test(message);
