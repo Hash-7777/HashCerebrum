@@ -71,6 +71,68 @@
     repeating-linear-gradient(180deg, transparent 0 21px, rgba(34,211,238,0.018) 21px 22px);
 }
 
+/* Top rail section — project selector */
+.project-rail {
+  position: relative;
+  padding: 12px 8px 10px;
+  border-bottom: 1px solid var(--hc-border);
+}
+.project-rail-head {
+  padding: 0 4px 8px;
+  color: var(--hc-fg-dim);
+  font-family: var(--hc-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.project-rail-row,
+.project-rail-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.project-rail-select,
+.project-rail-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hc-border);
+  border-radius: 7px;
+  color: var(--hc-fg);
+  font-size: 12px;
+}
+.project-rail-select:focus-visible,
+.project-rail-input:focus-visible {
+  outline: none;
+  border-color: var(--hc-border-accent);
+}
+.project-rail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hc-border);
+  border-radius: 6px;
+  color: var(--hc-fg-muted);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.project-rail-btn:hover:not(:disabled) {
+  color: var(--hc-accent-strong);
+  border-color: var(--hc-border-accent);
+}
+.project-rail-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.project-rail-btn-danger:hover:not(:disabled) {
+  color: var(--hc-danger);
+  border-color: var(--hc-danger);
+}
+
 /* Upper rail section — saved chats */
 .chat-history {
   position: relative;

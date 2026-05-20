@@ -10,6 +10,7 @@
 import { create } from 'zustand';
 import type { EvidenceItem } from '@platform/index';
 import { platform } from '@platform/index';
+import { useProjectStore } from './projectStore';
 
 const STORAGE_KEY = 'chatHistory.v1';
 const MAX_CHATS = 100;
@@ -30,6 +31,7 @@ export interface ChatMessage {
 export interface SavedChat {
   id: string;
   title: string;
+  projectId: string;
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
@@ -43,11 +45,18 @@ interface ChatHistoryStore {
   chats: SavedChat[];
   activeChatId: string | null;
   hydrated: boolean;
-  hydrate: () => Promise<void>;
+  hydrate: (fallbackProjectId?: string) => Promise<void>;
   newChat: () => string;
   selectChat: (id: string) => void;
   saveActive: (messages: ChatMessage[]) => void;
   deleteChat: (id: string) => void;
+  deleteChatsForProject: (projectId: string) => void;
+}
+
+// The active project a new or freshly created chat belongs to. Resolved
+// lazily so this store never imports projectStore state at module load.
+function currentProjectId(): string {
+  return useProjectStore.getState().activeProjectId ?? '';
 }
 
 function deriveTitle(messages: ChatMessage[]): string {
@@ -77,15 +86,32 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
   activeChatId: null,
   hydrated: false,
 
-  hydrate: async () => {
-    const chats = await loadPersisted();
+  hydrate: async (fallbackProjectId) => {
+    const loaded = await loadPersisted();
+    // Migration: chats saved before projects existed have no projectId.
+    // Adopt them into the passed project so existing history is not lost.
+    if (!fallbackProjectId) {
+      set({ chats: loaded, hydrated: true });
+      return;
+    }
+    const adoptInto = fallbackProjectId;
+    const chats = loaded.map((chat) =>
+      chat.projectId ? chat : { ...chat, projectId: adoptInto },
+    );
     set({ chats, hydrated: true });
   },
 
   newChat: () => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const chat: SavedChat = { id, title: 'New chat', messages: [], createdAt: now, updatedAt: now };
+    const chat: SavedChat = {
+      id,
+      title: 'New chat',
+      projectId: currentProjectId(),
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+    };
     set((state) => {
       // Drop any earlier empty drafts so repeated New chat clicks do not
       // pile up blank entries in the rail.
@@ -114,7 +140,14 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       } else {
         activeChatId = crypto.randomUUID();
         chats = [
-          { id: activeChatId, title, messages: cleaned, createdAt: now, updatedAt: now },
+          {
+            id: activeChatId,
+            title,
+            projectId: currentProjectId(),
+            messages: cleaned,
+            createdAt: now,
+            updatedAt: now,
+          },
           ...state.chats.filter((c) => c.messages.length > 0),
         ].slice(0, MAX_CHATS);
       }
@@ -128,5 +161,18 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       const chats = state.chats.filter((c) => c.id !== id);
       persist(chats);
       return { chats, activeChatId: state.activeChatId === id ? null : state.activeChatId };
+    }),
+
+  // Cascade used when a project is deleted — drops every chat that belonged
+  // to it. Orchestrated by ProjectSelector so the stores stay decoupled.
+  deleteChatsForProject: (projectId) =>
+    set((state) => {
+      const chats = state.chats.filter((c) => c.projectId !== projectId);
+      persist(chats);
+      const activeChatId =
+        state.activeChatId && !chats.some((c) => c.id === state.activeChatId)
+          ? null
+          : state.activeChatId;
+      return { chats, activeChatId };
     }),
 }));

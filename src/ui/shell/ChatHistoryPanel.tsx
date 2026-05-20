@@ -1,4 +1,5 @@
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
+import { useProjectStore } from '@core/store/projectStore';
 import { Icon } from '@ui/icons';
 
 export function ChatHistoryPanel() {
@@ -7,8 +8,11 @@ export function ChatHistoryPanel() {
   const newChat = useChatHistoryStore((s) => s.newChat);
   const selectChat = useChatHistoryStore((s) => s.selectChat);
   const deleteChat = useChatHistoryStore((s) => s.deleteChat);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
 
-  const ordered = [...chats].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const ordered = [...chats]
+    .filter((chat) => chat.projectId === activeProjectId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return (
     <div className="chat-history" aria-label="Saved chats">

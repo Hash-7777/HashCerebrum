@@ -14,6 +14,7 @@ import { bus } from '@core/bus/EventBus';
 import { resolveDefaultModel, streamWithModelChain } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
+import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { classify } from '@core/topic/MeshClassifier';
@@ -78,6 +79,7 @@ export function BrainMode() {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -116,6 +118,14 @@ export function BrainMode() {
     const chat = useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId);
     if (chat) setMessages(chat.messages.length > 0 ? chat.messages : [WELCOME_MESSAGE]);
   }, [activeChatId]);
+
+  // Switching projects starts a fresh transcript so a chat is never saved
+  // into the wrong project. The snapshot effect below skips welcome-only
+  // transcripts, so this never persists a stray empty chat.
+  useEffect(() => {
+    setMessages([WELCOME_MESSAGE]);
+    useChatHistoryStore.setState({ activeChatId: null });
+  }, [activeProjectId]);
 
   // Snapshot the conversation into chat history once a turn settles.
   useEffect(() => {
