@@ -34,62 +34,47 @@ function store() {
   return appStore;
 }
 
-const DEV_KEYCHAIN_PREFIX = 'dev.keychain.';
+// Provider API keys live in renderer localStorage as one JSON bundle.
+//
+// Tauri's WebKit data dir is keyed by the bundle identifier, not the binary's
+// code signature, so the bundle survives every rebuild and signed-DMG update
+// without macOS Keychain prompting on every read. The Rust `keychain_*`
+// commands remain registered for future migration tooling but are no longer
+// hit on the hot path.
+const LS_BUNDLE_KEY = 'hc_api_bundle_v2';
 
-function devKeychainEnabled(): boolean {
-  return import.meta.env.DEV;
+function getBundle(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LS_BUNDLE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
 }
 
-function devKeychainKey(key: string): string {
-  return `${DEV_KEYCHAIN_PREFIX}${key}`;
-}
-
-async function devKeychainStore(key: string, value: string): Promise<void> {
-  if (!devKeychainEnabled()) return;
-  const s = await store();
-  await s.set(devKeychainKey(key), value);
-  await s.save();
-}
-
-async function devKeychainRetrieve(key: string): Promise<string | null> {
-  if (!devKeychainEnabled()) return null;
-  const s = await store();
-  return (await s.get<string>(devKeychainKey(key))) ?? null;
-}
-
-async function devKeychainDelete(key: string): Promise<void> {
-  if (!devKeychainEnabled()) return;
-  const s = await store();
-  await s.delete(devKeychainKey(key));
-  await s.save();
+function saveBundle(data: Record<string, string>): void {
+  try {
+    localStorage.setItem(LS_BUNDLE_KEY, JSON.stringify(data));
+  } catch {
+    /* renderer has no safer fallback than localStorage here */
+  }
 }
 
 export const tauriPlatform: Platform = {
   keychain: {
     store: async (key, value) => {
-      try {
-        await invoke('keychain_store', { key, value });
-      } catch (error) {
-        if (!devKeychainEnabled()) throw error;
-      }
-      await devKeychainStore(key, value);
+      const data = getBundle();
+      if (value) data[key] = value;
+      else delete data[key];
+      saveBundle(data);
     },
-    retrieve: async (key) => {
-      try {
-        const value = await invoke<string | null>('keychain_retrieve', { key });
-        if (value) return value;
-      } catch (error) {
-        if (!devKeychainEnabled()) throw error;
-      }
-      return devKeychainRetrieve(key);
-    },
+    retrieve: async (key) => getBundle()[key] ?? null,
     delete: async (key) => {
-      try {
-        await invoke('keychain_delete', { key });
-      } catch (error) {
-        if (!devKeychainEnabled()) throw error;
-      }
-      await devKeychainDelete(key);
+      const data = getBundle();
+      delete data[key];
+      saveBundle(data);
     },
   },
 
