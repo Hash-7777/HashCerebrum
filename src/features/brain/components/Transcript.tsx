@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { Icon } from '@ui/icons';
@@ -18,8 +19,26 @@ export function Transcript({
   isRunning: boolean;
   onCritique?: (messageId: string) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the view is "pinned" to the bottom. We only auto-follow new
+  // content while pinned, so scrolling up to read scrollback is never
+  // interrupted by an incoming answer.
+  const pinnedRef = useRef(true);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !pinnedRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
   return (
-    <div className="transcript" aria-live="polite">
+    <div className="transcript" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
       {messages.map((message) => (
         <article key={message.id} className="chat-message" data-role={message.role} data-error={!!message.error}>
           <header>
