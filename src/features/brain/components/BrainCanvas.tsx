@@ -131,8 +131,10 @@ function BrainMesh({
 
   useEffect(() => {
     material.emissive.copy(regionColor);
-    material.emissiveIntensity = intensity > 0.03 ? 0.16 + intensity * 0.78 : 0.035;
-    material.color.lerpColors(neutralColor, regionColor, Math.min(0.28, intensity * 0.26));
+    material.emissiveIntensity = intensity > 0.03 ? 0.2 + intensity * 0.95 : 0.04;
+    // Blend the surface toward the region colour. A higher cap keeps lit
+    // regions from washing out into the neutral base.
+    material.color.lerpColors(neutralColor, regionColor, Math.min(0.55, intensity * 0.5));
     material.needsUpdate = true;
   }, [intensity, material, neutralColor, regionColor]);
 
