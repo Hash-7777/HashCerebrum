@@ -28,7 +28,9 @@ const QUALITY_TICK_MS = 70;
 const PERFORMANCE_TICK_MS = 300;
 const QUALITY_DECAY_FACTOR = 0.92;
 const PERFORMANCE_DECAY_FACTOR = 0.78;
-const NEUTRAL_BRAIN_COLOR = '#cdb7a7';
+// Idle surface tone — a deeper, more saturated anatomical tan so the brain
+// reads with colour instead of washing out toward grey-white.
+const NEUTRAL_BRAIN_COLOR = '#c2917a';
 
 function readPerformancePreference() {
   if (typeof window === 'undefined') return false;
@@ -249,7 +251,7 @@ function BrainScene({ cameraRef, controlsRef, performanceMode, ...props }: Scene
       {!performanceMode && (
         <EffectComposer multisampling={4} autoClear={false}>
           <Outline blur edgeStrength={3.4} pulseSpeed={0.25} visibleEdgeColor={0x3dd1bf} hiddenEdgeColor={0x1d2533} />
-          <Bloom intensity={0.42} luminanceThreshold={0.28} luminanceSmoothing={0.48} mipmapBlur />
+          <Bloom intensity={0.34} luminanceThreshold={0.5} luminanceSmoothing={0.48} mipmapBlur />
           <Vignette eskil={false} offset={0.18} darkness={0.7} />
         </EffectComposer>
       )}
@@ -377,10 +379,10 @@ export function BrainCanvas(props: BrainCanvasProps) {
       >
         <color attach="background" args={['#04070d']} />
         <fog attach="fog" args={['#04070d', 6.4, 12]} />
-        <ambientLight intensity={0.5} />
-        <hemisphereLight args={['#d8fff6', '#0d1722', 0.72]} />
-        <directionalLight position={[2.8, 4.2, 3.5]} intensity={performanceMode ? 1.65 : 2.25} color="#f3eee2" castShadow={!performanceMode} />
-        <directionalLight position={[-3.4, 0.6, -2.4]} intensity={performanceMode ? 0.62 : 0.96} color="#5fdcd0" />
+        <ambientLight intensity={0.42} />
+        <hemisphereLight args={['#d8fff6', '#0d1722', 0.58]} />
+        <directionalLight position={[2.8, 4.2, 3.5]} intensity={performanceMode ? 1.4 : 1.95} color="#f3eee2" castShadow={!performanceMode} />
+        <directionalLight position={[-3.4, 0.6, -2.4]} intensity={performanceMode ? 0.5 : 0.78} color="#5fdcd0" />
         <Suspense fallback={<LoadingModel />}>
           <BrainScene cameraRef={cameraRef} controlsRef={controlsRef} performanceMode={performanceMode} {...props} />
         </Suspense>

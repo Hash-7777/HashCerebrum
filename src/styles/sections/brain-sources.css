@@ -1,8 +1,11 @@
 .brain-side {
   display: grid;
-  grid-template-rows: minmax(280px, 44%) minmax(0, 1fr);
+  /* Real row minimums so the side column scrolls instead of squeezing the
+     Evidence panel off-screen when the window is short. */
+  grid-template-rows: minmax(300px, 0.8fr) minmax(440px, 1.2fr);
   gap: 10px;
   min-height: 0;
+  overflow-y: auto;
 }
 .brain-model-panel {
   position: relative;
@@ -25,7 +28,8 @@
 .source-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  /* Evidence row keeps a floor so it stays readable under the source agents. */
+  grid-template-rows: auto minmax(190px, 1fr);
   gap: 10px;
   min-height: 0;
 }
