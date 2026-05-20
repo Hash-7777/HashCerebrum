@@ -7,7 +7,8 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { RegionId } from '@config/agents';
 import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
-import { BRAIN_MODEL, PARTS_BY_NODE, partColor, primaryRegionForPart, type BrainModelPart } from '../data/modelParts';
+import { BRAIN_MODEL, PARTS_BY_NODE, primaryRegionForPart, type BrainModelPart } from '../data/modelParts';
+import { regionById } from '../data/regions';
 import { BrainOverlay } from './BrainOverlay';
 
 interface BrainCanvasProps {
@@ -26,8 +27,10 @@ interface BrainMeshPart {
 const PERFORMANCE_STORAGE_KEY = 'hc.brain.performanceMode.v1';
 const QUALITY_TICK_MS = 70;
 const PERFORMANCE_TICK_MS = 300;
-const QUALITY_DECAY_FACTOR = 0.92;
-const PERFORMANCE_DECAY_FACTOR = 0.78;
+const QUALITY_DECAY_FACTOR = 0.86;
+const PERFORMANCE_DECAY_FACTOR = 0.72;
+// Radians per second for the continuous idle auto-rotation.
+const AUTO_ROTATE_SPEED = 0.25;
 // Idle surface tone — a deeper, more saturated anatomical tan so the brain
 // reads with colour instead of washing out toward grey-white.
 const NEUTRAL_BRAIN_COLOR = '#c2917a';
@@ -116,27 +119,34 @@ function BrainMesh({
   performanceMode: boolean;
 }) {
   const material = useMemo(() => meshPart.baseMaterial.clone(), [meshPart.baseMaterial]);
-  const regionColor = useMemo(() => new THREE.Color(partColor(meshPart.part)), [meshPart.part]);
   const neutralColor = useMemo(() => new THREE.Color(NEUTRAL_BRAIN_COLOR), []);
   const regionState = useBrainStore((store) => store.regions);
   const ref = useRef<THREE.Mesh>(null);
   const selected = selectedRegion ? meshPart.part.regionIds.includes(selectedRegion) : false;
   const hovered = hoveredRegion ? meshPart.part.regionIds.includes(hoveredRegion) : false;
-  const intensity = Math.max(
-    ...meshPart.part.regionIds.map((regionId) => {
-      const state = regionState[regionId];
-      return Math.max(state.base, state.accent);
-    }),
-    selected ? 0.92 : 0,
-    hovered ? 0.72 : 0,
-  );
+
+  // A mesh part can map to more than one region. Glow in the colour of
+  // whichever region is most active right now, so the lit colour tracks the
+  // agent that is actually working instead of a fixed primary-region colour.
+  let activeRegion = primaryRegionForPart(meshPart.part);
+  let glow = 0;
+  for (const regionId of meshPart.part.regionIds) {
+    const state = regionState[regionId];
+    const lit = Math.max(state.base, state.accent);
+    if (lit > glow) {
+      glow = lit;
+      activeRegion = regionId;
+    }
+  }
+  const intensity = Math.max(glow, selected ? 0.95 : 0, hovered ? 0.75 : 0);
+  const regionColor = useMemo(() => new THREE.Color(regionById(activeRegion).emissive), [activeRegion]);
 
   useEffect(() => {
     material.emissive.copy(regionColor);
-    material.emissiveIntensity = intensity > 0.03 ? 0.2 + intensity * 0.95 : 0.04;
-    // Blend the surface toward the region colour. A higher cap keeps lit
-    // regions from washing out into the neutral base.
-    material.color.lerpColors(neutralColor, regionColor, Math.min(0.55, intensity * 0.5));
+    // Vivid lit regions: strong emissive and a near-full colour blend so an
+    // active region reads clearly as its agent colour, not a washed tan.
+    material.emissiveIntensity = intensity > 0.03 ? 0.35 + intensity * 1.5 : 0.05;
+    material.color.lerpColors(neutralColor, regionColor, Math.min(0.95, intensity * 1.05));
     material.needsUpdate = true;
   }, [intensity, material, neutralColor, regionColor]);
 
@@ -194,9 +204,9 @@ function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProp
     return () => window.clearInterval(interval);
   }, [hasActiveGlow, invalidate, performanceMode, tick]);
 
-  // Slow ambient drift, paused while the user is interacting with the
-  // OrbitControls (otherwise the wobble fights the drag).
-  useFrame((state) => {
+  // Continuous slow auto-rotation, paused only while the user is dragging
+  // the model with the mouse (rotateEnabled flips off on OrbitControls drag).
+  useFrame((state, delta) => {
     if (!performanceMode) {
       const elapsedMs = state.clock.elapsedTime * 1000;
       if (elapsedMs - lastTickRef.current >= QUALITY_TICK_MS) {
@@ -205,9 +215,9 @@ function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProp
       }
     }
     if (!groupRef.current) return;
+    groupRef.current.rotation.x = 0.12;
     if (!performanceMode && rotateEnabled) {
-      groupRef.current.rotation.y = -0.34 + Math.sin(state.clock.elapsedTime * 0.14) * 0.035;
-      groupRef.current.rotation.x = 0.12 + Math.sin(state.clock.elapsedTime * 0.1) * 0.012;
+      groupRef.current.rotation.y += delta * AUTO_ROTATE_SPEED;
     }
   });
 

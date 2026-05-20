@@ -17,9 +17,8 @@
   z-index: 8;
   display: grid;
   align-content: center;
-  gap: 2px;
-  min-height: 52px;
-  padding: 4px 0 10px;
+  min-height: 32px;
+  padding: 2px 0 8px;
   background: linear-gradient(180deg, rgba(6, 10, 18, 0.99) 65%, rgba(6, 10, 18, 0.0));
   border-bottom: 1px solid var(--hc-border);
   margin-bottom: 2px;
@@ -27,9 +26,9 @@
 .workspace-toolbar h1 {
   margin: 0;
   font-family: var(--hc-font-serif);
-  font-size: 28px;
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.05;
+  line-height: 1.1;
   letter-spacing: -0.01em;
   color: var(--hc-fg-strong);
 }

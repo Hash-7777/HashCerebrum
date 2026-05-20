@@ -22,7 +22,6 @@ import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
-import { Icon } from '@ui/icons';
 
 import { BrainCanvas } from './components/BrainCanvas';
 import { BrainLegend } from './components/BrainLegend';
@@ -165,7 +164,7 @@ export function BrainMode() {
         if (seenTerms.has(hit.term)) continue;
         seenTerms.add(hit.term);
         bus.emit('topic:detected', hit);
-        bus.emit('region:light', { region: hit.region, source: 'topic', intensity: hit.confidence * 0.55, ttlMs: 9000 });
+        bus.emit('region:light', { region: hit.region, source: 'topic', intensity: hit.confidence * 0.55, ttlMs: 4500 });
       }
     };
 
@@ -184,7 +183,7 @@ export function BrainMode() {
         source: 'agent',
         agentId,
         intensity,
-        ttlMs: 10_000,
+        ttlMs: 4000,
       });
     };
 
@@ -220,7 +219,7 @@ export function BrainMode() {
         const def = sourceForTool(toolName);
         if (def) {
           updateSource(def.id, { state: 'running', detail: 'fetching' });
-          bus.emit('region:light', { region: def.region, source: 'agent', agentId, intensity: 0.78, ttlMs: 10_000 });
+          bus.emit('region:light', { region: def.region, source: 'agent', agentId, intensity: 0.78, ttlMs: 4000 });
         }
         bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
       },
@@ -370,7 +369,7 @@ export function BrainMode() {
     critiquedRef.current.add(messageId);
 
     bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'on-demand critique' });
-    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'boss', intensity: 0.85, ttlMs: 9000 });
+    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'boss', intensity: 0.85, ttlMs: 4500 });
 
     const critiqueId = crypto.randomUUID();
     setMessages((current) => [
@@ -445,10 +444,7 @@ export function BrainMode() {
     <div className="mode brain-mode brain-workspace">
       <section className="research-chat" aria-label="Brain research chat">
         <header className="workspace-toolbar">
-          <p className="eyebrow">
-            <Icon name="brain" size={10} /> Brain Research
-          </p>
-          <h1>Chat-first workspace</h1>
+          <h1>The Main Brain</h1>
         </header>
 
         <FeatureBoundary name="Transcript">
