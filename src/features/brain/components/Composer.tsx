@@ -2,8 +2,6 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 
-export type ChatRouteMode = 'auto' | 'chat' | 'research';
-
 export function Composer({
   query,
   setQuery,
@@ -11,8 +9,6 @@ export function Composer({
   setSelectedModel,
   isRunning,
   canSubmit,
-  routeMode,
-  setRouteMode,
   onSubmit,
   onOpenSettings,
 }: {
@@ -22,8 +18,6 @@ export function Composer({
   setSelectedModel: (value: string) => void;
   isRunning: boolean;
   canSubmit: boolean;
-  routeMode: ChatRouteMode;
-  setRouteMode: (value: ChatRouteMode) => void;
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
 }) {
@@ -66,19 +60,6 @@ export function Composer({
           <Icon name="settings" size={13} /> Settings
         </button>
       </div>
-      <div className="composer-route" role="group" aria-label="Conversation route">
-        {(['auto', 'chat', 'research'] as const).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            data-active={routeMode === mode}
-            disabled={isRunning}
-            onClick={() => setRouteMode(mode)}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
       <div className="composer-input-row">
         <textarea
           ref={textareaRef}
@@ -102,10 +83,10 @@ export function Composer({
           disabled={isRunning || !canSubmit}
           className="composer-send"
           data-running={isRunning ? 'true' : 'false'}
-          aria-label={isRunning ? 'Running' : 'Research'}
+          aria-label={isRunning ? 'Running' : 'Send'}
         >
           <Icon name={isRunning ? 'spinner' : 'send'} size={13} />
-          <span>{isRunning ? 'Running' : routeMode === 'research' ? 'Research' : 'Send'}</span>
+          <span>{isRunning ? 'Running' : 'Send'}</span>
         </button>
       </div>
     </form>

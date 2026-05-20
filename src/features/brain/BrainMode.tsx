@@ -9,10 +9,12 @@
 // instead of taking the workspace down.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { RegionId } from '@config/agents';
+import { agentById, type AgentId, type RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { resolveDefaultModel, streamWithModelChain } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
+import type { LlmMessage } from '@core/llm/types';
+import { agentModelFor } from '@core/store/agentModelStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -25,21 +27,16 @@ import { Icon } from '@ui/icons';
 
 import { BrainCanvas } from './components/BrainCanvas';
 import { BrainLegend } from './components/BrainLegend';
-import { Composer, type ChatRouteMode } from './components/Composer';
+import { Composer } from './components/Composer';
 import { EvidenceList } from './components/EvidenceList';
 import { SettingsPanel } from './components/SettingsPanel';
 import { INITIAL_SOURCES, SourceRunner, type SourceStatus } from './components/SourceRunner';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
-import { runResearchAgent } from './researchAgent';
-import {
-  isResearchQuery,
-  labelForModel,
-  shortLabelForModel,
-  summarizeEvidence,
-  TOPIC_THROTTLE_MS,
-} from './researchPipeline';
+import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
+import { runSwarm } from './swarm/runSwarm';
+import type { BossPhase, SwarmCallbacks } from './swarm/types';
 import { useLitRegions } from './useLitRegions';
 
 const WELCOME_MESSAGE: ChatMessage = {
@@ -54,7 +51,6 @@ export function BrainMode() {
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [routeMode, setRouteMode] = useState<ChatRouteMode>('auto');
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
 
@@ -141,102 +137,32 @@ export function BrainMode() {
 
     setQuery('');
     setSourceStatuses(INITIAL_SOURCES.map((source) => ({ ...source, state: 'idle', count: 0 })));
+    setEvidence([]);
+
+    const conversation = messages.flatMap<LlmMessage>((message) => {
+      if (message.role === 'user') return [{ role: 'user', content: message.content }];
+      if (message.role === 'assistant' && !message.critiqueOf && message.content.trim()) {
+        return [{ role: 'assistant', content: message.content }];
+      }
+      return [];
+    });
+
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: cleanQuery }]);
 
-    const shouldRunResearch = routeMode === 'research' || (routeMode === 'auto' && isResearchQuery(cleanQuery));
-
-    if (!shouldRunResearch) {
-      if (!availableModels.some((model) => model.value === selectedModel)) {
-        setMessages((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: 'No connected model is available yet. Connect Ollama or save a provider key in Settings, then refresh models.',
-          },
-        ]);
-        return;
-      }
-
-      setIsRunning(true);
-      bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'normal chat' });
-      const assistantId = crypto.randomUUID();
+    if (availableModels.length === 0) {
       setMessages((current) => [
         ...current,
         {
-          id: assistantId,
+          id: crypto.randomUUID(),
           role: 'assistant',
-          content: '',
-          modelLabel,
-          isStreaming: true,
+          content: 'No connected model is available yet. Connect Ollama or save a provider key in Settings, then refresh models.',
         },
       ]);
-      let buffer = '';
-      try {
-        const response = await streamWithModelChain(
-          selectedModel,
-          {
-            temperature: 0.45,
-            maxTokens: 1100,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'You are HashCerebrum, a concise desktop assistant. Chat normally. If the user asks for biomedical evidence, say research mode can fetch guarded sources; do not invent citations.',
-              },
-              { role: 'user', content: cleanQuery },
-            ],
-          },
-          {
-            onToken: (delta) => {
-              buffer += delta;
-              setMessages((current) =>
-                current.map((m) => (m.id === assistantId ? { ...m, content: buffer } : m)),
-              );
-            },
-          },
-          (progress) => {
-            bus.emit('agent:activity', {
-              agentId: 'boss',
-              phase: 'tool_call',
-              detail: `Failover ${progress.attempt}: ${shortLabelForModel(progress.from)} → ${progress.to.shortLabel}`,
-            });
-          },
-        );
-        setMessages((current) =>
-          current.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  content: response.content || buffer,
-                  modelLabel: labelForModel(response.modelUsed),
-                  isStreaming: false,
-                }
-              : m,
-          ),
-        );
-        bus.emit('agent:activity', { agentId: 'boss', phase: 'done', detail: labelForModel(response.modelUsed) });
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        setMessages((current) =>
-          current.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: buffer || `Chat unavailable: ${detail}`, isStreaming: false, error: detail }
-              : m,
-          ),
-        );
-        bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
-      } finally {
-        setIsRunning(false);
-      }
       return;
     }
 
     setIsRunning(true);
-    bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'agentic research' });
-
     const runs = useResearchRunStore.getState();
-    const run = runs.startRun(cleanQuery, []);
     const assistantId = crypto.randomUUID();
     setMessages((current) => [
       ...current,
@@ -259,68 +185,127 @@ export function BrainMode() {
     };
 
     const sourceForTool = (toolName: string) => SOURCE_DEFS.find((def) => def.tool === toolName);
+    const sourceCounts = new Map<SourceStatus['id'], number>();
+    let activeRunId: string | null = null;
+    const ensureResearchRun = () => {
+      if (!activeRunId) activeRunId = runs.startRun(cleanQuery, []).id;
+      return activeRunId;
+    };
+
+    const lightAgent = (agentId: AgentId, intensity = 0.78) => {
+      const agent = agentById(agentId);
+      bus.emit('region:light', {
+        region: agent.regionBinding,
+        source: 'agent',
+        agentId,
+        intensity,
+        ttlMs: 10_000,
+      });
+    };
+
+    const bossDetail: Record<BossPhase, string> = {
+      routing: 'routing message',
+      delegating: 'delegating to specialists',
+      synthesizing: 'synthesizing specialist findings',
+      answering: 'normal chat',
+    };
+
+    const callbacks: SwarmCallbacks = {
+      onBossPhase: (phase) => {
+        if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
+        bus.emit('agent:activity', {
+          agentId: 'boss',
+          phase: phase === 'routing' || phase === 'answering' ? 'start' : 'tool_call',
+          detail: bossDetail[phase],
+        });
+        lightAgent('boss', phase === 'synthesizing' ? 0.86 : 0.72);
+      },
+      onSpecialistStart: (agentId, subQuery) => {
+        ensureResearchRun();
+        bus.emit('agent:activity', { agentId, phase: 'start', detail: subQuery });
+        lightAgent(agentId);
+      },
+      onSpecialistDone: (agentId, recordCount) => {
+        bus.emit('agent:activity', { agentId, phase: 'done', detail: `${recordCount} records` });
+      },
+      onSpecialistError: (agentId, message) => {
+        bus.emit('agent:activity', { agentId, phase: 'error', detail: message });
+      },
+      onToolCall: (agentId, toolName) => {
+        const def = sourceForTool(toolName);
+        if (def) {
+          updateSource(def.id, { state: 'running', detail: 'fetching' });
+          bus.emit('region:light', { region: def.region, source: 'agent', agentId, intensity: 0.78, ttlMs: 10_000 });
+        }
+        bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
+      },
+      onToolResult: (agentId, toolName, count) => {
+        const def = sourceForTool(toolName);
+        if (def) {
+          const total = (sourceCounts.get(def.id) ?? 0) + count;
+          sourceCounts.set(def.id, total);
+          updateSource(def.id, {
+            state: 'done',
+            count: total,
+            detail: `${total} record${total === 1 ? '' : 's'}`,
+          });
+        }
+        bus.emit('agent:activity', {
+          agentId,
+          phase: 'tool_result',
+          detail: `${def?.label ?? toolName}: ${count}`,
+        });
+      },
+      onAnswerToken: (delta) => {
+        streamedContent += delta;
+        setMessages((current) => current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)));
+        flushTopicHits(streamedContent);
+      },
+    };
 
     try {
-      const result = await runResearchAgent(cleanQuery, selectedModel, {
-        onToolCall: (toolName) => {
-          const def = sourceForTool(toolName);
-          if (!def) return;
-          updateSource(def.id, { state: 'running', count: 0, detail: 'fetching' });
-          bus.emit('agent:activity', { agentId: def.agentId, phase: 'tool_call', detail: def.label });
-          bus.emit('region:light', { region: def.region, source: 'agent', agentId: def.agentId, intensity: 0.78, ttlMs: 10_000 });
-        },
-        onToolResult: (toolName, count) => {
-          const def = sourceForTool(toolName);
-          if (!def) return;
-          updateSource(def.id, { state: 'done', count, detail: `${count} record${count === 1 ? '' : 's'}` });
-          bus.emit('agent:activity', { agentId: def.agentId, phase: 'tool_result', detail: `${def.label}: ${count}` });
-        },
-        onToolError: (toolName, message) => {
-          const def = sourceForTool(toolName);
-          if (!def) return;
-          updateSource(def.id, { state: 'error', count: 0, detail: message });
-          bus.emit('agent:activity', { agentId: def.agentId, phase: 'error', detail: def.label });
-        },
-        onPhase: (phase) => {
-          if (phase !== 'answering') return;
-          bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'synthesize' });
-          bus.emit('region:light', { region: 'parietal', source: 'agent', agentId: 'boss', intensity: 0.8, ttlMs: 9000 });
-        },
-        onAnswerToken: (delta) => {
-          streamedContent += delta;
-          setMessages((current) => current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)));
-          flushTopicHits(streamedContent);
-        },
+      const result = await runSwarm({
+        question: cleanQuery,
+        conversation,
+        modelFor: agentModelFor,
+        callbacks,
       });
 
       flushTopicHits(result.answer || streamedContent);
-      setEvidence(result.evidence);
-      runs.storeEvidence(run.id, result.evidence);
-      const finalContent = result.answer || streamedContent || summarizeEvidence(result.evidence);
-      runs.storeSummary(run.id, finalContent, result.modelUsed);
+      const finalContent =
+        result.answer ||
+        streamedContent ||
+        (result.kind === 'research' ? summarizeEvidence(result.evidence) : 'No response returned by the selected model.');
 
-      // Save this run into the active project's RAG memory: each retrieved
-      // record plus the synthesized answer become searchable chunks so a
-      // later question can draw on what this project already found.
-      if (activeProjectId) {
-        const evidenceChunks: NewRagChunk[] = result.evidence.map((item) => ({
-          kind: 'evidence',
-          title: item.title,
-          text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
-          source: item.source,
-          runId: run.id,
-          query: cleanQuery,
-          ...(item.url ? { url: item.url } : {}),
-        }));
-        const answerChunk: NewRagChunk = {
-          kind: 'answer',
-          title: cleanQuery,
-          text: finalContent,
-          source: 'answer',
-          runId: run.id,
-          query: cleanQuery,
-        };
-        useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+      if (result.kind === 'research') {
+        const runId = ensureResearchRun();
+        setEvidence(result.evidence);
+        runs.storeEvidence(runId, result.evidence);
+        runs.storeSummary(runId, finalContent, result.modelUsed);
+
+        // Save this run into the active project's RAG memory: each retrieved
+        // record plus the synthesized answer become searchable chunks so a
+        // later question can draw on what this project already found.
+        if (activeProjectId) {
+          const evidenceChunks: NewRagChunk[] = result.evidence.map((item) => ({
+            kind: 'evidence',
+            title: item.title,
+            text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
+            source: item.source,
+            runId,
+            query: cleanQuery,
+            ...(item.url ? { url: item.url } : {}),
+          }));
+          const answerChunk: NewRagChunk = {
+            kind: 'answer',
+            title: cleanQuery,
+            text: finalContent,
+            source: 'answer',
+            runId,
+            query: cleanQuery,
+          };
+          useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+        }
       }
       setMessages((current) =>
         current.map((m) =>
@@ -328,18 +313,22 @@ export function BrainMode() {
             ? {
                 ...m,
                 content: finalContent,
-                citations: result.evidence.slice(0, 12),
                 modelLabel: labelForModel(result.modelUsed),
                 isStreaming: false,
+                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 12) } : {}),
               }
             : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'boss', phase: 'done', detail: labelForModel(result.modelUsed) });
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'done',
+        detail: `${result.kind} · ${labelForModel(result.modelUsed)}`,
+      });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      const fallback = streamedContent || `Research could not complete: ${detail}`;
-      runs.failRun(run.id, detail);
+      const fallback = streamedContent || `HashCerebrum could not complete the request: ${detail}`;
+      if (activeRunId) runs.failRun(activeRunId, detail);
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
@@ -452,8 +441,6 @@ export function BrainMode() {
             setSelectedModel={setSelectedModel}
             isRunning={isRunning}
             canSubmit={canSubmit}
-            routeMode={routeMode}
-            setRouteMode={setRouteMode}
             onSubmit={submit}
             onOpenSettings={() => setSettingsOpen(true)}
           />

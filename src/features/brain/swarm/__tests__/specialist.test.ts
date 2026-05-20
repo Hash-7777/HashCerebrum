@@ -1,14 +1,16 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { agentById } from '@config/agents';
 import { tools } from '@core/tools/ToolRegistry';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
-import { runResearchAgent } from '../researchAgent';
+import { runSwarm } from '../runSwarm';
+import { runSpecialist } from '../specialist';
 
 vi.mock('@core/llm/ProviderRegistry', () => ({
   completeWithModelChain: vi.fn(async () => {
     throw new Error('planner unavailable');
   }),
   streamWithModelChain: vi.fn(async () => {
-    throw new Error('synthesizer unavailable');
+    throw new Error('boss synthesis unavailable');
   }),
 }));
 
@@ -64,23 +66,55 @@ beforeEach(() => {
   executedTools = [];
 });
 
-describe('runResearchAgent', () => {
-  it('still fetches source evidence when model tool planning and synthesis fail', async () => {
+describe('runSpecialist', () => {
+  it('directly fetches source evidence when model tool planning fails', async () => {
     const callbacks = {
+      onBossPhase: vi.fn(),
+      onSpecialistStart: vi.fn(),
+      onSpecialistDone: vi.fn(),
+      onSpecialistError: vi.fn(),
       onToolCall: vi.fn(),
       onToolResult: vi.fn(),
-      onToolError: vi.fn(),
-      onPhase: vi.fn(),
       onAnswerToken: vi.fn(),
     };
 
-    const result = await runResearchAgent('glioma biomarker trial safety', 'openrouter:test-model', callbacks);
+    const result = await runSpecialist(
+      agentById('literature'),
+      'openrouter:test-model',
+      'glioma biomarker trial safety',
+      callbacks,
+    );
 
     expect(executedTools).toEqual(Object.keys(SOURCE_BY_TOOL));
     expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
+    expect(result.error).toContain('planner unavailable');
+    expect(callbacks.onToolResult).toHaveBeenCalledWith('literature', 'pubmed_search', 1);
+  });
+});
+
+describe('runSwarm', () => {
+  it('returns source evidence when boss planning and synthesis are unavailable', async () => {
+    const callbacks = {
+      onBossPhase: vi.fn(),
+      onSpecialistStart: vi.fn(),
+      onSpecialistDone: vi.fn(),
+      onSpecialistError: vi.fn(),
+      onToolCall: vi.fn(),
+      onToolResult: vi.fn(),
+      onAnswerToken: vi.fn(),
+    };
+
+    const result = await runSwarm({
+      question: 'glioma biomarker trial safety',
+      conversation: [],
+      modelFor: () => 'openrouter:test-model',
+      callbacks,
+    });
+
+    expect(result.kind).toBe('research');
+    expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
     expect(result.answer).toContain('Source agents retrieved');
-    expect(result.answer).toContain('planner unavailable');
-    expect(callbacks.onToolResult).toHaveBeenCalledWith('pubmed_search', 1);
-    expect(callbacks.onToolError).not.toHaveBeenCalled();
+    expect(result.answer).toContain('boss synthesis unavailable');
+    expect(result.specialists[0]?.error).toContain('planner unavailable');
   });
 });

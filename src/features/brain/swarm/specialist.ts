@@ -1,7 +1,7 @@
 // A topic specialist — a guarded tool-loop scoped to one medical domain.
 // Each specialist runs with its own model and only its allowed tools,
 // retrieves real records, and writes a findings summary for the boss.
-// Generalises the former single-model researchAgent into one swarm worker.
+// Generalises the former single-model research path into one swarm worker.
 
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
@@ -12,6 +12,24 @@ import type { SpecialistResult, SwarmCallbacks } from './types';
 
 const MAX_ROUNDS = 3;
 const SNIPPET_CHARS = 280;
+
+interface DirectSearchPlan {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+function directSearchPlan(query: string, agent: AgentDef): DirectSearchPlan[] {
+  const maxResults = 8;
+  const plans: DirectSearchPlan[] = [
+    { name: 'pubmed_search', args: { query, maxResults } },
+    { name: 'europepmc_fetch', args: { query, maxResults } },
+    { name: 'openalex_query', args: { query, maxResults } },
+    { name: 'ctgov_search', args: { query, maxResults } },
+    { name: 'openfda_query', args: { endpoint: 'drug/event', query, maxResults: 5 } },
+    { name: 'rxnorm_lookup', args: { drug: query } },
+  ];
+  return plans.filter((plan) => agent.tools.includes(plan.name));
+}
 
 function toolSpecs(toolNames: string[]): LlmToolSpec[] {
   return toolNames
@@ -45,6 +63,45 @@ function formatRecords(toolName: string, records: EvidenceItem[], startIndex: nu
   return `${toolName} returned ${records.length} record(s):\n${lines.join('\n')}`;
 }
 
+async function runDirectSourceSweep(
+  agent: AgentDef,
+  subQuery: string,
+  evidence: EvidenceItem[],
+  messages: LlmMessage[],
+  callbacks: SwarmCallbacks,
+): Promise<number> {
+  let toolCalls = 0;
+  const resultBlocks: string[] = [];
+
+  for (const plan of directSearchPlan(subQuery, agent)) {
+    const tool = toolRegistry.get(plan.name);
+    if (!tool) continue;
+    callbacks.onToolCall(agent.id, plan.name);
+    try {
+      const result = await tool.execute(plan.args);
+      toolCalls += 1;
+      const records = asRecords(result);
+      const startIndex = evidence.length;
+      evidence.push(...records);
+      callbacks.onToolResult(agent.id, plan.name, records.length);
+      resultBlocks.push(formatRecords(plan.name, records, startIndex));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      callbacks.onSpecialistError(agent.id, `${plan.name}: ${detail}`);
+      resultBlocks.push(`${plan.name}: error — ${detail}`);
+    }
+  }
+
+  if (resultBlocks.length > 0) {
+    messages.push({
+      role: 'user',
+      content: `Direct source-agent retrieval results for "${subQuery}":\n\n${resultBlocks.join('\n\n')}`,
+    });
+  }
+
+  return toolCalls;
+}
+
 function systemPrompt(agent: AgentDef): string {
   return `You are the ${agent.label} research specialist on the HashCerebrum biomedical team. ${agent.specialty}
 
@@ -75,17 +132,24 @@ export async function runSpecialist(
   ];
   const evidence: EvidenceItem[] = [];
   let toolCalls = 0;
+  let planningError: unknown;
 
   callbacks.onSpecialistStart(agent.id, subQuery);
 
   try {
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
-      const resp = await completeWithModelChain(model, {
-        messages,
-        tools: specs,
-        temperature: 0.2,
-        maxTokens: 1100,
-      });
+      let resp;
+      try {
+        resp = await completeWithModelChain(model, {
+          messages,
+          tools: specs,
+          temperature: 0.2,
+          maxTokens: 1100,
+        });
+      } catch (error) {
+        planningError = error;
+        break;
+      }
       if (resp.toolCalls.length === 0) break;
       messages.push({ role: 'assistant', content: resp.content });
 
@@ -139,6 +203,10 @@ export async function runSpecialist(
       }
     }
 
+    if (evidence.length === 0) {
+      toolCalls += await runDirectSourceSweep(agent, subQuery, evidence, messages, callbacks);
+    }
+
     // Findings summary — non-streamed, since specialists run in parallel.
     messages.push({
       role: 'user',
@@ -154,7 +222,8 @@ export async function runSpecialist(
   } catch (error) {
     // A specialist failure is contained — the swarm continues with the rest.
     const detail = error instanceof Error ? error.message : String(error);
+    const reason = planningError instanceof Error ? `${planningError.message}; ${detail}` : detail;
     callbacks.onSpecialistError(agent.id, detail);
-    return { agentId: agent.id, label: agent.label, subQuery, findings: '', evidence, toolCalls, error: detail };
+    return { agentId: agent.id, label: agent.label, subQuery, findings: '', evidence, toolCalls, error: reason };
   }
 }

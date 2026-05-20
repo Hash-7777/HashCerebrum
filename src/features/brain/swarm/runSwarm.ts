@@ -36,6 +36,28 @@ function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
   return merged;
 }
 
+function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: string): string {
+  if (evidence.length === 0) {
+    return `No source records were retrieved for "${question}". Boss synthesis also failed: ${reason}`;
+  }
+  const snapshot = evidence
+    .slice(0, 10)
+    .map((record, index) => {
+      const year = record.year ? ` (${record.year})` : '';
+      const snippet = record.snippet ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, 220)}` : '';
+      return `[S${index + 1}] ${record.source.toUpperCase()}${year}: ${record.title}${snippet}`;
+    })
+    .join('\n');
+  return [
+    `Source agents retrieved ${evidence.length} record(s) for "${question}", but the boss could not draft the synthesis: ${reason}`,
+    '',
+    'Evidence snapshot:',
+    snapshot,
+    '',
+    'Use this as source triage, not medical advice.',
+  ].join('\n');
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks } = opts;
   const bossModel = modelFor('boss');
@@ -58,7 +80,19 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   const merged = mergeEvidence(specialists);
   callbacks.onBossPhase('synthesizing');
-  const synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken);
+  let synth;
+  try {
+    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      kind: 'research',
+      answer: sourceOnlyAnswer(question, merged, detail),
+      evidence: merged,
+      specialists,
+      modelUsed: bossModel,
+    };
+  }
 
   return {
     kind: 'research',
