@@ -18,6 +18,7 @@ import {
   type FailoverProgress,
 } from '@core/llm/ProviderRegistry';
 import { DEFAULT_MODEL } from '@core/llm/modelCatalog';
+import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { classify } from '@core/topic/MeshClassifier';
@@ -43,6 +44,13 @@ import {
   TOPIC_THROTTLE_MS,
 } from './researchPipeline';
 import { useLitRegions } from './useLitRegions';
+
+const WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome',
+  role: 'system',
+  content:
+    'Ask normally for chat, or ask a biomedical research question to run source agents that fetch guarded evidence, store the run, and synthesize from the stored records.',
+};
 
 export function BrainMode() {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
@@ -72,14 +80,8 @@ export function BrainMode() {
     }
   }, [availableModels, selectedModel]);
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'system',
-      content:
-        'Ask normally for chat, or ask a biomedical research question to run source agents that fetch guarded evidence, store the run, and synthesize from the stored records.',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const [sourceStatuses, setSourceStatuses] = useState<SourceStatus[]>(INITIAL_SOURCES);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -112,6 +114,22 @@ export function BrainMode() {
   const updateSource = (id: SourceStatus['id'], update: Partial<SourceStatus>) => {
     setSourceStatuses((current) => current.map((source) => (source.id === id ? { ...source, ...update } : source)));
   };
+
+  // Load a transcript when one is opened from the left rail. activeChatId
+  // only becomes non-null after an explicit rail action or the first
+  // saved turn, so this never clobbers an in-progress conversation.
+  useEffect(() => {
+    if (!activeChatId) return;
+    const chat = useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId);
+    if (chat) setMessages(chat.messages.length > 0 ? chat.messages : [WELCOME_MESSAGE]);
+  }, [activeChatId]);
+
+  // Snapshot the conversation into chat history once a turn settles.
+  useEffect(() => {
+    if (isRunning) return;
+    if (!messages.some((m) => m.role === 'user')) return;
+    useChatHistoryStore.getState().saveActive(messages);
+  }, [isRunning, messages]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

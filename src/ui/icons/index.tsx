@@ -26,7 +26,8 @@ export type IconName =
   | 'alert'
   | 'lock'
   | 'eye'
-  | 'gauge';
+  | 'gauge'
+  | 'plus';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -159,6 +160,11 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
       <path d="M4.2 16a8.5 8.5 0 1 1 15.6 0" />
       <path d="M12 12.5 16 8" />
       <path d="M8 19h8" />
+    </svg>
+  ),
+  plus: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M12 5v14M5 12h14" />
     </svg>
   ),
 };

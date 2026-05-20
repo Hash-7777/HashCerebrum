@@ -4,10 +4,11 @@ import { useModeStore } from '@core/store/modeStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResourcesStore } from '@core/store/resourcesStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
+import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
-import { ModeRail } from './ModeRail';
+import { LeftRail } from './LeftRail';
 import { ExecutionTrace } from './ExecutionTrace';
 
 const RegionBindingEditor = lazy(() =>
@@ -34,13 +35,15 @@ export function AppShell() {
   const refreshModels = useModelCatalogStore((s) => s.refreshAll);
   const hydrateResources = useResourcesStore((s) => s.hydrate);
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
+  const hydrateChats = useChatHistoryStore((s) => s.hydrate);
   const View = getModeComponent(mode);
 
   useEffect(() => {
     void refreshModels();
     void hydrateResources();
     void hydrateResearchRuns();
-  }, [hydrateResources, hydrateResearchRuns, refreshModels]);
+    void hydrateChats();
+  }, [hydrateChats, hydrateResources, hydrateResearchRuns, refreshModels]);
 
   // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
   // reflects this binding (⌘1, ⌘2, …).
@@ -70,7 +73,7 @@ export function AppShell() {
     <div className="app-shell">
       <TitleBar />
       <div className="app-body">
-        <ModeRail />
+        <LeftRail />
         <main className="app-main">
           <ModeErrorBoundary mode={mode} resetKey={mode}>
             <Suspense fallback={<div className="mode mode-loading">Loading {mode}</div>}>

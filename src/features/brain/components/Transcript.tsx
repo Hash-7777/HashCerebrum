@@ -1,17 +1,8 @@
 import type { EvidenceItem } from '@platform/index';
+import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { Icon } from '@ui/icons';
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  citations?: EvidenceItem[];
-  modelLabel?: string;
-  failoverNote?: string;
-  error?: string;
-  critiqueOf?: string;
-  isStreaming?: boolean;
-}
+export type { ChatMessage };
 
 function evidenceKey(item: EvidenceItem, index: number) {
   return item.provenanceHash || `${item.source}-${item.title}-${index}`;
