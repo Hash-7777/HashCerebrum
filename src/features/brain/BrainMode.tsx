@@ -159,7 +159,7 @@ export function BrainMode() {
       }
 
       setIsRunning(true);
-      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: 'normal chat' });
+      bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'normal chat' });
       const assistantId = crypto.randomUUID();
       setMessages((current) => [
         ...current,
@@ -197,7 +197,7 @@ export function BrainMode() {
           },
           (progress) => {
             bus.emit('agent:activity', {
-              agentId: 'synthesizer',
+              agentId: 'boss',
               phase: 'tool_call',
               detail: `Failover ${progress.attempt}: ${shortLabelForModel(progress.from)} → ${progress.to.shortLabel}`,
             });
@@ -215,7 +215,7 @@ export function BrainMode() {
               : m,
           ),
         );
-        bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(response.modelUsed) });
+        bus.emit('agent:activity', { agentId: 'boss', phase: 'done', detail: labelForModel(response.modelUsed) });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         setMessages((current) =>
@@ -225,7 +225,7 @@ export function BrainMode() {
               : m,
           ),
         );
-        bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'error', detail });
+        bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
       } finally {
         setIsRunning(false);
       }
@@ -233,7 +233,7 @@ export function BrainMode() {
     }
 
     setIsRunning(true);
-    bus.emit('agent:activity', { agentId: 'librarian', phase: 'start', detail: 'agentic research' });
+    bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'agentic research' });
 
     const runs = useResearchRunStore.getState();
     const run = runs.startRun(cleanQuery, []);
@@ -283,8 +283,8 @@ export function BrainMode() {
         },
         onPhase: (phase) => {
           if (phase !== 'answering') return;
-          bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'start', detail: 'synthesize' });
-          bus.emit('region:light', { region: 'parietal', source: 'agent', agentId: 'synthesizer', intensity: 0.8, ttlMs: 9000 });
+          bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'synthesize' });
+          bus.emit('region:light', { region: 'parietal', source: 'agent', agentId: 'boss', intensity: 0.8, ttlMs: 9000 });
         },
         onAnswerToken: (delta) => {
           streamedContent += delta;
@@ -335,7 +335,7 @@ export function BrainMode() {
             : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'done', detail: labelForModel(result.modelUsed) });
+      bus.emit('agent:activity', { agentId: 'boss', phase: 'done', detail: labelForModel(result.modelUsed) });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       const fallback = streamedContent || `Research could not complete: ${detail}`;
@@ -345,7 +345,7 @@ export function BrainMode() {
           m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'synthesizer', phase: 'error', detail });
+      bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
     } finally {
       setIsRunning(false);
     }
@@ -358,8 +358,8 @@ export function BrainMode() {
     if (!target || critiquedRef.current.has(messageId)) return;
     critiquedRef.current.add(messageId);
 
-    bus.emit('agent:activity', { agentId: 'critic', phase: 'start', detail: 'on-demand critique' });
-    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'critic', intensity: 0.85, ttlMs: 9000 });
+    bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'on-demand critique' });
+    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'boss', intensity: 0.85, ttlMs: 9000 });
 
     const critiqueId = crypto.randomUUID();
     setMessages((current) => [
@@ -409,7 +409,7 @@ export function BrainMode() {
             : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'critic', phase: 'done' });
+      bus.emit('agent:activity', { agentId: 'boss', phase: 'done' });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
@@ -419,7 +419,7 @@ export function BrainMode() {
             : m,
         ),
       );
-      bus.emit('agent:activity', { agentId: 'critic', phase: 'error', detail });
+      bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
     }
   };
 
