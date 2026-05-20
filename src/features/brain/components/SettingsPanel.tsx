@@ -5,6 +5,7 @@ import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { Icon } from '@ui/icons';
+import { AgentModelSettings } from './AgentModelSettings';
 import { AuditModal } from './AuditModal';
 
 function formatBytes(bytes: number): string {
@@ -189,6 +190,8 @@ export function SettingsPanel({
           Refresh models
         </button>
       </div>
+
+      <AgentModelSettings />
 
       <label className="toggle-row">
         <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
