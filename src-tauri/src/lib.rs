@@ -58,6 +58,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
+        // Restores the main window's position and size between launches.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             // Initialize guard policy, audit log, and SQLite cache before
             // the renderer can call anything.
