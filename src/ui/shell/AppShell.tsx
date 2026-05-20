@@ -43,7 +43,6 @@ export function AppShell() {
   const hydrateProjects = useProjectStore((s) => s.hydrate);
   const hydrateRag = useRagStore((s) => s.hydrate);
   const hydrateAgentModels = useAgentModelStore((s) => s.hydrate);
-  const View = getModeComponent(mode);
 
   useEffect(() => {
     void refreshModels();
@@ -97,11 +96,18 @@ export function AppShell() {
       <div className="app-body">
         <LeftRail />
         <main className="app-main">
-          <ModeErrorBoundary mode={mode} resetKey={mode}>
-            <Suspense fallback={<div className="mode mode-loading">Loading {mode}</div>}>
-              <View />
-            </Suspense>
-          </ModeErrorBoundary>
+          {MODES.map((modeDef) => {
+            const ModeView = getModeComponent(modeDef.id);
+            return (
+              <div key={modeDef.id} className="mode-host" hidden={modeDef.id !== mode}>
+                <ModeErrorBoundary mode={modeDef.id} resetKey={modeDef.id}>
+                  <Suspense fallback={<div className="mode mode-loading">Loading {modeDef.id}</div>}>
+                    <ModeView />
+                  </Suspense>
+                </ModeErrorBoundary>
+              </div>
+            );
+          })}
         </main>
       </div>
       <ExecutionTrace />

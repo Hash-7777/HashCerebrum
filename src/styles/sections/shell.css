@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
   background:
     radial-gradient(1200px 700px at 60% 30%, rgba(61, 209, 191, 0.08), transparent 60%),
     radial-gradient(900px 600px at 18% 88%, rgba(139, 158, 255, 0.07), transparent 62%),
@@ -265,3 +266,7 @@
 .mode-rail-shortcut { color: var(--hc-fg-dim); font-size: 10px; font-family: var(--hc-font-mono); }
 
 .app-main { background: #06080c; overflow: hidden; }
+/* Each mode stays mounted; only the active one is shown. Keeping the Brain
+   mode mounted preserves its WebGL canvas so mode switches are instant. */
+.mode-host { height: 100%; min-height: 0; }
+.mode-host[hidden] { display: none; }
