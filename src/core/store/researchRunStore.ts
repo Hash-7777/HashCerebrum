@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AgentId } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import { platform } from '@platform/index';
+import { useProjectStore } from './projectStore';
 
 const STORAGE_KEY = 'research.runs.v1';
 const MAX_RUNS = 50;
@@ -21,6 +22,7 @@ export interface ResearchAgentStep {
 
 export interface ResearchRun {
   id: string;
+  projectId: string;
   query: string;
   status: ResearchRunStatus;
   startedAt: string;
@@ -87,6 +89,7 @@ export const useResearchRunStore = create<ResearchRunStore>((set, get) => ({
   startRun: (query, steps) => {
     const run: ResearchRun = {
       id: crypto.randomUUID(),
+      projectId: useProjectStore.getState().activeProjectId ?? '',
       query,
       status: 'running',
       startedAt: new Date().toISOString(),

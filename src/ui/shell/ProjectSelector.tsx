@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from 'react';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
+import { useRagStore } from '@core/store/ragStore';
 import { Icon } from '@ui/icons';
 
 type EditMode = 'idle' | 'create' | 'rename';
@@ -51,11 +52,13 @@ export function ProjectSelector() {
   const handleDelete = () => {
     if (!active || !canDelete) return;
     const ok = window.confirm(
-      `Delete project "${active.name}"? Its saved chats will be removed. This cannot be undone.`,
+      `Delete project "${active.name}"? Its saved chats and research memory will be removed. This cannot be undone.`,
     );
     if (!ok) return;
-    // Cascade: drop the project's chats first, then the project itself.
+    // Cascade: drop the project's chats and RAG memory first, then the
+    // project itself.
     useChatHistoryStore.getState().deleteChatsForProject(active.id);
+    useRagStore.getState().clearProject(active.id);
     deleteProject(active.id);
   };
 

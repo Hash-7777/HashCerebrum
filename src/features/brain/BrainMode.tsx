@@ -17,6 +17,7 @@ import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
+import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
@@ -298,6 +299,30 @@ export function BrainMode() {
       runs.storeEvidence(run.id, result.evidence);
       const finalContent = result.answer || streamedContent || summarizeEvidence(result.evidence);
       runs.storeSummary(run.id, finalContent, result.modelUsed);
+
+      // Save this run into the active project's RAG memory: each retrieved
+      // record plus the synthesized answer become searchable chunks so a
+      // later question can draw on what this project already found.
+      if (activeProjectId) {
+        const evidenceChunks: NewRagChunk[] = result.evidence.map((item) => ({
+          kind: 'evidence',
+          title: item.title,
+          text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
+          source: item.source,
+          runId: run.id,
+          query: cleanQuery,
+          ...(item.url ? { url: item.url } : {}),
+        }));
+        const answerChunk: NewRagChunk = {
+          kind: 'answer',
+          title: cleanQuery,
+          text: finalContent,
+          source: 'answer',
+          runId: run.id,
+          query: cleanQuery,
+        };
+        useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+      }
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId

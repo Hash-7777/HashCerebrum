@@ -6,6 +6,7 @@ import { useResourcesStore } from '@core/store/resourcesStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
+import { useRagStore } from '@core/store/ragStore';
 import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
@@ -38,19 +39,21 @@ export function AppShell() {
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
   const hydrateChats = useChatHistoryStore((s) => s.hydrate);
   const hydrateProjects = useProjectStore((s) => s.hydrate);
+  const hydrateRag = useRagStore((s) => s.hydrate);
   const View = getModeComponent(mode);
 
   useEffect(() => {
     void refreshModels();
     void hydrateResources();
     void hydrateResearchRuns();
+    void hydrateRag();
     // Projects must hydrate before chats so legacy chats with no projectId
     // can be adopted into the active project.
     void (async () => {
       await hydrateProjects();
       await hydrateChats(useProjectStore.getState().activeProjectId ?? undefined);
     })();
-  }, [hydrateChats, hydrateProjects, hydrateResources, hydrateResearchRuns, refreshModels]);
+  }, [hydrateChats, hydrateProjects, hydrateRag, hydrateResources, hydrateResearchRuns, refreshModels]);
 
   // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
   // reflects this binding (⌘1, ⌘2, …).
