@@ -3,7 +3,7 @@
 
 import { AGENTS } from '@config/agents';
 import { useModelCatalogStore, labelForModelValue } from '@core/store/modelCatalogStore';
-import { autoAssignedModels, useAgentModelStore } from '@core/store/agentModelStore';
+import { autoAssignedModels, isConnectedModelValue, useAgentModelStore } from '@core/store/agentModelStore';
 
 export function AgentModelSettings() {
   const modelGroups = useModelCatalogStore((s) => s.groups);
@@ -20,28 +20,60 @@ export function AgentModelSettings() {
         The boss and each specialist auto-pick a connected model. Override any of them here.
       </p>
       {AGENTS.map((agent) => (
-        <label key={agent.id} className="settings-agent-row">
-          <span className="settings-agent-name" title={agent.specialty}>
-            {agent.label}
-          </span>
-          <select
-            value={overrides[agent.id] ?? ''}
-            onChange={(event) => setOverride(agent.id, event.target.value || null)}
-            disabled={modelGroups.length === 0}
-          >
-            <option value="">Auto — {labelForModelValue(auto[agent.id] ?? '')}</option>
-            {modelGroups.map((group) => (
-              <optgroup key={group.provider} label={group.label}>
-                {group.models.map((model) => (
-                  <option key={model.value} value={model.value}>
-                    {model.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+        <AgentModelRow
+          key={agent.id}
+          label={agent.label}
+          specialty={agent.specialty}
+          value={overrides[agent.id] ?? ''}
+          autoValue={auto[agent.id] ?? ''}
+          modelGroups={modelGroups}
+          onChange={(value) => setOverride(agent.id, value || null)}
+        />
       ))}
     </section>
+  );
+}
+
+function AgentModelRow({
+  label,
+  specialty,
+  value,
+  autoValue,
+  modelGroups,
+  onChange,
+}: {
+  label: string;
+  specialty: string;
+  value: string;
+  autoValue: string;
+  modelGroups: ReturnType<typeof useModelCatalogStore.getState>['groups'];
+  onChange: (value: string) => void;
+}) {
+  const allModels = modelGroups.flatMap((group) => group.models);
+  const staleOverride = value && !isConnectedModelValue(value, allModels);
+
+  return (
+    <label className="settings-agent-row">
+      <span className="settings-agent-name" title={specialty}>
+        {label}
+      </span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={modelGroups.length === 0}>
+        <option value="">Auto — {labelForModelValue(autoValue)}</option>
+        {staleOverride && (
+          <option value={value} disabled>
+            Unavailable — using Auto
+          </option>
+        )}
+        {modelGroups.map((group) => (
+          <optgroup key={group.provider} label={group.label}>
+            {group.models.map((model) => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
   );
 }

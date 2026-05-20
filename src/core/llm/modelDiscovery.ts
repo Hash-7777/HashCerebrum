@@ -10,6 +10,7 @@ import {
 import { modelStrengthScore } from './modelRanking';
 import { OPENAI_COMPAT_MODELS_URL } from './providerEndpoints';
 import { getOllamaHost } from './providerSettings';
+import { redactSecrets } from './secrets';
 import type { LlmProviderId } from './types';
 
 export type ProviderConnectionState = 'idle' | 'checking' | 'connected' | 'no-key' | 'unavailable' | 'error';
@@ -71,11 +72,7 @@ function boolField(record: Record<string, unknown>, key: string): boolean | unde
 }
 
 function redact(text: string, secret?: string): string {
-  let clean = text
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/(api[_ -]?key["':=\s]+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]');
-  if (secret) clean = clean.split(secret).join('[redacted]');
-  return clean.slice(0, 180);
+  return redactSecrets(text, secret ? [secret] : []).slice(0, 180);
 }
 
 function safeError(error: unknown, secret?: string): string {

@@ -10,6 +10,7 @@ import {
 import { allDiscoveredModels, useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { OPENAI_COMPAT_CHAT_URL } from './providerEndpoints';
 import { getOllamaHost, getPrivacyLocalOnly } from './providerSettings';
+import { redactSecrets, secretValuesFromHeaders } from './secrets';
 import {
   ToolCallAccumulator,
   normalizeOpenAiToolCalls,
@@ -63,12 +64,27 @@ async function postJson(
 ): Promise<any> {
   const { status, body: text } = await platform().llm.httpPost(provider, url, headers, JSON.stringify(body));
   if (status < 200 || status >= 300) {
-    throw new Error(`${provider} HTTP ${status}: ${text.slice(0, 240)}`);
+    throw new Error(`${provider} HTTP ${status}: ${redactSecrets(text.slice(0, 240), secretValuesFromHeaders(headers))}`);
   }
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(`${provider} returned a non-JSON response`);
+  }
+}
+
+async function chatStream(
+  provider: LlmProviderId,
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  onLine: (line: string) => void,
+): Promise<void> {
+  try {
+    await platform().llm.chatStream(provider, url, headers, body, onLine);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(redactSecrets(message, secretValuesFromHeaders(headers)));
   }
 }
 
@@ -240,7 +256,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
   let content = '';
   const accumulator = new ToolCallAccumulator();
-  await platform().llm.chatStream(
+  await chatStream(
     'ollama',
     `${getOllamaHost()}/api/chat`,
     { 'Content-Type': 'application/json' },
@@ -284,7 +300,7 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
   }
   let content = '';
   const accumulator = new ToolCallAccumulator();
-  await platform().llm.chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
+  await chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
     const parsed = parseOpenAiStreamLine(line);
     if (!parsed) return;
     if (parsed.delta) {
@@ -314,7 +330,7 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
     ...(typeof req.temperature === 'number' ? { temperature: req.temperature } : {}),
   };
   let content = '';
-  await platform().llm.chatStream(
+  await chatStream(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
     {
@@ -338,7 +354,7 @@ async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   const key = await requireKey('gemini');
   let content = '';
   const toolCalls: LlmToolCall[] = [];
-  await platform().llm.chatStream(
+  await chatStream(
     'gemini',
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`,
     {

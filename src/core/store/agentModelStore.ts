@@ -77,15 +77,22 @@ export const useAgentModelStore = create<AgentModelStore>((set) => ({
     }),
 }));
 
+export function isConnectedModelValue(value: string, models: ModelOption[] = allDiscoveredModels()): boolean {
+  return models.some((model) => model.value === value);
+}
+
 // Effective auto-assignment over the currently connected catalog.
 export function autoAssignedModels(): Record<AgentId, string> {
   return autoAssignModels(allDiscoveredModels());
 }
 
 // The model an agent should run on right now: manual override if set,
-// otherwise the auto-assigned model.
+// otherwise the auto-assigned model. Stale overrides are ignored so a
+// removed provider/model cannot keep an agent pinned to an unavailable
+// model after model discovery refreshes.
 export function agentModelFor(agentId: AgentId): string {
+  const discovered = allDiscoveredModels();
   const override = useAgentModelStore.getState().overrides[agentId];
-  if (override) return override;
-  return autoAssignedModels()[agentId] ?? DEFAULT_MODEL;
+  if (override && isConnectedModelValue(override, discovered)) return override;
+  return autoAssignModels(discovered)[agentId] ?? DEFAULT_MODEL;
 }

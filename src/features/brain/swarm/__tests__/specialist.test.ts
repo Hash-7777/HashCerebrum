@@ -5,13 +5,14 @@ import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 import { runSwarm } from '../runSwarm';
 import { runSpecialist } from '../specialist';
 
+const llmMocks = vi.hoisted(() => ({
+  completeWithModelChain: vi.fn(),
+  streamWithModelChain: vi.fn(),
+}));
+
 vi.mock('@core/llm/ProviderRegistry', () => ({
-  completeWithModelChain: vi.fn(async () => {
-    throw new Error('planner unavailable');
-  }),
-  streamWithModelChain: vi.fn(async () => {
-    throw new Error('boss synthesis unavailable');
-  }),
+  completeWithModelChain: llmMocks.completeWithModelChain,
+  streamWithModelChain: llmMocks.streamWithModelChain,
 }));
 
 const SOURCE_BY_TOOL = {
@@ -64,51 +65,52 @@ beforeAll(() => {
 
 beforeEach(() => {
   executedTools = [];
+  llmMocks.completeWithModelChain.mockReset();
+  llmMocks.streamWithModelChain.mockReset();
 });
+
+function callbacks() {
+  return {
+    onBossPhase: vi.fn(),
+    onSpecialistStart: vi.fn(),
+    onSpecialistDone: vi.fn(),
+    onSpecialistError: vi.fn(),
+    onToolCall: vi.fn(),
+    onToolResult: vi.fn(),
+    onAnswerToken: vi.fn(),
+  };
+}
 
 describe('runSpecialist', () => {
   it('directly fetches source evidence when model tool planning fails', async () => {
-    const callbacks = {
-      onBossPhase: vi.fn(),
-      onSpecialistStart: vi.fn(),
-      onSpecialistDone: vi.fn(),
-      onSpecialistError: vi.fn(),
-      onToolCall: vi.fn(),
-      onToolResult: vi.fn(),
-      onAnswerToken: vi.fn(),
-    };
+    llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
+    const cb = callbacks();
 
     const result = await runSpecialist(
       agentById('literature'),
       'openrouter:test-model',
       'glioma biomarker trial safety',
-      callbacks,
+      cb,
     );
 
     expect(executedTools).toEqual(Object.keys(SOURCE_BY_TOOL));
     expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
     expect(result.error).toContain('planner unavailable');
-    expect(callbacks.onToolResult).toHaveBeenCalledWith('literature', 'pubmed_search', 1);
+    expect(cb.onToolResult).toHaveBeenCalledWith('literature', 'pubmed_search', 1);
   });
 });
 
 describe('runSwarm', () => {
   it('returns source evidence when boss planning and synthesis are unavailable', async () => {
-    const callbacks = {
-      onBossPhase: vi.fn(),
-      onSpecialistStart: vi.fn(),
-      onSpecialistDone: vi.fn(),
-      onSpecialistError: vi.fn(),
-      onToolCall: vi.fn(),
-      onToolResult: vi.fn(),
-      onAnswerToken: vi.fn(),
-    };
+    llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
+    llmMocks.streamWithModelChain.mockRejectedValue(new Error('boss synthesis unavailable'));
+    const cb = callbacks();
 
     const result = await runSwarm({
       question: 'glioma biomarker trial safety',
       conversation: [],
       modelFor: () => 'openrouter:test-model',
-      callbacks,
+      callbacks: cb,
     });
 
     expect(result.kind).toBe('research');
@@ -116,5 +118,70 @@ describe('runSwarm', () => {
     expect(result.answer).toContain('Source agents retrieved');
     expect(result.answer).toContain('boss synthesis unavailable');
     expect(result.specialists[0]?.error).toContain('planner unavailable');
+  });
+
+  it('lets the boss route ordinary messages to chat without running specialists', async () => {
+    llmMocks.completeWithModelChain.mockResolvedValue({ content: '{"mode":"chat"}', toolCalls: [] });
+    llmMocks.streamWithModelChain.mockImplementation(async (_model, _req, opts) => {
+      opts.onToken('hello');
+      return { content: 'hello', toolCalls: [], modelUsed: 'cloud:openai:gpt-5' };
+    });
+    const cb = callbacks();
+
+    const result = await runSwarm({
+      question: 'hi',
+      conversation: [],
+      modelFor: () => 'cloud:openai:gpt-5',
+      callbacks: cb,
+    });
+
+    expect(result.kind).toBe('chat');
+    expect(result.evidence).toHaveLength(0);
+    expect(result.specialists).toHaveLength(0);
+    expect(executedTools).toHaveLength(0);
+    expect(cb.onBossPhase).toHaveBeenCalledWith('routing');
+    expect(cb.onBossPhase).toHaveBeenCalledWith('answering');
+    expect(cb.onAnswerToken).toHaveBeenCalledWith('hello');
+  });
+
+  it('uses per-agent models for routed specialist tasks', async () => {
+    llmMocks.completeWithModelChain.mockImplementation(async (_model, req) => {
+      const lastMessage = req.messages.at(-1)?.content ?? '';
+      if (lastMessage.includes('User message:')) {
+        return {
+          content:
+            '{"mode":"research","tasks":[{"agent":"pharmacology","subQuery":"drug safety"},{"agent":"trials","subQuery":"trial status"}]}',
+          toolCalls: [],
+        };
+      }
+      if (lastMessage.includes('Write a concise findings summary')) {
+        return { content: 'specialist findings', toolCalls: [] };
+      }
+      return { content: '', toolCalls: [] };
+    });
+    llmMocks.streamWithModelChain.mockResolvedValue({
+      content: 'synthesized answer [S1]',
+      toolCalls: [],
+      modelUsed: 'cloud:openai:gpt-5',
+    });
+    const requestedModels = new Map<string, string>([
+      ['boss', 'cloud:openai:gpt-5'],
+      ['pharmacology', 'cloud:groq:llama-3.1-8b'],
+      ['trials', 'cloud:gemini:gemini-2.5-flash'],
+    ]);
+    const modelFor = vi.fn((agentId: string) => requestedModels.get(agentId) ?? 'cloud:openai:gpt-5');
+
+    const result = await runSwarm({
+      question: 'panadol safety and clinical trials',
+      conversation: [],
+      modelFor,
+      callbacks: callbacks(),
+    });
+
+    expect(result.kind).toBe('research');
+    expect(result.specialists.map((specialist) => specialist.agentId).sort()).toEqual(['pharmacology', 'trials']);
+    expect(modelFor).toHaveBeenCalledWith('boss');
+    expect(modelFor).toHaveBeenCalledWith('pharmacology');
+    expect(modelFor).toHaveBeenCalledWith('trials');
   });
 });
