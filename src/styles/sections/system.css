@@ -80,3 +80,31 @@
 }
 .mode-error h2 { font-family: var(--hc-font-serif); margin: 0 0 var(--hc-space-2); }
 .mode-error p { color: var(--hc-danger); margin: 0; font-family: var(--hc-font-mono); font-size: 12px; }
+
+/* Transient toast — bottom-centre confirmation (e.g. export complete) */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 80vw;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--hc-border-accent);
+  background: rgba(11, 17, 26, 0.97);
+  color: var(--hc-fg-strong);
+  font-size: 12.5px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: toast-in 180ms ease-out;
+}
+.app-toast svg { color: var(--hc-accent-strong); flex: none; }
+.app-toast[data-tone="error"] { border-color: var(--hc-danger); }
+.app-toast[data-tone="error"] svg { color: var(--hc-danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

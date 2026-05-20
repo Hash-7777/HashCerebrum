@@ -156,14 +156,20 @@ export function buildMarkdownExport(message: ExportableMessage): string {
   return `# ${message.title}\n\n${message.content}${citations}\n`;
 }
 
-export function downloadTextFile(filename: string, body: string, mime: string): void {
-  const blob = new Blob([body], { type: mime });
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
   anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1200);
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+export function downloadTextFile(filename: string, body: string, mime: string): void {
+  downloadBlob(filename, new Blob([body], { type: mime }));
 }
 
 export function exportMessageMarkdown(message: ExportableMessage): void {
@@ -174,29 +180,15 @@ export function exportMessageHtml(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.html`, buildExportHtml(message), 'text/html;charset=utf-8');
 }
 
-export function exportMessagePdf(message: ExportableMessage): void {
-  const html = buildExportHtml(message);
-  const frame = document.createElement('iframe');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '0';
-  frame.style.height = '0';
-  frame.style.border = '0';
-  frame.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-  if (!doc) {
-    document.body.removeChild(frame);
-    exportMessageHtml(message);
-    return;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
-  setTimeout(() => {
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
-    setTimeout(() => frame.remove(), 1000);
-  }, 120);
+// Build a publishable research-paper PDF and save it. The webview routes
+// the download to the user's Downloads folder, like the Markdown export.
+export async function exportMessagePdf(message: ExportableMessage): Promise<void> {
+  const { buildPaperPdfBlob } = await import('./paperPdf');
+  const blob = await buildPaperPdfBlob({
+    title: message.title,
+    content: message.content,
+    ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
+    ...(message.citations ? { citations: message.citations } : {}),
+  });
+  downloadBlob(`${slugifyFilename(message.title)}.pdf`, blob);
 }

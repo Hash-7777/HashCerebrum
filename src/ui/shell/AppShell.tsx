@@ -13,6 +13,7 @@ import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
 import { LeftRail } from './LeftRail';
 import { ExecutionTrace } from './ExecutionTrace';
+import { Toast } from './Toast';
 
 const RegionBindingEditor = lazy(() =>
   import('@features/brain/components/RegionBindingEditor').then((module) => ({
@@ -104,6 +105,7 @@ export function AppShell() {
         </main>
       </div>
       <ExecutionTrace />
+      <Toast />
     </div>
   );
 }

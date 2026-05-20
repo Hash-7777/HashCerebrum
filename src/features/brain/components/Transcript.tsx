@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
+import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
 import { exportMessageMarkdown, exportMessagePdf, type ExportableMessage } from '../export/messageExport';
 
@@ -74,6 +75,20 @@ export function Transcript({
     ...(message.citations ? { citations: message.citations } : {}),
   });
 
+  const exportPdf = async (message: ChatMessage, index: number) => {
+    try {
+      await exportMessagePdf(exportableFor(message, index));
+      useToastStore.getState().show('Exported to Downloads');
+    } catch {
+      useToastStore.getState().show('PDF export failed', 'error');
+    }
+  };
+
+  const exportMarkdown = (message: ChatMessage, index: number) => {
+    exportMessageMarkdown(exportableFor(message, index));
+    useToastStore.getState().show('Exported to Downloads');
+  };
+
   return (
     <div className="transcript" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
       {messages.map((message, index) => (
@@ -127,14 +142,14 @@ export function Transcript({
               )}
               <button
                 type="button"
-                onClick={() => exportMessagePdf(exportableFor(message, index))}
+                onClick={() => void exportPdf(message, index)}
                 className="chat-action"
               >
                 <Icon name="download" size={12} /> PDF
               </button>
               <button
                 type="button"
-                onClick={() => exportMessageMarkdown(exportableFor(message, index))}
+                onClick={() => exportMarkdown(message, index)}
                 className="chat-action"
               >
                 <Icon name="document" size={12} /> MD
