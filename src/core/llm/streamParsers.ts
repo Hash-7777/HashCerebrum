@@ -1,8 +1,16 @@
 import type { LlmToolCall } from './types';
 
+export interface OpenAiToolCallDelta {
+  index?: number;
+  id?: string;
+  name?: string;
+  argsFragment?: string;
+}
+
 export interface StreamParseResult {
   delta: string;
   toolCalls: LlmToolCall[];
+  toolCallDeltas?: OpenAiToolCallDelta[];
 }
 
 export function parseToolArgs(args: unknown): Record<string, unknown> {
@@ -36,13 +44,73 @@ export function normalizeOpenAiToolCalls(calls: unknown[] | undefined): LlmToolC
     .filter((call): call is LlmToolCall => !!call.name);
 }
 
+export function extractOpenAiToolCallDeltas(calls: unknown[] | undefined): OpenAiToolCallDelta[] {
+  if (!Array.isArray(calls)) return [];
+  return calls.map((c) => {
+    const call = c as {
+      index?: number;
+      id?: string;
+      function?: { name?: string; arguments?: string };
+    };
+    const out: OpenAiToolCallDelta = {};
+    if (typeof call.index === 'number') out.index = call.index;
+    if (call.id) out.id = call.id;
+    if (call.function?.name) out.name = call.function.name;
+    if (typeof call.function?.arguments === 'string') out.argsFragment = call.function.arguments;
+    return out;
+  });
+}
+
+// Merges fragmented OpenAI-compatible tool-call SSE deltas. Per the spec,
+// `arguments` is streamed character-by-character across chunks, keyed by
+// `index`. Without accumulation each fragment would surface as its own
+// LlmToolCall with empty args.
+export class ToolCallAccumulator {
+  private byIndex = new Map<number, { id?: string; name?: string; argsBuffer: string }>();
+  private autoIndex = 0;
+
+  ingest(deltas: OpenAiToolCallDelta[] | undefined): void {
+    if (!deltas || deltas.length === 0) return;
+    for (const d of deltas) {
+      const index = typeof d.index === 'number' ? d.index : this.autoIndex++;
+      const slot = this.byIndex.get(index) ?? { argsBuffer: '' };
+      if (d.id) slot.id = d.id;
+      if (d.name) slot.name = d.name;
+      if (typeof d.argsFragment === 'string') slot.argsBuffer += d.argsFragment;
+      this.byIndex.set(index, slot);
+    }
+  }
+
+  collect(): LlmToolCall[] {
+    const out: LlmToolCall[] = [];
+    const sorted = [...this.byIndex.entries()].sort(([a], [b]) => a - b);
+    for (const [index, slot] of sorted) {
+      if (!slot.name) continue;
+      out.push({
+        id: slot.id || `call_${index}`,
+        name: slot.name,
+        args: parseToolArgs(slot.argsBuffer || '{}'),
+      });
+    }
+    return out;
+  }
+}
+
+function withDeltas(base: { delta: string; toolCalls: LlmToolCall[] }, raw: unknown[] | undefined): StreamParseResult {
+  const deltas = extractOpenAiToolCallDeltas(raw);
+  return deltas.length > 0 ? { ...base, toolCallDeltas: deltas } : base;
+}
+
 export function parseOllamaStreamLine(line: string): StreamParseResult | null {
   try {
     const json = JSON.parse(line);
-    return {
-      delta: json.message?.content ?? '',
-      toolCalls: normalizeOpenAiToolCalls(json.message?.tool_calls),
-    };
+    return withDeltas(
+      {
+        delta: json.message?.content ?? '',
+        toolCalls: normalizeOpenAiToolCalls(json.message?.tool_calls),
+      },
+      json.message?.tool_calls,
+    );
   } catch {
     return null;
   }
@@ -55,10 +123,10 @@ export function parseOpenAiStreamLine(line: string): StreamParseResult | null {
   try {
     const json = JSON.parse(payload);
     const delta = json.choices?.[0]?.delta;
-    return {
-      delta: delta?.content ?? '',
-      toolCalls: normalizeOpenAiToolCalls(delta?.tool_calls),
-    };
+    return withDeltas(
+      { delta: delta?.content ?? '', toolCalls: normalizeOpenAiToolCalls(delta?.tool_calls) },
+      delta?.tool_calls,
+    );
   } catch {
     return null;
   }

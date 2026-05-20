@@ -11,6 +11,7 @@ import { allDiscoveredModels, useModelCatalogStore } from '@core/store/modelCata
 import { OPENAI_COMPAT_CHAT_URL } from './providerEndpoints';
 import { getOllamaHost, getPrivacyLocalOnly } from './providerSettings';
 import {
+  ToolCallAccumulator,
   normalizeOpenAiToolCalls,
   parseAnthropicStreamLine,
   parseGeminiResponse,
@@ -248,7 +249,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   });
   if (!response.ok) throw new Error(`Ollama HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
   let content = '';
-  const toolCalls: LlmToolCall[] = [];
+  const accumulator = new ToolCallAccumulator();
   await readStream(response, (line) => {
     const parsed = parseOllamaStreamLine(line);
     if (!parsed) return;
@@ -256,9 +257,9 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
       content += parsed.delta;
       opts.onToken(parsed.delta);
     }
-    toolCalls.push(...parsed.toolCalls);
+    accumulator.ingest(parsed.toolCallDeltas);
   });
-  return { content, toolCalls };
+  return { content, toolCalls: accumulator.collect() };
 }
 
 async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -295,7 +296,7 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
   if (!response.ok) throw new Error(`${providerId} HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
 
   let content = '';
-  const toolCalls: LlmToolCall[] = [];
+  const accumulator = new ToolCallAccumulator();
   await readStream(response, (line) => {
     const parsed = parseOpenAiStreamLine(line);
     if (!parsed) return;
@@ -303,9 +304,9 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
       content += parsed.delta;
       opts.onToken(parsed.delta);
     }
-    toolCalls.push(...parsed.toolCalls);
+    accumulator.ingest(parsed.toolCallDeltas);
   });
-  return { content, toolCalls };
+  return { content, toolCalls: accumulator.collect() };
 }
 
 async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
