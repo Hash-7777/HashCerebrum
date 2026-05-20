@@ -1,11 +1,9 @@
 .brain-side {
   display: grid;
-  /* Real row minimums so the side column scrolls instead of squeezing the
-     Evidence panel off-screen when the window is short. */
-  grid-template-rows: minmax(300px, 0.8fr) minmax(440px, 1.2fr);
+  grid-template-rows: minmax(260px, 0.78fr) minmax(0, 1.22fr);
   gap: 10px;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 .brain-model-panel {
   position: relative;
@@ -28,10 +26,10 @@
 .source-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  /* Evidence row keeps a floor so it stays readable under the source agents. */
-  grid-template-rows: auto minmax(190px, 1fr);
+  grid-template-rows: minmax(0, 176px) minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
+  overflow: hidden;
 }
 .source-runner,
 .brain-workspace .brain-legend,
@@ -45,8 +43,11 @@
 }
 .source-runner,
 .brain-workspace .brain-legend {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  padding: 10px;
+  overflow: hidden;
+  padding: 9px;
 }
 .source-runner header,
 .brain-workspace .brain-legend header,
@@ -65,9 +66,9 @@
   gap: 6px;
   margin: 0;
   color: var(--hc-fg-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 .source-runner h3 svg,
 .brain-workspace .brain-legend h3 svg,
@@ -83,17 +84,20 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  min-height: 0;
   margin: 0;
   padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .source-runner li {
   display: grid;
-  grid-template-columns: 12px 1fr;
-  gap: 8px;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 7px;
   align-items: center;
   border-radius: 8px;
-  padding: 6px;
+  padding: 5px;
 }
 .source-runner li[data-state="running"] {
   background: rgba(95, 179, 168, 0.1);
@@ -102,8 +106,8 @@
   background: rgba(255, 107, 107, 0.08);
 }
 .source-swatch {
-  width: 9px;
-  height: 26px;
+  width: 8px;
+  height: 23px;
   border-radius: 999px;
 }
 .source-runner button {
@@ -123,16 +127,17 @@
   flex: 1;
   overflow: hidden;
   color: var(--hc-fg);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
+  line-height: 1.18;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .source-row-head > svg:first-of-type { color: var(--hc-fg-muted); flex-shrink: 0; }
 .source-row-detail {
   overflow: hidden;
   color: var(--hc-fg-dim);
-  font-size: 10px;
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -151,17 +156,17 @@
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  overflow: auto;
 }
 .brain-workspace .brain-legend li button {
-  padding: 6px;
+  padding: 5px;
 }
 .evidence-list {
   grid-column: 1 / -1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  padding: 10px;
+  overflow: hidden;
+  padding: 9px;
 }
 .evidence-list > div {
   display: grid;

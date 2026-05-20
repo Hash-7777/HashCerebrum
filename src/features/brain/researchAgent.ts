@@ -14,6 +14,11 @@ import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 const MAX_SEARCH_ROUNDS = 4;
 const SNIPPET_CHARS = 320;
 
+interface DirectSearchPlan {
+  name: string;
+  args: Record<string, unknown>;
+}
+
 const RESEARCH_TOOL_NAMES = [
   'rag_search',
   'pubmed_search',
@@ -23,6 +28,18 @@ const RESEARCH_TOOL_NAMES = [
   'openfda_query',
   'rxnorm_lookup',
 ];
+
+function directSearchPlan(query: string): DirectSearchPlan[] {
+  const maxResults = 8;
+  return [
+    { name: 'pubmed_search', args: { query, maxResults } },
+    { name: 'europepmc_fetch', args: { query, maxResults } },
+    { name: 'openalex_query', args: { query, maxResults } },
+    { name: 'ctgov_search', args: { query, maxResults } },
+    { name: 'openfda_query', args: { endpoint: 'drug/event', query, maxResults: 5 } },
+    { name: 'rxnorm_lookup', args: { drug: query } },
+  ];
+}
 
 // The anti-hallucination contract: the agent may only state facts it pulled
 // from a tool result in this conversation, and must say so when evidence is
@@ -98,6 +115,58 @@ function formatRecords(toolName: string, records: EvidenceItem[], startIndex: nu
   return `${toolName} returned ${records.length} record(s):\n${lines.join('\n')}`;
 }
 
+async function runDirectSourceSweep(
+  query: string,
+  evidence: EvidenceItem[],
+  messages: LlmMessage[],
+  callbacks: ResearchAgentCallbacks,
+): Promise<number> {
+  let toolCalls = 0;
+  const resultBlocks: string[] = [];
+
+  for (const plan of directSearchPlan(query)) {
+    const tool = toolRegistry.get(plan.name);
+    if (!tool) continue;
+    callbacks.onToolCall(plan.name);
+    try {
+      const result = await tool.execute(plan.args);
+      toolCalls += 1;
+      const records = asRecords(result);
+      const startIndex = evidence.length;
+      evidence.push(...records);
+      callbacks.onToolResult(plan.name, records.length);
+      resultBlocks.push(formatRecords(plan.name, records, startIndex));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      callbacks.onToolError(plan.name, detail);
+      resultBlocks.push(`${plan.name}: error — ${detail}`);
+    }
+  }
+
+  if (resultBlocks.length > 0) {
+    messages.push({
+      role: 'user',
+      content: `Direct source-agent retrieval results for "${query}":\n\n${resultBlocks.join('\n\n')}`,
+    });
+  }
+
+  return toolCalls;
+}
+
+function sourceOnlyAnswer(query: string, evidence: EvidenceItem[], reason: string): string {
+  if (evidence.length === 0) {
+    return `No source records were retrieved for "${query}". Model synthesis also failed: ${reason}`;
+  }
+  return [
+    `Source agents retrieved ${evidence.length} record(s) for "${query}", but the model could not draft the synthesis: ${reason}`,
+    '',
+    'Evidence snapshot:',
+    formatRecords('source_agents', evidence.slice(0, 10), 0),
+    '',
+    'Use this as source triage, not medical advice.',
+  ].join('\n');
+}
+
 export async function runResearchAgent(
   query: string,
   model: string,
@@ -111,16 +180,23 @@ export async function runResearchAgent(
   const evidence: EvidenceItem[] = [];
   let toolCalls = 0;
   let memoryHits = 0;
+  let planningError: unknown;
 
   callbacks.onPhase('searching');
 
   for (let round = 0; round < MAX_SEARCH_ROUNDS; round += 1) {
-    const resp = await completeWithModelChain(model, {
-      messages,
-      tools: specs,
-      temperature: 0.2,
-      maxTokens: 1200,
-    });
+    let resp;
+    try {
+      resp = await completeWithModelChain(model, {
+        messages,
+        tools: specs,
+        temperature: 0.2,
+        maxTokens: 1200,
+      });
+    } catch (error) {
+      planningError = error;
+      break;
+    }
     if (resp.toolCalls.length === 0) break;
 
     messages.push({ role: 'assistant', content: resp.content });
@@ -179,6 +255,11 @@ export async function runResearchAgent(
     }
   }
 
+  if (evidence.length === 0) {
+    const directCalls = await runDirectSourceSweep(query, evidence, messages, callbacks);
+    toolCalls += directCalls;
+  }
+
   // Final answer — streamed, no tools. A fresh instruction stops the model
   // issuing more tool calls and focuses it on writing from what it found.
   callbacks.onPhase('answering');
@@ -194,11 +275,17 @@ export async function runResearchAgent(
       'No records were retrieved. State plainly that the searched databases returned no strong evidence for this question. Do not answer from training memory.';
   }
   messages.push({ role: 'user', content: finalInstruction });
-  const final = await streamWithModelChain(
-    model,
-    { messages, temperature: 0.2, maxTokens: 1500 },
-    { onToken: callbacks.onAnswerToken },
-  );
+  try {
+    const final = await streamWithModelChain(
+      model,
+      { messages, temperature: 0.2, maxTokens: 1500 },
+      { onToken: callbacks.onAnswerToken },
+    );
 
-  return { answer: final.content, evidence, modelUsed: final.modelUsed, toolCalls };
+    return { answer: final.content, evidence, modelUsed: final.modelUsed, toolCalls };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const reason = planningError instanceof Error ? `${planningError.message}; ${detail}` : detail;
+    return { answer: sourceOnlyAnswer(query, evidence, reason), evidence, modelUsed: model, toolCalls };
+  }
 }
