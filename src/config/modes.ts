@@ -36,6 +36,12 @@ export const MODES = defineModes([
     shortcut: '⌘2',
     description: 'Saved papers, collections, tags, notes, export',
   },
+  {
+    id: 'memory',
+    label: 'Memory',
+    shortcut: '⌘3',
+    description: "The active project's saved research memory — evidence and answers",
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];
