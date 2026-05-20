@@ -150,6 +150,11 @@ export const tauriPlatform: Platform = {
     },
   },
 
+  llm: {
+    httpGet: (provider, url, headers) =>
+      invoke<{ status: number; body: string }>('llm_http_get', { provider, url, headers }),
+  },
+
   env: {
     isTauri: true,
     platform: detectPlatform(),

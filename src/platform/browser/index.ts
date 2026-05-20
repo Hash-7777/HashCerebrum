@@ -120,6 +120,15 @@ export const browserPlatform: Platform = {
       localStorage.removeItem(storageKey(key));
     },
   },
+  llm: {
+    // Browser dev has no Rust shell; a direct fetch will usually be
+    // blocked by provider CORS, which the caller already handles as a
+    // provider error. The Tauri shell is the supported path.
+    httpGet: async (_provider, url, headers) => {
+      const response = await fetch(url, { headers, cache: 'no-store', referrerPolicy: 'no-referrer' });
+      return { status: response.status, body: await response.text() };
+    },
+  },
   env: {
     isTauri: false,
     platform: 'browser',

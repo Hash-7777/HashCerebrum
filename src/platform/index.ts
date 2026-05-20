@@ -92,6 +92,17 @@ export interface Platform {
     delete(key: string): Promise<void>;
   };
 
+  // LLM provider HTTP — proxied through Rust so the guard, rate limiter,
+  // and audit log cover provider calls. The renderer supplies the auth
+  // headers per call; Rust never logs them.
+  llm: {
+    httpGet(
+      provider: string,
+      url: string,
+      headers: Record<string, string>,
+    ): Promise<{ status: number; body: string }>;
+  };
+
   // Environment
   env: {
     isTauri: boolean;

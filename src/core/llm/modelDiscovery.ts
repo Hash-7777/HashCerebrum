@@ -34,7 +34,6 @@ export interface ModelDiscoverySnapshot {
   fetchedAt: string;
 }
 
-const REQUEST_TIMEOUT_MS = 12_000;
 const DEFAULT_MODEL_LIMIT = 60;
 const OPENROUTER_MODEL_LIMIT = 90;
 const NON_CHAT_MODEL = /\b(embed|embedding|rerank|moderation|safeguard|guard|image|tts|whisper|transcrib|realtime|ocr|sora|deep-research|computer-use|codex|babbage|davinci)\b/i;
@@ -80,27 +79,26 @@ function redact(text: string, secret?: string): string {
 }
 
 function safeError(error: unknown, secret?: string): string {
-  if (error instanceof DOMException && error.name === 'AbortError') return 'request timed out';
   const message = error instanceof Error ? error.message : String(error ?? 'model discovery failed');
   return redact(message, secret);
 }
 
-async function fetchJson(url: string, init: RequestInit = {}, secret?: string): Promise<unknown> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+// Provider HTTP is proxied through Rust (platform().llm.httpGet) so the
+// guard, per-host rate limiter, and audit log cover model discovery.
+async function fetchJson(
+  provider: LlmProviderId,
+  url: string,
+  headers: Record<string, string> = {},
+  secret?: string,
+): Promise<unknown> {
+  const { status, body } = await platform().llm.httpGet(provider, url, headers);
+  if (status < 200 || status >= 300) {
+    throw new Error(`HTTP ${status}: ${redact(body.slice(0, 240), secret)}`);
+  }
   try {
-    const response = await fetch(url, {
-      ...init,
-      cache: 'no-store',
-      referrerPolicy: 'no-referrer',
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${redact((await response.text()).slice(0, 240), secret)}`);
-    }
-    return response.json();
-  } finally {
-    clearTimeout(timeout);
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new Error('provider returned a non-JSON response');
   }
 }
 
@@ -208,7 +206,7 @@ async function savedKey(provider: LlmProviderId): Promise<string | null> {
 async function discoverOllama(): Promise<ProviderDiscoveryResult> {
   const provider: LlmProviderId = 'ollama';
   try {
-    const data = await fetchJson(`${getOllamaHost()}/api/tags`);
+    const data = await fetchJson(provider, `${getOllamaHost()}/api/tags`);
     const models = normalizeOptions(provider, recordsFromList(data));
     return {
       group: makeGroup(provider, models),
@@ -224,12 +222,11 @@ async function discoverOllama(): Promise<ProviderDiscoveryResult> {
 
 async function discoverGemini(key: string): Promise<ModelOption[]> {
   const data = await fetchJson(
+    'gemini',
     'https://generativelanguage.googleapis.com/v1beta/models',
     {
-      headers: {
-        Accept: 'application/json',
-        'x-goog-api-key': key,
-      },
+      Accept: 'application/json',
+      'x-goog-api-key': key,
     },
     key,
   );
@@ -238,13 +235,12 @@ async function discoverGemini(key: string): Promise<ModelOption[]> {
 
 async function discoverAnthropic(key: string): Promise<ModelOption[]> {
   const data = await fetchJson(
+    'anthropic',
     'https://api.anthropic.com/v1/models?limit=1000',
     {
-      headers: {
-        Accept: 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
+      Accept: 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
     },
     key,
   );
@@ -262,7 +258,7 @@ async function discoverOpenAiCompatible(provider: LlmProviderId, key: string): P
     headers['HTTP-Referer'] = 'hashcerebrum://local';
     headers['X-Title'] = 'HashCerebrum';
   }
-  const data = await fetchJson(url, { headers }, key);
+  const data = await fetchJson(provider, url, headers, key);
   return normalizeOptions(provider, recordsFromList(data));
 }
 

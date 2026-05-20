@@ -33,6 +33,7 @@ use commands::{
     },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
+    llm::llm_http_get,
     medical::{
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
         openfda::openfda_query, pubmed::pubmed_search, rxnorm::rxnorm_lookup,
@@ -81,6 +82,8 @@ pub fn run() {
             audit_log_verify,
             // Network (generic GET — all external HTTP gates through guard)
             net_get,
+            // LLM provider HTTP (backend-proxied, guard + rate-limit + audit)
+            llm_http_get,
             // Medical sources
             pubmed_search,
             europepmc_fetch,
