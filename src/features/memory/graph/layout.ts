@@ -22,7 +22,7 @@ function clusterCenters(graph: MemoryGraph, span: number): Map<string, NodePosit
   const clusters = graph.clusters.length > 0
     ? graph.clusters
     : [{ id: 'default', label: 'Memory', nodeIds: graph.nodes.map((node) => node.id), terms: [] }];
-  const radius = clusters.length <= 1 ? 0 : span * 0.31;
+  const radius = clusters.length <= 1 ? 0 : span * 0.23;
   const map = new Map<string, NodePosition>();
   clusters.forEach((cluster, index) => {
     const angle = -Math.PI / 2 + (index / clusters.length) * Math.PI * 2;
@@ -49,7 +49,7 @@ function seedPositions(graph: MemoryGraph, span: number, centers: Map<string, No
   const out = graph.nodes.map(() => ({ x: centre, y: centre }));
   for (const [clusterId, indices] of byCluster) {
     const anchor = centers.get(clusterId) ?? { x: centre, y: centre };
-    const radius = Math.min(span * 0.1, 42 + Math.sqrt(indices.length) * 28);
+    const radius = Math.min(span * 0.09, 38 + Math.sqrt(indices.length) * 24);
     indices.forEach((nodeIndex, localIndex) => {
       const t = indices.length <= 1 ? 0 : (localIndex + 1) / indices.length;
       const r = radius * Math.sqrt(t);
@@ -80,7 +80,7 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
   graph.nodes.forEach((node, i) => index.set(node.id, i));
 
   const radii = graph.nodes.map((node) => nodeLayoutRadius(node.degree));
-  const ideal = Math.sqrt((span * span) / count) * 0.72; // ideal edge length
+  const ideal = Math.sqrt((span * span) / count) * 0.62; // ideal edge length
   const centre = span / 2;
   let temperature = span * 0.18;
   const cooling = temperature / (ITERATIONS + 1);
@@ -105,9 +105,9 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
           dist = Math.hypot(dx, dy);
         }
         const sameCluster = graph.nodes[i]!.clusterId === graph.nodes[j]!.clusterId;
-        const minDist = radii[i]! + radii[j]! + (sameCluster ? 18 : 34);
-        const overlapForce = dist < minDist ? (minDist - dist) * 1.7 : 0;
-        const force = ((ideal * ideal) / dist) * (sameCluster ? 0.82 : 1.32) + overlapForce;
+        const minDist = radii[i]! + radii[j]! + (sameCluster ? 15 : 28);
+        const overlapForce = dist < minDist ? (minDist - dist) * 1.35 : 0;
+        const force = ((ideal * ideal) / dist) * (sameCluster ? 0.52 : 0.88) + overlapForce;
         const ux = dx / dist;
         const uy = dy / dist;
         disp[i]!.x += ux * force;
@@ -126,7 +126,7 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       const dy = pos[a]!.y - pos[b]!.y;
       const dist = Math.max(Math.hypot(dx, dy), 0.01);
       const sameCluster = graph.nodes[a]!.clusterId === graph.nodes[b]!.clusterId;
-      const force = ((dist * dist) / ideal) * (sameCluster ? 0.34 + edge.weight : 0.22 + edge.weight * 0.6);
+      const force = ((dist * dist) / ideal) * (sameCluster ? 0.5 + edge.weight : 0.18 + edge.weight * 0.48);
       const ux = dx / dist;
       const uy = dy / dist;
       disp[a]!.x -= ux * force;
@@ -139,11 +139,21 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
     // disconnected clusters from drifting off-canvas.
     for (let i = 0; i < count; i += 1) {
       const cluster = centers.get(graph.nodes[i]!.clusterId) ?? { x: centre, y: centre };
-      const clusterPull = graph.nodes[i]!.degree === 0 ? 0.02 : 0.012;
+      const clusterPull = graph.nodes[i]!.degree === 0 ? 0.035 : 0.026;
       disp[i]!.x += (cluster.x - pos[i]!.x) * clusterPull;
       disp[i]!.y += (cluster.y - pos[i]!.y) * clusterPull;
-      disp[i]!.x += (centre - pos[i]!.x) * 0.004;
-      disp[i]!.y += (centre - pos[i]!.y) * 0.004;
+      disp[i]!.x += (centre - pos[i]!.x) * 0.006;
+      disp[i]!.y += (centre - pos[i]!.y) * 0.006;
+
+      // Soft boundary force: keep the drawing reasonably close to the
+      // virtual canvas without pinning points to a visible square border.
+      const margin = span * 0.08;
+      const max = span - margin;
+      const boundaryPull = 0.018;
+      if (pos[i]!.x < margin) disp[i]!.x += (margin - pos[i]!.x) * boundaryPull;
+      if (pos[i]!.x > max) disp[i]!.x -= (pos[i]!.x - max) * boundaryPull;
+      if (pos[i]!.y < margin) disp[i]!.y += (margin - pos[i]!.y) * boundaryPull;
+      if (pos[i]!.y > max) disp[i]!.y -= (pos[i]!.y - max) * boundaryPull;
     }
 
     // Apply displacement, capped by the cooling temperature.
@@ -152,8 +162,6 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       const step = Math.min(magnitude, temperature);
       pos[i]!.x += (disp[i]!.x / magnitude) * step;
       pos[i]!.y += (disp[i]!.y / magnitude) * step;
-      pos[i]!.x = Math.min(Math.max(pos[i]!.x, 32), span - 32);
-      pos[i]!.y = Math.min(Math.max(pos[i]!.y, 32), span - 32);
     }
     temperature = Math.max(temperature - cooling, 1);
   }

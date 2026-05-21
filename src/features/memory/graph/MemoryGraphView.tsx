@@ -12,9 +12,9 @@ import { layoutMemoryGraph, type NodePosition } from './layout';
 
 const EXCERPT_CHARS = 280;
 const LABEL_CHARS = 30;
-const MIN_SCALE = 0.24;
-const MAX_SCALE = 3.2;
-const WHEEL_ZOOM_STEP = 1.08;
+const MIN_SCALE = 0.06;
+const MAX_SCALE = 10;
+const WHEEL_ZOOM_STEP = 1.14;
 const CLICK_SLOP = 4; // px of movement below which a gesture counts as a click
 
 interface Transform {
@@ -51,7 +51,7 @@ export function MemoryGraphView({
   // Lay the graph out in a virtual square sized by node count, so the
   // simulation never reruns on container resize — only the fit transform does.
   const span = useMemo(
-    () => Math.max(720, Math.ceil(Math.sqrt(graph.nodes.length)) * 190, graph.clusters.length * 260),
+    () => Math.max(720, Math.ceil(Math.sqrt(graph.nodes.length)) * 170, graph.clusters.length * 220),
     [graph.nodes.length, graph.clusters.length],
   );
   const layout = useMemo(() => layoutMemoryGraph(graph, span), [graph, span]);
@@ -104,7 +104,7 @@ export function MemoryGraphView({
       const availableH = Math.max(size.h - pad * 2, size.h * 0.3);
       const scale = Math.min(
         Math.max(Math.min(availableW / boxW, availableH / boxH), MIN_SCALE),
-        1.35,
+        1.6,
       );
       setTransform({
         x: size.w / 2 - ((minX + maxX) / 2) * scale,
@@ -328,10 +328,10 @@ export function MemoryGraphView({
           <span className="memory-graph-swatch" data-kind="evidence" /> Evidence
           <span className="memory-graph-swatch" data-kind="answer" /> Answer
         </span>
-        <button type="button" onClick={() => zoomFromCenter(1 / 1.18)} aria-label="Zoom out">
+        <button type="button" onClick={() => zoomFromCenter(1 / 1.28)} aria-label="Zoom out">
           <Icon name="minus" size={12} />
         </button>
-        <button type="button" onClick={() => zoomFromCenter(1.18)} aria-label="Zoom in">
+        <button type="button" onClick={() => zoomFromCenter(1.28)} aria-label="Zoom in">
           <Icon name="plus" size={12} />
         </button>
         <button type="button" onClick={() => fitView(positions)}>

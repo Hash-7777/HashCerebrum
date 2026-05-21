@@ -47,4 +47,42 @@ describe('layoutMemoryGraph', () => {
     const c2y = (positions.get('c')!.y + positions.get('d')!.y) / 2;
     expect(Math.hypot(c1x - c2x, c1y - c2y)).toBeGreaterThan(180);
   });
+
+  it('does not pin dense graphs to the virtual canvas border', () => {
+    const graph: MemoryGraph = {
+      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], terms: ['dense'] }],
+      nodes: [],
+      edges: [],
+    };
+    graph.nodes = Array.from({ length: 80 }, (_, index) => {
+      const id = `n${index}`;
+      graph.clusters[0]!.nodeIds.push(id);
+      return {
+        id,
+        chunk: chunk(id),
+        label: id,
+        degree: 6,
+        clusterId: 'dense',
+        topicTerms: ['dense'],
+      };
+    });
+    graph.edges = graph.nodes.slice(1).map((node) => ({
+      source: graph.nodes[0]!.id,
+      target: node.id,
+      weight: 0.6,
+      reason: 'same_topic',
+      label: 'same topic',
+    }));
+
+    const positions = layoutMemoryGraph(graph, 1200);
+    const pinned = [...positions.values()].filter(
+      (point) =>
+        Math.abs(point.x - 32) < 0.001 ||
+        Math.abs(point.x - 1168) < 0.001 ||
+        Math.abs(point.y - 32) < 0.001 ||
+        Math.abs(point.y - 1168) < 0.001,
+    );
+
+    expect(pinned).toHaveLength(0);
+  });
 });
