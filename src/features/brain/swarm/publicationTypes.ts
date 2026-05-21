@@ -44,7 +44,7 @@ export interface CitationMapEntry {
 
 export interface ManuscriptFigure {
   id: string;
-  kind: 'source_yield' | 'prisma_flow' | 'evidence_years' | 'topic_map';
+  kind: 'source_yield' | 'prisma_flow' | 'evidence_years' | 'topic_map' | 'forest_plot';
   title: string;
   caption: string;
   alt: string;
@@ -92,6 +92,99 @@ export interface UploadedDatasetSummary {
   delimiter: ',' | '\t';
   columnSummaries: DatasetColumnSummary[];
   previewRows: Record<string, string>[];
+  // Computed by the inferential statistics engine (Phase 42) at upload time.
+  inferential?: AnalysisPlan;
+}
+
+// --- Inferential statistics engine (Phase 42) -------------------------------
+// A validated, in-app analysis plan: every estimate and p-value here is
+// computed deterministically in code from the uploaded dataset. The language
+// model may narrate these exact numbers but never invents its own.
+
+/** A point estimate with its 95% confidence interval. */
+export interface EffectEstimate {
+  label: string; // e.g. 'Odds ratio', 'Mean difference', 'Hazard ratio'
+  point: number;
+  ciLow: number;
+  ciHigh: number;
+}
+
+export type AnalysisKind =
+  | 'two_by_two'
+  | 'welch_t'
+  | 'mann_whitney'
+  | 'anova'
+  | 'pearson'
+  | 'chi_square'
+  | 'fisher_exact';
+
+/** One computed inferential analysis. */
+export interface AnalysisResult {
+  id: string;
+  kind: AnalysisKind;
+  title: string;
+  outcome: string;
+  exposure?: string;
+  estimate?: EffectEstimate;
+  pValue?: number;
+  statistic?: { name: string; value: number; df?: number };
+  reportText: string; // a plain-language narration of the computed result
+  caveats: string[];
+}
+
+export interface SubgroupRow {
+  label: string;
+  oddsRatio: number;
+  ciLow: number;
+  ciHigh: number;
+  n: number;
+}
+
+/** Stratified (Mantel–Haenszel) subgroup analysis behind the forest plot. */
+export interface SubgroupAnalysis {
+  outcome: string;
+  exposure: string;
+  stratifier: string;
+  rows: SubgroupRow[];
+  pooledOddsRatio: number;
+  pooledCiLow: number;
+  pooledCiHigh: number;
+  homogeneityP: number;
+  reportText: string;
+}
+
+export interface CoxTerm {
+  name: string;
+  hazardRatio: number;
+  ciLow: number;
+  ciHigh: number;
+  pValue: number;
+}
+
+/** Time-to-event analysis: Kaplan–Meier, log-rank, and Cox regression. */
+export interface SurvivalAnalysis {
+  timeColumn: string;
+  eventColumn: string;
+  groupColumn?: string;
+  medianSurvival: { group: string; median: number | null }[];
+  logRank?: {
+    chiSquare: number;
+    pValue: number;
+    hazardRatio: number;
+    ciLow: number;
+    ciHigh: number;
+  };
+  cox?: { converged: boolean; terms: CoxTerm[] };
+  reportText: string;
+}
+
+/** The full analysis plan stored on an uploaded dataset summary. */
+export interface AnalysisPlan {
+  generated: boolean;
+  analyses: AnalysisResult[];
+  subgroups?: SubgroupAnalysis;
+  survival?: SurvivalAnalysis;
+  notes: string[];
 }
 
 export interface ValidationIssue {
