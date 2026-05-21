@@ -234,6 +234,25 @@ export function tTwoSidedP(t: number, df: number): number {
   return clampProbability(incompleteBeta(df / 2, 0.5, df / (df + t * t)));
 }
 
+/**
+ * Inverse Student's t CDF (quantile) for 0 < p < 1. Found by bisection on the
+ * monotone CDF — used to build confidence intervals around t statistics.
+ */
+export function studentTQuantile(p: number, df: number): number {
+  if (df <= 0) return Number.NaN;
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  if (p === 0.5) return 0;
+  let lo = -1e7;
+  let hi = 1e7;
+  for (let i = 0; i < 200; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (studentTCdf(mid, df) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 // --- F distribution ---------------------------------------------------------
 
 /** F cumulative distribution function P(F <= f) with (d1, d2) degrees of freedom. */
