@@ -348,6 +348,36 @@ function unsupportedStatisticIssues(manuscript: Manuscript, evidence: EvidenceIt
   return issues;
 }
 
+function claimConsistencyIssues(manuscript: Manuscript): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const scarcityRx = /\b(no|little|limited|insufficient|thin|indirect)\s+(direct\s+)?evidence\b/i;
+  const strengthRx = /\b(strong|definitive|conclusive|clear|established|proven)\s+evidence\b/i;
+  const safetyRx = /\b(no\s+(meaningful\s+)?risk|safe|safety\s+is\s+established|rules\s+out)\b/i;
+  const riskRx = /\b(risk|harm|bleeding|toxicity|adverse|signal|warning)\b/i;
+
+  for (const section of manuscript.sections) {
+    const text = section.body.join(' ');
+    if (scarcityRx.test(text) && strengthRx.test(text)) {
+      issues.push({
+        severity: 'warning',
+        code: 'claim-consistency-scarcity-strength',
+        section: section.heading,
+        message: `${section.heading} mixes evidence-scarcity language with strong-evidence language; expert review should confirm the interpretation.`,
+      });
+    }
+    if (safetyRx.test(text) && riskRx.test(text)) {
+      issues.push({
+        severity: 'warning',
+        code: 'claim-consistency-safety-risk',
+        section: section.heading,
+        message: `${section.heading} contains both safety-assurance and risk-signal wording; the final conclusion may need tighter qualification.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function validateManuscript(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
@@ -424,6 +454,7 @@ function validateManuscript(
   }
 
   issues.push(...unsupportedStatisticIssues(manuscript, evidence));
+  issues.push(...claimConsistencyIssues(manuscript));
 
   if (references.length === 0 && citedSet.size > 0) {
     issues.push({

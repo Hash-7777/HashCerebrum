@@ -9,6 +9,7 @@ import {
   parseAbstract,
   sectionBodyFromReply,
   SECTION_PLAN,
+  type SectionSpec,
   type Manuscript,
   type ManuscriptSection,
 } from './manuscript';
@@ -19,6 +20,7 @@ const SNIPPET_CHARS = 200;
 const MAX_EVIDENCE = 48;
 const SECTION_TOKENS = 2600;
 const MAX_SECTION_PASSES = 3;
+const MAX_REPAIR_PASSES = 2;
 
 const STOPWORDS = new Set([
   'about', 'after', 'against', 'and', 'are', 'between', 'during', 'from', 'into',
@@ -106,6 +108,54 @@ async function callModel(
   return response.content.trim();
 }
 
+function repairableHeadings(manuscript: Manuscript, evidence: EvidenceItem[]): string[] {
+  const artifact = buildPublicationArtifact(manuscript, evidence);
+  const headings = artifact.validation.blockers
+    .filter((issue) =>
+      issue.section &&
+      ['section-too-short', 'section-missing-citation', 'unsupported-statistic'].includes(issue.code),
+    )
+    .map((issue) => issue.section!);
+  return [...new Set(headings)].filter((heading) => SECTION_PLAN.some((spec) => spec.heading === heading));
+}
+
+async function repairSection(opts: {
+  model: string;
+  question: string;
+  spec: SectionSpec;
+  currentBody: string[];
+  evidenceBlock: string;
+  digest: string;
+  priorDigest: string;
+}): Promise<string[]> {
+  const reply = await callModel(
+    opts.model,
+    SECTION_SYSTEM,
+    `Repair one manuscript section that failed publication validation.
+
+Manuscript topic: ${opts.question}
+Section to repair: ${opts.spec.heading}
+Required section intent: ${opts.spec.instruction}
+Required minimum: ${opts.spec.minWords} words. Target: ${opts.spec.targetWords}.
+
+Current draft:
+${opts.currentBody.join('\n\n')}
+
+Retrieved records:
+${opts.evidenceBlock}
+
+Specialist findings:
+${opts.digest}
+
+Other drafted sections for continuity:
+${opts.priorDigest}
+
+Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix missing citations, unsupported statistics, thin analysis, and note-like prose. Every factual claim must use real [S#] markers from the retrieved records. Do not invent p-values, confidence intervals, hazard ratios, odds ratios, trial outcomes, titles, PMIDs, DOIs, or years. Do not write headings, lists, tables, References, or Bibliography.`,
+    SECTION_TOKENS,
+  );
+  return sectionBodyFromReply(opts.spec.heading, reply);
+}
+
 export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Manuscript> {
   const { question, bossModel, evidence, specialists } = opts;
   const evidenceBlock = formatEvidence(evidence);
@@ -174,6 +224,47 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       sections.push({ heading: spec.heading, body: [`This section could not be drafted: ${detail}`] });
+    }
+  }
+
+  // Validation repair — after the first pass, regenerate only sections that
+  // fail publication gates instead of throwing away the whole manuscript.
+  for (let repairPass = 0; repairPass < MAX_REPAIR_PASSES; repairPass += 1) {
+    const draftForValidation: Manuscript = {
+      title,
+      abstract: parseAbstract(''),
+      keywords: keywordsFrom(question),
+      sections,
+    };
+    const headings = repairableHeadings(draftForValidation, evidence);
+    if (headings.length === 0) break;
+
+    for (const heading of headings) {
+      const index = sections.findIndex((section) => section.heading === heading);
+      const spec = SECTION_PLAN.find((candidate) => candidate.heading === heading);
+      if (index < 0 || !spec) continue;
+      opts.onSection?.(`${heading} validation repair ${repairPass + 1}`);
+      const priorDigest =
+        sections
+          .filter((section) => section.heading !== heading)
+          .map((section) => `${section.heading}: ${(section.body[0] ?? '').slice(0, 180)}`)
+          .join('\n') || '(none yet)';
+      try {
+        sections[index] = {
+          heading,
+          body: await repairSection({
+            model: bossModel,
+            question,
+            spec,
+            currentBody: sections[index]!.body,
+            evidenceBlock,
+            digest,
+            priorDigest,
+          }),
+        };
+      } catch {
+        /* keep the previous section; final validation will block export if needed */
+      }
     }
   }
 

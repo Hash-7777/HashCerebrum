@@ -87,4 +87,24 @@ describe('publication artifact contract', () => {
     expect(markdown).toContain('[1] A Researcher, B Clinician');
     expect(markdown).not.toContain('[S2]');
   });
+
+  it('flags internally inconsistent claim language for expert review', () => {
+    const artifact = buildPublicationArtifact(
+      {
+        ...manuscript,
+        sections: [
+          {
+            heading: 'Introduction',
+            body: [
+              'There is limited evidence for the interaction [S1]. However, the same section also claims strong evidence that the risk is proven [S1].',
+            ],
+          },
+          ...manuscript.sections.slice(1),
+        ],
+      },
+      evidence,
+    );
+
+    expect(artifact.validation.warnings.some((issue) => issue.code === 'claim-consistency-scarcity-strength')).toBe(true);
+  });
 });
