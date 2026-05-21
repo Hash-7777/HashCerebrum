@@ -1,7 +1,7 @@
 // Memory graph view — an Obsidian-style diagram of a project's saved RAG
-// chunks. Nodes are findings; edges are lexical relatedness. The layout is
-// a deterministic force simulation; this component only renders it and
-// handles pan / zoom / drag / selection.
+// chunks. Nodes are findings; edges are topic links. The layout is a
+// deterministic force simulation; this component only renders it and handles
+// pan / zoom / drag / selection.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
@@ -42,6 +42,10 @@ export function MemoryGraphView({
   onRemove: (id: string) => void;
 }) {
   const graph = useMemo(() => buildMemoryGraph(chunks), [chunks]);
+  const clusterById = useMemo(
+    () => new Map(graph.clusters.map((cluster) => [cluster.id, cluster])),
+    [graph.clusters],
+  );
 
   // Lay the graph out in a virtual square sized by node count, so the
   // simulation never reruns on container resize — only the fit transform does.
@@ -263,7 +267,9 @@ export function MemoryGraphView({
                 x2={b.x}
                 y2={b.y}
                 strokeWidth={(0.6 + edge.weight * 2.4) / transform.scale}
-              />
+              >
+                <title>{edge.label}</title>
+              </line>
             );
           })}
           {graph.nodes.map((node) => {
@@ -279,6 +285,7 @@ export function MemoryGraphView({
                 data-kind={node.chunk.kind}
                 data-state={state}
                 data-selected={node.id === selectedId}
+                data-cluster={node.clusterId}
                 transform={`translate(${point.x} ${point.y})`}
                 onPointerDown={(event) => onNodePointerDown(event, node.id)}
                 onPointerEnter={() => setHoverId(node.id)}
@@ -302,7 +309,8 @@ export function MemoryGraphView({
 
       <div className="memory-graph-info">
         {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} ·{' '}
-        {graph.edges.length} {graph.edges.length === 1 ? 'link' : 'links'}
+        {graph.edges.length} {graph.edges.length === 1 ? 'topic link' : 'topic links'} ·{' '}
+        {graph.clusters.length} {graph.clusters.length === 1 ? 'cluster' : 'clusters'}
       </div>
 
       <div className="memory-graph-controls">
@@ -317,7 +325,7 @@ export function MemoryGraphView({
 
       {graph.edges.length === 0 && graph.nodes.length > 1 ? (
         <p className="memory-graph-hint">
-          No strong links yet — findings need overlapping terms to connect.
+          No strong topic links yet — findings need shared entities, topic phrases, or research runs to connect.
         </p>
       ) : null}
 
@@ -340,8 +348,11 @@ export function MemoryGraphView({
           <p className="memory-graph-detail-meta">
             <span>{selected.chunk.source}</span>
             <span>
-              {selected.degree} {selected.degree === 1 ? 'link' : 'links'}
+              {selected.degree} {selected.degree === 1 ? 'topic link' : 'topic links'}
             </span>
+          </p>
+          <p className="memory-graph-detail-topic">
+            Topic: {clusterById.get(selected.clusterId)?.label ?? 'Untitled topic'}
           </p>
           <p className="memory-graph-detail-text">
             {truncate(selected.chunk.text.replace(/\s+/g, ' ').trim(), EXCERPT_CHARS)}

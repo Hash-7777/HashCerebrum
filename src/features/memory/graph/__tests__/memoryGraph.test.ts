@@ -16,7 +16,7 @@ function chunk(
 
 describe('buildMemoryGraph', () => {
   it('returns an empty graph for no chunks', () => {
-    expect(buildMemoryGraph([])).toEqual({ nodes: [], edges: [] });
+    expect(buildMemoryGraph([])).toEqual({ nodes: [], edges: [], clusters: [] });
   });
 
   it('makes one node per chunk', () => {
@@ -49,11 +49,56 @@ describe('buildMemoryGraph', () => {
     const edge = graph.edges[0]!;
     expect([edge.source, edge.target].sort()).toEqual(['nsaid-1', 'nsaid-2']);
     expect(edge.weight).toBeGreaterThan(0);
+    expect(edge.label).toContain('warfarin');
 
     const degree = Object.fromEntries(graph.nodes.map((n) => [n.id, n.degree]));
     expect(degree['nsaid-1']).toBe(1);
     expect(degree['nsaid-2']).toBe(1);
     expect(degree['unrelated']).toBe(0);
+  });
+
+  it('does not connect findings only because manuscript filler words overlap', () => {
+    const graph = buildMemoryGraph([
+      chunk({
+        id: 'drug',
+        title: 'Warfarin anticoagulant bleeding signal',
+        text: 'clinical evidence study results conclusion patient research',
+      }),
+      chunk({
+        id: 'bone',
+        title: 'Calcium fracture bone density',
+        text: 'clinical evidence study results conclusion patient research',
+      }),
+    ]);
+
+    expect(graph.edges).toHaveLength(0);
+    expect(graph.nodes.every((node) => node.degree === 0)).toBe(true);
+  });
+
+  it('links sparse findings from the same research run and labels the cluster', () => {
+    const graph = buildMemoryGraph([
+      chunk({
+        id: 'run-a',
+        title: 'Warfarin safety',
+        text: 'anticoagulant pharmacology',
+        runId: 'run-1',
+        query: 'make a full research paper about NSAIDs and warfarin bleeding',
+      }),
+      chunk({
+        id: 'run-b',
+        title: 'Naproxen cohort',
+        text: 'gastrointestinal event data',
+        runId: 'run-1',
+        query: 'make a full research paper about NSAIDs and warfarin bleeding',
+      }),
+    ]);
+
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]?.reason).toBe('same_run');
+    expect(graph.edges[0]?.label).toBe('same research run');
+    expect(graph.clusters).toHaveLength(1);
+    expect(graph.clusters[0]?.label.toLowerCase()).toContain('nsaids');
+    expect(graph.nodes.every((node) => node.clusterId === 'run:run-1')).toBe(true);
   });
 
   it('caps the number of edges on any single node', () => {
