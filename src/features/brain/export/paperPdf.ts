@@ -240,21 +240,30 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     else paragraph(block.text);
   });
 
-  // ---- References --------------------------------------------------------
-  if (input.citations && input.citations.length > 0) {
+  // ---- References — only the records actually cited in the body ----------
+  // The swarm retrieves far more evidence than a paper cites; a real
+  // reference list contains only the works the manuscript [S#]-cites.
+  const citedNumbers = new Set<number>();
+  for (const match of input.content.matchAll(/\[S(\d+)\]/g)) {
+    citedNumbers.add(Number(match[1]));
+  }
+  const cited = [...citedNumbers].sort((a, b) => a - b);
+  if (input.citations && input.citations.length > 0 && cited.length > 0) {
     heading('References', 2);
     doc.setFont('times', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(55, 65, 81);
-    input.citations.slice(0, 60).forEach((record, i) => {
-      const lines = doc.splitTextToSize(formatReference(record, i), contentW - 16) as string[];
+    for (const number of cited) {
+      const record = input.citations[number - 1];
+      if (!record) continue;
+      const lines = doc.splitTextToSize(formatReference(record, number - 1), contentW - 16) as string[];
       lines.forEach((line, li) => {
         ensureSpace(12);
         doc.text(line, marginX + (li === 0 ? 0 : 16), y);
         y += 12;
       });
       y += 3;
-    });
+    }
   }
 
   // ---- Page numbers ------------------------------------------------------
