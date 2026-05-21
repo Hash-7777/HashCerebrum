@@ -25,10 +25,10 @@ interface BrainMeshPart {
 }
 
 const PERFORMANCE_STORAGE_KEY = 'hc.brain.performanceMode.v1';
-const QUALITY_TICK_MS = 70;
-const PERFORMANCE_TICK_MS = 300;
-const QUALITY_DECAY_FACTOR = 0.86;
-const PERFORMANCE_DECAY_FACTOR = 0.72;
+const QUALITY_TICK_MS = 55;
+const PERFORMANCE_TICK_MS = 160;
+const QUALITY_DECAY_FACTOR = 0.8;
+const PERFORMANCE_DECAY_FACTOR = 0.52;
 // Radians per second for the continuous idle auto-rotation.
 const AUTO_ROTATE_SPEED = 0.25;
 // Idle surface tone — a deeper, more saturated anatomical tan so the brain
@@ -188,7 +188,7 @@ interface BrainModelProps extends BrainCanvasProps {
 function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProps) {
   const tick = useBrainStore((store) => store.tick);
   const hasActiveGlow = useBrainStore((store) =>
-    Object.values(store.regions).some((region) => region.decayUntil > 0 || region.base > 0.01 || region.accent > 0.01),
+    Object.values(store.regions).some((region) => region.base > 0.01 || region.accent > 0.01),
   );
   const invalidate = useThree((state) => state.invalidate);
   const groupRef = useRef<THREE.Group>(null);
