@@ -25,15 +25,12 @@ interface BrainMeshPart {
 }
 
 const PERFORMANCE_STORAGE_KEY = 'hc.brain.performanceMode.v1';
-const QUALITY_TICK_MS = 55;
-const PERFORMANCE_TICK_MS = 160;
-const QUALITY_DECAY_FACTOR = 0.8;
-const PERFORMANCE_DECAY_FACTOR = 0.52;
+const PERFORMANCE_TICK_MS = 80;
 // Radians per second for the continuous idle auto-rotation.
 const AUTO_ROTATE_SPEED = 0.25;
 // Idle surface tone — a deeper, more saturated anatomical tan so the brain
 // reads with colour instead of washing out toward grey-white.
-const NEUTRAL_BRAIN_COLOR = '#c2917a';
+const NEUTRAL_BRAIN_COLOR = '#b97465';
 
 function readPerformancePreference() {
   if (typeof window === 'undefined') return false;
@@ -48,15 +45,20 @@ function cloneMaterial(source: THREE.Material | THREE.Material[]): THREE.MeshSta
   const material = Array.isArray(source) ? source[0] : source;
   if (material instanceof THREE.MeshStandardMaterial) {
     const cloned = material.clone();
-    cloned.roughness = 0.72;
+    cloned.roughness = 0.64;
     cloned.metalness = 0.03;
     return cloned;
   }
   return new THREE.MeshStandardMaterial({
-    color: '#d9c5b7',
-    roughness: 0.72,
+    color: NEUTRAL_BRAIN_COLOR,
+    roughness: 0.64,
     metalness: 0.03,
   });
+}
+
+function glowCurve(value: number): number {
+  const clamped = Math.min(1, Math.max(0, value));
+  return 1 - Math.pow(1 - clamped, 2.4);
 }
 
 function useBrainMeshParts(): BrainMeshPart[] {
@@ -142,11 +144,12 @@ function BrainMesh({
   const regionColor = useMemo(() => new THREE.Color(regionById(activeRegion).emissive), [activeRegion]);
 
   useEffect(() => {
+    const visual = glowCurve(intensity);
     material.emissive.copy(regionColor);
     // Vivid lit regions: strong emissive and a near-full colour blend so an
     // active region reads clearly as its agent colour, not a washed tan.
-    material.emissiveIntensity = intensity > 0.03 ? 0.35 + intensity * 1.5 : 0.05;
-    material.color.lerpColors(neutralColor, regionColor, Math.min(0.95, intensity * 1.05));
+    material.emissiveIntensity = visual > 0.02 ? 0.28 + visual * 2.35 : 0.08;
+    material.color.lerpColors(neutralColor, regionColor, visual > 0.02 ? Math.min(1, 0.2 + visual * 0.88) : 0);
     material.needsUpdate = true;
   }, [intensity, material, neutralColor, regionColor]);
 
@@ -198,7 +201,7 @@ function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProp
   useEffect(() => {
     if (!performanceMode || !hasActiveGlow) return;
     const interval = window.setInterval(() => {
-      tick(PERFORMANCE_DECAY_FACTOR);
+      tick(PERFORMANCE_TICK_MS);
       invalidate();
     }, PERFORMANCE_TICK_MS);
     return () => window.clearInterval(interval);
@@ -209,10 +212,10 @@ function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProp
   useFrame((state, delta) => {
     if (!performanceMode) {
       const elapsedMs = state.clock.elapsedTime * 1000;
-      if (elapsedMs - lastTickRef.current >= QUALITY_TICK_MS) {
-        tick(QUALITY_DECAY_FACTOR);
-        lastTickRef.current = elapsedMs;
-      }
+      const last = lastTickRef.current || elapsedMs;
+      const deltaMs = Math.min(80, Math.max(1, elapsedMs - last));
+      if (hasActiveGlow) tick(deltaMs);
+      lastTickRef.current = elapsedMs;
     }
     if (!groupRef.current) return;
     groupRef.current.rotation.x = 0.12;

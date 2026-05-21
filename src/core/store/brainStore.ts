@@ -15,15 +15,26 @@ interface RegionState {
 interface BrainStore {
   regions: Record<RegionId, RegionState>;
   setRegion: (region: RegionId, source: 'agent' | 'topic', intensity: number, ttlMs: number) => void;
-  tick: (decayFactor?: number) => void;
+  tick: (deltaMs?: number) => void;
 }
 
 const initialRegion = (): RegionState => ({ base: 0, accent: 0, baseHoldUntil: 0, accentHoldUntil: 0 });
 
 const HOLD_PROFILE = {
-  agent: { minMs: 180, maxMs: 520, ttlRatio: 0.12 },
-  topic: { minMs: 90, maxMs: 260, ttlRatio: 0.06 },
+  agent: { minMs: 240, maxMs: 700, ttlRatio: 0.16 },
+  topic: { minMs: 120, maxMs: 340, ttlRatio: 0.08 },
 } as const;
+
+const DECAY_HALF_LIFE_MS = {
+  agent: 900,
+  topic: 380,
+} as const;
+
+function decayByHalfLife(value: number, deltaMs: number, halfLifeMs: number): number {
+  if (value <= 0) return 0;
+  const multiplier = Math.pow(0.5, Math.max(0, deltaMs) / halfLifeMs);
+  return value * multiplier;
+}
 
 function holdMsFor(source: 'agent' | 'topic', ttlMs: number): number {
   const profile = HOLD_PROFILE[source];
@@ -65,7 +76,7 @@ export const useBrainStore = create<BrainStore>((set) => ({
         },
       };
     }),
-  tick: (decayFactor = 0.8) =>
+  tick: (deltaMs = 16.7) =>
     set((state) => {
       const now = Date.now();
       const next: Record<RegionId, RegionState> = { ...state.regions };
@@ -75,15 +86,15 @@ export const useBrainStore = create<BrainStore>((set) => ({
         let base = cur.base;
         let accent = cur.accent;
         if (base > 0 && now > cur.baseHoldUntil) {
-          base *= decayFactor;
+          base = decayByHalfLife(base, deltaMs, DECAY_HALF_LIFE_MS.agent);
         }
         if (accent > 0 && now > cur.accentHoldUntil) {
           // Topic hits should read as quick sparks during synthesis, not
           // long sticky washes that hide the active agent colour.
-          accent *= Math.max(0.35, decayFactor * 0.78);
+          accent = decayByHalfLife(accent, deltaMs, DECAY_HALF_LIFE_MS.topic);
         }
-        if (base < 0.008) base = 0;
-        if (accent < 0.008) accent = 0;
+        if (base < 0.006) base = 0;
+        if (accent < 0.006) accent = 0;
         if (base !== cur.base || accent !== cur.accent) {
           changed = true;
           if (base === 0 && accent === 0) {

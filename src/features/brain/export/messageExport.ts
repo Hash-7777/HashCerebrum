@@ -36,7 +36,7 @@ function inlineMarkdown(value: string): string {
 }
 
 export function markdownToHtml(markdown: string): string {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const lines = stripGeneratedReferenceSections(markdown).replace(/\r\n/g, '\n').split('\n');
   const html: string[] = [];
   let paragraph: string[] = [];
   let listOpen: 'ul' | 'ol' | null = null;
@@ -148,6 +148,7 @@ export function buildExportHtml(message: ExportableMessage): string {
 }
 
 export function buildMarkdownExport(message: ExportableMessage): string {
+  const content = stripGeneratedReferenceSections(message.content);
   const citations = message.citations?.length
     ? [
         '',
@@ -155,7 +156,7 @@ export function buildMarkdownExport(message: ExportableMessage): string {
         ...message.citations.slice(0, 40).map((item, index) => `[S${index + 1}] ${item.source.toUpperCase()}: ${item.title}`),
       ].join('\n')
     : '';
-  return `# ${message.title}\n\n${message.content}${citations}\n`;
+  return `# ${message.title}\n\n${content}${citations}\n`;
 }
 
 export function downloadBlob(filename: string, blob: Blob): void {
@@ -215,35 +216,58 @@ function manuscriptReferences(
     });
 }
 
-// Build a publishable research-paper PDF and save it. A structured
-// manuscript is typeset by the embedded Typst engine; jsPDF is the
-// fallback when Typst is unavailable (browser dev) or fails. The webview
-// routes the download to the user's Downloads folder.
-export async function exportMessagePdf(message: ExportableMessage): Promise<void> {
-  const filename = `${slugifyFilename(message.title)}.pdf`;
+export function stripGeneratedReferenceSections(markdown: string): string {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const out: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const heading = line.match(/^(#{1,6})\s+(references|bibliography|works cited|exported evidence links)\s*$/i);
+    if (heading) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && /^#{1,6}\s+\S/.test(line)) {
+      skipping = false;
+    }
+    if (!skipping) out.push(line);
+  }
+
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export async function buildMessagePdfBlob(message: ExportableMessage): Promise<Blob> {
+  const content = stripGeneratedReferenceSections(message.content);
 
   if (message.manuscript) {
     try {
       const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
-      const blob = await platform().manuscript.renderPdf(
+      return await platform().manuscript.renderPdf(
         message.manuscript,
         manuscriptReferences(message.manuscript, message.citations ?? []),
         meta,
       );
-      downloadBlob(filename, blob);
-      return;
     } catch {
       /* Typst unavailable or failed — fall through to the jsPDF renderer. */
     }
   }
 
   const { buildPaperPdfBlob } = await import('./paperPdf');
-  const blob = await buildPaperPdfBlob({
+  return buildPaperPdfBlob({
     title: message.title,
-    content: message.content,
+    content,
     ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
     ...(message.citations ? { citations: message.citations } : {}),
     ...(message.manuscript ? { manuscript: message.manuscript } : {}),
   });
+}
+
+// Build a publishable research-paper PDF and save it. A structured
+// manuscript is typeset by the embedded Typst engine; jsPDF is the
+// fallback when Typst is unavailable (browser dev) or fails. The webview
+// routes the download to the user's Downloads folder.
+export async function exportMessagePdf(message: ExportableMessage): Promise<void> {
+  const filename = `${slugifyFilename(message.title)}.pdf`;
+  const blob = await buildMessagePdfBlob(message);
   downloadBlob(filename, blob);
 }

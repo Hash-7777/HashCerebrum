@@ -20,11 +20,11 @@ describe('brainStore lighting decay', () => {
     const lit = useBrainStore.getState().regions.frontal;
 
     expect(lit.base).toBe(1);
-    expect(lit.baseHoldUntil - now).toBeLessThanOrEqual(520);
-    expect(lit.baseHoldUntil - now).toBeGreaterThanOrEqual(180);
+    expect(lit.baseHoldUntil - now).toBeLessThanOrEqual(700);
+    expect(lit.baseHoldUntil - now).toBeGreaterThanOrEqual(240);
 
-    vi.advanceTimersByTime(530);
-    useBrainStore.getState().tick(0.5);
+    vi.advanceTimersByTime(710);
+    useBrainStore.getState().tick(900);
 
     expect(useBrainStore.getState().regions.frontal.base).toBeCloseTo(0.5);
   });
@@ -33,15 +33,15 @@ describe('brainStore lighting decay', () => {
     useBrainStore.getState().setRegion('temporal', 'agent', 0.9, 4000);
     useBrainStore.getState().setRegion('temporal', 'topic', 0.9, 4500);
 
-    vi.advanceTimersByTime(280);
-    useBrainStore.getState().tick(0.8);
+    vi.advanceTimersByTime(360);
+    useBrainStore.getState().tick(80);
     const first = useBrainStore.getState().regions.temporal;
 
     expect(first.base).toBeCloseTo(0.9);
     expect(first.accent).toBeLessThan(0.9);
 
-    vi.advanceTimersByTime(260);
-    useBrainStore.getState().tick(0.8);
+    vi.advanceTimersByTime(360);
+    useBrainStore.getState().tick(360);
     const second = useBrainStore.getState().regions.temporal;
 
     expect(second.base).toBeLessThan(0.9);

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { buildExportHtml, buildMarkdownExport, escapeHtml, markdownToHtml, slugifyFilename } from '../messageExport';
+import {
+  buildExportHtml,
+  buildMarkdownExport,
+  escapeHtml,
+  markdownToHtml,
+  slugifyFilename,
+  stripGeneratedReferenceSections,
+} from '../messageExport';
 
 const citations: EvidenceItem[] = [
   {
@@ -41,5 +48,29 @@ describe('message export helpers', () => {
     expect(buildMarkdownExport(message)).toContain('[S1] EUROPEPMC: Bleeding outcomes');
     expect(buildExportHtml(message)).toContain('Exported Evidence Links');
     expect(buildExportHtml(message)).toContain('DOI:10.0000/test');
+  });
+
+  it('strips model-generated reference sections before appending canonical export references', () => {
+    const content = [
+      '## Results',
+      'Evidence synthesis [S1].',
+      '',
+      '## References',
+      '[S1] Duplicated model reference.',
+    ].join('\n');
+    const message = {
+      title: 'Reference cleanup',
+      role: 'assistant' as const,
+      content,
+      citations,
+    };
+
+    expect(stripGeneratedReferenceSections(content)).not.toContain('Duplicated model reference');
+    const markdown = buildMarkdownExport(message);
+    expect(markdown).toContain('Evidence synthesis [S1].');
+    expect(markdown).not.toContain('Duplicated model reference');
+    expect(markdown).toContain('## Exported Evidence Links');
+    expect(markdown.match(/Exported Evidence Links/g)).toHaveLength(1);
+    expect(markdownToHtml(content)).not.toContain('Duplicated model reference');
   });
 });
