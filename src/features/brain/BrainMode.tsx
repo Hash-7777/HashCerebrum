@@ -17,6 +17,7 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
+import { useToastStore } from '@core/store/toastStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
@@ -31,7 +32,9 @@ import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
+import { summarizeDatasetText } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
+import type { UploadedDatasetSummary } from './swarm/publicationTypes';
 
 const WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -48,6 +51,7 @@ export function BrainMode() {
   const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [dataset, setDataset] = useState<UploadedDatasetSummary | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
@@ -58,6 +62,17 @@ export function BrainMode() {
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
   const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
+
+  const attachDataset = async (file: File) => {
+    try {
+      const summary = await summarizeDatasetText(file.name, await file.text());
+      setDataset(summary);
+      useToastStore.getState().show(`Dataset attached: ${summary.rows} rows`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      useToastStore.getState().show(`Dataset rejected: ${detail}`, 'error');
+    }
+  };
 
   // Clicking the same region twice clears the selection.
   const toggleRegion = (region: RegionId | null) => {
@@ -254,6 +269,7 @@ export function BrainMode() {
       const result = await runSwarm({
         question: cleanQuery,
         conversation,
+        dataset,
         modelFor: agentModelFor,
         callbacks,
       });
@@ -476,6 +492,10 @@ export function BrainMode() {
             isRunning={isRunning}
             canSubmit={canSubmit}
             editing={!!editingMessageId}
+            datasetLabel={dataset?.filename ?? null}
+            datasetDetail={dataset ? `${dataset.rows} rows · ${dataset.columns.length} columns` : null}
+            onDatasetFile={(file) => void attachDataset(file)}
+            onClearDataset={() => setDataset(null)}
             onCancelEdit={() => {
               setEditingMessageId(null);
               setQuery('');

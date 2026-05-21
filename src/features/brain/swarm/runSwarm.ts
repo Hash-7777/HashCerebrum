@@ -62,7 +62,7 @@ function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: st
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
-  const { question, conversation, modelFor, callbacks } = opts;
+  const { question, conversation, modelFor, callbacks, dataset } = opts;
   const bossModel = modelFor('boss');
   const paperRequest = detectPaperRequest(question);
 
@@ -98,6 +98,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       bossModel,
       evidence: merged,
       specialists,
+      ...(dataset ? { dataset } : {}),
       onSection: (heading) => callbacks.onManuscriptSection?.(heading),
     });
     return {

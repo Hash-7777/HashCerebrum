@@ -1,4 +1,4 @@
-import { useEffect, useRef, type FormEvent } from 'react';
+import { useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 
 // The composer no longer carries a model picker — every agent's model is
@@ -13,6 +13,10 @@ export function Composer({
   onCancelEdit,
   onSubmit,
   onOpenSettings,
+  datasetLabel,
+  datasetDetail,
+  onDatasetFile,
+  onClearDataset,
 }: {
   query: string;
   setQuery: (value: string) => void;
@@ -22,8 +26,13 @@ export function Composer({
   onCancelEdit?: () => void;
   onSubmit: (event: FormEvent) => void;
   onOpenSettings: () => void;
+  datasetLabel?: string | null;
+  datasetDetail?: string | null;
+  onDatasetFile?: (file: File) => void;
+  onClearDataset?: () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -31,6 +40,12 @@ export function Composer({
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 42), 164)}px`;
   }, [query]);
+
+  const attachDataset = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) onDatasetFile?.(file);
+  };
 
   return (
     <form className="research-composer" onSubmit={onSubmit}>
@@ -45,10 +60,36 @@ export function Composer({
         </div>
       )}
       <div className="composer-controls">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+          className="composer-file-input"
+          onChange={attachDataset}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="composer-settings"
+          aria-label="Attach CSV or TSV dataset"
+        >
+          <Icon name="database" size={13} /> Dataset
+        </button>
         <button type="button" onClick={onOpenSettings} className="composer-settings" aria-label="Open settings">
           <Icon name="settings" size={13} /> Settings
         </button>
       </div>
+      {datasetLabel && (
+        <div className="composer-dataset">
+          <span>
+            <Icon name="database" size={12} /> {datasetLabel}
+          </span>
+          {datasetDetail && <small>{datasetDetail}</small>}
+          <button type="button" onClick={onClearDataset} aria-label="Remove attached dataset">
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
       <div className="composer-input-row">
         <textarea
           ref={textareaRef}

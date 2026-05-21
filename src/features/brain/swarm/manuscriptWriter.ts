@@ -14,6 +14,8 @@ import {
   type ManuscriptSection,
 } from './manuscript';
 import { buildPublicationArtifact } from './publication';
+import { datasetSummaryForPrompt } from './statistics';
+import type { UploadedDatasetSummary } from './publicationTypes';
 import type { SpecialistResult } from './types';
 
 const SNIPPET_CHARS = 200;
@@ -41,6 +43,7 @@ export interface DraftManuscriptOptions {
   bossModel: string;
   evidence: EvidenceItem[];
   specialists: SpecialistResult[];
+  dataset?: UploadedDatasetSummary | null;
   onSection?: (heading: string) => void;
 }
 
@@ -108,8 +111,14 @@ async function callModel(
   return response.content.trim();
 }
 
-function repairableHeadings(manuscript: Manuscript, evidence: EvidenceItem[]): string[] {
-  const artifact = buildPublicationArtifact(manuscript, evidence);
+function repairableHeadings(
+  manuscript: Manuscript,
+  evidence: EvidenceItem[],
+  dataset?: UploadedDatasetSummary | null,
+): string[] {
+  const artifact = buildPublicationArtifact(manuscript, evidence, {
+    ...(dataset ? { dataset } : {}),
+  });
   const headings = artifact.validation.blockers
     .filter((issue) =>
       issue.section &&
@@ -126,6 +135,7 @@ async function repairSection(opts: {
   currentBody: string[];
   evidenceBlock: string;
   digest: string;
+  datasetBlock: string;
   priorDigest: string;
 }): Promise<string[]> {
   const reply = await callModel(
@@ -147,6 +157,9 @@ ${opts.evidenceBlock}
 Specialist findings:
 ${opts.digest}
 
+Uploaded dataset summary, if supplied:
+${opts.datasetBlock}
+
 Other drafted sections for continuity:
 ${opts.priorDigest}
 
@@ -157,9 +170,10 @@ Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix mis
 }
 
 export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Manuscript> {
-  const { question, bossModel, evidence, specialists } = opts;
+  const { question, bossModel, evidence, specialists, dataset } = opts;
   const evidenceBlock = formatEvidence(evidence);
   const digest = specialistDigest(specialists);
+  const datasetBlock = dataset ? datasetSummaryForPrompt(dataset) : '(no uploaded dataset was supplied)';
 
   // Title — a focused one-line call; falls back to the question.
   let title = question.trim();
@@ -196,10 +210,13 @@ ${evidenceBlock}
 Specialist findings:
 ${digest}
 
+Uploaded dataset summary, if supplied:
+${datasetBlock}
+
 Sections already drafted (for continuity — do not repeat their content):
 ${priorDigest}
 
-Write the ${spec.heading} section now as final manuscript prose, not notes.`;
+Write the ${spec.heading} section now as final manuscript prose, not notes. If a dataset summary is supplied, narrate only the computed descriptive statistics listed there and make clear that no inferential statistics were computed unless they are explicitly present in the dataset summary.`;
     try {
       const reply = await callModel(bossModel, SECTION_SYSTEM, user, SECTION_TOKENS);
       let body = sectionBodyFromReply(spec.heading, reply);
@@ -236,7 +253,7 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
       keywords: keywordsFrom(question),
       sections,
     };
-    const headings = repairableHeadings(draftForValidation, evidence);
+    const headings = repairableHeadings(draftForValidation, evidence, dataset);
     if (headings.length === 0) break;
 
     for (const heading of headings) {
@@ -259,6 +276,7 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
             currentBody: sections[index]!.body,
             evidenceBlock,
             digest,
+            datasetBlock,
             priorDigest,
           }),
         };
@@ -290,6 +308,8 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
   const manuscript: Manuscript = { title, abstract, keywords: keywordsFrom(question), sections };
   return {
     ...manuscript,
-    publication: buildPublicationArtifact(manuscript, evidence),
+    publication: buildPublicationArtifact(manuscript, evidence, {
+      ...(dataset ? { dataset } : {}),
+    }),
   };
 }

@@ -496,6 +496,43 @@
   color: var(--hc-fg-muted);
 }
 .composer-controls .composer-settings:hover { color: var(--hc-fg); }
+.composer-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.composer-dataset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(61, 209, 191, 0.2);
+  border-radius: 8px;
+  background: rgba(61, 209, 191, 0.07);
+}
+.composer-dataset span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--hc-fg);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.composer-dataset small {
+  min-width: 0;
+  color: var(--hc-fg-muted);
+  font: 10.5px/1.2 var(--hc-font-mono);
+}
+.composer-dataset button {
+  margin-left: auto;
+  min-height: 22px;
+  width: 24px;
+  padding: 0;
+}
 .composer-input-row {
   position: relative;
   min-height: 44px;

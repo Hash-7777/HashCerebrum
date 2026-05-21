@@ -6,6 +6,7 @@ import type { AgentId } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import type { LlmMessage } from '@core/llm/types';
 import type { Manuscript } from './manuscript';
+import type { UploadedDatasetSummary } from './publicationTypes';
 
 export interface SpecialistTask {
   agentId: AgentId;
@@ -51,6 +52,8 @@ export interface SwarmOptions {
   question: string;
   // Prior conversation turns (user/assistant only, no system message).
   conversation: LlmMessage[];
+  // Optional user-uploaded CSV/TSV summary for original-data manuscripts.
+  dataset?: UploadedDatasetSummary | null;
   // Resolves the LLM model each agent runs on.
   modelFor: (agentId: AgentId) => string;
   callbacks: SwarmCallbacks;

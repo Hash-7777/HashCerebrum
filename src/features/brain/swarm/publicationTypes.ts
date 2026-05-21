@@ -68,12 +68,30 @@ export interface StatisticsPayload {
   yearRange: { min: number | null; max: number | null };
   computedAnalyses: string[];
   safeguards: string[];
-  dataset?: {
-    filename: string;
-    sha256: string;
-    rows: number;
-    columns: string[];
-  };
+  dataset?: UploadedDatasetSummary;
+}
+
+export interface DatasetColumnSummary {
+  name: string;
+  type: 'numeric' | 'categorical';
+  nonMissing: number;
+  missing: number;
+  mean?: number;
+  sd?: number;
+  median?: number;
+  min?: number;
+  max?: number;
+  levels?: { value: string; count: number }[];
+}
+
+export interface UploadedDatasetSummary {
+  filename: string;
+  sha256: string;
+  rows: number;
+  columns: string[];
+  delimiter: ',' | '\t';
+  columnSummaries: DatasetColumnSummary[];
+  previewRows: Record<string, string>[];
 }
 
 export interface ValidationIssue {

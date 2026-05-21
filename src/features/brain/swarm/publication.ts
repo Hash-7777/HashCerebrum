@@ -11,6 +11,7 @@ import type {
   ManuscriptValidation,
   PublicationArtifact,
   StatisticsPayload,
+  UploadedDatasetSummary,
   ValidationIssue,
 } from './publicationTypes';
 
@@ -274,7 +275,24 @@ function buildFigures(evidence: EvidenceItem[], referenceCount: number): Manuscr
   return figures;
 }
 
-function buildTables(evidence: EvidenceItem[]): ManuscriptTable[] {
+function datasetTable(dataset: UploadedDatasetSummary): ManuscriptTable {
+  return {
+    id: 'table-dataset-descriptives',
+    title: 'Dataset descriptive statistics',
+    caption:
+      'Computed in-app from the uploaded dataset. Inferential statistics are not reported unless a validated analysis plan computes them.',
+    columns: ['Variable', 'Type', 'Summary'],
+    rows: dataset.columnSummaries.map((column) => {
+      const summary =
+        column.type === 'numeric'
+          ? `n=${column.nonMissing}, missing=${column.missing}, mean=${column.mean}, SD=${column.sd}, median=${column.median}, range=${column.min}-${column.max}`
+          : `n=${column.nonMissing}, missing=${column.missing}, levels=${column.levels?.map((level) => `${level.value} ${level.count}`).join(', ') ?? 'none'}`;
+      return [column.name, column.type, summary];
+    }),
+  };
+}
+
+function buildTables(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary): ManuscriptTable[] {
   const counts = sourceCounts(evidence);
   const rows = Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
@@ -284,7 +302,7 @@ function buildTables(evidence: EvidenceItem[]): ManuscriptTable[] {
       const range = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : 'not available';
       return [source, String(count), range];
     });
-  return [
+  const tables: ManuscriptTable[] = [
     {
       id: 'table-source-yield',
       title: 'Evidence source summary',
@@ -293,12 +311,18 @@ function buildTables(evidence: EvidenceItem[]): ManuscriptTable[] {
       rows,
     },
   ];
+  if (dataset) tables.push(datasetTable(dataset));
+  return tables;
 }
 
-function statisticsPayload(evidence: EvidenceItem[], references: CanonicalReference[]): StatisticsPayload {
+function statisticsPayload(
+  evidence: EvidenceItem[],
+  references: CanonicalReference[],
+  dataset?: UploadedDatasetSummary,
+): StatisticsPayload {
   const years = evidenceYears(evidence);
   return {
-    mode: 'evidence_review',
+    mode: dataset ? 'original_dataset' : 'evidence_review',
     totalRecords: evidence.length,
     uniqueReferences: references.length,
     sourceCounts: sourceCounts(evidence),
@@ -306,11 +330,14 @@ function statisticsPayload(evidence: EvidenceItem[], references: CanonicalRefere
       min: years.length ? Math.min(...years) : null,
       max: years.length ? Math.max(...years) : null,
     },
-    computedAnalyses: ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'],
+    computedAnalyses: dataset
+      ? ['dataset_sha256', 'descriptive_statistics', 'table_one_preview', 'source_counts', 'citation_resolution']
+      : ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'],
     safeguards: [
       'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
       'The language model may narrate retrieved evidence but may not invent numerical statistical results.',
     ],
+    ...(dataset ? { dataset } : {}),
   };
 }
 
@@ -318,15 +345,39 @@ function hasReferenceSection(section: ManuscriptSection): boolean {
   return /^(references|bibliography|works cited)$/i.test(section.heading.trim());
 }
 
-function evidenceText(evidence: EvidenceItem[]): string {
+function evidenceText(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary): string {
+  const datasetText = dataset
+    ? [
+        dataset.filename,
+        dataset.sha256,
+        dataset.rows,
+        ...dataset.columns,
+        ...dataset.columnSummaries.flatMap((column) => [
+          column.name,
+          column.nonMissing,
+          column.missing,
+          column.mean,
+          column.sd,
+          column.median,
+          column.min,
+          column.max,
+          ...(column.levels?.flatMap((level) => [level.value, level.count]) ?? []),
+        ]),
+      ].filter(Boolean).join(' ')
+    : '';
   return evidence
     .map((record) => [record.title, record.snippet, record.year, record.identifiers?.doi, record.identifiers?.pmid].filter(Boolean).join(' '))
+    .concat([datasetText])
     .join(' ')
     .toLowerCase();
 }
 
-function unsupportedStatisticIssues(manuscript: Manuscript, evidence: EvidenceItem[]): ValidationIssue[] {
-  const supportedText = evidenceText(evidence);
+function unsupportedStatisticIssues(
+  manuscript: Manuscript,
+  evidence: EvidenceItem[],
+  dataset?: UploadedDatasetSummary,
+): ValidationIssue[] {
+  const supportedText = evidenceText(evidence, dataset);
   const rx =
     /\b(?:p\s*[<=>]\s*0?\.\d+|(?:hazard ratio|odds ratio|risk ratio|relative risk|hr|or|rr)\s*(?:=|of|:)?\s*\d+(?:\.\d+)?|95%\s*ci\s*[:(]?\s*\d+(?:\.\d+)?\s*(?:-|–|to|,)\s*\d+(?:\.\d+)?)/gi;
   const issues: ValidationIssue[] = [];
@@ -382,6 +433,7 @@ function validateManuscript(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
   references: CanonicalReference[],
+  dataset?: UploadedDatasetSummary,
 ): ManuscriptValidation {
   const issues: ValidationIssue[] = [];
   const wordCounts: Record<string, number> = {};
@@ -453,7 +505,7 @@ function validateManuscript(
     }
   }
 
-  issues.push(...unsupportedStatisticIssues(manuscript, evidence));
+  issues.push(...unsupportedStatisticIssues(manuscript, evidence, dataset));
   issues.push(...claimConsistencyIssues(manuscript));
 
   if (references.length === 0 && citedSet.size > 0) {
@@ -515,21 +567,25 @@ function compliance(standard: ManuscriptStandard, validation: ManuscriptValidati
 export function buildPublicationArtifact(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
-  options: { standard?: ManuscriptStandard; manuscriptType?: 'evidence_review' | 'original_research' } = {},
+  options: {
+    standard?: ManuscriptStandard;
+    manuscriptType?: 'evidence_review' | 'original_research';
+    dataset?: UploadedDatasetSummary;
+  } = {},
 ): PublicationArtifact {
   const { references, citationMap } = canonicalReferences(manuscript, evidence);
-  const statistics = statisticsPayload(evidence, references);
-  const validation = validateManuscript(manuscript, evidence, references);
+  const statistics = statisticsPayload(evidence, references, options.dataset);
+  const validation = validateManuscript(manuscript, evidence, references, options.dataset);
   const standard = options.standard ?? 'icmje_generic';
   return {
     schemaVersion: 'hc.manuscript.v2',
     generatedAt: new Date().toISOString(),
-    manuscriptType: options.manuscriptType ?? 'evidence_review',
+    manuscriptType: options.manuscriptType ?? (options.dataset ? 'original_research' : 'evidence_review'),
     standard,
     references,
     citationMap,
     figures: buildFigures(evidence, references.length),
-    tables: buildTables(evidence),
+    tables: buildTables(evidence, options.dataset),
     statistics,
     validation,
     compliance: compliance(standard, validation, statistics),
