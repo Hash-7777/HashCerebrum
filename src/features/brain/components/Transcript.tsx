@@ -146,7 +146,14 @@ export function Transcript({
       <div className="transcript" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
         {messages.map((message, index) => {
           const title = titleFor(message, index);
-          const isManuscript = message.role === 'assistant' && !!message.manuscript && !message.isStreaming;
+          // A finished research result — a structured manuscript or any
+          // answer with retrieved citations — is collapsed to a compact card
+          // instead of dumping the whole paper into the chat. The card opens
+          // the document preview.
+          const isDocument =
+            message.role === 'assistant' &&
+            !message.isStreaming &&
+            (!!message.manuscript || (message.citations?.length ?? 0) > 0);
           return (
             <article key={message.id} className="chat-message" data-role={message.role} data-error={!!message.error}>
               <header>
@@ -167,10 +174,10 @@ export function Transcript({
                 </span>
                 {message.failoverNote && <span className="chat-failover">{message.failoverNote}</span>}
               </header>
-              {isManuscript ? (
+              {isDocument ? (
                 <DocumentArtifactCard
                   title={title}
-                  typeLabel="Research manuscript"
+                  typeLabel={message.manuscript ? 'Research manuscript' : 'Research result'}
                   referenceCount={message.citations?.length ?? 0}
                   onOpen={() => void openPdfPreview(message, index)}
                 />
@@ -180,7 +187,7 @@ export function Transcript({
                   {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                 </p>
               )}
-              {message.citations && message.citations.length > 0 && !isManuscript && (
+              {message.citations && message.citations.length > 0 && !isDocument && (
                 <div className="inline-citations">
                   {message.citations.slice(0, 6).map((item, index) => (
                     <a key={evidenceKey(item, index)} href={item.url ?? undefined} target="_blank" rel="noreferrer">

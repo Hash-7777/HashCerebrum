@@ -45,7 +45,10 @@
       //
       // connect-src is limited to 'self' and the Tauri IPC origin: the
       // renderer only talks to Rust, never to a provider host directly.
-      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+      //
+      // frame-src allows 'self' and blob: so the in-app document preview
+      // can render an exported PDF (a blob: URL) inside its <iframe>.
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },
 
