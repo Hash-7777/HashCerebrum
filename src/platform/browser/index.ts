@@ -98,6 +98,11 @@ export const browserPlatform: Platform = {
   pdf: {
     extractText: async () => '',
   },
+  manuscript: {
+    renderPdf: async () => {
+      throw new Error('Typst manuscript rendering needs the desktop app');
+    },
+  },
   cache: {
     stats: async () => ({ rows: 0, bytes: 0, hosts: [] }),
     clear: async () => 0,

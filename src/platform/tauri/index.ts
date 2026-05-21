@@ -127,6 +127,13 @@ export const tauriPlatform: Platform = {
     extractText: (path) => invoke<string>('pdf_extract_text', { path }),
   },
 
+  manuscript: {
+    renderPdf: async (manuscript, references, meta) => {
+      const bytes = await invoke<number[]>('render_manuscript_pdf', { manuscript, references, meta });
+      return new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+    },
+  },
+
   cache: {
     stats: () => invoke<CacheStats>('cache_stats'),
     clear: () => invoke<number>('cache_clear'),

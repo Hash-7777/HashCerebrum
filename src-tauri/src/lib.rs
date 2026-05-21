@@ -35,6 +35,7 @@ use commands::{
     cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_http_get, llm_http_post},
+    manuscript::render_manuscript_pdf,
     medical::{
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
         openfda::openfda_query, pubmed::pubmed_search, rxnorm::rxnorm_lookup,
@@ -96,6 +97,8 @@ pub fn run() {
             rxnorm_lookup,
             // PDF extraction (used by Librarian agent)
             pdf_extract_text,
+            // Manuscript typesetting (Typst → PDF)
+            render_manuscript_pdf,
             // Cache inspection / clear (surfaced in Settings)
             cache_stats,
             cache_clear,

@@ -1,4 +1,4 @@
-import type { EvidenceItem } from '@platform/index';
+import { platform, type EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import type { Manuscript } from '../swarm/manuscript';
 
@@ -182,9 +182,61 @@ export function exportMessageHtml(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.html`, buildExportHtml(message), 'text/html;charset=utf-8');
 }
 
-// Build a publishable research-paper PDF and save it. The webview routes
-// the download to the user's Downloads folder, like the Markdown export.
+// Cited-only reference list for the Typst renderer: scan the manuscript
+// prose for [S#] markers and resolve each against the retrieved evidence.
+function manuscriptReferences(
+  manuscript: Manuscript,
+  citations: EvidenceItem[],
+): { marker: string; text: string }[] {
+  const prose: string[] = [
+    manuscript.abstract.background,
+    manuscript.abstract.objective,
+    manuscript.abstract.methods,
+    manuscript.abstract.results,
+    manuscript.abstract.conclusions,
+  ];
+  for (const section of manuscript.sections) prose.push(...section.body);
+  const cited = new Set<number>();
+  for (const match of prose.join(' ').matchAll(/\[S(\d+)\]/g)) {
+    cited.add(Number(match[1]));
+  }
+  return [...cited]
+    .sort((a, b) => a - b)
+    .flatMap((n) => {
+      const record = citations[n - 1];
+      if (!record) return [];
+      const year = record.year ? ` (${record.year})` : '';
+      const id = record.identifiers?.pmid
+        ? ` PMID: ${record.identifiers.pmid}`
+        : record.identifiers?.doi
+          ? ` DOI: ${record.identifiers.doi}`
+          : '';
+      return [{ marker: `[S${n}]`, text: `${record.source.toUpperCase()}${year}. ${record.title}.${id}` }];
+    });
+}
+
+// Build a publishable research-paper PDF and save it. A structured
+// manuscript is typeset by the embedded Typst engine; jsPDF is the
+// fallback when Typst is unavailable (browser dev) or fails. The webview
+// routes the download to the user's Downloads folder.
 export async function exportMessagePdf(message: ExportableMessage): Promise<void> {
+  const filename = `${slugifyFilename(message.title)}.pdf`;
+
+  if (message.manuscript) {
+    try {
+      const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
+      const blob = await platform().manuscript.renderPdf(
+        message.manuscript,
+        manuscriptReferences(message.manuscript, message.citations ?? []),
+        meta,
+      );
+      downloadBlob(filename, blob);
+      return;
+    } catch {
+      /* Typst unavailable or failed — fall through to the jsPDF renderer. */
+    }
+  }
+
   const { buildPaperPdfBlob } = await import('./paperPdf');
   const blob = await buildPaperPdfBlob({
     title: message.title,
@@ -193,5 +245,5 @@ export async function exportMessagePdf(message: ExportableMessage): Promise<void
     ...(message.citations ? { citations: message.citations } : {}),
     ...(message.manuscript ? { manuscript: message.manuscript } : {}),
   });
-  downloadBlob(`${slugifyFilename(message.title)}.pdf`, blob);
+  downloadBlob(filename, blob);
 }

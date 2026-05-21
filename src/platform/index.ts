@@ -76,6 +76,17 @@ export interface Platform {
     extractText(path: string): Promise<string>;
   };
 
+  // Manuscript typesetting — a structured manuscript rendered to a PDF by
+  // the embedded Typst engine. Desktop-only; browser dev rejects so the
+  // caller falls back to the jsPDF renderer.
+  manuscript: {
+    renderPdf(
+      manuscript: unknown,
+      references: { marker: string; text: string }[],
+      meta: string,
+    ): Promise<Blob>;
+  };
+
   // SQLite cache controls — surfaced in Settings so the user can see
   // per-host row/byte counts and clear expired or all rows.
   cache: {
