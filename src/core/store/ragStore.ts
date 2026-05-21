@@ -13,20 +13,13 @@
 
 import { create } from 'zustand';
 import { platform } from '@platform/index';
+import { buildRagIndex, searchRagIndex, lexicalSearch, tokenize, type RagIndex } from './ragSearch';
+
+export { lexicalSearch, tokenize };
 
 const STORAGE_KEY = 'rag.v1';
 const MAX_CHUNKS = 1000;
 const DEFAULT_SEARCH_LIMIT = 8;
-
-// Generic English function words only — never anything biomedically
-// meaningful (keep "effect", "study", "dose", etc. as searchable terms).
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'is',
-  'are', 'was', 'were', 'be', 'been', 'by', 'at', 'as', 'it', 'its', 'this',
-  'that', 'these', 'those', 'from', 'into', 'than', 'then', 'what', 'which',
-  'who', 'whom', 'how', 'why', 'when', 'where', 'does', 'do', 'did', 'has',
-  'have', 'had', 'can', 'could', 'would', 'should', 'will', 'about', 'any',
-]);
 
 export type RagChunkKind = 'evidence' | 'answer';
 
@@ -66,38 +59,6 @@ interface RagStore {
   clearProject: (projectId: string) => void;
 }
 
-// Exported so the memory-graph builder ranks relatedness on the exact same
-// token model the retriever uses — one definition of "a meaningful term".
-export function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((term) => term.length >= 3 && !STOPWORDS.has(term));
-}
-
-// Pure lexical retrieval: rank chunks by query-term overlap, weighting a
-// title hit above a body hit. Exported so it is unit-testable and isolated
-// from storage. Caller passes the already project-filtered chunk list.
-export function lexicalSearch(chunks: RagChunk[], query: string, limit: number): RagSearchHit[] {
-  const terms = Array.from(new Set(tokenize(query)));
-  if (terms.length === 0 || limit <= 0) return [];
-
-  const hits: RagSearchHit[] = [];
-  for (const chunk of chunks) {
-    const titleTerms = new Set(tokenize(chunk.title));
-    const bodyTerms = new Set(tokenize(chunk.text));
-    let score = 0;
-    for (const term of terms) {
-      if (titleTerms.has(term)) score += 2;
-      else if (bodyTerms.has(term)) score += 1;
-    }
-    if (score > 0) hits.push({ chunk, score });
-  }
-
-  hits.sort((a, b) => b.score - a.score || b.chunk.createdAt.localeCompare(a.chunk.createdAt));
-  return hits.slice(0, limit);
-}
-
 // Evidence chunks are deduped per project so the same paper saved by
 // repeated runs does not pile up. Answer chunks are always kept — each run
 // produces a distinct synthesized answer.
@@ -129,6 +90,25 @@ function persist(chunks: RagChunk[]) {
   void platform()
     .storage.set<PersistShape>(STORAGE_KEY, { chunks })
     .catch(() => undefined);
+}
+
+let indexCache:
+  | {
+      chunksRef: RagChunk[];
+      byProject: Map<string, RagIndex>;
+    }
+  | null = null;
+
+function searchProjectIndex(chunks: RagChunk[], projectId: string, query: string, limit: number): RagSearchHit[] {
+  if (!indexCache || indexCache.chunksRef !== chunks) {
+    indexCache = { chunksRef: chunks, byProject: new Map() };
+  }
+  let index = indexCache.byProject.get(projectId);
+  if (!index) {
+    index = buildRagIndex(chunks.filter((chunk) => chunk.projectId === projectId));
+    indexCache.byProject.set(projectId, index);
+  }
+  return searchRagIndex(index, query, limit);
 }
 
 export const useRagStore = create<RagStore>((set, get) => ({
@@ -166,11 +146,7 @@ export const useRagStore = create<RagStore>((set, get) => ({
   },
 
   search: (projectId, query, limit = DEFAULT_SEARCH_LIMIT) =>
-    lexicalSearch(
-      get().chunks.filter((c) => c.projectId === projectId),
-      query,
-      limit,
-    ),
+    searchProjectIndex(get().chunks, projectId, query, limit),
 
   chunksForProject: (projectId) => get().chunks.filter((c) => c.projectId === projectId),
 

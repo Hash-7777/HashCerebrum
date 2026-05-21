@@ -51,4 +51,34 @@ describe('lexicalSearch', () => {
     expect(hits[0]!.chunk.id).toBe('both');
     expect(hits[0]!.score).toBeGreaterThan(hits[1]!.score);
   });
+
+  it('pulls same-run topic neighbours after finding a strong seed hit', () => {
+    const seed = chunk({
+      id: 'seed',
+      title: 'Warfarin bleeding signal',
+      text: 'anticoagulant interaction',
+      runId: 'run-1',
+      query: 'NSAIDs and warfarin bleeding risk',
+    });
+    const neighbour = chunk({
+      id: 'neighbour',
+      title: 'Naproxen cohort',
+      text: 'gastrointestinal event rates',
+      runId: 'run-1',
+      query: 'NSAIDs and warfarin bleeding risk',
+    });
+    const unrelated = chunk({
+      id: 'unrelated',
+      title: 'Calcium and bone density',
+      text: 'fracture prevention',
+      runId: 'run-2',
+      query: 'calcium fracture prevention',
+    });
+
+    const hits = lexicalSearch([unrelated, neighbour, seed], 'warfarin bleeding', 3);
+
+    expect(hits.map((hit) => hit.chunk.id)).toContain('seed');
+    expect(hits.map((hit) => hit.chunk.id)).toContain('neighbour');
+    expect(hits.map((hit) => hit.chunk.id)).not.toContain('unrelated');
+  });
 });
