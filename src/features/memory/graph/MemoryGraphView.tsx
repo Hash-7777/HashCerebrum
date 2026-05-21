@@ -1,13 +1,15 @@
-// Memory graph view — an Obsidian-style diagram of a project's saved RAG
-// chunks. Nodes are findings; edges are topic links. The layout is a
-// deterministic force simulation; this component only renders it and handles
-// pan / zoom / drag / selection.
+// Memory graph view — a brain-shaped diagram of a project's saved RAG chunks.
+// Nodes are findings, edges are topic links, and the whole map is laid out
+// inside a brain silhouette so it reads as one mind rather than scattered
+// blobs. This component renders the layout and handles pan / zoom / drag /
+// selection.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { RagChunk } from '@core/store/ragStore';
 import { Icon } from '@ui/icons';
 import { buildMemoryGraph } from './memoryGraph';
+import { brainShape, type BrainBounds } from './brainShape';
 import { layoutMemoryGraph, type NodePosition } from './layout';
 
 const EXCERPT_CHARS = 280;
@@ -51,9 +53,10 @@ export function MemoryGraphView({
   // Lay the graph out in a virtual square sized by node count, so the
   // simulation never reruns on container resize — only the fit transform does.
   const span = useMemo(
-    () => Math.max(720, Math.ceil(Math.sqrt(graph.nodes.length)) * 170, graph.clusters.length * 220),
-    [graph.nodes.length, graph.clusters.length],
+    () => Math.max(1000, Math.sqrt(graph.nodes.length) * 150),
+    [graph.nodes.length],
   );
+  const brain = useMemo(() => brainShape(span), [span]);
   const layout = useMemo(() => layoutMemoryGraph(graph, span), [graph, span]);
 
   const neighbors = useMemo(() => {
@@ -83,32 +86,20 @@ export function MemoryGraphView({
   const svgRef = useRef<SVGSVGElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
 
-  // Fit a set of positions into the current viewport.
-  const fitView = useCallback(
-    (source: Map<string, NodePosition>) => {
-      if (size.w === 0 || size.h === 0 || source.size === 0) return;
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const point of source.values()) {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-        maxX = Math.max(maxX, point.x);
-        maxY = Math.max(maxY, point.y);
-      }
-      const pad = Math.min(110, Math.max(54, Math.min(size.w, size.h) * 0.12));
-      const boxW = Math.max(maxX - minX, 1);
-      const boxH = Math.max(maxY - minY, 1);
-      const availableW = Math.max(size.w - pad * 2, size.w * 0.3);
-      const availableH = Math.max(size.h - pad * 2, size.h * 0.3);
+  // Fit a bounding box (the brain silhouette) into the current viewport.
+  const fitBox = useCallback(
+    (box: BrainBounds) => {
+      if (size.w === 0 || size.h === 0) return;
+      const pad = Math.min(96, Math.max(44, Math.min(size.w, size.h) * 0.09));
+      const boxW = Math.max(box.maxX - box.minX, 1);
+      const boxH = Math.max(box.maxY - box.minY, 1);
       const scale = Math.min(
-        Math.max(Math.min(availableW / boxW, availableH / boxH), MIN_SCALE),
-        1.6,
+        Math.max(Math.min((size.w - pad * 2) / boxW, (size.h - pad * 2) / boxH), MIN_SCALE),
+        1.7,
       );
       setTransform({
-        x: size.w / 2 - ((minX + maxX) / 2) * scale,
-        y: size.h / 2 - ((minY + maxY) / 2) * scale,
+        x: size.w / 2 - ((box.minX + box.maxX) / 2) * scale,
+        y: size.h / 2 - ((box.minY + box.maxY) / 2) * scale,
         scale,
       });
     },
@@ -121,10 +112,10 @@ export function MemoryGraphView({
     setSelectedId(null);
   }, [layout]);
 
-  // Fit once the viewport is measured and after every relayout.
+  // Frame the brain once the viewport is measured and after every relayout.
   useEffect(() => {
-    fitView(layout);
-  }, [layout, fitView]);
+    fitBox(brain.bounds);
+  }, [brain, fitBox]);
 
   // Track the container size.
   useEffect(() => {
@@ -258,6 +249,29 @@ export function MemoryGraphView({
         onPointerCancel={onPointerUp}
       >
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
+          <g className="memory-brain" aria-hidden="true">
+            <ellipse
+              className="memory-brain-lobe"
+              cx={brain.left.cx}
+              cy={brain.left.cy}
+              rx={brain.left.rx}
+              ry={brain.left.ry}
+            />
+            <ellipse
+              className="memory-brain-lobe"
+              cx={brain.right.cx}
+              cy={brain.right.cy}
+              rx={brain.right.rx}
+              ry={brain.right.ry}
+            />
+            <line
+              className="memory-brain-fissure"
+              x1={brain.fissureX}
+              y1={brain.fissureTop}
+              x2={brain.fissureX}
+              y2={brain.fissureBottom}
+            />
+          </g>
           {graph.edges.map((edge) => {
             const a = positions.get(edge.source);
             const b = positions.get(edge.target);
@@ -334,7 +348,7 @@ export function MemoryGraphView({
         <button type="button" onClick={() => zoomFromCenter(1.28)} aria-label="Zoom in">
           <Icon name="plus" size={12} />
         </button>
-        <button type="button" onClick={() => fitView(positions)}>
+        <button type="button" onClick={() => fitBox(brain.bounds)}>
           <Icon name="refresh" size={12} /> Reset view
         </button>
       </div>
