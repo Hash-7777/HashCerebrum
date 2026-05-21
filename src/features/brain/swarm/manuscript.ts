@@ -26,6 +26,7 @@ export interface SectionSpec {
   heading: string;
   instruction: string;
   targetWords: string;
+  minWords: number;
 }
 
 // The fixed section list the app drafts in order. One focused model call
@@ -36,60 +37,70 @@ export const SECTION_PLAN: SectionSpec[] = [
     instruction:
       'Establish the clinical problem, its scope and importance, what is already known, and the aim of this evidence review.',
     targetWords: '500-750 words across 4-6 substantial paragraphs',
+    minWords: 420,
   },
   {
     heading: 'Methods',
     instruction:
       'Describe how the evidence was assembled: an automated multi-source search across biomedical databases (PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, OpenFDA), the kinds of records retrieved, and how findings were selected and synthesised. Be transparent that this is an automated search, not a hand-curated systematic review.',
     targetWords: '450-650 words across 3-5 paragraphs',
+    minWords: 360,
   },
   {
     heading: 'Evidence Base and Search Yield',
     instruction:
       'Describe the retrieved evidence base, source mix, record types, date spread where available, and the highest-value records for the research question. Cite every factual claim with its [S#] marker.',
     targetWords: '500-750 words across 4-6 paragraphs',
+    minWords: 420,
   },
   {
     heading: 'Mechanistic and Pharmacologic Evidence',
     instruction:
       'Explain the mechanistic and pharmacologic evidence relevant to the question. For drug-interaction topics, separate pharmacokinetic mechanisms, pharmacodynamic mechanisms, transporter/enzyme considerations, and biological plausibility. Cite every factual claim with its [S#] marker.',
     targetWords: '650-900 words across 5-7 paragraphs',
+    minWords: 540,
   },
   {
     heading: 'Clinical Evidence and Safety Outcomes',
     instruction:
       'Synthesize the clinical evidence and safety outcomes. Distinguish direct evidence from indirect evidence, registry signals from trial results, and outcome evidence from mechanistic inference. Cite every factual claim with its [S#] marker.',
     targetWords: '700-950 words across 5-8 paragraphs',
+    minWords: 580,
   },
   {
     heading: 'Trial and Registry Evidence',
     instruction:
       'Summarize clinical-trial and registry evidence without using markdown tables. Write prose grouped by trial purpose, population, intervention/exposure, and relevance to the research question. If evidence is indirect or incomplete, say so explicitly. Cite every factual claim with its [S#] marker.',
     targetWords: '550-800 words across 4-6 paragraphs',
+    minWords: 450,
   },
   {
     heading: 'Discussion',
     instruction:
       'Interpret the evidence in depth: mechanisms, the consistency and strength of the findings, conflicting or weak results, and the clinical and research implications.',
     targetWords: '800-1100 words across 6-9 paragraphs',
+    minWords: 680,
   },
   {
     heading: 'Limitations',
     instruction:
       'State the limitations of this automated evidence review honestly — search coverage, reliance on abstracts and snippets, absence of formal risk-of-bias appraisal, and any gaps in the retrieved evidence.',
     targetWords: '350-550 words across 3-5 paragraphs',
+    minWords: 280,
   },
   {
     heading: 'Conclusion',
     instruction:
       'Summarise the key takeaways and what further research is needed. Keep it to one or two focused paragraphs.',
     targetWords: '250-400 words across 2-3 paragraphs',
+    minWords: 200,
   },
   {
     heading: 'Declarations',
     instruction:
       'Write one short paragraph: this manuscript is an automated evidence-review draft generated from public biomedical databases; no specific funding or conflicts of interest apply; it is intended for expert review and is not medical advice.',
     targetWords: '100-180 words in one paragraph',
+    minWords: 80,
   },
 ];
 

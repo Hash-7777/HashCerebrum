@@ -17,6 +17,7 @@ import type { SpecialistResult } from './types';
 const SNIPPET_CHARS = 200;
 const MAX_EVIDENCE = 48;
 const SECTION_TOKENS = 2600;
+const MAX_SECTION_PASSES = 3;
 
 const STOPWORDS = new Set([
   'about', 'after', 'against', 'and', 'are', 'between', 'during', 'from', 'into',
@@ -68,6 +69,15 @@ function specialistDigest(specialists: SpecialistResult[]): string {
 
 function wordCount(value: string): number {
   return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
+}
+
+function bodyWordCount(body: string[]): number {
+  return wordCount(body.join(' '));
+}
+
+function isDraftFailure(body: string[]): boolean {
+  const text = body.join(' ').toLowerCase();
+  return text.includes('could not be drafted') || text.includes('could not complete');
 }
 
 function keywordsFrom(question: string): string[] {
@@ -142,20 +152,22 @@ Write the ${spec.heading} section now as final manuscript prose, not notes.`;
     try {
       const reply = await callModel(bossModel, SECTION_SYSTEM, user, SECTION_TOKENS);
       let body = sectionBodyFromReply(spec.heading, reply);
-      const shortNonDeclaration = spec.heading !== 'Declarations' && wordCount(body.join(' ')) < 220;
-      if (shortNonDeclaration) {
+      let passes = 1;
+      while (bodyWordCount(body) < spec.minWords && !isDraftFailure(body) && passes < MAX_SECTION_PASSES) {
+        opts.onSection?.(`${spec.heading} expansion ${passes}`);
         const expansion = await callModel(
           bossModel,
           SECTION_SYSTEM,
           `${user}
 
-The previous draft was too short and read like notes:
+The current ${spec.heading} draft is ${bodyWordCount(body)} words, below the required minimum of ${spec.minWords} words:
 ${body.join('\n\n')}
 
-Rewrite and expand it into ${spec.targetWords}. Keep every factual claim tied to [S#] citations. Do not use markdown tables or lists.`,
+Rewrite the complete ${spec.heading} section as a full replacement. Target ${spec.targetWords}, and do not stop early. Keep every factual claim tied to [S#] citations. If the retrieved evidence is genuinely thin, still write a complete, transparent section that explains the uncertainty instead of returning notes. Do not use markdown tables or lists.`,
           SECTION_TOKENS,
         );
         body = sectionBodyFromReply(spec.heading, expansion);
+        passes += 1;
       }
       sections.push({ heading: spec.heading, body });
     } catch (error) {
