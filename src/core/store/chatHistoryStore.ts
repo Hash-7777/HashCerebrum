@@ -10,6 +10,7 @@
 import { create } from 'zustand';
 import type { EvidenceItem } from '@platform/index';
 import { platform } from '@platform/index';
+import type { Manuscript } from '@features/brain/swarm/manuscript';
 import { useProjectStore } from './projectStore';
 
 const STORAGE_KEY = 'chatHistory.v1';
@@ -26,6 +27,9 @@ export interface ChatMessage {
   error?: string;
   critiqueOf?: string;
   isStreaming?: boolean;
+  // Present on a full-paper assistant message — the structured manuscript
+  // the PDF export renders deterministically.
+  manuscript?: Manuscript;
 }
 
 export interface SavedChat {

@@ -120,9 +120,8 @@ describe('runSwarm', () => {
     expect(result.specialists[0]?.error).toContain('planner unavailable');
   });
 
-  it('returns a structured manuscript fallback when a paper request reaches source-only recovery', async () => {
+  it('drafts a structured manuscript for a paper request even when the model is unavailable', async () => {
     llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
-    llmMocks.streamWithModelChain.mockRejectedValue(new Error('boss synthesis unavailable'));
 
     const result = await runSwarm({
       question: 'make a full research paper about NSAIDs and warfarin',
@@ -139,10 +138,20 @@ describe('runSwarm', () => {
       'public_health',
     ]);
     expect(result.evidence.length).toBeGreaterThan(0);
-    expect(result.answer).toContain('# Manuscript Draft');
-    expect(result.answer).toContain('## Structured Abstract');
-    expect(result.answer).toContain('## References');
-    expect(result.answer).toContain('boss synthesis unavailable');
+    // A paper request always yields a structured manuscript — even with the
+    // model unavailable, every section is present with an honest placeholder.
+    expect(result.manuscript).toBeDefined();
+    expect(result.manuscript?.sections.map((section) => section.heading)).toEqual([
+      'Introduction',
+      'Methods',
+      'Results',
+      'Discussion',
+      'Limitations',
+      'Conclusion',
+      'Declarations',
+    ]);
+    expect(result.manuscript?.sections[0]?.body.join(' ')).toContain('could not be drafted');
+    expect(result.answer).toContain('INTRODUCTION');
   });
 
   it('lets the boss route ordinary messages to chat without running specialists', async () => {

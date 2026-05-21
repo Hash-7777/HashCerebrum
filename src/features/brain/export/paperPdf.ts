@@ -4,12 +4,16 @@
 // on demand so it never weighs down the main bundle.
 
 import type { EvidenceItem } from '@platform/index';
+import type { Manuscript } from '../swarm/manuscript';
 
 export interface PaperPdfInput {
   title: string;
   content: string;
   modelLabel?: string;
   citations?: EvidenceItem[];
+  // When present, the PDF is rendered deterministically from this structure
+  // instead of by parsing the markdown in `content`.
+  manuscript?: Manuscript;
 }
 
 type Block =
@@ -118,7 +122,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   doc.setFont('times', 'bold');
   doc.setFontSize(21);
   doc.setTextColor(15, 23, 42);
-  for (const line of doc.splitTextToSize(plain(input.title), contentW) as string[]) {
+  for (const line of doc.splitTextToSize(plain(input.manuscript?.title ?? input.title), contentW) as string[]) {
     ensureSpace(27);
     doc.text(line, pageW / 2, y, { align: 'center' });
     y += 27;
@@ -221,24 +225,47 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     y += 3;
   };
 
-  const blocks = parseBlocks(input.content);
-  const titleKey = normalizeHeading(input.title);
-  blocks.forEach((block, index) => {
-    // The title is already rendered as the document title — skip a leading
-    // heading that merely repeats it.
-    if (
-      index === 0 &&
-      (block.kind === 'h1' || block.kind === 'h2' || block.kind === 'h3') &&
-      normalizeHeading(block.text) === titleKey
-    ) {
-      return;
+  // Deterministic render straight from the structured manuscript — the
+  // reliable path. Falls back to markdown parsing for non-paper messages.
+  const renderManuscript = (m: Manuscript) => {
+    heading('Abstract', 2);
+    const absField = (label: string, text: string) => {
+      if (text.trim()) paragraph(`**${label}:** ${text}`);
+    };
+    absField('Background', m.abstract.background);
+    absField('Objective', m.abstract.objective);
+    absField('Methods', m.abstract.methods);
+    absField('Results', m.abstract.results);
+    absField('Conclusions', m.abstract.conclusions);
+    if (m.keywords.length > 0) paragraph(`**Keywords:** ${m.keywords.join(', ')}`);
+    for (const section of m.sections) {
+      heading(section.heading, 2);
+      for (const para of section.body) paragraph(para);
     }
-    if (block.kind === 'h1' || block.kind === 'h2') heading(block.text, 2);
-    else if (block.kind === 'h3') heading(block.text, 3);
-    else if (block.kind === 'bullet') listItem('•', block.text);
-    else if (block.kind === 'numbered') listItem(block.marker, block.text);
-    else paragraph(block.text);
-  });
+  };
+
+  if (input.manuscript) {
+    renderManuscript(input.manuscript);
+  } else {
+    const blocks = parseBlocks(input.content);
+    const titleKey = normalizeHeading(input.title);
+    blocks.forEach((block, index) => {
+      // The title is already rendered as the document title — skip a leading
+      // heading that merely repeats it.
+      if (
+        index === 0 &&
+        (block.kind === 'h1' || block.kind === 'h2' || block.kind === 'h3') &&
+        normalizeHeading(block.text) === titleKey
+      ) {
+        return;
+      }
+      if (block.kind === 'h1' || block.kind === 'h2') heading(block.text, 2);
+      else if (block.kind === 'h3') heading(block.text, 3);
+      else if (block.kind === 'bullet') listItem('•', block.text);
+      else if (block.kind === 'numbered') listItem(block.marker, block.text);
+      else paragraph(block.text);
+    });
+  }
 
   // ---- References — only the records actually cited in the body ----------
   // The swarm retrieves far more evidence than a paper cites; a real

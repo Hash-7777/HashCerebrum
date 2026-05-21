@@ -1,5 +1,6 @@
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
+import type { Manuscript } from '../swarm/manuscript';
 
 export interface ExportableMessage {
   title: string;
@@ -7,6 +8,7 @@ export interface ExportableMessage {
   content: string;
   modelLabel?: string;
   citations?: EvidenceItem[];
+  manuscript?: Manuscript;
 }
 
 export function slugifyFilename(value: string): string {
@@ -189,6 +191,7 @@ export async function exportMessagePdf(message: ExportableMessage): Promise<void
     content: message.content,
     ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
     ...(message.citations ? { citations: message.citations } : {}),
+    ...(message.manuscript ? { manuscript: message.manuscript } : {}),
   });
   downloadBlob(`${slugifyFilename(message.title)}.pdf`, blob);
 }

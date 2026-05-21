@@ -238,6 +238,16 @@ export function BrainMode() {
         setMessages((current) => current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)));
         flushTopicHits(streamedContent);
       },
+      onManuscriptSection: (heading) => {
+        // A paper is drafted section by section (no token stream) — show
+        // progress in the pending bubble and the boss status.
+        updateAgentStatus('boss', { state: 'running', detail: `drafting ${heading}` });
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === assistantId ? { ...m, content: `Drafting manuscript — ${heading}…` } : m,
+          ),
+        );
+      },
     };
 
     try {
@@ -293,6 +303,7 @@ export function BrainMode() {
                 modelLabel: labelForModel(result.modelUsed),
                 isStreaming: false,
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
+                ...(result.manuscript ? { manuscript: result.manuscript } : {}),
               }
             : m,
         ),
@@ -442,6 +453,9 @@ export function BrainMode() {
       <section className="research-chat" aria-label="Brain research chat">
         <header className="workspace-toolbar">
           <h1>The Main Brain</h1>
+          <p className="workspace-hint">
+            Tip — for the most reliable research papers, set a large model as the Boss in Settings → Agent models.
+          </p>
         </header>
 
         <FeatureBoundary name="Transcript">

@@ -5,6 +5,7 @@
 import type { AgentId } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import type { LlmMessage } from '@core/llm/types';
+import type { Manuscript } from './manuscript';
 
 export interface SpecialistTask {
   agentId: AgentId;
@@ -31,6 +32,8 @@ export interface SwarmCallbacks {
   onToolCall: (agentId: AgentId, toolName: string) => void;
   onToolResult: (agentId: AgentId, toolName: string, count: number) => void;
   onAnswerToken: (delta: string) => void;
+  // Progress for a section-by-section manuscript draft (paper requests).
+  onManuscriptSection?: (heading: string) => void;
 }
 
 export interface SwarmResult {
@@ -39,6 +42,9 @@ export interface SwarmResult {
   evidence: EvidenceItem[];
   specialists: SpecialistResult[];
   modelUsed: string;
+  // Present for full-paper requests — the structured manuscript the PDF
+  // export renders deterministically.
+  manuscript?: Manuscript;
 }
 
 export interface SwarmOptions {

@@ -7,7 +7,9 @@
 import { agentById } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import { bossChat, planResearch, synthesize } from './boss';
-import { buildSourceGroundedPaperFallback, detectPaperRequest, fallbackPaperTasks } from './paper';
+import { detectPaperRequest, fallbackPaperTasks } from './paper';
+import { manuscriptToReadableText } from './manuscript';
+import { draftManuscript } from './manuscriptWriter';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SwarmOptions, SwarmResult } from './types';
 
@@ -87,17 +89,35 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   const merged = mergeEvidence(specialists);
   callbacks.onBossPhase('synthesizing');
-  let synth;
-  try {
-    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken, paperRequest);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    const answer = paperRequest
-      ? buildSourceGroundedPaperFallback(question, paperRequest, merged, specialists, detail)
-      : sourceOnlyAnswer(question, merged, detail);
+
+  // Full-paper requests are drafted section by section into a structured
+  // manuscript — reliable across models and rendered deterministically.
+  if (paperRequest) {
+    const manuscript = await draftManuscript({
+      question,
+      bossModel,
+      evidence: merged,
+      specialists,
+      onSection: (heading) => callbacks.onManuscriptSection?.(heading),
+    });
     return {
       kind: 'research',
-      answer,
+      answer: manuscriptToReadableText(manuscript),
+      evidence: merged,
+      specialists,
+      manuscript,
+      modelUsed: bossModel,
+    };
+  }
+
+  let synth;
+  try {
+    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      kind: 'research',
+      answer: sourceOnlyAnswer(question, merged, detail),
       evidence: merged,
       specialists,
       modelUsed: bossModel,

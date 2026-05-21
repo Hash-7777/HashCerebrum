@@ -73,6 +73,7 @@ export function Transcript({
     content: message.content,
     modelLabel: message.modelLabel ?? modelLabel,
     ...(message.citations ? { citations: message.citations } : {}),
+    ...(message.manuscript ? { manuscript: message.manuscript } : {}),
   });
 
   const exportPdf = async (message: ChatMessage, index: number) => {

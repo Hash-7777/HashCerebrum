@@ -32,6 +32,12 @@
   letter-spacing: -0.01em;
   color: var(--hc-fg-strong);
 }
+.workspace-hint {
+  margin: 3px 0 0;
+  color: var(--hc-fg-dim);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
 .research-composer button:not(.composer-send),
 .research-composer select,
 .settings-panel button,
