@@ -188,11 +188,6 @@ export function DocumentPreviewWindow({
           />
         ))}
         <header className="document-preview-titlebar" onPointerDown={startDrag}>
-          <div className="document-preview-traffic" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
           <div className="document-preview-title">
             <strong>{document.filename}</strong>
             <span>{document.typeLabel}</span>
