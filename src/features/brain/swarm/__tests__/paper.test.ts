@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { buildSourceGroundedPaperFallback, detectPaperRequest, fallbackPaperTasks } from '../paper';
+import {
+  buildSourceGroundedPaperFallback,
+  detectPaperRequest,
+  fallbackPaperTasks,
+  manuscriptStandardForQuestion,
+} from '../paper';
 
 const evidence: EvidenceItem[] = [
   {
@@ -27,6 +32,14 @@ describe('paper request helpers', () => {
     const request = detectPaperRequest('draft a systematic review manuscript using PRISMA');
 
     expect(request?.standard).toBe('prisma_review');
+  });
+
+  it('maps journal style requests onto export templates', () => {
+    expect(manuscriptStandardForQuestion('write this as an AMA manuscript')).toBe('ama');
+    expect(manuscriptStandardForQuestion('draft for NEJM style')).toBe('nejm_style');
+    expect(manuscriptStandardForQuestion('make it Lancet ready')).toBe('lancet_style');
+    expect(manuscriptStandardForQuestion('Nature Medicine style paper')).toBe('nature_medicine_style');
+    expect(manuscriptStandardForQuestion('standard manuscript')).toBe('icmje_generic');
   });
 
   it('builds broad fallback tasks for manuscript drafting', () => {

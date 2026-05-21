@@ -15,7 +15,7 @@ import {
 } from './manuscript';
 import { buildPublicationArtifact } from './publication';
 import { datasetSummaryForPrompt } from './statistics';
-import type { UploadedDatasetSummary } from './publicationTypes';
+import type { ManuscriptStandard, UploadedDatasetSummary } from './publicationTypes';
 import type { SpecialistResult } from './types';
 
 const SNIPPET_CHARS = 200;
@@ -43,6 +43,7 @@ export interface DraftManuscriptOptions {
   bossModel: string;
   evidence: EvidenceItem[];
   specialists: SpecialistResult[];
+  standard?: ManuscriptStandard;
   dataset?: UploadedDatasetSummary | null;
   onSection?: (heading: string) => void;
 }
@@ -170,7 +171,7 @@ Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix mis
 }
 
 export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Manuscript> {
-  const { question, bossModel, evidence, specialists, dataset } = opts;
+  const { question, bossModel, evidence, specialists, dataset, standard = 'icmje_generic' } = opts;
   const evidenceBlock = formatEvidence(evidence);
   const digest = specialistDigest(specialists);
   const datasetBlock = dataset ? datasetSummaryForPrompt(dataset) : '(no uploaded dataset was supplied)';
@@ -309,6 +310,7 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
   return {
     ...manuscript,
     publication: buildPublicationArtifact(manuscript, evidence, {
+      standard,
       ...(dataset ? { dataset } : {}),
     }),
   };

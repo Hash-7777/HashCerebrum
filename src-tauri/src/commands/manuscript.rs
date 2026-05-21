@@ -57,6 +57,8 @@ struct Table {
 #[derive(Debug, Default, Deserialize)]
 struct Publication {
     #[serde(default)]
+    standard: String,
+    #[serde(default)]
     figures: Vec<Figure>,
     #[serde(default)]
     tables: Vec<Table>,
@@ -188,6 +190,65 @@ struct PreparedFigure {
     bytes: Vec<u8>,
 }
 
+struct RenderStyle {
+    margin_x: &'static str,
+    margin_y: &'static str,
+    body_size: &'static str,
+    title_size: &'static str,
+    heading_size: &'static str,
+    paragraph_leading: &'static str,
+}
+
+fn render_style(manuscript: &Manuscript) -> RenderStyle {
+    let standard = manuscript
+        .publication
+        .as_ref()
+        .map(|publication| publication.standard.as_str())
+        .unwrap_or("icmje_generic");
+    match standard {
+        "ama" => RenderStyle {
+            margin_x: "2.54cm",
+            margin_y: "2.54cm",
+            body_size: "10pt",
+            title_size: "18pt",
+            heading_size: "12.5pt",
+            paragraph_leading: "0.68em",
+        },
+        "nejm_style" => RenderStyle {
+            margin_x: "2.35cm",
+            margin_y: "2.6cm",
+            body_size: "10.7pt",
+            title_size: "19.5pt",
+            heading_size: "13pt",
+            paragraph_leading: "0.72em",
+        },
+        "lancet_style" => RenderStyle {
+            margin_x: "2.15cm",
+            margin_y: "2.45cm",
+            body_size: "10.2pt",
+            title_size: "18.5pt",
+            heading_size: "12.5pt",
+            paragraph_leading: "0.7em",
+        },
+        "nature_medicine_style" => RenderStyle {
+            margin_x: "2.0cm",
+            margin_y: "2.35cm",
+            body_size: "10pt",
+            title_size: "18pt",
+            heading_size: "12pt",
+            paragraph_leading: "0.68em",
+        },
+        _ => RenderStyle {
+            margin_x: "2.3cm",
+            margin_y: "2.7cm",
+            body_size: "10.5pt",
+            title_size: "19pt",
+            heading_size: "13pt",
+            paragraph_leading: "0.72em",
+        },
+    }
+}
+
 fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
     let trimmed = value.trim();
     let lowered = trimmed.to_lowercase();
@@ -241,20 +302,32 @@ fn build_typ(
     figures: &[PreparedFigure],
 ) -> String {
     let mut doc = String::new();
+    let style = render_style(manuscript);
 
     doc.push_str(&format!("#set document(title: \"{}\")\n", esc(&manuscript.title)));
-    doc.push_str(
-        "#set page(paper: \"a4\", margin: (x: 2.3cm, y: 2.7cm), numbering: \"1 / 1\", number-align: center)\n",
-    );
-    doc.push_str("#set text(font: \"Libertinus Serif\", size: 10.5pt, lang: \"en\")\n");
-    doc.push_str("#set par(justify: false, leading: 0.72em)\n");
+    doc.push_str(&format!(
+        "#set page(paper: \"a4\", margin: (x: {}, y: {}), numbering: \"1 / 1\", number-align: center)\n",
+        style.margin_x, style.margin_y
+    ));
+    doc.push_str(&format!(
+        "#set text(font: \"Libertinus Serif\", size: {}, lang: \"en\")\n",
+        style.body_size
+    ));
+    doc.push_str(&format!(
+        "#set par(justify: false, leading: {})\n",
+        style.paragraph_leading
+    ));
     doc.push_str("#set heading(numbering: none)\n");
-    doc.push_str("#show heading.where(level: 1): set text(size: 13pt)\n");
+    doc.push_str(&format!(
+        "#show heading.where(level: 1): set text(size: {})\n",
+        style.heading_size
+    ));
     doc.push_str("#show heading: set block(above: 1.3em, below: 0.7em)\n\n");
 
     // Title block.
     doc.push_str(&format!(
-        "#align(center, text(size: 19pt, weight: \"bold\")[#\"{}\"])\n",
+        "#align(center, text(size: {}, weight: \"bold\")[#\"{}\"])\n",
+        style.title_size,
         esc(&manuscript.title)
     ));
     doc.push_str(&format!(

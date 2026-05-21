@@ -1,5 +1,6 @@
 import type { EvidenceItem } from '@platform/index';
 import type { SpecialistResult, SpecialistTask } from './types';
+import type { ManuscriptStandard } from './publicationTypes';
 
 export type PaperStandard = 'imrad_review' | 'prisma_review' | 'consort_trial' | 'strobe_observational' | 'care_case';
 
@@ -25,6 +26,14 @@ export function detectPaperRequest(question: string): PaperRequest | null {
     return { standard: 'care_case', label: 'CARE-aware case-report manuscript' };
   }
   return { standard: 'imrad_review', label: 'IMRaD narrative review manuscript' };
+}
+
+export function manuscriptStandardForQuestion(question: string): ManuscriptStandard {
+  if (/\bama\b|american medical association/i.test(question)) return 'ama';
+  if (/\bnejm\b|new england journal/i.test(question)) return 'nejm_style';
+  if (/\blancet\b/i.test(question)) return 'lancet_style';
+  if (/\bnature medicine\b|\bnature-style\b|\bnature style\b/i.test(question)) return 'nature_medicine_style';
+  return 'icmje_generic';
 }
 
 export function fallbackPaperTasks(question: string): SpecialistTask[] {

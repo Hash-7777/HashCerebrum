@@ -7,7 +7,7 @@
 import { agentById } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
 import { bossChat, planResearch, synthesize } from './boss';
-import { detectPaperRequest, fallbackPaperTasks } from './paper';
+import { detectPaperRequest, fallbackPaperTasks, manuscriptStandardForQuestion } from './paper';
 import { manuscriptToReadableText } from './manuscript';
 import { draftManuscript } from './manuscriptWriter';
 import { runSpecialist } from './specialist';
@@ -98,6 +98,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       bossModel,
       evidence: merged,
       specialists,
+      standard: manuscriptStandardForQuestion(question),
       ...(dataset ? { dataset } : {}),
       onSection: (heading) => callbacks.onManuscriptSection?.(heading),
     });
