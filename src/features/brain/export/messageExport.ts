@@ -230,17 +230,20 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
   if (message.manuscript) {
     const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
     assertPublicationReady(artifact);
-    const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact);
+    const typstManuscript = normalizeManuscriptForPublication(message.manuscript, artifact, {
+      includeSupplementalSection: false,
+    });
     try {
       const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
       return await platform().manuscript.renderPdf(
-        exportManuscript,
+        typstManuscript,
         referenceLinesForPublication(artifact),
         meta,
       );
     } catch {
       /* Typst unavailable or failed — fall through to the jsPDF renderer. */
     }
+    const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact);
     const { buildPaperPdfBlob } = await import('./paperPdf');
     return buildPaperPdfBlob({
       title: message.title,

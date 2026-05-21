@@ -33,6 +33,36 @@ struct Section {
 }
 
 #[derive(Debug, Default, Deserialize)]
+struct Figure {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    svg: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct Table {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    columns: Vec<String>,
+    #[serde(default)]
+    rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct Publication {
+    #[serde(default)]
+    figures: Vec<Figure>,
+    #[serde(default)]
+    tables: Vec<Table>,
+}
+
+#[derive(Debug, Default, Deserialize)]
 struct Manuscript {
     #[serde(default)]
     title: String,
@@ -42,6 +72,8 @@ struct Manuscript {
     keywords: Vec<String>,
     #[serde(default)]
     sections: Vec<Section>,
+    #[serde(default)]
+    publication: Option<Publication>,
 }
 
 // Public because it appears in the #[tauri::command] signature.
@@ -149,7 +181,65 @@ fn paragraph(value: &str) -> String {
     format!("#\"{}\"\n\n", esc(&clean_body_text(value)))
 }
 
-fn build_typ(manuscript: &Manuscript, references: &[ReferenceLine], meta: &str) -> String {
+struct PreparedFigure {
+    filename: String,
+    title: String,
+    caption: String,
+    bytes: Vec<u8>,
+}
+
+fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
+    let trimmed = value.trim();
+    let lowered = trimmed.to_lowercase();
+    if trimmed.len() > 512 * 1024 {
+        return None;
+    }
+    if !lowered.starts_with("<svg") && !lowered.contains("<svg") {
+        return None;
+    }
+    let blocked = [
+        "<script",
+        "<foreignobject",
+        "javascript:",
+        "file:",
+        "http://",
+        "https://",
+        "data:",
+    ];
+    if blocked.iter().any(|needle| lowered.contains(needle)) {
+        return None;
+    }
+    Some(trimmed.as_bytes().to_vec())
+}
+
+fn prepare_figures(manuscript: &Manuscript) -> Vec<PreparedFigure> {
+    manuscript
+        .publication
+        .as_ref()
+        .map(|publication| {
+            publication
+                .figures
+                .iter()
+                .enumerate()
+                .filter_map(|(index, figure)| {
+                    safe_svg_bytes(&figure.svg).map(|bytes| PreparedFigure {
+                        filename: format!("hashcerebrum-figure-{}.svg", index + 1),
+                        title: figure.title.clone(),
+                        caption: figure.caption.clone(),
+                        bytes,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn build_typ(
+    manuscript: &Manuscript,
+    references: &[ReferenceLine],
+    meta: &str,
+    figures: &[PreparedFigure],
+) -> String {
     let mut doc = String::new();
 
     doc.push_str(&format!("#set document(title: \"{}\")\n", esc(&manuscript.title)));
@@ -212,6 +302,47 @@ fn build_typ(manuscript: &Manuscript, references: &[ReferenceLine], meta: &str) 
         }
     }
 
+    if !figures.is_empty() {
+        doc.push_str("= Figures\n");
+        for (index, figure) in figures.iter().enumerate() {
+            let caption = format!("Figure {}. {}. {}", index + 1, figure.title, figure.caption);
+            doc.push_str(&format!(
+                "#figure(image(\"{}\", width: 100%), caption: [#\"{}\"])\n\n",
+                esc(&figure.filename),
+                esc(&clean_body_text(&caption))
+            ));
+        }
+    }
+
+    if let Some(publication) = &manuscript.publication {
+        if !publication.tables.is_empty() {
+            doc.push_str("= Tables\n");
+            for (index, table) in publication.tables.iter().enumerate() {
+                let heading = format!("Table {}. {}", index + 1, table.title);
+                doc.push_str(&format!("== {}\n", esc_heading(&heading)));
+                if !table.caption.trim().is_empty() {
+                    doc.push_str(&paragraph(&table.caption));
+                }
+                for row in &table.rows {
+                    let cells = row
+                        .iter()
+                        .enumerate()
+                        .map(|(cell_index, cell)| {
+                            let label = table
+                                .columns
+                                .get(cell_index)
+                                .map(String::as_str)
+                                .unwrap_or("Value");
+                            format!("{label}: {cell}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    doc.push_str(&paragraph(&cells));
+                }
+            }
+        }
+    }
+
     // References — hanging indent, marker in bold.
     if !references.is_empty() {
         doc.push_str("= References\n");
@@ -236,10 +367,19 @@ fn esc_heading(value: &str) -> String {
         .collect()
 }
 
-fn compile(source: String) -> AppResult<Vec<u8>> {
+fn compile(source: String, figures: Vec<PreparedFigure>) -> AppResult<Vec<u8>> {
+    let figure_files = figures
+        .into_iter()
+        .map(|figure| (figure.filename, figure.bytes))
+        .collect::<Vec<_>>();
+    let static_files = figure_files
+        .iter()
+        .map(|(filename, bytes)| (filename.as_str(), bytes.as_slice()))
+        .collect::<Vec<_>>();
     let engine = TypstEngine::builder()
         .main_file(source)
         .fonts(typst_assets::fonts())
+        .with_static_file_resolver(static_files)
         .build();
     let document = engine
         .compile()
@@ -259,14 +399,16 @@ pub async fn render_manuscript_pdf(
     if manuscript.sections.is_empty() {
         return Err(AppError::InvalidInput("manuscript has no sections".into()));
     }
+    let figures = prepare_figures(&manuscript);
     let source = build_typ(
         &manuscript,
         &references,
         meta.as_deref().unwrap_or("HashCerebrum"),
+        &figures,
     );
     // Typst compilation is CPU-bound and synchronous — keep it off the
     // async runtime's worker threads.
-    tokio::task::spawn_blocking(move || compile(source))
+    tokio::task::spawn_blocking(move || compile(source, figures))
         .await
         .map_err(|e| AppError::Pdf(format!("join: {e}")))?
 }

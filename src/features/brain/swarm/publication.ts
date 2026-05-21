@@ -564,7 +564,12 @@ function tableParagraphs(tables: ManuscriptTable[]): string[] {
   });
 }
 
-export function normalizeManuscriptForPublication(manuscript: Manuscript, artifact: PublicationArtifact): Manuscript {
+export function normalizeManuscriptForPublication(
+  manuscript: Manuscript,
+  artifact: PublicationArtifact,
+  options: { includeSupplementalSection?: boolean } = {},
+): Manuscript {
+  const includeSupplementalSection = options.includeSupplementalSection ?? true;
   const sections = manuscript.sections
     .filter((section) => !hasReferenceSection(section))
     .map((section) => ({
@@ -587,13 +592,15 @@ export function normalizeManuscriptForPublication(manuscript: Manuscript, artifa
       results: replaceCitations(manuscript.abstract.results, artifact.citationMap),
       conclusions: replaceCitations(manuscript.abstract.conclusions, artifact.citationMap),
     },
-    sections: [
-      ...sections,
-      {
-        heading: 'Figures, Tables, and Statistical Safeguards',
-        body: supplementalBody,
-      },
-    ],
+    sections: includeSupplementalSection
+      ? [
+          ...sections,
+          {
+            heading: 'Figures, Tables, and Statistical Safeguards',
+            body: supplementalBody,
+          },
+        ]
+      : sections,
     publication: artifact,
   };
 }
