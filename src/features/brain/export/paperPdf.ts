@@ -1,5 +1,5 @@
 // Renders a chat message into a clean, publishable research-paper PDF:
-// A4, Times typography, a centred title block, justified body text,
+// A4, Times typography, a centred title block, readable body text,
 // section headings, a references list, and page numbers. jsPDF is loaded
 // on demand so it never weighs down the main bundle.
 
@@ -16,29 +16,76 @@ export interface PaperPdfInput {
   manuscript?: Manuscript;
 }
 
-type Block =
+export type PaperPdfBlock =
   | { kind: 'h1' | 'h2' | 'h3'; text: string }
   | { kind: 'p'; text: string }
   | { kind: 'bullet'; text: string }
   | { kind: 'numbered'; marker: string; text: string };
 
+function isTableSeparator(line: string): boolean {
+  return /^[\s|:\-]+$/.test(line) && line.includes('-');
+}
+
+function tableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+}
+
+function tableRowsToBullets(rows: string[]): string[] {
+  const parsed = rows.filter((line) => !isTableSeparator(line)).map(tableCells).filter((cells) => cells.length > 1);
+  if (parsed.length === 0) return [];
+  const hasHeader = parsed.length > 1;
+  const header = parsed[0]!;
+  const dataRows = hasHeader ? parsed.slice(1) : parsed;
+
+  return dataRows.map((cells) => {
+    const text =
+      hasHeader && header.length === cells.length
+        ? cells.map((cell, index) => `${header[index]}: ${cell}`).join('; ')
+        : cells.join('; ');
+    return plain(text);
+  });
+}
+
 // Markdown → ordered blocks. Loose paragraphs are joined; headings, bullet
-// lists, and numbered lists become their own blocks.
-function parseBlocks(markdown: string): Block[] {
-  const blocks: Block[] = [];
+// lists, numbered lists, and markdown tables become their own blocks.
+export function parseBlocks(markdown: string): PaperPdfBlock[] {
+  const blocks: PaperPdfBlock[] = [];
   let paragraph: string[] = [];
+  let table: string[] = [];
   const flush = () => {
     if (paragraph.length) {
       blocks.push({ kind: 'p', text: paragraph.join(' ').trim() });
       paragraph = [];
     }
   };
+  const flushTable = () => {
+    if (!table.length) return;
+    flush();
+    for (const row of tableRowsToBullets(table)) {
+      blocks.push({ kind: 'bullet', text: row });
+    }
+    table = [];
+  };
   for (const raw of markdown.replace(/\r\n/g, '\n').split('\n')) {
     const line = raw.trim();
+    const isTableRow = line.includes('|') && tableCells(line).length > 1;
     if (!line) {
+      flushTable();
       flush();
       continue;
     }
+    if (isTableRow || (table.length > 0 && isTableSeparator(line))) {
+      flush();
+      table.push(line);
+      continue;
+    }
+    flushTable();
     const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       flush();
@@ -68,15 +115,21 @@ function parseBlocks(markdown: string): Block[] {
     }
     paragraph.push(line);
   }
+  flushTable();
   flush();
   return blocks;
 }
 
-// Drop emphasis markers we do not render inline.
+// Drop emphasis markers we do not render inline, and neutralize raw table
+// delimiters from old exports before they can stretch PDF text.
 function plain(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
+    .replace(/[ \t]*\|[ \t]*/g, '; ')
+    .replace(/-{4,}/g, ' ')
+    .replace(/\s+([;,.])/g, '$1')
+    .replace(/;\s*;/g, ';')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -160,8 +213,9 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   const BODY_SIZE = 10.5;
   const BODY_LEADING = 15;
 
-  // A paragraph that begins with "**Label:**" keeps the label in bold; any
-  // other paragraph is justified for a clean publishable column.
+  // A paragraph that begins with "**Label:**" keeps the label in bold. Other
+  // paragraphs use conservative justification only when the line is safe;
+  // raw table fragments and long identifiers are kept ragged-right.
   const paragraph = (text: string, indent = 0) => {
     const width = contentW - indent;
     const x = marginX + indent;
@@ -191,14 +245,17 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     }
 
     doc.setFont('times', 'normal');
-    const lines = doc.splitTextToSize(plain(text), width) as string[];
+    const cleaned = plain(text);
+    const unsafeForJustify = /[|]/.test(text) || /-{4,}/.test(text) || /;\s*\w+:/i.test(cleaned);
+    const lines = doc.splitTextToSize(cleaned, width) as string[];
     lines.forEach((line, i) => {
       ensureSpace(BODY_LEADING);
       const isLast = i === lines.length - 1;
       // Never justify a line dominated by one long unbreakable token (a URL
       // or DOI) — justification would stretch it into ugly letter-spacing.
       const longToken = line.split(/\s+/).some((token) => token.length > 38);
-      if (!isLast && lines.length > 1 && !longToken) {
+      const enoughWords = line.split(/\s+/).filter(Boolean).length >= 8;
+      if (!isLast && lines.length > 1 && !longToken && !unsafeForJustify && enoughWords) {
         doc.text(line, x, y, { align: 'justify', maxWidth: width });
       } else {
         doc.text(line, x, y);

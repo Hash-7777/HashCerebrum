@@ -61,9 +61,92 @@ fn esc(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn is_table_separator(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.contains('-')
+        && trimmed
+            .chars()
+            .all(|c| matches!(c, ' ' | '|' | ':' | '-'))
+}
+
+fn table_cells(line: &str) -> Vec<String> {
+    line.trim()
+        .trim_matches('|')
+        .split('|')
+        .map(|cell| cell.trim())
+        .filter(|cell| !cell.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn collapse_ws(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn table_rows_to_prose(rows: &[String]) -> Vec<String> {
+    let parsed: Vec<Vec<String>> = rows
+        .iter()
+        .filter(|line| !is_table_separator(line))
+        .map(|line| table_cells(line))
+        .filter(|cells| cells.len() > 1)
+        .collect();
+    if parsed.is_empty() {
+        return Vec::new();
+    }
+
+    let has_header = parsed.len() > 1;
+    let header = &parsed[0];
+    let data_rows: &[Vec<String>] = if has_header { &parsed[1..] } else { &parsed[..] };
+    data_rows
+        .iter()
+        .map(|cells| {
+            let text = if has_header && header.len() == cells.len() {
+                cells
+                    .iter()
+                    .enumerate()
+                    .map(|(index, cell)| format!("{}: {}", header[index], cell))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            } else {
+                cells.join("; ")
+            };
+            collapse_ws(&text)
+        })
+        .collect()
+}
+
+fn flush_table(output: &mut Vec<String>, table: &mut Vec<String>) {
+    if table.is_empty() {
+        return;
+    }
+    output.extend(table_rows_to_prose(table));
+    table.clear();
+}
+
+fn clean_body_text(value: &str) -> String {
+    let normalized = value.replace("\r\n", "\n");
+    let mut output = Vec::new();
+    let mut table = Vec::new();
+
+    for raw in normalized.lines() {
+        let line = raw.trim();
+        let is_table_row = line.contains('|') && table_cells(line).len() > 1;
+        if is_table_row || (!table.is_empty() && is_table_separator(line)) {
+            table.push(line.to_owned());
+            continue;
+        }
+
+        flush_table(&mut output, &mut table);
+        output.push(raw.replace('|', "; "));
+    }
+
+    flush_table(&mut output, &mut table);
+    collapse_ws(&output.join(" "))
+}
+
 /// One body paragraph as a Typst string in markup context.
 fn paragraph(value: &str) -> String {
-    format!("#\"{}\"\n\n", esc(value))
+    format!("#\"{}\"\n\n", esc(&clean_body_text(value)))
 }
 
 fn build_typ(manuscript: &Manuscript, references: &[ReferenceLine], meta: &str) -> String {
@@ -74,7 +157,7 @@ fn build_typ(manuscript: &Manuscript, references: &[ReferenceLine], meta: &str) 
         "#set page(paper: \"a4\", margin: (x: 2.3cm, y: 2.7cm), numbering: \"1 / 1\", number-align: center)\n",
     );
     doc.push_str("#set text(font: \"Libertinus Serif\", size: 10.5pt, lang: \"en\")\n");
-    doc.push_str("#set par(justify: true, leading: 0.72em)\n");
+    doc.push_str("#set par(justify: false, leading: 0.72em)\n");
     doc.push_str("#set heading(numbering: none)\n");
     doc.push_str("#show heading.where(level: 1): set text(size: 13pt)\n");
     doc.push_str("#show heading: set block(above: 1.3em, below: 0.7em)\n\n");
@@ -101,7 +184,7 @@ fn build_typ(manuscript: &Manuscript, references: &[ReferenceLine], meta: &str) 
             if value.trim().is_empty() {
                 String::new()
             } else {
-                format!("#par[*{}.* #\"{}\"]\n\n", label, esc(value))
+                format!("#par[*{}.* #\"{}\"]\n\n", label, esc(&clean_body_text(value)))
             }
         };
         doc.push_str(&field("Background", &a.background));

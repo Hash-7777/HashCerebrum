@@ -16,7 +16,7 @@ import type { SpecialistResult } from './types';
 
 const SNIPPET_CHARS = 200;
 const MAX_EVIDENCE = 48;
-const SECTION_TOKENS = 1400;
+const SECTION_TOKENS = 2600;
 
 const STOPWORDS = new Set([
   'about', 'after', 'against', 'and', 'are', 'between', 'during', 'from', 'into',
@@ -25,7 +25,9 @@ const STOPWORDS = new Set([
 ]);
 
 const SECTION_SYSTEM = `You are a biomedical research writer drafting ONE section of an evidence-review manuscript for HashCerebrum.
-- Write only flowing academic prose in full paragraphs for the requested section. Do not write other sections, a title, or a heading line.
+- Write only polished academic prose in full paragraphs for the requested section. Do not write other sections, a title, or a heading line.
+- Do not use markdown tables, pipe tables, ASCII tables, bullet lists, numbered lists, or chat-style summaries. Convert comparisons into prose.
+- Make the section read like a serious journal manuscript: dense, precise, source-grounded, and professionally edited.
 - Use only the retrieved records and specialist findings supplied. Cite every factual claim with its [S#] marker.
 - Never invent a statistic, study finding, PMID, DOI, author, year, or title. If the evidence is thin for this section, say so plainly.
 - Do not write a References or Bibliography section — references are added automatically.`;
@@ -62,6 +64,10 @@ function specialistDigest(specialists: SpecialistResult[]): string {
     .filter((specialist) => !specialist.error && specialist.findings.trim())
     .map((specialist) => `${specialist.label}: ${specialist.findings.replace(/\s+/g, ' ').slice(0, 600)}`);
   return parts.length > 0 ? parts.join('\n\n') : '(no specialist findings were available)';
+}
+
+function wordCount(value: string): number {
+  return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
 }
 
 function keywordsFrom(question: string): string[] {
@@ -121,6 +127,7 @@ export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Man
 
 Section to write now: ${spec.heading}
 ${spec.instruction}
+Target length: ${spec.targetWords}. Do not underwrite this section unless the retrieved evidence is genuinely too thin.
 
 Retrieved records:
 ${evidenceBlock}
@@ -131,10 +138,26 @@ ${digest}
 Sections already drafted (for continuity — do not repeat their content):
 ${priorDigest}
 
-Write the ${spec.heading} section now.`;
+Write the ${spec.heading} section now as final manuscript prose, not notes.`;
     try {
       const reply = await callModel(bossModel, SECTION_SYSTEM, user, SECTION_TOKENS);
-      sections.push({ heading: spec.heading, body: sectionBodyFromReply(spec.heading, reply) });
+      let body = sectionBodyFromReply(spec.heading, reply);
+      const shortNonDeclaration = spec.heading !== 'Declarations' && wordCount(body.join(' ')) < 220;
+      if (shortNonDeclaration) {
+        const expansion = await callModel(
+          bossModel,
+          SECTION_SYSTEM,
+          `${user}
+
+The previous draft was too short and read like notes:
+${body.join('\n\n')}
+
+Rewrite and expand it into ${spec.targetWords}. Keep every factual claim tied to [S#] citations. Do not use markdown tables or lists.`,
+          SECTION_TOKENS,
+        );
+        body = sectionBodyFromReply(spec.heading, expansion);
+      }
+      sections.push({ heading: spec.heading, body });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       sections.push({ heading: spec.heading, body: [`This section could not be drafted: ${detail}`] });
@@ -151,9 +174,9 @@ Write the ${spec.heading} section now.`;
       .slice(0, 6000);
     const reply = await callModel(
       bossModel,
-      'You write structured scientific abstracts. Reply with exactly five labelled lines — Background:, Objective:, Methods:, Results:, Conclusions: — each one to three sentences, and nothing else.',
+      'You write structured scientific abstracts for journal manuscripts. Reply with exactly five labelled fields — Background:, Objective:, Methods:, Results:, Conclusions: — each field two to four polished sentences, and nothing else.',
       `Write the structured abstract for the manuscript titled "${title}". Base it only on the drafted sections below.\n\n${sectionDigest}`,
-      700,
+      1100,
     );
     abstract = parseAbstract(reply);
   } catch {

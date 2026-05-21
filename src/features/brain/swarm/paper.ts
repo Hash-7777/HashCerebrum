@@ -62,7 +62,7 @@ export function paperSystemInstruction(request: PaperRequest): string {
 Formatting (Markdown — follow exactly):
 - Begin with the article title on its own line as "# Title".
 - Every section heading is a Markdown "## Heading"; use "### Sub-heading" where a section needs parts.
-- Write flowing academic prose in full paragraphs. Use lists only where a list is genuinely clearer than prose.
+- Write flowing academic prose in full paragraphs. Do not use markdown tables, ASCII tables, pipe tables, bullet lists, numbered lists, or chat-style summaries.
 - Do not number the sections and do not repeat the title anywhere except the opening "# Title" line.
 
 Required sections, in this order:
@@ -77,7 +77,7 @@ Required sections, in this order:
 ## Declarations — ethics, funding, conflicts of interest, and data availability.
 
 Depth requirements:
-- Introduction, Results, and Discussion must each run to several substantial paragraphs; aim for a comprehensive review of roughly 1500-2500 words overall.
+- Introduction, Results, and Discussion must each run to several substantial paragraphs; aim for a comprehensive review of roughly 4500-7000 words overall when the retrieved evidence can support it.
 - Develop every point fully: state the finding, the supporting evidence, the strength of that evidence, and its clinical meaning.
 
 Hard rules:

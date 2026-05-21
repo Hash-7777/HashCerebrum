@@ -144,7 +144,10 @@ describe('runSwarm', () => {
     expect(result.manuscript?.sections.map((section) => section.heading)).toEqual([
       'Introduction',
       'Methods',
-      'Results',
+      'Evidence Base and Search Yield',
+      'Mechanistic and Pharmacologic Evidence',
+      'Clinical Evidence and Safety Outcomes',
+      'Trial and Registry Evidence',
       'Discussion',
       'Limitations',
       'Conclusion',
