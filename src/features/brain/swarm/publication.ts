@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '@platform/index';
 import { SECTION_PLAN, type Manuscript, type ManuscriptSection } from './manuscript';
 import type {
+  AnalysisPlan,
   CanonicalReference,
   CitationMapEntry,
   ComplianceItem,
@@ -14,6 +15,7 @@ import type {
   UploadedDatasetSummary,
   ValidationIssue,
 } from './publicationTypes';
+import { forestPlotFigure } from './stats/forestPlot';
 
 const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   pubmed: 'PubMed',
@@ -234,7 +236,11 @@ function yearsSvg(years: number[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
 }
 
-function buildFigures(evidence: EvidenceItem[], referenceCount: number): ManuscriptFigure[] {
+function buildFigures(
+  evidence: EvidenceItem[],
+  referenceCount: number,
+  dataset?: UploadedDatasetSummary,
+): ManuscriptFigure[] {
   const counts = sourceCounts(evidence);
   const years = evidenceYears(evidence);
   const total = evidence.length;
@@ -272,6 +278,11 @@ function buildFigures(evidence: EvidenceItem[], referenceCount: number): Manuscr
     });
   }
 
+  // Forest plot of the computed Mantel–Haenszel subgroup analysis.
+  if (dataset?.inferential?.subgroups) {
+    figures.push(forestPlotFigure(dataset.inferential.subgroups));
+  }
+
   return figures;
 }
 
@@ -289,6 +300,60 @@ function datasetTable(dataset: UploadedDatasetSummary): ManuscriptTable {
           : `n=${column.nonMissing}, missing=${column.missing}, levels=${column.levels?.map((level) => `${level.value} ${level.count}`).join(', ') ?? 'none'}`;
       return [column.name, column.type, summary];
     }),
+  };
+}
+
+function fmtStat(value: number): string {
+  if (!Number.isFinite(value)) return 'n/a';
+  return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(2);
+}
+
+function fmtPValue(p: number | undefined): string {
+  if (p === undefined || !Number.isFinite(p)) return 'n/a';
+  return p < 0.001 ? '<0.001' : p.toFixed(3);
+}
+
+/** Table of the inferential analyses computed by the validated engine. */
+function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
+  const rows: string[][] = [];
+  for (const analysis of plan.analyses) {
+    const estimate = analysis.estimate
+      ? `${analysis.estimate.label} ${fmtStat(analysis.estimate.point)} (95% CI ${fmtStat(analysis.estimate.ciLow)} to ${fmtStat(analysis.estimate.ciHigh)})`
+      : analysis.statistic
+        ? `${analysis.statistic.name} = ${fmtStat(analysis.statistic.value)}`
+        : '—';
+    rows.push([analysis.title, estimate, fmtPValue(analysis.pValue)]);
+  }
+  if (plan.subgroups) {
+    rows.push([
+      `Mantel–Haenszel subgroup analysis by ${plan.subgroups.stratifier}`,
+      `Pooled odds ratio ${fmtStat(plan.subgroups.pooledOddsRatio)} (95% CI ${fmtStat(plan.subgroups.pooledCiLow)} to ${fmtStat(plan.subgroups.pooledCiHigh)})`,
+      `${fmtPValue(plan.subgroups.homogeneityP)} (Breslow–Day homogeneity)`,
+    ]);
+  }
+  if (plan.survival?.logRank) {
+    rows.push([
+      'Log-rank test',
+      `Hazard ratio ${fmtStat(plan.survival.logRank.hazardRatio)} (95% CI ${fmtStat(plan.survival.logRank.ciLow)} to ${fmtStat(plan.survival.logRank.ciHigh)})`,
+      fmtPValue(plan.survival.logRank.pValue),
+    ]);
+  }
+  if (plan.survival?.cox) {
+    for (const term of plan.survival.cox.terms) {
+      rows.push([
+        `Cox regression — ${term.name}`,
+        `Hazard ratio ${fmtStat(term.hazardRatio)} (95% CI ${fmtStat(term.ciLow)} to ${fmtStat(term.ciHigh)})`,
+        fmtPValue(term.pValue),
+      ]);
+    }
+  }
+  return {
+    id: 'table-inferential-statistics',
+    title: 'Inferential statistics',
+    caption:
+      'Computed in-app by the validated analysis engine directly from the uploaded dataset. The language model narrates these values but does not generate them.',
+    columns: ['Analysis', 'Estimate (95% CI)', 'p-value'],
+    rows,
   };
 }
 
@@ -312,6 +377,7 @@ function buildTables(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary)
     },
   ];
   if (dataset) tables.push(datasetTable(dataset));
+  if (dataset?.inferential?.generated) tables.push(inferentialTable(dataset.inferential));
   return tables;
 }
 
@@ -321,6 +387,30 @@ function statisticsPayload(
   dataset?: UploadedDatasetSummary,
 ): StatisticsPayload {
   const years = evidenceYears(evidence);
+  const inferential = dataset?.inferential;
+
+  const computedAnalyses = dataset
+    ? ['dataset_sha256', 'descriptive_statistics', 'table_one_preview', 'source_counts', 'citation_resolution']
+    : ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'];
+  if (inferential?.generated) {
+    for (const analysis of inferential.analyses) computedAnalyses.push(analysis.kind);
+    if (inferential.subgroups) computedAnalyses.push('mantel_haenszel_subgroups');
+    if (inferential.survival) {
+      computedAnalyses.push('kaplan_meier', 'log_rank');
+      if (inferential.survival.cox) computedAnalyses.push('cox_regression');
+    }
+  }
+
+  const safeguards = inferential?.generated
+    ? [
+        'Inferential statistics (p-values, confidence intervals, odds and risk ratios, hazard ratios, and survival estimates) were computed in-app by the validated analysis engine directly from the uploaded dataset.',
+        'The language model narrates only these computed values and never invents a numerical statistical result.',
+      ]
+    : [
+        'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
+        'The language model may narrate retrieved evidence but may not invent numerical statistical results.',
+      ];
+
   return {
     mode: dataset ? 'original_dataset' : 'evidence_review',
     totalRecords: evidence.length,
@@ -330,13 +420,8 @@ function statisticsPayload(
       min: years.length ? Math.min(...years) : null,
       max: years.length ? Math.max(...years) : null,
     },
-    computedAnalyses: dataset
-      ? ['dataset_sha256', 'descriptive_statistics', 'table_one_preview', 'source_counts', 'citation_resolution']
-      : ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'],
-    safeguards: [
-      'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
-      'The language model may narrate retrieved evidence but may not invent numerical statistical results.',
-    ],
+    computedAnalyses: [...new Set(computedAnalyses)],
+    safeguards,
     ...(dataset ? { dataset } : {}),
   };
 }
@@ -365,9 +450,22 @@ function evidenceText(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary
         ]),
       ].filter(Boolean).join(' ')
     : '';
+  // Every number the validated inferential engine computed is "supported":
+  // the report sentences carry the formatted estimates, CIs, and p-values.
+  const inferential = dataset?.inferential;
+  const inferentialText = inferential
+    ? [
+        ...inferential.analyses.map((analysis) => analysis.reportText),
+        inferential.subgroups?.reportText ?? '',
+        ...(inferential.subgroups?.rows.map(
+          (row) => `${row.oddsRatio} ${row.ciLow} ${row.ciHigh}`,
+        ) ?? []),
+        inferential.survival?.reportText ?? '',
+      ].join(' ')
+    : '';
   return evidence
     .map((record) => [record.title, record.snippet, record.year, record.identifiers?.doi, record.identifiers?.pmid].filter(Boolean).join(' '))
-    .concat([datasetText])
+    .concat([datasetText, inferentialText])
     .join(' ')
     .toLowerCase();
 }
@@ -584,7 +682,7 @@ export function buildPublicationArtifact(
     standard,
     references,
     citationMap,
-    figures: buildFigures(evidence, references.length),
+    figures: buildFigures(evidence, references.length, options.dataset),
     tables: buildTables(evidence, options.dataset),
     statistics,
     validation,
@@ -636,7 +734,7 @@ export function normalizeManuscriptForPublication(
   const supplementalBody = [
     ...figureParagraphs(artifact.figures),
     ...tableParagraphs(artifact.tables),
-    `Statistics safeguard. This artifact is an ${artifact.statistics.mode.replace('_', ' ')} manuscript. Computed analyses are limited to ${artifact.statistics.computedAnalyses.join(', ')}. No original p-values, confidence intervals, hazard ratios, odds ratios, Kaplan-Meier curves, or subgroup estimates are generated without a validated dataset or effect-size table.`,
+    `Statistics safeguard. This artifact is an ${artifact.statistics.mode.replace('_', ' ')} manuscript. Computed analyses: ${artifact.statistics.computedAnalyses.join(', ')}. ${artifact.statistics.safeguards.join(' ')}`,
   ];
 
   return {

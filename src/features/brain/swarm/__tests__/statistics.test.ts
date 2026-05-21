@@ -27,6 +27,17 @@ describe('dataset statistics summary', () => {
       value: 'control',
       count: 2,
     });
-    expect(datasetSummaryForPrompt(summary)).toContain('Allowed use: narrate these computed descriptive statistics only');
+    expect(datasetSummaryForPrompt(summary)).toContain('Computed descriptive statistics:');
+  });
+
+  it('attaches a computed inferential analysis plan to the dataset summary', async () => {
+    const rows = ['arm,outcome'];
+    for (let i = 0; i < 10; i += 1) rows.push('treated,event', 'control,none');
+    const summary = await summarizeDatasetText('trial.csv', rows.join('\n'));
+
+    expect(summary.inferential).toBeDefined();
+    expect(summary.inferential!.generated).toBe(true);
+    expect(summary.inferential!.analyses.some((a) => a.kind === 'two_by_two')).toBe(true);
+    expect(datasetSummaryForPrompt(summary)).toContain('Computed inferential statistics');
   });
 });

@@ -1,4 +1,5 @@
-import type { DatasetColumnSummary, UploadedDatasetSummary } from './publicationTypes';
+import type { AnalysisPlan, DatasetColumnSummary, UploadedDatasetSummary } from './publicationTypes';
+import { deriveAnalysisPlan } from './stats/analysisPlan';
 
 const MAX_PREVIEW_ROWS = 6;
 const MAX_LEVELS = 8;
@@ -137,7 +138,29 @@ export async function summarizeDatasetText(filename: string, text: string): Prom
     delimiter,
     columnSummaries: headers.map((header) => columnSummary(rows, header)),
     previewRows: rows.slice(0, MAX_PREVIEW_ROWS),
+    // The inferential statistics engine derives and runs its analysis plan
+    // once, here, where the parsed rows are still in scope.
+    inferential: deriveAnalysisPlan(headers, rows),
   };
+}
+
+/** Prompt block listing the validated, in-app computed inferential analyses. */
+function analysisPlanForPrompt(plan: AnalysisPlan): string {
+  if (!plan.generated) {
+    return `Computed inferential statistics: none.${plan.notes.length ? ` ${plan.notes.join(' ')}` : ''}
+Allowed use: narrate the computed descriptive statistics only. Do not report p-values, odds ratios, hazard ratios, confidence intervals, or subgroup effects — none were validly computed for this dataset.`;
+  }
+  const lines = [
+    'Computed inferential statistics (computed in-app by the validated analysis engine — you MAY narrate these exact numbers):',
+  ];
+  for (const analysis of plan.analyses) lines.push(`- ${analysis.reportText}`);
+  if (plan.subgroups) lines.push(`- ${plan.subgroups.reportText}`);
+  if (plan.survival) lines.push(`- ${plan.survival.reportText}`);
+  if (plan.notes.length) lines.push(`Caveats: ${plan.notes.join(' ')}`);
+  lines.push(
+    'Allowed use: in Methods, name the statistical tests used; in Results, narrate these computed estimates, confidence intervals, and p-values using these exact numbers. Do NOT compute or invent any other statistic.',
+  );
+  return lines.join('\n');
 }
 
 export function datasetSummaryForPrompt(dataset: UploadedDatasetSummary): string {
@@ -150,6 +173,9 @@ export function datasetSummaryForPrompt(dataset: UploadedDatasetSummary): string
       return `${column.name}: categorical, n=${column.nonMissing}, missing=${column.missing}, top levels: ${levels}`;
     })
     .join('\n');
+  const inferentialBlock = dataset.inferential
+    ? analysisPlanForPrompt(dataset.inferential)
+    : 'Computed inferential statistics: none. Allowed use: narrate the computed descriptive statistics only.';
   return `Dataset: ${dataset.filename}
 SHA-256: ${dataset.sha256}
 Rows: ${dataset.rows}
@@ -157,5 +183,5 @@ Columns: ${dataset.columns.join(', ')}
 Computed descriptive statistics:
 ${columns}
 
-Allowed use: narrate these computed descriptive statistics only. Do not report p-values, odds ratios, hazard ratios, confidence intervals, survival curves, or subgroup effects unless a future validated analysis plan computes them.`;
+${inferentialBlock}`;
 }

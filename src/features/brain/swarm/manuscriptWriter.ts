@@ -164,7 +164,7 @@ ${opts.datasetBlock}
 Other drafted sections for continuity:
 ${opts.priorDigest}
 
-Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix missing citations, unsupported statistics, thin analysis, and note-like prose. Every factual claim must use real [S#] markers from the retrieved records. Do not invent p-values, confidence intervals, hazard ratios, odds ratios, trial outcomes, titles, PMIDs, DOIs, or years. Do not write headings, lists, tables, References, or Bibliography.`,
+Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix missing citations, unsupported statistics, thin analysis, and note-like prose. Every factual claim must use real [S#] markers from the retrieved records. Do not invent p-values, confidence intervals, hazard ratios, or odds ratios — report only the statistics already computed in the dataset analysis block above. Do not invent trial outcomes, titles, PMIDs, DOIs, or years. Do not write headings, lists, tables, References, or Bibliography.`,
     SECTION_TOKENS,
   );
   return sectionBodyFromReply(opts.spec.heading, reply);
@@ -217,7 +217,7 @@ ${datasetBlock}
 Sections already drafted (for continuity — do not repeat their content):
 ${priorDigest}
 
-Write the ${spec.heading} section now as final manuscript prose, not notes. If a dataset summary is supplied, narrate only the computed descriptive statistics listed there and make clear that no inferential statistics were computed unless they are explicitly present in the dataset summary.`;
+Write the ${spec.heading} section now as final manuscript prose, not notes. If a dataset summary is supplied, narrate only the statistics it lists — both the computed descriptive statistics and any inferential statistics already computed by the validated analysis engine — using those exact numbers, and never compute or invent a statistic yourself.`;
     try {
       const reply = await callModel(bossModel, SECTION_SYSTEM, user, SECTION_TOKENS);
       let body = sectionBodyFromReply(spec.heading, reply);
