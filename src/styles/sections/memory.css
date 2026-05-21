@@ -301,6 +301,7 @@
 .memory-graph-controls button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   height: 26px;
   padding: 0 10px;
@@ -310,6 +311,10 @@
   color: var(--hc-fg-muted);
   font-size: 11px;
   cursor: pointer;
+}
+.memory-graph-controls button[aria-label] {
+  width: 26px;
+  padding: 0;
 }
 .memory-graph-controls button:hover { color: var(--hc-fg); border-color: var(--hc-border-strong); }
 

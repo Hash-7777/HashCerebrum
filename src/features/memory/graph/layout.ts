@@ -1,7 +1,8 @@
-// Force-directed layout for the memory graph — a small Fruchterman-Reingold
-// simulation run to a fixed iteration count. Pure and deterministic (a
-// golden-angle spiral seed, no Math.random), so the same graph always lays
-// out the same way and the function stays unit-testable.
+// Force-directed layout for the memory graph — a small deterministic
+// Fruchterman-Reingold simulation with cluster-aware seeding and gravity.
+// It keeps findings from the same topic near each other while pushing
+// different clusters apart, so the diagram does not collapse into one flat
+// node soup.
 
 import type { MemoryGraph } from './memoryGraph';
 
@@ -12,17 +13,49 @@ export interface NodePosition {
 
 const ITERATIONS = 320;
 
-/** Deterministic spiral seed so the layout never jitters between renders. */
-function seedPositions(count: number, span: number): NodePosition[] {
+function nodeLayoutRadius(degree: number): number {
+  return 13 + Math.sqrt(degree) * 4;
+}
+
+function clusterCenters(graph: MemoryGraph, span: number): Map<string, NodePosition> {
+  const centre = span / 2;
+  const clusters = graph.clusters.length > 0
+    ? graph.clusters
+    : [{ id: 'default', label: 'Memory', nodeIds: graph.nodes.map((node) => node.id), terms: [] }];
+  const radius = clusters.length <= 1 ? 0 : span * 0.31;
+  const map = new Map<string, NodePosition>();
+  clusters.forEach((cluster, index) => {
+    const angle = -Math.PI / 2 + (index / clusters.length) * Math.PI * 2;
+    map.set(cluster.id, {
+      x: centre + Math.cos(angle) * radius,
+      y: centre + Math.sin(angle) * radius,
+    });
+  });
+  return map;
+}
+
+/** Deterministic clustered seed so the layout never jitters between renders. */
+function seedPositions(graph: MemoryGraph, span: number, centers: Map<string, NodePosition>): NodePosition[] {
   const centre = span / 2;
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  const radius = span * 0.42;
-  const out: NodePosition[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const t = count <= 1 ? 0 : i / (count - 1);
-    const r = radius * Math.sqrt(t);
-    const angle = i * goldenAngle;
-    out.push({ x: centre + r * Math.cos(angle), y: centre + r * Math.sin(angle) });
+  const byCluster = new Map<string, number[]>();
+  graph.nodes.forEach((node, index) => {
+    const key = node.clusterId || 'default';
+    const list = byCluster.get(key) ?? [];
+    list.push(index);
+    byCluster.set(key, list);
+  });
+
+  const out = graph.nodes.map(() => ({ x: centre, y: centre }));
+  for (const [clusterId, indices] of byCluster) {
+    const anchor = centers.get(clusterId) ?? { x: centre, y: centre };
+    const radius = Math.min(span * 0.1, 42 + Math.sqrt(indices.length) * 28);
+    indices.forEach((nodeIndex, localIndex) => {
+      const t = indices.length <= 1 ? 0 : (localIndex + 1) / indices.length;
+      const r = radius * Math.sqrt(t);
+      const angle = localIndex * goldenAngle;
+      out[nodeIndex] = { x: anchor.x + r * Math.cos(angle), y: anchor.y + r * Math.sin(angle) };
+    });
   }
   return out;
 }
@@ -41,11 +74,13 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
     return result;
   }
 
-  const pos = seedPositions(count, span);
+  const centers = clusterCenters(graph, span);
+  const pos = seedPositions(graph, span, centers);
   const index = new Map<string, number>();
   graph.nodes.forEach((node, i) => index.set(node.id, i));
 
-  const ideal = Math.sqrt((span * span) / count) * 0.8; // ideal edge length
+  const radii = graph.nodes.map((node) => nodeLayoutRadius(node.degree));
+  const ideal = Math.sqrt((span * span) / count) * 0.72; // ideal edge length
   const centre = span / 2;
   let temperature = span * 0.18;
   const cooling = temperature / (ITERATIONS + 1);
@@ -69,7 +104,10 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
           dy = 0.013;
           dist = Math.hypot(dx, dy);
         }
-        const force = (ideal * ideal) / dist;
+        const sameCluster = graph.nodes[i]!.clusterId === graph.nodes[j]!.clusterId;
+        const minDist = radii[i]! + radii[j]! + (sameCluster ? 18 : 34);
+        const overlapForce = dist < minDist ? (minDist - dist) * 1.7 : 0;
+        const force = ((ideal * ideal) / dist) * (sameCluster ? 0.82 : 1.32) + overlapForce;
         const ux = dx / dist;
         const uy = dy / dist;
         disp[i]!.x += ux * force;
@@ -87,7 +125,8 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       const dx = pos[a]!.x - pos[b]!.x;
       const dy = pos[a]!.y - pos[b]!.y;
       const dist = Math.max(Math.hypot(dx, dy), 0.01);
-      const force = ((dist * dist) / ideal) * (0.4 + edge.weight);
+      const sameCluster = graph.nodes[a]!.clusterId === graph.nodes[b]!.clusterId;
+      const force = ((dist * dist) / ideal) * (sameCluster ? 0.34 + edge.weight : 0.22 + edge.weight * 0.6);
       const ux = dx / dist;
       const uy = dy / dist;
       disp[a]!.x -= ux * force;
@@ -96,10 +135,15 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       disp[b]!.y += uy * force;
     }
 
-    // Gentle gravity keeps disconnected nodes from drifting off-canvas.
+    // Topic gravity keeps clusters coherent; gentle global gravity keeps
+    // disconnected clusters from drifting off-canvas.
     for (let i = 0; i < count; i += 1) {
-      disp[i]!.x += (centre - pos[i]!.x) * 0.012;
-      disp[i]!.y += (centre - pos[i]!.y) * 0.012;
+      const cluster = centers.get(graph.nodes[i]!.clusterId) ?? { x: centre, y: centre };
+      const clusterPull = graph.nodes[i]!.degree === 0 ? 0.02 : 0.012;
+      disp[i]!.x += (cluster.x - pos[i]!.x) * clusterPull;
+      disp[i]!.y += (cluster.y - pos[i]!.y) * clusterPull;
+      disp[i]!.x += (centre - pos[i]!.x) * 0.004;
+      disp[i]!.y += (centre - pos[i]!.y) * 0.004;
     }
 
     // Apply displacement, capped by the cooling temperature.
@@ -108,6 +152,8 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       const step = Math.min(magnitude, temperature);
       pos[i]!.x += (disp[i]!.x / magnitude) * step;
       pos[i]!.y += (disp[i]!.y / magnitude) * step;
+      pos[i]!.x = Math.min(Math.max(pos[i]!.x, 32), span - 32);
+      pos[i]!.y = Math.min(Math.max(pos[i]!.y, 32), span - 32);
     }
     temperature = Math.max(temperature - cooling, 1);
   }

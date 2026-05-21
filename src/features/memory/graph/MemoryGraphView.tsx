@@ -12,8 +12,9 @@ import { layoutMemoryGraph, type NodePosition } from './layout';
 
 const EXCERPT_CHARS = 280;
 const LABEL_CHARS = 30;
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 2.6;
+const MIN_SCALE = 0.24;
+const MAX_SCALE = 3.2;
+const WHEEL_ZOOM_STEP = 1.08;
 const CLICK_SLOP = 4; // px of movement below which a gesture counts as a click
 
 interface Transform {
@@ -50,8 +51,8 @@ export function MemoryGraphView({
   // Lay the graph out in a virtual square sized by node count, so the
   // simulation never reruns on container resize — only the fit transform does.
   const span = useMemo(
-    () => Math.max(640, Math.ceil(Math.sqrt(graph.nodes.length)) * 220),
-    [graph.nodes.length],
+    () => Math.max(720, Math.ceil(Math.sqrt(graph.nodes.length)) * 190, graph.clusters.length * 260),
+    [graph.nodes.length, graph.clusters.length],
   );
   const layout = useMemo(() => layoutMemoryGraph(graph, span), [graph, span]);
 
@@ -96,12 +97,14 @@ export function MemoryGraphView({
         maxX = Math.max(maxX, point.x);
         maxY = Math.max(maxY, point.y);
       }
-      const pad = 80;
+      const pad = Math.min(110, Math.max(54, Math.min(size.w, size.h) * 0.12));
       const boxW = Math.max(maxX - minX, 1);
       const boxH = Math.max(maxY - minY, 1);
+      const availableW = Math.max(size.w - pad * 2, size.w * 0.3);
+      const availableH = Math.max(size.h - pad * 2, size.h * 0.3);
       const scale = Math.min(
-        Math.max(Math.min((size.w - pad * 2) / boxW, (size.h - pad * 2) / boxH), MIN_SCALE),
-        1.5,
+        Math.max(Math.min(availableW / boxW, availableH / boxH), MIN_SCALE),
+        1.35,
       );
       setTransform({
         x: size.w / 2 - ((minX + maxX) / 2) * scale,
@@ -136,6 +139,18 @@ export function MemoryGraphView({
   }, []);
 
   // Non-passive wheel listener so zoom can preventDefault the page scroll.
+  const zoomAt = useCallback((px: number, py: number, factor: number) => {
+    setTransform((prev) => {
+      const scale = Math.min(Math.max(prev.scale * factor, MIN_SCALE), MAX_SCALE);
+      const ratio = scale / prev.scale;
+      return { x: px - (px - prev.x) * ratio, y: py - (py - prev.y) * ratio, scale };
+    });
+  }, []);
+
+  const zoomFromCenter = (factor: number) => {
+    zoomAt((size.w || 800) / 2, (size.h || 600) / 2, factor);
+  };
+
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -144,16 +159,11 @@ export function MemoryGraphView({
       const rect = svg.getBoundingClientRect();
       const px = event.clientX - rect.left;
       const py = event.clientY - rect.top;
-      setTransform((prev) => {
-        const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-        const scale = Math.min(Math.max(prev.scale * factor, MIN_SCALE), MAX_SCALE);
-        const ratio = scale / prev.scale;
-        return { x: px - (px - prev.x) * ratio, y: py - (py - prev.y) * ratio, scale };
-      });
+      zoomAt(px, py, event.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP);
     };
     svg.addEventListener('wheel', onWheel, { passive: false });
     return () => svg.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [zoomAt]);
 
   const localPoint = (event: { clientX: number; clientY: number }) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -318,6 +328,12 @@ export function MemoryGraphView({
           <span className="memory-graph-swatch" data-kind="evidence" /> Evidence
           <span className="memory-graph-swatch" data-kind="answer" /> Answer
         </span>
+        <button type="button" onClick={() => zoomFromCenter(1 / 1.18)} aria-label="Zoom out">
+          <Icon name="minus" size={12} />
+        </button>
+        <button type="button" onClick={() => zoomFromCenter(1.18)} aria-label="Zoom in">
+          <Icon name="plus" size={12} />
+        </button>
         <button type="button" onClick={() => fitView(positions)}>
           <Icon name="refresh" size={12} /> Reset view
         </button>

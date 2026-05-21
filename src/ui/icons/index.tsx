@@ -28,6 +28,7 @@ export type IconName =
   | 'eye'
   | 'gauge'
   | 'plus'
+  | 'minus'
   | 'copy'
   | 'edit'
   | 'refresh'
@@ -171,6 +172,11 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   plus: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  minus: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M5 12h14" />
     </svg>
   ),
   copy: (p) => (
