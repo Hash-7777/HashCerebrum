@@ -1,0 +1,617 @@
+import type { EvidenceItem } from '@platform/index';
+import { SECTION_PLAN, type Manuscript, type ManuscriptSection } from './manuscript';
+import type {
+  CanonicalReference,
+  CitationMapEntry,
+  ComplianceItem,
+  CslReference,
+  ManuscriptFigure,
+  ManuscriptStandard,
+  ManuscriptTable,
+  ManuscriptValidation,
+  PublicationArtifact,
+  StatisticsPayload,
+  ValidationIssue,
+} from './publicationTypes';
+
+const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
+  pubmed: 'PubMed',
+  europepmc: 'Europe PMC',
+  openalex: 'OpenAlex',
+  ctgov: 'ClinicalTrials.gov',
+  openfda: 'OpenFDA',
+  rxnorm: 'RxNorm',
+};
+
+const SECTION_CITATION_EXEMPT = new Set(['Declarations']);
+
+function escXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function evidenceIdentity(record: EvidenceItem): string {
+  const doi = record.identifiers?.doi?.trim().toLowerCase();
+  if (doi) return `doi:${doi}`;
+  const pmid = record.identifiers?.pmid?.trim().toLowerCase();
+  if (pmid) return `pmid:${pmid}`;
+  const url = record.url?.trim().toLowerCase();
+  if (url) return `url:${url}`;
+  return `title:${normalizeText(record.title).toLowerCase()}-${record.year ?? ''}`;
+}
+
+function words(value: string): number {
+  return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
+}
+
+function sourceMarker(index: number): string {
+  return `S${index + 1}`;
+}
+
+function textFromManuscript(manuscript: Manuscript): string {
+  return [
+    manuscript.title,
+    manuscript.abstract.background,
+    manuscript.abstract.objective,
+    manuscript.abstract.methods,
+    manuscript.abstract.results,
+    manuscript.abstract.conclusions,
+    ...manuscript.sections.flatMap((section) => [section.heading, ...section.body]),
+  ].join('\n\n');
+}
+
+export function citedSourceNumbers(manuscript: Manuscript): number[] {
+  const seen = new Set<number>();
+  for (const match of textFromManuscript(manuscript).matchAll(/\[S(\d+)\]/g)) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && value > 0) seen.add(value);
+  }
+  return [...seen].sort((a, b) => a - b);
+}
+
+function cslType(record: EvidenceItem): CslReference['type'] {
+  if (record.source === 'ctgov') return 'clinical-trial';
+  if (record.source === 'openfda' || record.source === 'rxnorm') return 'report';
+  if (record.url && !record.identifiers?.doi && !record.identifiers?.pmid) return 'webpage';
+  return 'article-journal';
+}
+
+function cslAuthors(authors: string[]): { family: string; given?: string }[] | undefined {
+  const parsed = authors
+    .map((author) => author.trim())
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((author) => {
+      const parts = author.split(/\s+/);
+      if (parts.length <= 1) return { family: author };
+      return { family: parts.at(-1)!, given: parts.slice(0, -1).join(' ') };
+    });
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function cslReference(record: EvidenceItem, id: string): CslReference {
+  const year = typeof record.year === 'number' ? record.year : Number(record.year);
+  const authors = cslAuthors(record.authors);
+  return {
+    id,
+    type: cslType(record),
+    title: record.title,
+    ...(authors ? { author: authors } : {}),
+    ...(Number.isFinite(year) ? { issued: { 'date-parts': [[year]] } } : {}),
+    ...(record.identifiers?.doi ? { DOI: record.identifiers.doi } : {}),
+    ...(record.identifiers?.pmid ? { PMID: record.identifiers.pmid } : {}),
+    ...(record.url ? { URL: record.url } : {}),
+    source: record.source,
+  };
+}
+
+function formatAuthors(record: EvidenceItem): string {
+  if (record.authors.length === 0) return SOURCE_LABELS[record.source];
+  const authors = record.authors.slice(0, 6).map((author) => author.trim()).filter(Boolean);
+  if (authors.length === 0) return SOURCE_LABELS[record.source];
+  const suffix = record.authors.length > authors.length ? ' et al.' : '';
+  return `${authors.join(', ')}${suffix}`;
+}
+
+function vancouverText(record: EvidenceItem): string {
+  const year = record.year ? ` ${record.year}.` : '';
+  const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
+  const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
+  const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
+  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}`);
+}
+
+function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
+  const cited = citedSourceNumbers(manuscript);
+  const byIdentity = new Map<string, CanonicalReference>();
+  const references: CanonicalReference[] = [];
+  const citationMap: Record<string, CitationMapEntry> = {};
+
+  for (const number of cited) {
+    const evidenceIndex = number - 1;
+    const record = evidence[evidenceIndex];
+    if (!record) continue;
+
+    const identity = evidenceIdentity(record);
+    let reference = byIdentity.get(identity);
+    if (!reference) {
+      const vancouverNumber = references.length + 1;
+      const id = `ref-${stableHash(identity)}`;
+      reference = {
+        id,
+        sourceMarker: `[S${number}]`,
+        displayMarker: `[${vancouverNumber}]`,
+        vancouverNumber,
+        evidenceIndex,
+        evidence: record,
+        csl: cslReference(record, id),
+        text: vancouverText(record),
+      };
+      byIdentity.set(identity, reference);
+      references.push(reference);
+    }
+
+    const marker = sourceMarker(evidenceIndex);
+    citationMap[marker] = {
+      sourceMarker: `[${marker}]`,
+      displayMarker: reference.displayMarker,
+      referenceId: reference.id,
+      evidenceIndex,
+    };
+  }
+
+  return { references, citationMap };
+}
+
+function sourceCounts(evidence: EvidenceItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const record of evidence) counts[SOURCE_LABELS[record.source]] = (counts[SOURCE_LABELS[record.source]] ?? 0) + 1;
+  return counts;
+}
+
+function evidenceYears(evidence: EvidenceItem[]): number[] {
+  return evidence
+    .map((record) => Number(record.year))
+    .filter((year) => Number.isFinite(year) && year >= 1800 && year <= 2200);
+}
+
+function uniqueEvidenceCount(evidence: EvidenceItem[]): number {
+  return new Set(evidence.map(evidenceIdentity)).size;
+}
+
+function sourceYieldSvg(counts: Record<string, number>): string {
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1, ...rows.map(([, count]) => count));
+  const rowH = 26;
+  const width = 760;
+  const height = Math.max(120, 52 + rows.length * rowH);
+  const bars = rows
+    .map(([source, count], index) => {
+      const y = 42 + index * rowH;
+      const barW = Math.round((count / max) * 410);
+      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(source)}</text><rect x="190" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${210 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
+}
+
+function prismaSvg(total: number, unique: number, cited: number): string {
+  const box = (x: number, y: number, label: string, value: string) =>
+    `<rect x="${x}" y="${y}" width="250" height="58" rx="10" fill="#111c2b" stroke="#2a3951"/><text x="${x + 125}" y="${y + 24}" text-anchor="middle" fill="#f1f6fc" font-size="13" font-weight="700">${escXml(label)}</text><text x="${x + 125}" y="${y + 44}" text-anchor="middle" fill="#3dd1bf" font-size="14">${escXml(value)}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img"><rect width="720" height="310" rx="14" fill="#08111d"/>${box(235, 28, 'Records identified', String(total))}<path d="M360 86 L360 118" stroke="#7f8ea8" stroke-width="2"/>${box(235, 118, 'Unique source records', String(unique))}<path d="M360 176 L360 208" stroke="#7f8ea8" stroke-width="2"/>${box(235, 208, 'Records cited in draft', String(cited))}</svg>`;
+}
+
+function yearsSvg(years: number[]): string {
+  const counts = new Map<number, number>();
+  for (const year of years) counts.set(year, (counts.get(year) ?? 0) + 1);
+  const entries = [...counts.entries()].sort((a, b) => a[0] - b[0]).slice(-18);
+  const max = Math.max(1, ...entries.map(([, count]) => count));
+  const bars = entries
+    .map(([year, count], index) => {
+      const x = 48 + index * 36;
+      const h = Math.max(5, Math.round((count / max) * 120));
+      const y = 170 - h;
+      return `<rect x="${x}" y="${y}" width="20" height="${h}" rx="4" fill="#8b9eff"/><text x="${x + 10}" y="192" text-anchor="middle" fill="#9fb0c7" font-size="10" transform="rotate(45 ${x + 10} 192)">${year}</text>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
+}
+
+function buildFigures(evidence: EvidenceItem[], referenceCount: number): ManuscriptFigure[] {
+  const counts = sourceCounts(evidence);
+  const years = evidenceYears(evidence);
+  const total = evidence.length;
+  const unique = uniqueEvidenceCount(evidence);
+  const figures: ManuscriptFigure[] = [
+    {
+      id: 'fig-source-yield',
+      kind: 'source_yield',
+      title: 'Evidence source yield',
+      caption: `Records retrieved by guarded biomedical source before final manuscript citation filtering. Total retrieved records: ${total}.`,
+      alt: 'Horizontal bar chart showing retrieved record counts by biomedical source.',
+      svg: sourceYieldSvg(counts),
+      data: { sourceCounts: counts, totalRecords: total },
+    },
+    {
+      id: 'fig-prisma-flow',
+      kind: 'prisma_flow',
+      title: 'Automated evidence flow',
+      caption: `Automated source flow from retrieved records to unique records and cited references. This is not a formal human-screened PRISMA diagram.`,
+      alt: 'Three-box flow diagram from identified records to unique records to cited records.',
+      svg: prismaSvg(total, unique, referenceCount),
+      data: { totalRecords: total, uniqueRecords: unique, citedReferences: referenceCount },
+    },
+  ];
+
+  if (years.length > 0) {
+    figures.push({
+      id: 'fig-evidence-years',
+      kind: 'evidence_years',
+      title: 'Evidence year distribution',
+      caption: `Distribution of available publication or registry years in retrieved records. Year metadata was present for ${years.length} record(s).`,
+      alt: 'Bar chart showing retrieved evidence by year.',
+      svg: yearsSvg(years),
+      data: { years },
+    });
+  }
+
+  return figures;
+}
+
+function buildTables(evidence: EvidenceItem[]): ManuscriptTable[] {
+  const counts = sourceCounts(evidence);
+  const rows = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => {
+      const sourceRecords = evidence.filter((record) => SOURCE_LABELS[record.source] === source);
+      const years = evidenceYears(sourceRecords);
+      const range = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : 'not available';
+      return [source, String(count), range];
+    });
+  return [
+    {
+      id: 'table-source-yield',
+      title: 'Evidence source summary',
+      caption: 'Retrieved source counts used by the agentic evidence-review pipeline before final citation filtering.',
+      columns: ['Source', 'Retrieved records', 'Year range'],
+      rows,
+    },
+  ];
+}
+
+function statisticsPayload(evidence: EvidenceItem[], references: CanonicalReference[]): StatisticsPayload {
+  const years = evidenceYears(evidence);
+  return {
+    mode: 'evidence_review',
+    totalRecords: evidence.length,
+    uniqueReferences: references.length,
+    sourceCounts: sourceCounts(evidence),
+    yearRange: {
+      min: years.length ? Math.min(...years) : null,
+      max: years.length ? Math.max(...years) : null,
+    },
+    computedAnalyses: ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'],
+    safeguards: [
+      'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
+      'The language model may narrate retrieved evidence but may not invent numerical statistical results.',
+    ],
+  };
+}
+
+function hasReferenceSection(section: ManuscriptSection): boolean {
+  return /^(references|bibliography|works cited)$/i.test(section.heading.trim());
+}
+
+function evidenceText(evidence: EvidenceItem[]): string {
+  return evidence
+    .map((record) => [record.title, record.snippet, record.year, record.identifiers?.doi, record.identifiers?.pmid].filter(Boolean).join(' '))
+    .join(' ')
+    .toLowerCase();
+}
+
+function unsupportedStatisticIssues(manuscript: Manuscript, evidence: EvidenceItem[]): ValidationIssue[] {
+  const supportedText = evidenceText(evidence);
+  const rx =
+    /\b(?:p\s*[<=>]\s*0?\.\d+|(?:hazard ratio|odds ratio|risk ratio|relative risk|hr|or|rr)\s*(?:=|of|:)?\s*\d+(?:\.\d+)?|95%\s*ci\s*[:(]?\s*\d+(?:\.\d+)?\s*(?:-|–|to|,)\s*\d+(?:\.\d+)?)/gi;
+  const issues: ValidationIssue[] = [];
+  for (const section of manuscript.sections) {
+    for (const match of section.body.join(' ').matchAll(rx)) {
+      const claim = match[0];
+      const numbers = claim.match(/\d+(?:\.\d+)?/g) ?? [];
+      const supported = numbers.length > 0 && numbers.every((n) => supportedText.includes(n.toLowerCase()));
+      if (!supported) {
+        issues.push({
+          severity: 'blocker',
+          code: 'unsupported-statistic',
+          section: section.heading,
+          message: `Statistical claim "${claim}" is not traceable to retrieved evidence or computed statistics.`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+function validateManuscript(
+  manuscript: Manuscript,
+  evidence: EvidenceItem[],
+  references: CanonicalReference[],
+): ManuscriptValidation {
+  const issues: ValidationIssue[] = [];
+  const wordCounts: Record<string, number> = {};
+  const cited = citedSourceNumbers(manuscript);
+  const citedSet = new Set(cited);
+  const sectionPlan = new Map(SECTION_PLAN.map((spec) => [spec.heading, spec]));
+  const presentSections = new Set(manuscript.sections.map((section) => section.heading));
+
+  if (!manuscript.title.trim()) {
+    issues.push({ severity: 'blocker', code: 'missing-title', message: 'The manuscript has no title.' });
+  }
+
+  for (const number of cited) {
+    if (!evidence[number - 1]) {
+      issues.push({
+        severity: 'blocker',
+        code: 'unresolved-citation',
+        message: `[S${number}] does not resolve to a retrieved evidence record.`,
+      });
+    }
+  }
+
+  if (evidence.length > 0 && cited.length === 0) {
+    issues.push({
+      severity: 'blocker',
+      code: 'no-citations',
+      message: 'The manuscript contains retrieved evidence but no inline source citations.',
+    });
+  }
+
+  for (const spec of SECTION_PLAN) {
+    if (!presentSections.has(spec.heading)) {
+      issues.push({
+        severity: 'blocker',
+        code: 'missing-required-section',
+        section: spec.heading,
+        message: `Required section "${spec.heading}" is missing.`,
+      });
+    }
+  }
+
+  for (const section of manuscript.sections) {
+    const count = words(section.body.join(' '));
+    wordCounts[section.heading] = count;
+    const spec = sectionPlan.get(section.heading);
+    if (spec && count < spec.minWords) {
+      issues.push({
+        severity: 'blocker',
+        code: 'section-too-short',
+        section: section.heading,
+        message: `${section.heading} is ${count} words; required minimum is ${spec.minWords}.`,
+      });
+    }
+    if (!SECTION_CITATION_EXEMPT.has(section.heading) && !/\[S\d+\]/.test(section.body.join(' '))) {
+      issues.push({
+        severity: 'blocker',
+        code: 'section-missing-citation',
+        section: section.heading,
+        message: `${section.heading} has no inline source citation.`,
+      });
+    }
+    if (hasReferenceSection(section)) {
+      issues.push({
+        severity: 'blocker',
+        code: 'model-owned-references',
+        section: section.heading,
+        message: 'References must be renderer-owned, not model-written body sections.',
+      });
+    }
+  }
+
+  issues.push(...unsupportedStatisticIssues(manuscript, evidence));
+
+  if (references.length === 0 && citedSet.size > 0) {
+    issues.push({
+      severity: 'blocker',
+      code: 'reference-resolution-empty',
+      message: 'Inline citations were found, but no canonical references could be resolved.',
+    });
+  }
+
+  if (references.length < citedSet.size) {
+    issues.push({
+      severity: 'warning',
+      code: 'deduplicated-references',
+      message: `${citedSet.size} inline source markers resolve to ${references.length} deduplicated reference(s).`,
+    });
+  }
+
+  const blockers = issues.filter((issue) => issue.severity === 'blocker');
+  return {
+    exportReady: blockers.length === 0,
+    blockers,
+    warnings: issues.filter((issue) => issue.severity === 'warning'),
+    wordCounts,
+    citationCount: citedSet.size,
+    referenceCount: references.length,
+  };
+}
+
+function compliance(standard: ManuscriptStandard, validation: ManuscriptValidation, stats: StatisticsPayload): ComplianceItem[] {
+  return [
+    {
+      id: 'citation-resolution',
+      label: 'Every inline citation resolves to canonical evidence',
+      status: validation.blockers.some((issue) => issue.code === 'unresolved-citation') ? 'blocker' : 'pass',
+      detail: `${validation.citationCount} inline citation marker(s), ${validation.referenceCount} canonical reference(s).`,
+    },
+    {
+      id: 'section-depth',
+      label: 'Required manuscript sections meet minimum depth',
+      status: validation.blockers.some((issue) => issue.code === 'section-too-short') ? 'blocker' : 'pass',
+      detail: 'Section word counts are checked before export.',
+    },
+    {
+      id: 'statistics-safety',
+      label: 'No model-invented statistical analysis',
+      status: validation.blockers.some((issue) => issue.code === 'unsupported-statistic') ? 'blocker' : 'pass',
+      detail: stats.safeguards[0] ?? 'Statistics safeguards active.',
+    },
+    {
+      id: 'journal-template',
+      label: `${standard.replace(/_/g, ' ').toUpperCase()} export template selected`,
+      status: 'pass',
+      detail: 'The structured artifact can be rendered through the selected manuscript style.',
+    },
+  ];
+}
+
+export function buildPublicationArtifact(
+  manuscript: Manuscript,
+  evidence: EvidenceItem[],
+  options: { standard?: ManuscriptStandard; manuscriptType?: 'evidence_review' | 'original_research' } = {},
+): PublicationArtifact {
+  const { references, citationMap } = canonicalReferences(manuscript, evidence);
+  const statistics = statisticsPayload(evidence, references);
+  const validation = validateManuscript(manuscript, evidence, references);
+  const standard = options.standard ?? 'icmje_generic';
+  return {
+    schemaVersion: 'hc.manuscript.v2',
+    generatedAt: new Date().toISOString(),
+    manuscriptType: options.manuscriptType ?? 'evidence_review',
+    standard,
+    references,
+    citationMap,
+    figures: buildFigures(evidence, references.length),
+    tables: buildTables(evidence),
+    statistics,
+    validation,
+    compliance: compliance(standard, validation, statistics),
+    exportPackage: {
+      includesPdf: true,
+      includesManuscriptJson: true,
+      includesStatisticsJson: true,
+      includesFiguresSvg: true,
+      includesReferencesJson: true,
+      includesAuditLog: true,
+    },
+  };
+}
+
+function replaceCitations(value: string, citationMap: Record<string, CitationMapEntry>): string {
+  return value.replace(/\[S(\d+)\]/g, (full, n: string) => citationMap[`S${n}`]?.displayMarker ?? full);
+}
+
+function figureParagraphs(figures: ManuscriptFigure[]): string[] {
+  return figures.map((figure, index) => {
+    const data = Object.entries(figure.data)
+      .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.length : JSON.stringify(value)}`)
+      .join('; ');
+    return `Figure ${index + 1}. ${figure.title}. ${figure.caption}${data ? ` Data summary: ${data}.` : ''}`;
+  });
+}
+
+function tableParagraphs(tables: ManuscriptTable[]): string[] {
+  return tables.map((table, index) => {
+    const rows = table.rows.map((row) => row.map((cell, i) => `${table.columns[i]}: ${cell}`).join('; ')).join(' ');
+    return `Table ${index + 1}. ${table.title}. ${table.caption} ${rows}`;
+  });
+}
+
+export function normalizeManuscriptForPublication(manuscript: Manuscript, artifact: PublicationArtifact): Manuscript {
+  const sections = manuscript.sections
+    .filter((section) => !hasReferenceSection(section))
+    .map((section) => ({
+      heading: section.heading,
+      body: section.body.map((paragraph) => replaceCitations(paragraph, artifact.citationMap)),
+    }));
+
+  const supplementalBody = [
+    ...figureParagraphs(artifact.figures),
+    ...tableParagraphs(artifact.tables),
+    `Statistics safeguard. This artifact is an ${artifact.statistics.mode.replace('_', ' ')} manuscript. Computed analyses are limited to ${artifact.statistics.computedAnalyses.join(', ')}. No original p-values, confidence intervals, hazard ratios, odds ratios, Kaplan-Meier curves, or subgroup estimates are generated without a validated dataset or effect-size table.`,
+  ];
+
+  return {
+    ...manuscript,
+    abstract: {
+      background: replaceCitations(manuscript.abstract.background, artifact.citationMap),
+      objective: replaceCitations(manuscript.abstract.objective, artifact.citationMap),
+      methods: replaceCitations(manuscript.abstract.methods, artifact.citationMap),
+      results: replaceCitations(manuscript.abstract.results, artifact.citationMap),
+      conclusions: replaceCitations(manuscript.abstract.conclusions, artifact.citationMap),
+    },
+    sections: [
+      ...sections,
+      {
+        heading: 'Figures, Tables, and Statistical Safeguards',
+        body: supplementalBody,
+      },
+    ],
+    publication: artifact,
+  };
+}
+
+export function referenceLinesForPublication(artifact: PublicationArtifact): { marker: string; text: string }[] {
+  return artifact.references.map((reference) => ({ marker: reference.displayMarker, text: reference.text }));
+}
+
+export function assertPublicationReady(artifact: PublicationArtifact): void {
+  if (artifact.validation.exportReady) return;
+  const detail = artifact.validation.blockers.map((issue) => issue.message).join(' ');
+  throw new Error(`Manuscript failed publication validation. ${detail}`);
+}
+
+export function publicationMarkdown(manuscript: Manuscript, artifact: PublicationArtifact): string {
+  const normalized = normalizeManuscriptForPublication(manuscript, artifact);
+  const lines: string[] = [`# ${normalized.title}`, '', '## Abstract'];
+  const a = normalized.abstract;
+  if (a.background) lines.push(`**Background:** ${a.background}`);
+  if (a.objective) lines.push(`**Objective:** ${a.objective}`);
+  if (a.methods) lines.push(`**Methods:** ${a.methods}`);
+  if (a.results) lines.push(`**Results:** ${a.results}`);
+  if (a.conclusions) lines.push(`**Conclusions:** ${a.conclusions}`);
+  if (normalized.keywords.length > 0) lines.push('', `**Keywords:** ${normalized.keywords.join(', ')}`);
+  for (const section of normalized.sections) {
+    lines.push('', `## ${section.heading}`, ...section.body.map((paragraph) => `\n${paragraph}`));
+  }
+  if (artifact.figures.length > 0) {
+    lines.push('', '## Figure SVG Assets');
+    artifact.figures.forEach((figure, index) => {
+      lines.push('', `### Figure ${index + 1}. ${figure.title}`, figure.svg);
+    });
+  }
+  if (artifact.references.length > 0) {
+    lines.push('', '## References', ...artifact.references.map((reference) => `${reference.displayMarker} ${reference.text}`));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+export function publicationHtml(_manuscript: Manuscript, artifact: PublicationArtifact, bodyHtml: string): string {
+  const figures = artifact.figures
+    .map(
+      (figure, index) => `<figure>${figure.svg}<figcaption>Figure ${index + 1}. ${escXml(figure.title)}. ${escXml(figure.caption)}</figcaption></figure>`,
+    )
+    .join('\n');
+  const references = artifact.references
+    .map((reference) => `<li>${escXml(reference.displayMarker)} ${escXml(reference.text)}</li>`)
+    .join('\n');
+  return `${bodyHtml}
+<section class="figures"><h2>Figures</h2>${figures}</section>
+<section class="references"><h2>References</h2><ol>${references}</ol></section>`;
+}

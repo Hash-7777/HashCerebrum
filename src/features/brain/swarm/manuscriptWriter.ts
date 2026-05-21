@@ -12,6 +12,7 @@ import {
   type Manuscript,
   type ManuscriptSection,
 } from './manuscript';
+import { buildPublicationArtifact } from './publication';
 import type { SpecialistResult } from './types';
 
 const SNIPPET_CHARS = 200;
@@ -195,5 +196,9 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
     /* keep the empty abstract */
   }
 
-  return { title, abstract, keywords: keywordsFrom(question), sections };
+  const manuscript: Manuscript = { title, abstract, keywords: keywordsFrom(question), sections };
+  return {
+    ...manuscript,
+    publication: buildPublicationArtifact(manuscript, evidence),
+  };
 }

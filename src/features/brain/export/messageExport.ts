@@ -1,6 +1,14 @@
 import { platform, type EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
-import type { Manuscript } from '../swarm/manuscript';
+import { manuscriptToReadableText, type Manuscript } from '../swarm/manuscript';
+import {
+  assertPublicationReady,
+  buildPublicationArtifact,
+  normalizeManuscriptForPublication,
+  publicationHtml,
+  publicationMarkdown,
+  referenceLinesForPublication,
+} from '../swarm/publication';
 
 export interface ExportableMessage {
   title: string;
@@ -115,7 +123,16 @@ function citationBlock(citations: EvidenceItem[] = []): string {
 
 export function buildExportHtml(message: ExportableMessage): string {
   const title = message.title || 'HashCerebrum Export';
-  const body = markdownToHtml(message.content);
+  const artifact = message.manuscript
+    ? (message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []))
+    : null;
+  const body = artifact && message.manuscript
+    ? publicationHtml(
+        message.manuscript,
+        artifact,
+        markdownToHtml(manuscriptToReadableText(normalizeManuscriptForPublication(message.manuscript, artifact))),
+      )
+    : markdownToHtml(message.content);
   const exportedAt = new Date().toISOString();
   return `<!doctype html>
 <html>
@@ -142,12 +159,16 @@ export function buildExportHtml(message: ExportableMessage): string {
     <div class="meta">HashCerebrum · ${escapeHtml(message.modelLabel ?? message.role)} · exported ${escapeHtml(exportedAt)}</div>
   </header>
   <main class="content">${body}</main>
-  ${citationBlock(message.citations)}
+  ${artifact ? '' : citationBlock(message.citations)}
 </body>
 </html>`;
 }
 
 export function buildMarkdownExport(message: ExportableMessage): string {
+  if (message.manuscript) {
+    const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+    return publicationMarkdown(message.manuscript, artifact);
+  }
   const content = stripGeneratedReferenceSections(message.content);
   const citations = message.citations?.length
     ? [
@@ -183,39 +204,6 @@ export function exportMessageHtml(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.html`, buildExportHtml(message), 'text/html;charset=utf-8');
 }
 
-// Cited-only reference list for the Typst renderer: scan the manuscript
-// prose for [S#] markers and resolve each against the retrieved evidence.
-function manuscriptReferences(
-  manuscript: Manuscript,
-  citations: EvidenceItem[],
-): { marker: string; text: string }[] {
-  const prose: string[] = [
-    manuscript.abstract.background,
-    manuscript.abstract.objective,
-    manuscript.abstract.methods,
-    manuscript.abstract.results,
-    manuscript.abstract.conclusions,
-  ];
-  for (const section of manuscript.sections) prose.push(...section.body);
-  const cited = new Set<number>();
-  for (const match of prose.join(' ').matchAll(/\[S(\d+)\]/g)) {
-    cited.add(Number(match[1]));
-  }
-  return [...cited]
-    .sort((a, b) => a - b)
-    .flatMap((n) => {
-      const record = citations[n - 1];
-      if (!record) return [];
-      const year = record.year ? ` (${record.year})` : '';
-      const id = record.identifiers?.pmid
-        ? ` PMID: ${record.identifiers.pmid}`
-        : record.identifiers?.doi
-          ? ` DOI: ${record.identifiers.doi}`
-          : '';
-      return [{ marker: `[S${n}]`, text: `${record.source.toUpperCase()}${year}. ${record.title}.${id}` }];
-    });
-}
-
 export function stripGeneratedReferenceSections(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
@@ -240,16 +228,27 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
   const content = stripGeneratedReferenceSections(message.content);
 
   if (message.manuscript) {
+    const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+    assertPublicationReady(artifact);
+    const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact);
     try {
       const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
       return await platform().manuscript.renderPdf(
-        message.manuscript,
-        manuscriptReferences(message.manuscript, message.citations ?? []),
+        exportManuscript,
+        referenceLinesForPublication(artifact),
         meta,
       );
     } catch {
       /* Typst unavailable or failed — fall through to the jsPDF renderer. */
     }
+    const { buildPaperPdfBlob } = await import('./paperPdf');
+    return buildPaperPdfBlob({
+      title: message.title,
+      content: manuscriptToReadableText(exportManuscript),
+      ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
+      citations: artifact.references.map((reference) => reference.evidence),
+      manuscript: exportManuscript,
+    });
   }
 
   const { buildPaperPdfBlob } = await import('./paperPdf');

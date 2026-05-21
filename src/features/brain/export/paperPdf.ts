@@ -140,14 +140,15 @@ function normalizeHeading(text: string): string {
   return plain(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function formatReference(record: EvidenceItem, index: number): string {
+function formatReference(record: EvidenceItem, index: number, style: 'source' | 'vancouver' = 'source'): string {
   const year = record.year ? ` (${record.year})` : '';
   const id = record.identifiers?.pmid
     ? ` PMID: ${record.identifiers.pmid}`
     : record.identifiers?.doi
       ? ` DOI: ${record.identifiers.doi}`
       : '';
-  return `[S${index + 1}] ${record.source.toUpperCase()}${year}. ${record.title}.${id}`;
+  const marker = style === 'vancouver' ? `[${index + 1}]` : `[S${index + 1}]`;
+  return `${marker} ${record.source.toUpperCase()}${year}. ${record.title}.${id}`;
 }
 
 export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
@@ -328,7 +329,8 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   // The swarm retrieves far more evidence than a paper cites; a real
   // reference list contains only the works the manuscript [S#]-cites.
   const citedNumbers = new Set<number>();
-  for (const match of input.content.matchAll(/\[S(\d+)\]/g)) {
+  const markerStyle = input.manuscript?.publication ? 'vancouver' : 'source';
+  for (const match of input.content.matchAll(/\[(?:S)?(\d+)\]/g)) {
     citedNumbers.add(Number(match[1]));
   }
   const cited = [...citedNumbers].sort((a, b) => a - b);
@@ -340,7 +342,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     for (const number of cited) {
       const record = input.citations[number - 1];
       if (!record) continue;
-      const lines = doc.splitTextToSize(formatReference(record, number - 1), contentW - 16) as string[];
+      const lines = doc.splitTextToSize(formatReference(record, number - 1, markerStyle), contentW - 16) as string[];
       lines.forEach((line, li) => {
         ensureSpace(12);
         doc.text(line, marginX + (li === 0 ? 0 : 16), y);

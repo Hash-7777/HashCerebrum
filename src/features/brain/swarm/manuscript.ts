@@ -2,6 +2,8 @@
 // prose into it, section by section. Because the structure never depends on
 // the model emitting valid JSON, the pipeline works even with small models.
 
+import type { PublicationArtifact } from './publicationTypes';
+
 export interface ManuscriptAbstract {
   background: string;
   objective: string;
@@ -20,6 +22,9 @@ export interface Manuscript {
   abstract: ManuscriptAbstract;
   keywords: string[];
   sections: ManuscriptSection[];
+  // Strict renderer-owned publication package: canonical references,
+  // evidence-review figures, statistics safeguards, and validation state.
+  publication?: PublicationArtifact;
 }
 
 export interface SectionSpec {
