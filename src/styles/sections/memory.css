@@ -169,3 +169,253 @@
 }
 .memory-link:hover { text-decoration: underline; }
 .memory-date { font: 10px var(--hc-font-mono); color: var(--hc-fg-dim); }
+
+/* --- Toolbar tools + list/graph toggle --- */
+.memory-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.memory-view-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-elev);
+}
+.memory-view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--hc-radius-pill);
+  background: transparent;
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--hc-ease), color var(--hc-ease);
+}
+.memory-view-toggle button:hover { color: var(--hc-fg); }
+.memory-view-toggle button[data-active='true'] {
+  background: var(--hc-accent-soft);
+  color: var(--hc-accent-strong);
+}
+
+/* --- Graph view --- */
+.memory-graph {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.035), rgba(0, 0, 0, 0) 62%),
+    var(--hc-bg-canvas);
+}
+.memory-graph-canvas {
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.memory-graph-canvas:active { cursor: grabbing; }
+
+.memory-graph-edge {
+  stroke: var(--hc-fg-dim);
+  stroke-opacity: 0.22;
+  transition: stroke-opacity 0.12s var(--hc-ease);
+}
+.memory-graph-edge[data-state='lit'] {
+  stroke: var(--hc-accent-strong);
+  stroke-opacity: 0.7;
+}
+.memory-graph-edge[data-state='dim'] { stroke-opacity: 0.05; }
+
+.memory-graph-node { cursor: pointer; }
+.memory-graph-dot {
+  fill: var(--hc-accent);
+  stroke: var(--hc-bg-canvas);
+  stroke-width: 1.5;
+  transition: opacity 0.12s var(--hc-ease);
+}
+.memory-graph-node[data-kind='answer'] .memory-graph-dot { fill: var(--hc-secondary); }
+.memory-graph-node[data-state='dim'] { opacity: 0.32; }
+.memory-graph-node[data-selected='true'] .memory-graph-dot {
+  stroke: var(--hc-fg-strong);
+  stroke-width: 2.4;
+}
+.memory-graph-node:hover .memory-graph-dot { filter: brightness(1.25); }
+
+.memory-graph-label {
+  fill: var(--hc-fg-muted);
+  font-family: var(--hc-font-sans);
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--hc-bg-canvas);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.memory-graph-node[data-state='lit'] .memory-graph-label,
+.memory-graph-node[data-selected='true'] .memory-graph-label { fill: var(--hc-fg-strong); }
+
+.memory-graph-info {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font: 10px var(--hc-font-mono);
+  color: var(--hc-fg-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.memory-graph-controls {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.memory-graph-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 10px var(--hc-font-mono);
+  color: var(--hc-fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.memory-graph-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hc-accent);
+}
+.memory-graph-swatch[data-kind='answer'] {
+  background: var(--hc-secondary);
+  margin-left: 6px;
+}
+.memory-graph-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-glass);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.memory-graph-controls button:hover { color: var(--hc-fg); border-color: var(--hc-border-strong); }
+
+.memory-graph-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-glass-strong);
+  border: 1px solid var(--hc-border);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.memory-graph-detail {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 280px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--hc-border-strong);
+  border-radius: var(--hc-radius);
+  background: var(--hc-bg-glass-strong);
+  box-shadow: var(--hc-shadow-2);
+  backdrop-filter: blur(10px);
+}
+.memory-graph-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.memory-graph-detail .memory-kind[data-kind='answer'] {
+  border-color: var(--hc-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hc-fg-muted);
+}
+.memory-graph-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: var(--hc-radius-sm);
+  background: transparent;
+  color: var(--hc-fg-dim);
+  cursor: pointer;
+}
+.memory-graph-detail-close:hover { color: var(--hc-fg); }
+.memory-graph-detail h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.32;
+  color: var(--hc-fg);
+}
+.memory-graph-detail-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font: 10px var(--hc-font-mono);
+  color: var(--hc-fg-dim);
+  text-transform: uppercase;
+}
+.memory-graph-detail-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--hc-fg-muted);
+}
+.memory-graph-detail footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.memory-graph-detail footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--hc-accent-strong);
+  font-size: 11px;
+  text-decoration: none;
+}
+.memory-graph-detail footer a:hover { text-decoration: underline; }
+.memory-graph-detail-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--hc-radius-sm);
+  background: transparent;
+  color: var(--hc-fg-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.memory-graph-detail-remove:hover {
+  color: var(--hc-danger);
+  border-color: rgba(255, 122, 138, 0.32);
+  background: rgba(255, 122, 138, 0.08);
+}

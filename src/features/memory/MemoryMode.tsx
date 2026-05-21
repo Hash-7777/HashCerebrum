@@ -8,8 +8,11 @@ import { lexicalSearch, useRagStore } from '@core/store/ragStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { Icon } from '@ui/icons';
 import { MemoryCard } from './components/MemoryCard';
+import { MemoryGraphView } from './graph/MemoryGraphView';
 
 const SEARCH_RESULT_LIMIT = 200;
+
+type MemoryView = 'list' | 'graph';
 
 export function MemoryMode() {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
@@ -18,6 +21,7 @@ export function MemoryMode() {
   const removeChunk = useRagStore((s) => s.removeChunk);
 
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<MemoryView>('list');
 
   const projectName = projects.find((p) => p.id === activeProjectId)?.name ?? 'Project';
 
@@ -49,14 +53,34 @@ export function MemoryMode() {
               {search.trim() ? ` matching "${search.trim()}"` : ''}
             </p>
           </div>
-          <label className="memory-search">
-            <Icon name="search" size={13} />
-            <input
-              placeholder="Search this project's memory…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
+          <div className="memory-tools">
+            <label className="memory-search">
+              <Icon name="search" size={13} />
+              <input
+                placeholder="Search this project's memory…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            <div className="memory-view-toggle" role="group" aria-label="Memory view">
+              <button
+                type="button"
+                data-active={view === 'list'}
+                onClick={() => setView('list')}
+                aria-pressed={view === 'list'}
+              >
+                <Icon name="list" size={13} /> List
+              </button>
+              <button
+                type="button"
+                data-active={view === 'graph'}
+                onClick={() => setView('graph')}
+                aria-pressed={view === 'graph'}
+              >
+                <Icon name="graph" size={13} /> Graph
+              </button>
+            </div>
+          </div>
         </header>
 
         {visible.length === 0 ? (
@@ -73,6 +97,8 @@ export function MemoryMode() {
               automatically.
             </p>
           </div>
+        ) : view === 'graph' ? (
+          <MemoryGraphView chunks={visible} onRemove={removeChunk} />
         ) : (
           <div className="memory-list">
             {visible.map((chunk) => (

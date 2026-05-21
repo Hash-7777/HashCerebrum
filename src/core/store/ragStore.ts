@@ -66,7 +66,9 @@ interface RagStore {
   clearProject: (projectId: string) => void;
 }
 
-function tokenize(text: string): string[] {
+// Exported so the memory-graph builder ranks relatedness on the exact same
+// token model the retriever uses — one definition of "a meaningful term".
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[^a-z0-9]+/)

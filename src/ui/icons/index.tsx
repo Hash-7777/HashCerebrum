@@ -31,7 +31,9 @@ export type IconName =
   | 'copy'
   | 'edit'
   | 'refresh'
-  | 'download';
+  | 'download'
+  | 'graph'
+  | 'list';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -196,6 +198,22 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
       <path d="M12 3v11" />
       <path d="m7 9 5 5 5-5" />
       <path d="M5 20h14" />
+    </svg>
+  ),
+  graph: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M8.1 6.9 15.7 6M7 9.3l4.1 6.4M16.8 8.2 13.1 15.6" />
+      <circle cx="6" cy="6.6" r="2.5" />
+      <circle cx="18" cy="6" r="2.5" />
+      <circle cx="12" cy="17.6" r="2.5" />
+    </svg>
+  ),
+  list: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <circle cx="4.6" cy="6" r="1.3" />
+      <circle cx="4.6" cy="12" r="1.3" />
+      <circle cx="4.6" cy="18" r="1.3" />
     </svg>
   ),
 };
