@@ -7,7 +7,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { RagChunk } from '@core/store/ragStore';
+import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
+import { regionForChunk } from '../../brain/data/memoryRegions';
 import { buildMemoryGraph } from './memoryGraph';
 import { brainShape, type BrainBounds } from './brainShape';
 import { layoutMemoryGraph, type NodePosition } from './layout';
@@ -128,6 +130,16 @@ export function MemoryGraphView({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // Addressing a finding in the diagram lights its anatomical region on the
+  // 3D brain — the memory diagram and the brain model are one brain.
+  useEffect(() => {
+    const node = selectedId ? graph.nodes.find((n) => n.id === selectedId) : null;
+    useBrainStore.getState().setFocusRegion(node ? regionForChunk(node.chunk) : null);
+  }, [selectedId, graph.nodes]);
+
+  // Clear the focused region when the diagram unmounts.
+  useEffect(() => () => useBrainStore.getState().setFocusRegion(null), []);
 
   // Non-passive wheel listener so zoom can preventDefault the page scroll.
   const zoomAt = useCallback((px: number, py: number, factor: number) => {

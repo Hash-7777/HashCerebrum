@@ -7,7 +7,7 @@
 // stays contained by FeatureBoundary instead of taking the workspace down.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { agentById, type AgentId, type RegionId } from '@config/agents';
+import { type AgentId, type RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 import type { LlmMessage } from '@core/llm/types';
@@ -31,6 +31,7 @@ import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
+import { useMemoryBrainBinding } from './useMemoryBrainBinding';
 import { runSwarm } from './swarm/runSwarm';
 import { summarizeDatasetText } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
@@ -62,6 +63,11 @@ export function BrainMode() {
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
   const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
+
+  // The 3D brain's steady glow is bound to the active project's memory, not
+  // to agent activity — addressing a finding in the memory diagram lights the
+  // matching anatomical region.
+  useMemoryBrainBinding();
 
   const attachDataset = async (file: File) => {
     try {
@@ -176,7 +182,6 @@ export function BrainMode() {
         if (seenTerms.has(hit.term)) continue;
         seenTerms.add(hit.term);
         bus.emit('topic:detected', hit);
-        bus.emit('region:light', { region: hit.region, source: 'topic', intensity: hit.confidence * 0.55, ttlMs: 4500 });
       }
     };
 
@@ -185,17 +190,6 @@ export function BrainMode() {
     const ensureResearchRun = () => {
       if (!activeRunId) activeRunId = runs.startRun(cleanQuery, []).id;
       return activeRunId;
-    };
-
-    const lightAgent = (agentId: AgentId, intensity = 0.78) => {
-      const agent = agentById(agentId);
-      bus.emit('region:light', {
-        region: agent.regionBinding,
-        source: 'agent',
-        agentId,
-        intensity,
-        ttlMs: 4000,
-      });
     };
 
     const bossDetail: Record<BossPhase, string> = {
@@ -214,13 +208,11 @@ export function BrainMode() {
           phase: phase === 'routing' || phase === 'answering' ? 'start' : 'tool_call',
           detail: bossDetail[phase],
         });
-        lightAgent('boss', phase === 'synthesizing' ? 0.86 : 0.72);
       },
       onSpecialistStart: (agentId, subQuery) => {
         ensureResearchRun();
         updateAgentStatus(agentId, { state: 'running', detail: subQuery });
         bus.emit('agent:activity', { agentId, phase: 'start', detail: subQuery });
-        lightAgent(agentId);
       },
       onSpecialistDone: (agentId, recordCount) => {
         updateAgentStatus(agentId, {
@@ -235,9 +227,6 @@ export function BrainMode() {
       },
       onToolCall: (agentId, toolName) => {
         const def = sourceForTool(toolName);
-        if (def) {
-          bus.emit('region:light', { region: def.region, source: 'agent', agentId, intensity: 0.78, ttlMs: 4000 });
-        }
         bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
       },
       onToolResult: (agentId, toolName, count) => {
@@ -394,7 +383,6 @@ export function BrainMode() {
     critiquedRef.current.add(messageId);
 
     bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'on-demand critique' });
-    bus.emit('region:light', { region: 'amygdala', source: 'agent', agentId: 'boss', intensity: 0.85, ttlMs: 4500 });
 
     const critiqueId = crypto.randomUUID();
     setMessages((current) => [

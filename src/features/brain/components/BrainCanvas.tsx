@@ -123,24 +123,30 @@ function BrainMesh({
   const material = useMemo(() => meshPart.baseMaterial.clone(), [meshPart.baseMaterial]);
   const neutralColor = useMemo(() => new THREE.Color(NEUTRAL_BRAIN_COLOR), []);
   const regionState = useBrainStore((store) => store.regions);
+  const focusRegion = useBrainStore((store) => store.focusRegion);
+  const invalidate = useThree((state) => state.invalidate);
   const ref = useRef<THREE.Mesh>(null);
   const selected = selectedRegion ? meshPart.part.regionIds.includes(selectedRegion) : false;
   const hovered = hoveredRegion ? meshPart.part.regionIds.includes(hoveredRegion) : false;
 
   // A mesh part can map to more than one region. Glow in the colour of
-  // whichever region is most active right now, so the lit colour tracks the
-  // agent that is actually working instead of a fixed primary-region colour.
+  // whichever region carries the most signal — the steady memory glow joins
+  // the transient channels, so the brain reads as a physical map of the
+  // project's saved knowledge.
   let activeRegion = primaryRegionForPart(meshPart.part);
   let glow = 0;
   for (const regionId of meshPart.part.regionIds) {
     const state = regionState[regionId];
-    const lit = Math.max(state.base, state.accent);
+    const lit = Math.max(state.base, state.accent, state.memory);
     if (lit > glow) {
       glow = lit;
       activeRegion = regionId;
     }
   }
-  const intensity = Math.max(glow, selected ? 0.95 : 0, hovered ? 0.75 : 0);
+  // A region addressed in the memory diagram lights brightest, in its colour.
+  const focused = focusRegion ? meshPart.part.regionIds.includes(focusRegion) : false;
+  if (focused && focusRegion) activeRegion = focusRegion;
+  const intensity = Math.max(glow, selected ? 0.95 : 0, hovered ? 0.75 : 0, focused ? 0.96 : 0);
   const regionColor = useMemo(() => new THREE.Color(regionById(activeRegion).emissive), [activeRegion]);
 
   useEffect(() => {
@@ -151,7 +157,9 @@ function BrainMesh({
     material.emissiveIntensity = visual > 0.02 ? 0.28 + visual * 2.35 : 0.08;
     material.color.lerpColors(neutralColor, regionColor, visual > 0.02 ? Math.min(1, 0.2 + visual * 0.88) : 0);
     material.needsUpdate = true;
-  }, [intensity, material, neutralColor, regionColor]);
+    // Repaint on demand so the glow updates even in the performance frameloop.
+    invalidate();
+  }, [intensity, material, neutralColor, regionColor, invalidate]);
 
   const primaryRegion = primaryRegionForPart(meshPart.part);
 
