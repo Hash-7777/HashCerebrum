@@ -512,3 +512,328 @@ export function mantelHaenszel(strata: MhStratum[]): MantelHaenszelResult {
     homogeneityP: bdDf > 0 ? chiSquareUpperP(bdChiSquare, bdDf) : Number.NaN,
   };
 }
+
+// --- paired tests ----------------------------------------------------------------
+
+export interface PairedTTestResult {
+  test: 'paired_t';
+  meanDifference: number;
+  sdDifference: number;
+  n: number;
+  tStatistic: number;
+  df: number;
+  pValue: number;
+  ciLow: number;
+  ciHigh: number;
+  reportText: string;
+}
+
+export function pairedTTest(before: number[], after: number[]): PairedTTestResult | null {
+  if (before.length !== after.length || before.length < 2) return null;
+  const diffs = before.map((b, i) => b - after[i]!);
+  const m = mean(diffs);
+  const sd = Math.sqrt(sampleVariance(diffs, m));
+  const n = diffs.length;
+  if (sd === 0) return null;
+  const se = sd / Math.sqrt(n);
+  const t = m / se;
+  const df = n - 1;
+  const p = tTwoSidedP(Math.abs(t), df);
+  const margin = studentTQuantile(0.975, df) * se;
+  return {
+    test: 'paired_t',
+    meanDifference: m,
+    sdDifference: sd,
+    n,
+    tStatistic: t,
+    df,
+    pValue: p,
+    ciLow: m - margin,
+    ciHigh: m + margin,
+    reportText: `Paired t-test: mean difference = ${fmt(m)} (SD ${fmt(sd)}), t(${df}) = ${fmt(t)}, p = ${fmtP(p)}, 95% CI [${fmt(m - margin)}, ${fmt(m + margin)}].`,
+  };
+}
+
+// --- Wilcoxon signed-rank -------------------------------------------------------
+
+export interface WilcoxonResult {
+  test: 'wilcoxon_signed_rank';
+  n: number;
+  wStatistic: number;
+  zStatistic: number;
+  pValue: number;
+  reportText: string;
+}
+
+export function wilcoxonSignedRank(before: number[], after: number[]): WilcoxonResult | null {
+  if (before.length !== after.length || before.length < 2) return null;
+  const diffs = before.map((b, i) => b - after[i]!).filter((d) => d !== 0);
+  if (diffs.length < 2) return null;
+  const abs = diffs.map((d) => Math.abs(d));
+  const { ranks, tieGroups } = rankWithTies(abs);
+  let wPos = 0;
+  for (let i = 0; i < diffs.length; i++) {
+    if (diffs[i]! > 0) wPos += ranks[i]!;
+  }
+  const n = diffs.length;
+  const meanW = (n * (n + 1)) / 4;
+  const tieCorrection = tieGroups.reduce((sum, t) => sum + (t ** 3 - t), 0);
+  const sdW = Math.sqrt((n * (n + 1) * (2 * n + 1)) / 24 - tieCorrection / 48);
+  if (sdW === 0) return null;
+  const z = (wPos - meanW) / sdW;
+  const p = normalTwoSidedP(Math.abs(z));
+  return {
+    test: 'wilcoxon_signed_rank',
+    n,
+    wStatistic: wPos,
+    zStatistic: z,
+    pValue: p,
+    reportText: `Wilcoxon signed-rank: W = ${wPos.toFixed(1)}, Z = ${fmt(z)}, p = ${fmtP(p)} (n = ${n}).`,
+  };
+}
+
+// --- McNemar's test --------------------------------------------------------------
+
+export interface McNemarResult {
+  test: 'mcnemar';
+  discordantA: number; // before+ / after-
+  discordantB: number; // before- / after+
+  n: number;
+  chiSquare: number;
+  pValue: number;
+  reportText: string;
+}
+
+export function mcnemarTest(beforePos: boolean[], afterPos: boolean[]): McNemarResult | null {
+  if (beforePos.length !== afterPos.length || beforePos.length < 2) return null;
+  let a = 0; // +/+
+  let b = 0; // +/-
+  let c = 0; // -/+
+  let d = 0; // -/-
+  for (let i = 0; i < beforePos.length; i++) {
+    const bp = beforePos[i]!;
+    const ap = afterPos[i]!;
+    if (bp && ap) a++;
+    else if (bp && !ap) b++;
+    else if (!bp && ap) c++;
+    else d++;
+  }
+  const discordant = b + c;
+  if (discordant === 0) return null;
+  // Continuity-corrected McNemar
+  const chi = (Math.abs(b - c) - 1) ** 2 / discordant;
+  const p = chiSquareUpperP(chi, 1);
+  return {
+    test: 'mcnemar',
+    discordantA: b,
+    discordantB: c,
+    n: beforePos.length,
+    chiSquare: chi,
+    pValue: p,
+    reportText: `McNemar's test: discordant pairs = ${b} vs ${c}, χ²(1) = ${fmt(chi)}, p = ${fmtP(p)}.`,
+  };
+}
+
+// --- diagnostic accuracy ---------------------------------------------------------
+
+export interface DiagnosticAccuracyResult {
+  test: 'diagnostic_accuracy';
+  tp: number;
+  fp: number;
+  tn: number;
+  fn: number;
+  sensitivity: number;
+  specificity: number;
+  ppv: number;
+  npv: number;
+  lrPositive: number;
+  lrNegative: number;
+  reportText: string;
+}
+
+export function diagnosticAccuracy(tp: number, fp: number, tn: number, fn: number): DiagnosticAccuracyResult | null {
+  if (tp + fn === 0 || tn + fp === 0) return null;
+  const sens = tp / (tp + fn);
+  const spec = tn / (tn + fp);
+  const ppv = tp + fp > 0 ? tp / (tp + fp) : Number.NaN;
+  const npv = tn + fn > 0 ? tn / (tn + fn) : Number.NaN;
+  const lrPos = spec < 1 ? sens / (1 - spec) : Number.NaN;
+  const lrNeg = sens < 1 ? (1 - spec) / sens : Number.NaN;
+  return {
+    test: 'diagnostic_accuracy',
+    tp, fp, tn, fn,
+    sensitivity: sens,
+    specificity: spec,
+    ppv,
+    npv,
+    lrPositive: lrPos,
+    lrNegative: lrNeg,
+    reportText: `Sensitivity = ${(sens * 100).toFixed(1)}%, Specificity = ${(spec * 100).toFixed(1)}%, PPV = ${(ppv * 100).toFixed(1)}%, NPV = ${(npv * 100).toFixed(1)}%, LR+ = ${fmt(lrPos)}, LR− = ${fmt(lrNeg)}.`,
+  };
+}
+
+// --- ROC AUC (Mann-Whitney U equivalence) ---------------------------------------
+
+export interface RocAucResult {
+  test: 'roc_auc';
+  auc: number;
+  nPositive: number;
+  nNegative: number;
+  reportText: string;
+}
+
+export function rocAuc(positiveScores: number[], negativeScores: number[]): RocAucResult | null {
+  if (positiveScores.length === 0 || negativeScores.length === 0) return null;
+  const mw = mannWhitneyU(positiveScores, negativeScores);
+  if (!mw) return null;
+  // mannWhitneyU returns the smaller U; AUC uses the larger U
+  const totalPairs = positiveScores.length * negativeScores.length;
+  const uMax = totalPairs - mw.u;
+  const auc = uMax / totalPairs;
+  return {
+    test: 'roc_auc',
+    auc,
+    nPositive: positiveScores.length,
+    nNegative: negativeScores.length,
+    reportText: `AUC = ${fmt(auc)} (Mann-Whitney U = ${uMax.toFixed(1)}, p = ${fmtP(mw.pValue)}).`,
+  };
+}
+
+// --- effect sizes ---------------------------------------------------------------
+
+export interface CohensDResult {
+  effect: "cohen_d";
+  d: number;
+  ciLow: number;
+  ciHigh: number;
+  interpretation: string;
+}
+
+export function cohensD(groupA: number[], groupB: number[]): CohensDResult | null {
+  if (groupA.length < 2 || groupB.length < 2) return null;
+  const m1 = mean(groupA);
+  const m2 = mean(groupB);
+  const v1 = sampleVariance(groupA, m1);
+  const v2 = sampleVariance(groupB, m2);
+  const n1 = groupA.length;
+  const n2 = groupB.length;
+  const pooledSD = Math.sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2));
+  if (pooledSD === 0) return null;
+  const d = (m1 - m2) / pooledSD;
+  const se = Math.sqrt(((n1 + n2) / (n1 * n2)) + (d ** 2) / (2 * (n1 + n2)));
+  const ciLow = d - Z_95 * se;
+  const ciHigh = d + Z_95 * se;
+  const mag = Math.abs(d) < 0.2 ? 'negligible' : Math.abs(d) < 0.5 ? 'small' : Math.abs(d) < 0.8 ? 'medium' : 'large';
+  return {
+    effect: 'cohen_d',
+    d,
+    ciLow,
+    ciHigh,
+    interpretation: `Cohen's d = ${fmt(d)} (${mag}), 95% CI [${fmt(ciLow)}, ${fmt(ciHigh)}].`,
+  };
+}
+
+export function cramersV(table: number[][]): { v: number; interpretation: string } | null {
+  const rows = table.length;
+  const cols = table[0]?.length ?? 0;
+  if (rows < 2 || cols < 2) return null;
+  let total = 0;
+  let chiSq = 0;
+  const rowSums = new Array(rows).fill(0);
+  const colSums = new Array(cols).fill(0);
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const val = table[i]![j]!;
+      total += val;
+      rowSums[i] += val;
+      colSums[j] += val;
+    }
+  }
+  if (total === 0) return null;
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const expected = (rowSums[i] * colSums[j]) / total;
+      if (expected > 0) chiSq += (table[i]![j]! - expected) ** 2 / expected;
+    }
+  }
+  const minDim = Math.min(rows - 1, cols - 1);
+  if (minDim === 0) return null;
+  const v = Math.sqrt(chiSq / (total * minDim));
+  const mag = v < 0.1 ? 'negligible' : v < 0.3 ? 'small' : v < 0.5 ? 'medium' : 'large';
+  return { v, interpretation: `Cramer's V = ${fmt(v)} (${mag} association).` };
+}
+
+// --- multiple comparison correction ----------------------------------------------
+
+export interface AdjustedPValues {
+  method: 'bonferroni' | 'holm' | 'bh_fdr';
+  original: number[];
+  adjusted: number[];
+  rejected: boolean[];
+  alpha: number;
+}
+
+export function bonferroni(pValues: number[], alpha = 0.05): AdjustedPValues {
+  const m = pValues.length;
+  const adjusted = pValues.map((p) => Math.min(p * m, 1));
+  return {
+    method: 'bonferroni',
+    original: pValues,
+    adjusted,
+    rejected: adjusted.map((p) => p < alpha),
+    alpha,
+  };
+}
+
+export function holmBonferroni(pValues: number[], alpha = 0.05): AdjustedPValues {
+  const indexed = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+  const m = pValues.length;
+  const adjusted = new Array<number>(m).fill(0);
+  let prev = 0;
+  for (let k = 0; k < m; k++) {
+    const rawP = indexed[k]!.p;
+    const adj = Math.min(rawP * (m - k), 1);
+    adjusted[indexed[k]!.i] = Math.max(adj, prev);
+    prev = adjusted[indexed[k]!.i];
+  }
+  return {
+    method: 'holm',
+    original: pValues,
+    adjusted,
+    rejected: adjusted.map((p) => p < alpha),
+    alpha,
+  };
+}
+
+export function benjaminiHochberg(pValues: number[], alpha = 0.05): AdjustedPValues {
+  const indexed = pValues.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+  const m = pValues.length;
+  const adjusted = new Array<number>(m).fill(0);
+  for (let k = m - 1; k >= 0; k--) {
+    const rawP = indexed[k]!.p;
+    const adj = Math.min(rawP * m / (k + 1), 1);
+    adjusted[indexed[k]!.i] = k === m - 1 ? adj : Math.min(adj, adjusted[indexed[k + 1]!.i]);
+  }
+  return {
+    method: 'bh_fdr',
+    original: pValues,
+    adjusted,
+    rejected: adjusted.map((p) => p < alpha),
+    alpha,
+  };
+}
+
+// --- formatting helpers (also used by analysisPlan) -----------------------------
+
+function fmt(value: number): string {
+  if (!Number.isFinite(value)) return 'n/a';
+  const abs = Math.abs(value);
+  if (abs >= 1000) return value.toFixed(0);
+  if (abs >= 100) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function fmtP(p: number): string {
+  if (!Number.isFinite(p)) return 'n/a';
+  return p < 0.001 ? '<0.001' : p.toFixed(3);
+}
