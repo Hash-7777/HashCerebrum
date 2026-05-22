@@ -129,27 +129,29 @@ export const browserPlatform: Platform = {
     // Browser dev has no Rust shell; a direct fetch will usually be
     // blocked by provider CORS, which the caller already handles as a
     // provider error. The Tauri shell is the supported path.
-    httpGet: async (_provider, url, headers) => {
-      const response = await fetch(url, { headers, cache: 'no-store', referrerPolicy: 'no-referrer' });
+    httpGet: async (_provider, url, headers, signal) => {
+      const response = await fetch(url, { headers, cache: 'no-store', referrerPolicy: 'no-referrer', ...(signal ? { signal } : {}) });
       return { status: response.status, body: await response.text() };
     },
-    httpPost: async (_provider, url, headers, body) => {
+    httpPost: async (_provider, url, headers, body, signal) => {
       const response = await fetch(url, {
         method: 'POST',
         headers,
         body,
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
+        ...(signal ? { signal } : {}),
       });
       return { status: response.status, body: await response.text() };
     },
-    chatStream: async (_provider, url, headers, body, onLine) => {
+    chatStream: async (_provider, url, headers, body, onLine, signal) => {
       const response = await fetch(url, {
         method: 'POST',
         headers,
         body,
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
+        ...(signal ? { signal } : {}),
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 240)}`);
@@ -158,19 +160,24 @@ export const browserPlatform: Platform = {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl = buffer.indexOf('\n');
-        while (nl !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (line) onLine(line);
-          nl = buffer.indexOf('\n');
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let nl = buffer.indexOf('\n');
+          while (nl !== -1) {
+            const line = buffer.slice(0, nl).trim();
+            buffer = buffer.slice(nl + 1);
+            if (line) onLine(line);
+            nl = buffer.indexOf('\n');
+          }
         }
+        if (buffer.trim()) onLine(buffer.trim());
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        throw err;
       }
-      if (buffer.trim()) onLine(buffer.trim());
     },
   },
   env: {

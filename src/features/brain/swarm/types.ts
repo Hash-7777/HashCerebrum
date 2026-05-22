@@ -57,4 +57,6 @@ export interface SwarmOptions {
   // Resolves the LLM model each agent runs on.
   modelFor: (agentId: AgentId) => string;
   callbacks: SwarmCallbacks;
+  // Abort signal to cancel in-flight LLM streams when the component unmounts.
+  signal?: AbortSignal;
 }

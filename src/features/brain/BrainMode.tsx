@@ -62,6 +62,14 @@ export function BrainMode() {
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
   const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
+  const isMounted = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const attachDataset = async (file: File) => {
     try {
@@ -178,6 +186,8 @@ export function BrainMode() {
     }
 
     setIsRunning(true);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
     const runs = useResearchRunStore.getState();
     const assistantId = crypto.randomUUID();
     setMessages([
@@ -216,6 +226,7 @@ export function BrainMode() {
 
     const callbacks: SwarmCallbacks = {
       onBossPhase: (phase) => {
+        if (!isMounted.current) return;
         if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
         updateAgentStatus('boss', { state: 'running', detail: bossDetail[phase] });
         lightAgent('boss', phase === 'answering' ? 0.55 : 0.82, phase === 'routing' ? 1100 : 2100);
@@ -226,12 +237,14 @@ export function BrainMode() {
         });
       },
       onSpecialistStart: (agentId, subQuery) => {
+        if (!isMounted.current) return;
         ensureResearchRun();
         updateAgentStatus(agentId, { state: 'running', detail: subQuery });
         lightAgent(agentId, 0.86, 2400);
         bus.emit('agent:activity', { agentId, phase: 'start', detail: subQuery });
       },
       onSpecialistDone: (agentId, recordCount) => {
+        if (!isMounted.current) return;
         updateAgentStatus(agentId, {
           state: 'done',
           detail: `${recordCount} record${recordCount === 1 ? '' : 's'}`,
@@ -240,17 +253,20 @@ export function BrainMode() {
         bus.emit('agent:activity', { agentId, phase: 'done', detail: `${recordCount} records` });
       },
       onSpecialistError: (agentId, message) => {
+        if (!isMounted.current) return;
         updateAgentStatus(agentId, { state: 'error', detail: message });
         lightAgent(agentId, 0.42, 1200);
         bus.emit('agent:activity', { agentId, phase: 'error', detail: message });
       },
       onToolCall: (agentId, toolName) => {
+        if (!isMounted.current) return;
         const def = sourceForTool(toolName);
         lightAgent(agentId, 0.68, 1600);
         if (def) lightRegion(def.region, 'topic', 0.55, 1250);
         bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
       },
       onToolResult: (agentId, toolName, count) => {
+        if (!isMounted.current) return;
         const def = sourceForTool(toolName);
         lightAgent(agentId, count > 0 ? 0.76 : 0.36, count > 0 ? 1700 : 850);
         if (def && count > 0) lightRegion(def.region, 'topic', Math.min(0.88, 0.42 + count / 30), 1550);
@@ -261,11 +277,13 @@ export function BrainMode() {
         });
       },
       onAnswerToken: (delta) => {
+        if (!isMounted.current) return;
         streamedContent += delta;
         setMessages((current) => current.map((m) => (m.id === assistantId ? { ...m, content: streamedContent } : m)));
         flushTopicHits(streamedContent);
       },
       onManuscriptSection: (heading) => {
+        if (!isMounted.current) return;
         // A paper is drafted section by section (no token stream) — show
         // progress in the pending bubble and the boss status.
         updateAgentStatus('boss', { state: 'running', detail: `drafting ${heading}` });
@@ -285,6 +303,7 @@ export function BrainMode() {
         dataset,
         modelFor: agentModelFor,
         callbacks,
+        signal: abortRef.current?.signal,
       });
 
       flushTopicHits(result.answer || streamedContent);
@@ -293,6 +312,7 @@ export function BrainMode() {
         streamedContent ||
         (result.kind === 'research' ? summarizeEvidence(result.evidence) : 'No response returned by the selected model.');
 
+      if (!isMounted.current) return;
       if (result.kind === 'research') {
         const runId = ensureResearchRun();
         setEvidence(result.evidence);
@@ -348,6 +368,7 @@ export function BrainMode() {
         detail: `${result.kind} · ${labelForModel(result.modelUsed)}`,
       });
     } catch (error) {
+      if (!isMounted.current) return;
       const detail = error instanceof Error ? error.message : String(error);
       const fallback = streamedContent || `HashCerebrum could not complete the request: ${detail}`;
       if (activeRunId) runs.failRun(activeRunId, detail);
@@ -360,7 +381,7 @@ export function BrainMode() {
       );
       bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
     } finally {
-      setIsRunning(false);
+      if (isMounted.current) setIsRunning(false);
     }
   };
 

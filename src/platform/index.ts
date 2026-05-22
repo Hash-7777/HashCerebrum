@@ -112,12 +112,14 @@ export interface Platform {
       provider: string,
       url: string,
       headers: Record<string, string>,
+      signal?: AbortSignal | undefined,
     ): Promise<{ status: number; body: string }>;
     httpPost(
       provider: string,
       url: string,
       headers: Record<string, string>,
       body: string,
+      signal?: AbortSignal | undefined,
     ): Promise<{ status: number; body: string }>;
     chatStream(
       provider: string,
@@ -125,6 +127,7 @@ export interface Platform {
       headers: Record<string, string>,
       body: string,
       onLine: (line: string) => void,
+      signal?: AbortSignal | undefined,
     ): Promise<void>;
   };
 

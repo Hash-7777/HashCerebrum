@@ -80,9 +80,10 @@ async function chatStream(
   headers: Record<string, string>,
   body: string,
   onLine: (line: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
-    await platform().llm.chatStream(provider, url, headers, body, onLine);
+    await platform().llm.chatStream(provider, url, headers, body, onLine, signal);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(redactSecrets(message, secretValuesFromHeaders(headers)));
@@ -244,6 +245,7 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
 
 export interface StreamOptions {
   onToken: (delta: string) => void;
+  signal?: AbortSignal | undefined;
 }
 
 async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -271,6 +273,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
       }
       accumulator.ingest(parsed.toolCallDeltas);
     },
+    opts.signal,
   );
   return { content, toolCalls: accumulator.collect() };
 }
@@ -309,7 +312,7 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
       opts.onToken(parsed.delta);
     }
     accumulator.ingest(parsed.toolCallDeltas);
-  });
+  }, opts.signal);
   return { content, toolCalls: accumulator.collect() };
 }
 
@@ -347,6 +350,7 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
       content += parsed.delta;
       opts.onToken(parsed.delta);
     },
+    opts.signal,
   );
   return { content, toolCalls: [] };
 }
@@ -373,6 +377,7 @@ async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
       }
       toolCalls.push(...parsed.toolCalls);
     },
+    opts.signal,
   );
   return { content, toolCalls };
 }
@@ -431,6 +436,7 @@ export async function streamWithModelChain(
           receivedAny = true;
           opts.onToken(token);
         },
+        signal: opts.signal,
       });
       return {
         ...response,

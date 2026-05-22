@@ -97,6 +97,7 @@ export async function bossChat(
   question: string,
   conversation: LlmMessage[],
   onToken: (delta: string) => void,
+  signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
   const messages: LlmMessage[] = [
     {
@@ -107,7 +108,7 @@ export async function bossChat(
     ...conversation,
     { role: 'user', content: question },
   ];
-  const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken });
+  const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken, signal });
   return { content: res.content, modelUsed: res.modelUsed };
 }
 
@@ -132,6 +133,7 @@ export async function synthesize(
   mergedEvidence: EvidenceItem[],
   onToken: (delta: string) => void,
   paperRequest?: PaperRequest | null,
+  signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
   const evidenceBlock =
     mergedEvidence.length > 0
@@ -185,7 +187,7 @@ Write the final, well-structured research answer now, citing [S#] markers for ev
   const res = await streamWithModelChain(
     model,
     { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 8000 : 1600 },
-    { onToken },
+    { onToken, signal },
   );
   return { content: res.content, modelUsed: res.modelUsed };
 }

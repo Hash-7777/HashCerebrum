@@ -160,14 +160,16 @@ export const tauriPlatform: Platform = {
   },
 
   llm: {
-    httpGet: (provider, url, headers) =>
+    httpGet: (provider, url, headers, _signal) =>
       invoke<{ status: number; body: string }>('llm_http_get', { provider, url, headers }),
-    httpPost: (provider, url, headers, body) =>
+    httpPost: (provider, url, headers, body, _signal) =>
       invoke<{ status: number; body: string }>('llm_http_post', { provider, url, headers, body }),
-    chatStream: async (provider, url, headers, body, onLine) => {
+    chatStream: async (provider, url, headers, body, onLine, signal) => {
+      if (signal?.aborted) throw new Error('Stream aborted');
       const channel = new Channel<{ kind: 'line'; text: string } | { kind: 'error'; message: string }>();
       let streamError: string | null = null;
       channel.onmessage = (event) => {
+        if (signal?.aborted) return;
         if (event.kind === 'line') onLine(event.text);
         else streamError = event.message;
       };

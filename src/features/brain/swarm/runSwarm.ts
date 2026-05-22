@@ -62,7 +62,7 @@ function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: st
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
-  const { question, conversation, modelFor, callbacks, dataset } = opts;
+  const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const bossModel = modelFor('boss');
   const paperRequest = detectPaperRequest(question);
 
@@ -76,7 +76,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   if (plan.mode === 'chat') {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken);
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -114,7 +114,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   let synth;
   try {
-    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken);
+    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken, undefined, signal);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {
