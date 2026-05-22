@@ -161,17 +161,19 @@ export interface SoFRow {
 export function buildSoFTable(assessments: GradeAssessment[]): SoFTable {
   return {
     title: 'Summary of Findings',
-    outcomes: assessments.map((a) => ({
-      outcome: a.outcome,
-      studies: 0, // populated by caller from evidence count
-      participants: 0,
-      certainty: a.finalCertainty,
-      relativeEffect: undefined,
-      absoluteEffect: a.absoluteEffect
-        ? `${a.absoluteEffect.intervention} vs ${a.absoluteEffect.control} (${a.absoluteEffect.difference})`
-        : undefined,
-      importance: 'critical',
-    })),
+    outcomes: assessments.map((a) => {
+      const row: SoFRow = {
+        outcome: a.outcome,
+        studies: 0,
+        participants: 0,
+        certainty: a.finalCertainty,
+        importance: 'critical',
+      };
+      if (a.absoluteEffect) {
+        row.absoluteEffect = `${a.absoluteEffect.intervention} vs ${a.absoluteEffect.control} (${a.absoluteEffect.difference})`;
+      }
+      return row;
+    }),
   };
 }
 

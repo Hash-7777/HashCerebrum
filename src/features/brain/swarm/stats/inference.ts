@@ -793,8 +793,9 @@ export function holmBonferroni(pValues: number[], alpha = 0.05): AdjustedPValues
   for (let k = 0; k < m; k++) {
     const rawP = indexed[k]!.p;
     const adj = Math.min(rawP * (m - k), 1);
-    adjusted[indexed[k]!.i] = Math.max(adj, prev);
-    prev = adjusted[indexed[k]!.i];
+    const idx = indexed[k]!.i;
+    adjusted[idx] = Math.max(adj, prev);
+    prev = adjusted[idx]!;
   }
   return {
     method: 'holm',
@@ -812,7 +813,8 @@ export function benjaminiHochberg(pValues: number[], alpha = 0.05): AdjustedPVal
   for (let k = m - 1; k >= 0; k--) {
     const rawP = indexed[k]!.p;
     const adj = Math.min(rawP * m / (k + 1), 1);
-    adjusted[indexed[k]!.i] = k === m - 1 ? adj : Math.min(adj, adjusted[indexed[k + 1]!.i]);
+    const idx = indexed[k]!.i;
+    adjusted[idx] = k === m - 1 ? adj : Math.min(adj, adjusted[indexed[k + 1]!.i]!);
   }
   return {
     method: 'bh_fdr',

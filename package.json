@@ -5,7 +5,7 @@
   "type": "module",
   "description": "HashCerebrum — Medical research agent desktop app",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tauri dev",

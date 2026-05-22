@@ -16,6 +16,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm test
 
@@ -35,4 +36,9 @@ jobs:
       - run: cargo clippy -- -D warnings
         working-directory: ./src-tauri
       - run: cargo test --lib
+        working-directory: ./src-tauri
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit
+          cargo audit
         working-directory: ./src-tauri
