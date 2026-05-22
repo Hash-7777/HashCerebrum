@@ -33,6 +33,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "api.fda.gov",
     // RxNorm
     "rxnav.nlm.nih.gov",
+    // Semantic Scholar (citation-aware academic search)
+    "api.semanticscholar.org",
     // LLM providers (only used if user opts into backend-proxied LLM)
     "api.anthropic.com",
     "api.openai.com",

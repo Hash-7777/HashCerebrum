@@ -37,6 +37,7 @@ use commands::{
     medical::{
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
         openfda::openfda_query, pubmed::pubmed_search, rxnorm::rxnorm_lookup,
+        semantic_scholar::semantic_scholar_search,
     },
     net::net_get,
     pdf::pdf_extract_text,
@@ -85,6 +86,7 @@ pub fn run() {
             ctgov_search,
             openfda_query,
             rxnorm_lookup,
+            semantic_scholar_search,
             pdf_extract_text,
             render_manuscript_pdf,
             cache_stats,

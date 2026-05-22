@@ -10,6 +10,7 @@ pub mod openalex;
 pub mod openfda;
 pub mod pubmed;
 pub mod rxnorm;
+pub mod semantic_scholar;
 
 use crate::cache;
 use crate::commands::net::net_get;
