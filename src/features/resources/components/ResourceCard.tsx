@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Collection, SavedResource } from '@core/store/resourcesStore';
+import { formatCitation } from '@core/store/resourcesStore';
 import { Icon } from '@ui/icons';
 
 export function ResourceCard({
@@ -18,7 +19,27 @@ export function ResourceCard({
   onNotes: (id: string, value: string) => void;
 }) {
   const [tagDraft, setTagDraft] = useState('');
+  const [copied, setCopied] = useState(false);
   const evidence = resource.evidence;
+
+  const copyCitation = async () => {
+    try {
+      const text = formatCitation(resource);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <article className="resource-card">
@@ -35,11 +56,16 @@ export function ResourceCard({
       </header>
       <h4>{evidence.title}</h4>
       {evidence.snippet && <p className="resource-snippet">{evidence.snippet}</p>}
-      {evidence.url && (
-        <a href={evidence.url} target="_blank" rel="noreferrer" className="resource-link">
-          <Icon name="eye" size={11} /> Open source
-        </a>
-      )}
+      <div className="resource-actions">
+        {evidence.url && (
+          <a href={evidence.url} target="_blank" rel="noreferrer" className="resource-link">
+            <Icon name="eye" size={11} /> Open source
+          </a>
+        )}
+        <button type="button" className="resource-link" onClick={copyCitation} aria-label="Copy citation">
+          <Icon name={copied ? 'check' : 'document'} size={11} /> {copied ? 'Copied' : 'Cite'}
+        </button>
+      </div>
       <div className="resource-row">
         <label>
           <span>Collection</span>

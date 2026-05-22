@@ -284,6 +284,19 @@ export function exportBibtex(resources: SavedResource[]): string {
   return lines.join('\n');
 }
 
+export function formatCitation(resource: SavedResource): string {
+  const e = resource.evidence;
+  const parts: string[] = [];
+  if (e.authors?.length) parts.push(e.authors.slice(0, 4).join(', ') + (e.authors.length > 4 ? ' et al.' : ''));
+  if (e.year) parts.push(`(${e.year})`);
+  parts.push(e.title);
+  parts.push(`${e.source.toUpperCase()}.`);
+  if (e.url) parts.push(e.url);
+  else if (e.identifiers?.doi) parts.push(`https://doi.org/${e.identifiers.doi}`);
+  else if (e.identifiers?.pmid) parts.push(`https://pubmed.ncbi.nlm.nih.gov/${e.identifiers.pmid}/`);
+  return parts.join(' ');
+}
+
 export function exportCslJson(resources: SavedResource[]): string {
   return JSON.stringify(
     resources.map((r) => {

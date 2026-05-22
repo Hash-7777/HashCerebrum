@@ -10,6 +10,7 @@ import {
   exportBibtex,
   exportCslJson,
   exportMarkdown,
+  formatCitation,
   useResourcesStore,
 } from '@core/store/resourcesStore';
 import { CollectionRail } from './components/CollectionRail';
@@ -72,6 +73,24 @@ export function ResourcesMode() {
     }
   };
 
+  const copyAllCitations = async () => {
+    if (filtered.length === 0) return;
+    const text = filtered.map((r) => formatCitation(r)).join('\n\n');
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <div className="mode resources-mode">
       <CollectionRail
@@ -119,6 +138,9 @@ export function ResourcesMode() {
               </button>
               <button type="button" disabled={filtered.length === 0} onClick={() => doExport('csl-json')}>
                 <Icon name="quote" size={12} /> CSL-JSON
+              </button>
+              <button type="button" disabled={filtered.length === 0} onClick={() => void copyAllCitations()}>
+                <Icon name="document" size={12} /> Copy citations
               </button>
             </div>
           </div>
