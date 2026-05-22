@@ -462,15 +462,41 @@ fn compile(source: String, figures: Vec<PreparedFigure>) -> AppResult<Vec<u8>> {
         .map_err(|errors| AppError::Pdf(format!("typst pdf: {errors:?}")))
 }
 
+const MAX_MANUSCRIPT_JSON_BYTES: usize = 5 * 1024 * 1024; // 5 MB
+const MAX_SECTIONS: usize = 64;
+const MAX_FIGURES: usize = 32;
+
 #[tauri::command]
 pub async fn render_manuscript_pdf(
     manuscript: serde_json::Value,
     references: Vec<ReferenceLine>,
     meta: Option<String>,
 ) -> AppResult<Vec<u8>> {
+    let json_bytes = serde_json::to_vec(&manuscript).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    if json_bytes.len() > MAX_MANUSCRIPT_JSON_BYTES {
+        return Err(AppError::InvalidInput(format!(
+            "manuscript payload exceeds {} bytes",
+            MAX_MANUSCRIPT_JSON_BYTES
+        )));
+    }
     let manuscript: Manuscript = serde_json::from_value(manuscript)?;
     if manuscript.sections.is_empty() {
         return Err(AppError::InvalidInput("manuscript has no sections".into()));
+    }
+    if manuscript.sections.len() > MAX_SECTIONS {
+        return Err(AppError::InvalidInput(format!(
+            "manuscript has {} sections (max {})",
+            manuscript.sections.len(),
+            MAX_SECTIONS
+        )));
+    }
+    let figure_count = manuscript.publication.as_ref().map(|p| p.figures.len()).unwrap_or(0);
+    if figure_count > MAX_FIGURES {
+        return Err(AppError::InvalidInput(format!(
+            "manuscript has {} figures (max {})",
+            figure_count,
+            MAX_FIGURES
+        )));
     }
     let figures = prepare_figures(&manuscript);
     let source = build_typ(
