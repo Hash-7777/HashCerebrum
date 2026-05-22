@@ -33,7 +33,7 @@ staged_files() {
 # -------------------------------------------------------------
 # 1. Block files by name
 # -------------------------------------------------------------
-BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/)'
+BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/|SESSION_HANDOFF\.md$)'
 RUNTIME_STATE_REGEX='^(audit|cache)/'
 
 while IFS= read -r f; do
@@ -122,6 +122,14 @@ while IFS= read -r f; do
     .githooks/pre-commit) continue ;;
     SECURITY.md|docs/SECURITY.md|.env.example) continue ;;
   esac
+
+  # Block known leaked passphrase (***) from re-entering history
+  if grep -nF "***" "$f" >/dev/null 2>&1; then
+    lines=$(grep -nF "***" "$f" | head -3)
+    warn "known leaked passphrase found in $f:"
+    echo "$lines" | sed 's/^/        /' >&2
+    hit_count=$((hit_count + 1))
+  fi
 
   # Skip pure-binary files quickly
   if LC_ALL=C grep -qPI '^$|.' "$f" 2>/dev/null; then

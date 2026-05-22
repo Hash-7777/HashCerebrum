@@ -91,3 +91,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 Sketches.jpg
+
+# =============================================================
+# Session handoff files — contain sensitive operational data
+# (passphrases, API keys, internal URLs) that must never be
+# committed. See docs/SESSION_HANDOFF.md for local use only.
+# =============================================================
+docs/SESSION_HANDOFF.md
+SESSION_HANDOFF.md
