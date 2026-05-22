@@ -14,9 +14,10 @@ Do **not** open a public GitHub issue for a security report.
 ## Hard rules (enforced by tooling)
 
 - **No secrets in the repo.** API keys, tokens, certificates, and private
-  keys are blocked by `.githooks/pre-commit` and `.gitignore`. Real keys
-  live in the OS keychain at runtime (`tauri-plugin-keyring` /
-  `security-framework`), never on disk in plaintext.
+  keys are blocked by `.githooks/pre-commit` and `.gitignore`. Provider API
+  keys are entered in Settings and held in the renderer's per-app WebKit
+  `localStorage`, isolated by the Tauri bundle identifier — never committed,
+  never written to the audit log, never stored in the response cache.
 - **No outbound HTTP from the renderer.** All external requests are
   initiated in Rust and gated through `security::guard::check`. See
   [docs/SECURITY.md](docs/SECURITY.md).

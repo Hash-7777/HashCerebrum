@@ -17,21 +17,26 @@ attacks on dependencies.
 
 ## Invariants
 
-1. **Medical-source HTTP originates in Rust.** The renderer never calls
-   `fetch()` to a medical source host. LLM provider calls currently stream
-   from the renderer so tokens can arrive live; those hosts are CSP-gated
-   and provider IDs remain allowlisted. A backend LLM proxy is tracked as
-   post-v1 work if keys must never enter renderer memory.
+1. **All external HTTP originates in Rust.** The renderer never calls
+   `fetch()` to a medical source or an LLM provider. Medical fetches and
+   LLM calls alike (`llm_http_get` / `llm_http_post` / `llm_chat_stream`)
+   run through Rust, behind the same guard, rate limiter, and audit path.
+   The renderer's CSP declares no external `connect-src` host at all.
 2. **Every privileged action passes `security::guard::check`.**
    Categories: `Net`, `Keychain`, `Fs`, `Llm`. Denials and approvals
    are both audited.
 3. **Audit log is hash-chained.** Each entry hashes the previous entry's
    hash. `audit_log_verify` walks the chain and returns the first broken
    sequence number, or `null` if intact.
-4. **API keys live in the OS keychain only at rest.** Never in files
-   (`.env` is in `.gitignore`), never logged, and never stored in model
-   metadata. The renderer retrieves a key only at the moment it calls a
-   configured LLM provider or fetches that provider's model list.
+4. **API keys stay in the renderer key store.** Provider keys are held in
+   the renderer's per-app WebKit `localStorage`, isolated by the Tauri
+   bundle identifier. They are never committed (`.env` is in `.gitignore`),
+   never written to the audit log, and never stored in model metadata or
+   the response cache. A key is read only at the moment a provider call is
+   made, then passed to the Rust proxy inside request headers — which are
+   never logged. Trade-off: this avoids an OS-keychain unlock prompt on
+   every launch, at the cost of at-rest encryption. An opt-in OS-keychain
+   path remains implemented in `commands/keychain.rs`.
 5. **CSP is strict.** No external `script-src`, no `'unsafe-inline'` on
    scripts. Style allows `'unsafe-inline'` for dynamic theme tokens only.
 6. **`withGlobalTauri: false`.** No implicit `window.__TAURI__`. The
@@ -42,15 +47,21 @@ attacks on dependencies.
 
 ## Denylist / SSRF protection
 
-`src-tauri/src/security/denylist.rs` blocks:
+`src-tauri/src/security/denylist.rs` blocks, before the allowlist is even
+consulted:
 - Cloud metadata endpoints (169.254.169.254, metadata.google.internal,
-  metadata.azure.com)
+  metadata.azure.com) and `0.0.0.0`
 - All RFC1918 private ranges (10/8, 172.16/12, 192.168/16)
-- Link-local IPv6 (`fe80:`)
-- ULA IPv6 (`fc00::/7`)
+- CGNAT / shared address space (100.64.0.0/10, RFC 6598)
+- Link-local IPv6 (`fe80:`) and ULA IPv6 (`fc00::/7`)
 
 `localhost` and `127.0.0.1` are NOT denylisted — they are allowed via
-`policy::ALLOWED_HOSTS` only for Ollama.
+`policy::ALLOWED_HOSTS`, and only on the Ollama port, for local models.
+
+Known limitation: the denylist matches host *strings*. An allowlisted
+domain whose DNS resolves to an internal address is not re-checked at the
+resolved-IP level. This is acceptable given the fixed set of government and
+academic API hosts the app talks to, but it is a deliberate, documented gap.
 
 ## Logging hygiene
 

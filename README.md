@@ -38,8 +38,8 @@ reaches a provider host directly.
   get a fast chat reply, research questions are delegated to topic specialists
   that fetch guarded evidence and return a citation-backed synthesis.
 - **Guarded medical sources** — PubMed, Europe PMC, OpenAlex,
-  ClinicalTrials.gov, openFDA, and RxNorm, fetched from Rust behind a host
-  allowlist, a per-host rate limiter, and a SQLite response cache.
+  ClinicalTrials.gov, openFDA, RxNorm, and Semantic Scholar, fetched from Rust
+  behind a host allowlist, a per-host rate limiter, and a SQLite response cache.
 - **Publication-grade papers** — research papers are drafted section by section
   into a strict, validated manuscript structure and typeset to PDF by an
   embedded Typst engine, with cited-only Vancouver references and a choice of
@@ -63,9 +63,11 @@ reaches a provider host directly.
 | **Brain** | ⌘1 | The research workspace: chat with the boss agent beside a live 3D anatomical brain whose regions light per active agent and detected topic. |
 | **Resources** | ⌘2 | Saved papers and collections with tags, notes, search, and Markdown / BibTeX / CSL-JSON export. |
 | **Memory** | ⌘3 | The active project's saved research memory — searchable evidence and answers, viewable as a list or a brain-shaped relatedness diagram. |
+| **Review** | ⌘4 | Structured study-quality assessment — RoB 2, ROBINS-I, QUADAS-2 checklists and a GRADE certainty-of-evidence tab, persisted per project. |
+| **Protocol** | ⌘5 | Study-design drafting — a PICO form that generates a structured research-protocol outline. |
 
 The mode registry is capped at five entries at compile time
-(`src/config/modes.ts`).
+(`src/config/modes.ts`) and all five are now in use.
 
 ## The agent swarm
 
@@ -166,7 +168,6 @@ src-tauri/           Rust backend — commands, guard, cache, audit, Typst
 - [Security](docs/SECURITY.md)
 - [Agents](docs/AGENTS.md)
 - [Licenses](docs/LICENSES.md)
-- [Remaining work](REMAINING_WORK.md)
 
 ## License
 
