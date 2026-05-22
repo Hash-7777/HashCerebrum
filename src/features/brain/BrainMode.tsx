@@ -32,7 +32,7 @@ import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
-import { summarizeDatasetText } from './swarm/statistics';
+import { summarizeDatasetText, summarizeDatasetXlsx } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
 import type { UploadedDatasetSummary } from './swarm/publicationTypes';
 
@@ -73,7 +73,10 @@ export function BrainMode() {
 
   const attachDataset = async (file: File) => {
     try {
-      const summary = await summarizeDatasetText(file.name, await file.text());
+      const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+      const summary = isExcel
+        ? await summarizeDatasetXlsx(file.name, await file.arrayBuffer())
+        : await summarizeDatasetText(file.name, await file.text());
       setDataset(summary);
       useToastStore.getState().show(`Dataset attached: ${summary.rows} rows`);
     } catch (error) {

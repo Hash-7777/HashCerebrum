@@ -63,7 +63,7 @@ export function Composer({
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+          accept=".csv,.tsv,.xlsx,.xls,.txt,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
           className="composer-file-input"
           onChange={attachDataset}
         />
@@ -71,7 +71,7 @@ export function Composer({
           type="button"
           onClick={() => fileRef.current?.click()}
           className="composer-settings"
-          aria-label="Attach CSV or TSV dataset"
+          aria-label="Attach CSV, TSV, or Excel dataset"
         >
           <Icon name="database" size={13} /> Dataset
         </button>

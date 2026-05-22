@@ -89,7 +89,7 @@ export interface UploadedDatasetSummary {
   sha256: string;
   rows: number;
   columns: string[];
-  delimiter: ',' | '\t';
+  delimiter: ',' | '\t' | null;
   columnSummaries: DatasetColumnSummary[];
   previewRows: Record<string, string>[];
   // Computed by the inferential statistics engine (Phase 42) at upload time.

@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import type { AnalysisPlan, DatasetColumnSummary, UploadedDatasetSummary } from './publicationTypes';
 import { deriveAnalysisPlan } from './stats/analysisPlan';
 
@@ -128,6 +129,29 @@ async function sha256(text: string): Promise<string> {
   return `fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
 }
 
+function parseXlsx(buffer: ArrayBuffer): { headers: string[]; rows: Record<string, string>[] } {
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]!];
+  if (!sheet) throw new Error('Excel workbook has no readable sheets.');
+  const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+  if (json.length === 0) throw new Error('Excel sheet is empty.');
+  const headers = (json[0] as unknown[]).map((cell, index) => {
+    const value = cell == null ? '' : String(cell);
+    return value || `column_${index + 1}`;
+  });
+  if (headers.length < 2) throw new Error('Dataset must contain at least two columns.');
+  const rows = json.slice(1).map((row) => {
+    const cells = row as unknown[];
+    const record: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      const raw = cells[index];
+      record[header] = raw == null ? '' : String(raw);
+    });
+    return record;
+  });
+  return { headers, rows: rows.filter((row) => Object.values(row).some((v) => v.trim())) };
+}
+
 export async function summarizeDatasetText(filename: string, text: string): Promise<UploadedDatasetSummary> {
   const { delimiter, headers, rows } = parseDelimited(text);
   return {
@@ -140,6 +164,24 @@ export async function summarizeDatasetText(filename: string, text: string): Prom
     previewRows: rows.slice(0, MAX_PREVIEW_ROWS),
     // The inferential statistics engine derives and runs its analysis plan
     // once, here, where the parsed rows are still in scope.
+    inferential: deriveAnalysisPlan(headers, rows),
+  };
+}
+
+export async function summarizeDatasetXlsx(filename: string, buffer: ArrayBuffer): Promise<UploadedDatasetSummary> {
+  if (buffer.byteLength > MAX_DATASET_BYTES) {
+    throw new Error('Dataset is too large for the in-app statistics preview. Use a file under 2 MB.');
+  }
+  const { headers, rows } = parseXlsx(buffer);
+  if (rows.length === 0) throw new Error('Excel sheet has no data rows.');
+  return {
+    filename,
+    sha256: await sha256(new TextDecoder().decode(buffer)),
+    rows: rows.length,
+    columns: headers,
+    delimiter: null,
+    columnSummaries: headers.map((header) => columnSummary(rows, header)),
+    previewRows: rows.slice(0, MAX_PREVIEW_ROWS),
     inferential: deriveAnalysisPlan(headers, rows),
   };
 }
