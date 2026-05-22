@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { APP_NAME, APP_VERSION } from '@config/constants';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
 import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
+import { useProjectStore } from '@core/store/projectStore';
+import { useResearchRunStore } from '@core/store/researchRunStore';
+import { useResourcesStore } from '@core/store/resourcesStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { Icon } from '@ui/icons';
@@ -31,6 +35,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const refreshProviderModels = useModelCatalogStore((s) => s.refreshProvider);
   const removeProviderModels = useModelCatalogStore((s) => s.removeProvider);
   const availableModels = modelGroups.flatMap((group) => group.models);
+  const totalResources = useResourcesStore((s) => s.resources.length);
+  const totalProjects = useProjectStore((s) => s.projects.length);
+  const totalRuns = useResearchRunStore((s) => s.runs.length);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -138,6 +145,41 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <Icon name="close" size={14} />
         </button>
       </header>
+
+      <section className="settings-status" aria-label="System status">
+        <ul>
+          <li>
+            <span>App</span>
+            <span>{APP_NAME} v{APP_VERSION}</span>
+          </li>
+          <li>
+            <span>Platform</span>
+            <span>{platform().env.isTauri ? `Tauri (${platform().env.platform})` : 'Browser dev'}</span>
+          </li>
+          <li>
+            <span>Providers</span>
+            <span>
+              {PROVIDER_DEFS.filter((g) => modelStatuses[g.provider]?.state === 'connected').length} / {PROVIDER_DEFS.length} connected
+            </span>
+          </li>
+          <li>
+            <span>Models</span>
+            <span>{availableModels.length}</span>
+          </li>
+          <li>
+            <span>Resources</span>
+            <span>{totalResources}</span>
+          </li>
+          <li>
+            <span>Projects</span>
+            <span>{totalProjects}</span>
+          </li>
+          <li>
+            <span>Research runs</span>
+            <span>{totalRuns}</span>
+          </li>
+        </ul>
+      </section>
 
       <div className="settings-model-tools">
         <span>

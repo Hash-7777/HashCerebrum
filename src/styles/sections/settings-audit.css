@@ -24,6 +24,7 @@
   overscroll-behavior: contain;
 }
 
+.settings-status,
 .settings-cache,
 .settings-audit,
 .settings-agents {
@@ -77,6 +78,24 @@
   min-height: 28px;
   padding: 0 10px;
   font-size: 11px;
+}
+.settings-status ul,
+.settings-cache ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+.settings-status ul li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  font: 11px var(--hc-font-mono);
+  color: var(--hc-fg-muted);
+}
+.settings-status ul li span:first-child {
+  color: var(--hc-fg-dim);
 }
 .settings-cache header,
 .settings-audit header {
