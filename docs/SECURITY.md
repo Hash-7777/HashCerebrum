@@ -42,6 +42,8 @@ attacks on dependencies.
    `'wasm-unsafe-eval'`, which permits WebAssembly compilation needed by
    WebKit/PDF rendering paths without allowing general JavaScript string
    evaluation. Style allows `'unsafe-inline'` for dynamic theme tokens only.
+   Production and development Tauri CSP entries carry the same script policy
+   so dev-time injected script hashes do not remove the WebAssembly allowance.
 6. **`withGlobalTauri: false`.** No implicit `window.__TAURI__`. The
    renderer must import from `@tauri-apps/api/core`, which is
    bundle-introspectable.

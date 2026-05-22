@@ -38,6 +38,8 @@
       // Strict by default. NO external script-src, NO inline scripts,
       // and NO broad unsafe-eval. wasm-unsafe-eval is the narrow WebAssembly
       // allowance needed by WebKit/PDF rendering paths.
+      // The same policy is set for production and dev builds so Tauri's
+      // injected script hashes never drop the WebAssembly allowance.
       // All external HTTP — medical sources and LLM providers alike —
       // goes through Rust commands behind the audited guard, so the
       // renderer needs no external connect-src hosts at all.
@@ -50,7 +52,8 @@
       //
       // frame-src allows 'self' and blob: so the in-app document preview
       // can render an exported PDF (a blob: URL) inside its <iframe>.
-      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+      "devCsp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },
 

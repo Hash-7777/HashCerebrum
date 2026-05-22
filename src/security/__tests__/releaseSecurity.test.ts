@@ -10,14 +10,17 @@ describe('release security configuration', () => {
   it('keeps the Tauri renderer CSP locked to the app and IPC origins', () => {
     const config = readRepoFile('src-tauri/tauri.conf.json');
     const csp = config.match(/"csp":\s*"([^"]+)"/)?.[1] ?? '';
+    const devCsp = config.match(/"devCsp":\s*"([^"]+)"/)?.[1] ?? '';
 
-    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
-    expect(csp).not.toContain("'unsafe-eval'");
-    expect(csp).toContain("object-src 'none'");
-    expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toContain("frame-src 'self' blob:");
-    expect(csp).toContain("connect-src 'self' ipc: http://ipc.localhost");
-    expect(csp).not.toMatch(/api\.openai|generativelanguage|anthropic|openrouter|localhost:11434/);
+    for (const policy of [csp, devCsp]) {
+      expect(policy).toContain("script-src 'self' 'wasm-unsafe-eval'");
+      expect(policy).not.toContain("'unsafe-eval'");
+      expect(policy).toContain("object-src 'none'");
+      expect(policy).toContain("frame-ancestors 'none'");
+      expect(policy).toContain("frame-src 'self' blob:");
+      expect(policy).toContain("connect-src 'self' ipc: http://ipc.localhost");
+      expect(policy).not.toMatch(/api\.openai|generativelanguage|anthropic|openrouter|localhost:11434/);
+    }
   });
 
   it('keeps production LLM code on the platform proxy instead of direct fetch', () => {
