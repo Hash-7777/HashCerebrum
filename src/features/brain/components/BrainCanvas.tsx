@@ -122,30 +122,42 @@ function BrainMesh({
 }) {
   const material = useMemo(() => meshPart.baseMaterial.clone(), [meshPart.baseMaterial]);
   const neutralColor = useMemo(() => new THREE.Color(NEUTRAL_BRAIN_COLOR), []);
-  const regionState = useBrainStore((store) => store.regions);
   const focusRegion = useBrainStore((store) => store.focusRegion);
   const invalidate = useThree((state) => state.invalidate);
   const ref = useRef<THREE.Mesh>(null);
   const selected = selectedRegion ? meshPart.part.regionIds.includes(selectedRegion) : false;
   const hovered = hoveredRegion ? meshPart.part.regionIds.includes(hoveredRegion) : false;
 
-  // A mesh part can map to more than one region. Glow in the colour of
-  // whichever region carries the most signal right now.
-  let activeRegion = primaryRegionForPart(meshPart.part);
-  let glow = 0;
-  for (const regionId of meshPart.part.regionIds) {
-    const state = regionState[regionId];
-    const lit = Math.max(state.base, state.accent);
-    if (lit > glow) {
-      glow = lit;
-      activeRegion = regionId;
+  // Subscribe to primitives only so this mesh does not re-render when
+  // unrelated regions change. Zustand v5 compares selector return values
+  // with Object.is; returning numbers/strings avoids reference churn.
+  const glow = useBrainStore((store) => {
+    let max = 0;
+    for (const regionId of meshPart.part.regionIds) {
+      const s = store.regions[regionId];
+      max = Math.max(max, s.base, s.accent);
     }
-  }
+    return max;
+  });
+  const activeRegion = useBrainStore((store) => {
+    let max = 0;
+    let active = primaryRegionForPart(meshPart.part);
+    for (const regionId of meshPart.part.regionIds) {
+      const s = store.regions[regionId];
+      const lit = Math.max(s.base, s.accent);
+      if (lit > max) {
+        max = lit;
+        active = regionId;
+      }
+    }
+    return active;
+  });
+
   // A region addressed in the memory diagram lights brightest, in its colour.
   const focused = focusRegion ? meshPart.part.regionIds.includes(focusRegion) : false;
-  if (focused && focusRegion) activeRegion = focusRegion;
+  const effectiveActiveRegion = focused && focusRegion ? focusRegion : activeRegion;
   const intensity = Math.max(glow, selected ? 0.95 : 0, hovered ? 0.75 : 0, focused ? 0.96 : 0);
-  const regionColor = useMemo(() => new THREE.Color(regionById(activeRegion).emissive), [activeRegion]);
+  const regionColor = useMemo(() => new THREE.Color(regionById(effectiveActiveRegion).emissive), [effectiveActiveRegion]);
 
   useEffect(() => {
     const visual = glowCurve(intensity);

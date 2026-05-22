@@ -47,4 +47,25 @@ describe('brainStore lighting decay', () => {
     expect(second.base).toBeLessThan(0.9);
     expect(second.accent).toBeLessThan(first.accent);
   });
+
+  it('returns the same state reference when nothing decays', () => {
+    const before = useBrainStore.getState();
+    useBrainStore.getState().tick(100);
+    const after = useBrainStore.getState();
+    expect(after).toBe(before);
+    expect(after.regions).toBe(before.regions);
+  });
+
+  it('returns a new regions object when a value decays', () => {
+    useBrainStore.getState().setRegion('frontal', 'agent', 1, 0);
+    vi.advanceTimersByTime(1000);
+
+    const before = useBrainStore.getState();
+    useBrainStore.getState().tick(100);
+    const after = useBrainStore.getState();
+
+    expect(after).not.toBe(before);
+    expect(after.regions).not.toBe(before.regions);
+    expect(after.regions.frontal.base).toBeLessThan(before.regions.frontal.base);
+  });
 });
