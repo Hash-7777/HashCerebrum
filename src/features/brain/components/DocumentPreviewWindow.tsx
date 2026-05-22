@@ -235,7 +235,7 @@ export function DocumentPreviewWindow({
               sandbox=""
             />
           ) : document.kind === 'pdf' ? (
-            <iframe className="document-preview-pdf" title={document.title} src={url} />
+            <iframe className="document-preview-pdf" title={document.title} src={url} sandbox="" />
           ) : (
             <pre>{document.copyText}</pre>
           )}
