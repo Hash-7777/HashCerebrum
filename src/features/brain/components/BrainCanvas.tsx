@@ -350,7 +350,7 @@ function useModelPresence() {
 
 const INITIAL_CAMERA: [number, number, number] = [0, 0.18, 5.6];
 
-export function BrainCanvas(props: BrainCanvasProps) {
+function BrainCanvasInner(props: BrainCanvasProps) {
   const presence = useModelPresence();
   const [performanceMode, setPerformanceMode] = useState(readPerformancePreference);
   const cameraRef = useRef<THREE.Camera | null>(null);
@@ -464,5 +464,10 @@ export function BrainCanvas(props: BrainCanvasProps) {
     </div>
   );
 }
+
+// Memoise the canvas — BrainMode re-renders on every chat keystroke, agent
+// update, and hover event; without this, the entire R3F scene tree was being
+// reconciled on each parent render, which made the GLB visibly reload.
+export const BrainCanvas = React.memo(BrainCanvasInner);
 
 useGLTF.preload(BRAIN_MODEL.path);

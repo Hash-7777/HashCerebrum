@@ -6,7 +6,7 @@
 // BrainCanvas, AgentPanel, EvidenceList, SettingsPanel) so a crash in one
 // stays contained by FeatureBoundary instead of taking the workspace down.
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentId, RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
@@ -85,10 +85,11 @@ export function BrainMode() {
     }
   };
 
-  // Clicking the same region twice clears the selection.
-  const toggleRegion = (region: RegionId | null) => {
+  // Clicking the same region twice clears the selection. Stable identity so
+  // the memoised BrainCanvas does not bail out of memoisation on every render.
+  const toggleRegion = useCallback((region: RegionId | null) => {
     setSelectedRegion((current) => (current === region ? null : region));
-  };
+  }, []);
 
   // Cmd+, / Ctrl+, opens settings — matches HashCortx muscle memory.
   useEffect(() => {
