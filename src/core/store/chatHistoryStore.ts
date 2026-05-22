@@ -77,7 +77,9 @@ function deriveTitle(messages: ChatMessage[]): string {
 function persist(chats: SavedChat[]) {
   void platform()
     .storage.set<PersistShape>(STORAGE_KEY, { chats })
-    .catch(() => undefined);
+    .catch((err: unknown) => {
+      console.error('[chatHistoryStore] persist failed:', err);
+    });
 }
 
 async function loadPersisted(): Promise<SavedChat[]> {

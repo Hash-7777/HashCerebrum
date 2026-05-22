@@ -89,7 +89,9 @@ async function loadPersisted(): Promise<PersistShape> {
 function persist(chunks: RagChunk[]) {
   void platform()
     .storage.set<PersistShape>(STORAGE_KEY, { chunks })
-    .catch(() => undefined);
+    .catch((err: unknown) => {
+      console.error('[ragStore] persist failed:', err);
+    });
 }
 
 let indexCache:

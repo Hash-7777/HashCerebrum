@@ -102,7 +102,11 @@ async function loadPersisted(): Promise<PersistShape> {
 }
 
 function persist(shape: PersistShape) {
-  void platform().storage.set(STORAGE_KEY, shape).catch(() => undefined);
+  void platform()
+    .storage.set(STORAGE_KEY, shape)
+    .catch((err: unknown) => {
+      console.error('[resourcesStore] persist failed:', err);
+    });
 }
 
 function evidenceKey(evidence: EvidenceItem): string {

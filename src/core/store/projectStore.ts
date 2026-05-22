@@ -86,7 +86,9 @@ async function loadPersisted(): Promise<PersistShape> {
 function persist(shape: PersistShape) {
   void platform()
     .storage.set<PersistShape>(STORAGE_KEY, shape)
-    .catch(() => undefined);
+    .catch((err: unknown) => {
+      console.error('[projectStore] persist failed:', err);
+    });
 }
 
 export const useProjectStore = create<ProjectStore>((set) => ({

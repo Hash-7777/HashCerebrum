@@ -75,7 +75,9 @@ export const useAgentModelStore = create<AgentModelStore>((set) => ({
       else delete overrides[agentId];
       void platform()
         .storage.set<PersistShape>(STORAGE_KEY, { overrides })
-        .catch(() => undefined);
+        .catch((err: unknown) => {
+          console.error('[agentModelStore] persist failed:', err);
+        });
       return { overrides };
     }),
 }));
