@@ -158,10 +158,10 @@ pub fn verify() -> AppResult<Option<u64>> {
             &serde_json::Value::Null, // payload hash already in data_hash
             &prev,
         );
-        // We can't re-derive entry_hash without the original payload — instead
-        // check that prev_hash matches the previous entry's entry_hash.
-        let _ = recomputed;
         if e.prev_hash != prev {
+            return Ok(Some(e.seq));
+        }
+        if recomputed.entry_hash != e.entry_hash {
             return Ok(Some(e.seq));
         }
         prev = e.entry_hash.clone();

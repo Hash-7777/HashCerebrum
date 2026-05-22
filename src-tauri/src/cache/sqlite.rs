@@ -60,13 +60,18 @@ fn with_conn<T>(f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
 
 pub fn stats() -> AppResult<CacheStats> {
     with_conn(|conn| {
-        let (rows, bytes): (u64, u64) = conn
+        let (rows_i64, bytes_i64): (i64, i64) = conn
             .query_row(
                 "SELECT COUNT(*), COALESCE(SUM(length(payload)), 0) FROM cache",
                 [],
-                |row| Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64)),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap_or((0, 0));
+        if rows_i64 < 0 || bytes_i64 < 0 {
+            return Err(AppError::Cache("negative count from SQLite".into()));
+        }
+        let rows = rows_i64 as u64;
+        let bytes = bytes_i64 as u64;
 
         let mut hosts = Vec::new();
         let mut stmt = conn.prepare(
