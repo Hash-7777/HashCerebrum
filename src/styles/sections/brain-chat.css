@@ -362,11 +362,32 @@
   overflow: hidden;
   background: rgba(2, 4, 8, 0.72);
 }
+.document-preview-pdf,
 .document-preview-body iframe {
   width: 100%;
   height: 100%;
   border: 0;
   background: #111827;
+}
+.document-preview-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
+  color: var(--hc-fg-muted);
+  text-align: center;
+}
+.document-preview-empty strong {
+  color: var(--hc-fg);
+  font-size: 13px;
+}
+.document-preview-empty p {
+  max-width: 360px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .document-preview-body pre {
   height: 100%;

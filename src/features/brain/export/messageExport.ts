@@ -10,6 +10,8 @@ import {
   referenceLinesForPublication,
 } from '../swarm/publication';
 
+const MIN_PDF_BYTES = 256;
+
 export interface ExportableMessage {
   title: string;
   role: ChatMessage['role'];
@@ -196,6 +198,16 @@ export function downloadTextFile(filename: string, body: string, mime: string): 
   downloadBlob(filename, new Blob([body], { type: mime }));
 }
 
+function assertPdfBlob(blob: Blob, renderer: string): Blob {
+  if (blob.size < MIN_PDF_BYTES) {
+    throw new Error(`${renderer} returned an empty or invalid PDF (${blob.size} bytes).`);
+  }
+  if (blob.type && !/pdf/i.test(blob.type)) {
+    throw new Error(`${renderer} returned ${blob.type}, not application/pdf.`);
+  }
+  return blob;
+}
+
 export function exportMessageMarkdown(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.md`, buildMarkdownExport(message), 'text/markdown;charset=utf-8');
 }
@@ -235,33 +247,42 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
     });
     try {
       const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
-      return await platform().manuscript.renderPdf(
-        typstManuscript,
-        referenceLinesForPublication(artifact),
-        meta,
+      return assertPdfBlob(
+        await platform().manuscript.renderPdf(
+          typstManuscript,
+          referenceLinesForPublication(artifact),
+          meta,
+        ),
+        'Typst renderer',
       );
     } catch {
       /* Typst unavailable or failed — fall through to the jsPDF renderer. */
     }
     const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact);
     const { buildPaperPdfBlob } = await import('./paperPdf');
-    return buildPaperPdfBlob({
-      title: message.title,
-      content: manuscriptToReadableText(exportManuscript),
-      ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
-      citations: artifact.references.map((reference) => reference.evidence),
-      manuscript: exportManuscript,
-    });
+    return assertPdfBlob(
+      await buildPaperPdfBlob({
+        title: message.title || exportManuscript.title,
+        content: manuscriptToReadableText(exportManuscript),
+        ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
+        citations: artifact.references.map((reference) => reference.evidence),
+        manuscript: exportManuscript,
+      }),
+      'jsPDF manuscript renderer',
+    );
   }
 
   const { buildPaperPdfBlob } = await import('./paperPdf');
-  return buildPaperPdfBlob({
-    title: message.title,
-    content,
-    ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
-    ...(message.citations ? { citations: message.citations } : {}),
-    ...(message.manuscript ? { manuscript: message.manuscript } : {}),
-  });
+  return assertPdfBlob(
+    await buildPaperPdfBlob({
+      title: message.title,
+      content,
+      ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
+      ...(message.citations ? { citations: message.citations } : {}),
+      ...(message.manuscript ? { manuscript: message.manuscript } : {}),
+    }),
+    'jsPDF message renderer',
+  );
 }
 
 // Build a publishable research-paper PDF and save it. A structured

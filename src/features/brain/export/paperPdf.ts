@@ -173,10 +173,11 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   };
 
   // ---- Title block -------------------------------------------------------
+  const documentTitle = plain(input.manuscript?.title ?? input.title) || 'HashCerebrum Research Manuscript';
   doc.setFont('times', 'bold');
   doc.setFontSize(21);
   doc.setTextColor(15, 23, 42);
-  for (const line of doc.splitTextToSize(plain(input.manuscript?.title ?? input.title), contentW) as string[]) {
+  for (const line of doc.splitTextToSize(documentTitle, contentW) as string[]) {
     ensureSpace(27);
     doc.text(line, pageW / 2, y, { align: 'center' });
     y += 27;
@@ -306,7 +307,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     renderManuscript(input.manuscript);
   } else {
     const blocks = parseBlocks(input.content);
-    const titleKey = normalizeHeading(input.title);
+    const titleKey = normalizeHeading(documentTitle);
     blocks.forEach((block, index) => {
       // The title is already rendered as the document title — skip a leading
       // heading that merely repeats it.

@@ -70,6 +70,13 @@ function saveRect(rect: Rect): void {
   }
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
 export function DocumentPreviewWindow({
   document,
   onClose,
@@ -80,6 +87,7 @@ export function DocumentPreviewWindow({
   const [rect, setRect] = useState(loadRect);
   const [copied, setCopied] = useState(false);
   const url = useMemo(() => URL.createObjectURL(document.blob), [document.blob]);
+  const emptyBlob = document.blob.size < 64;
 
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   useEffect(() => {
@@ -190,7 +198,7 @@ export function DocumentPreviewWindow({
         <header className="document-preview-titlebar" onPointerDown={startDrag}>
           <div className="document-preview-title">
             <strong>{document.filename}</strong>
-            <span>{document.typeLabel}</span>
+            <span>{document.typeLabel} · {formatBytes(document.blob.size)}</span>
           </div>
           <div className="document-preview-actions">
             <button type="button" onClick={() => void copyDocument()} title="Copy text">
@@ -207,8 +215,14 @@ export function DocumentPreviewWindow({
           </div>
         </header>
         <div className="document-preview-body">
-          {document.kind === 'pdf' ? (
-            <iframe title={document.title} src={url} />
+          {emptyBlob ? (
+            <div className="document-preview-empty">
+              <Icon name="alert" size={18} />
+              <strong>Preview unavailable</strong>
+              <p>The exported file has no readable bytes. Regenerate the document, then export again.</p>
+            </div>
+          ) : document.kind === 'pdf' ? (
+            <iframe className="document-preview-pdf" title={document.title} src={url} />
           ) : (
             <pre>{document.copyText}</pre>
           )}

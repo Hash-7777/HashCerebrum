@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { removeMarkdownTables, sectionBodyFromReply } from '../manuscript';
+import { containsPromptLeakage, removeMarkdownTables, sectionBodyFromReply } from '../manuscript';
 
 describe('manuscript section cleanup', () => {
   it('converts markdown tables into prose before manuscript storage', () => {
@@ -34,5 +34,30 @@ The remaining registry evidence is limited but clinically relevant [S5].
     expect(paragraphs.join(' ')).not.toContain('|');
     expect(paragraphs.join(' ')).not.toContain('---');
     expect(paragraphs.at(-1)).toContain('registry evidence is limited');
+  });
+
+  it('strips leaked prompt blocks before manuscript storage', () => {
+    const paragraphs = sectionBodyFromReply(
+      'Methods',
+      `
+Manuscript topic: warfarin interactions
+
+Retrieved records:
+[S1] PubMed record supplied to the model
+
+Specialist findings:
+Use only these notes.
+
+Methods
+
+The automated evidence review queried guarded biomedical sources and synthesized retrieved records with source markers [S1].
+`,
+    );
+
+    const body = paragraphs.join(' ');
+    expect(body).toContain('queried guarded biomedical sources');
+    expect(body).not.toContain('Manuscript topic');
+    expect(body).not.toContain('Retrieved records');
+    expect(containsPromptLeakage(body)).toBe(false);
   });
 });

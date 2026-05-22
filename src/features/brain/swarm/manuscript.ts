@@ -117,6 +117,48 @@ function paragraphs(text: string): string[] {
     .filter(Boolean);
 }
 
+const PROMPT_LEAK_BLOCK_START =
+  /^(manuscript topic|section to (?:write now|repair)|required section intent|required minimum|target length|retrieved records|specialist findings|uploaded dataset summary|sections already drafted|other drafted sections|current draft|hard rules|formatting rules|write the .* section now|rewrite the complete .* section)\b/i;
+
+const PROMPT_LEAK_PHRASES = [
+  'you are a biomedical research writer',
+  'write only polished academic prose',
+  'use only the retrieved records',
+  'do not write a references or bibliography section',
+  'do not invent p-values',
+  'do not invent a statistic',
+  'allowed use:',
+  'computed inferential statistics',
+  'computed descriptive statistics:',
+];
+
+function isPromptLeakBlock(block: string): boolean {
+  const normalized = block.replace(/\s+/g, ' ').trim();
+  const lower = normalized.toLowerCase();
+  const firstLine = block.split('\n').find((line) => line.trim())?.trim() ?? '';
+  if (PROMPT_LEAK_BLOCK_START.test(firstLine)) return true;
+  if (
+    /\bmanuscript topic:\b/i.test(normalized) &&
+    /\b(retrieved records|specialist findings|section to write now):\b/i.test(normalized)
+  ) {
+    return true;
+  }
+  return PROMPT_LEAK_PHRASES.some((phrase) => lower.startsWith(phrase));
+}
+
+export function stripPromptLeakage(text: string): string {
+  const blocks = removeMarkdownTables(text)
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  return blocks.filter((block) => !isPromptLeakBlock(block)).join('\n\n');
+}
+
+export function containsPromptLeakage(text: string): boolean {
+  return paragraphs(text).some(isPromptLeakBlock);
+}
+
 function isTableSeparator(line: string): boolean {
   return /^[\s|:\-]+$/.test(line) && line.includes('-');
 }
@@ -179,7 +221,7 @@ export function removeMarkdownTables(text: string): string {
 // Split a model's section reply into clean paragraphs, dropping any heading
 // line the model may have echoed back.
 export function sectionBodyFromReply(heading: string, reply: string): string[] {
-  const cleaned = removeMarkdownTables(reply)
+  const cleaned = stripPromptLeakage(reply)
     .split('\n')
     .filter((line) => {
       const bare = line.replace(/^#+\s*/, '').replace(/[*:]/g, '').trim().toLowerCase();
@@ -202,6 +244,7 @@ const EMPTY_ABSTRACT: ManuscriptAbstract = {
 // Anything unparseable falls back to the whole reply as Background so the
 // abstract is never empty.
 export function parseAbstract(reply: string): ManuscriptAbstract {
+  const cleanedReply = stripPromptLeakage(reply);
   const fields: (keyof ManuscriptAbstract)[] = [
     'background',
     'objective',
@@ -211,17 +254,17 @@ export function parseAbstract(reply: string): ManuscriptAbstract {
   ];
   const abstract: ManuscriptAbstract = { ...EMPTY_ABSTRACT };
   const labelRx = /\b(background|objective[s]?|methods?|results?|conclusion[s]?)\b\s*[:\-—]\s*/gi;
-  const matches = [...reply.matchAll(labelRx)];
+  const matches = [...cleanedReply.matchAll(labelRx)];
   if (matches.length === 0) {
-    abstract.background = reply.replace(/\s+/g, ' ').trim();
+    abstract.background = cleanedReply.replace(/\s+/g, ' ').trim();
     return abstract;
   }
   matches.forEach((match, index) => {
     const key = match[1]!.toLowerCase().replace(/s$/, '') as string;
     const field = fields.find((f) => f.startsWith(key.slice(0, 6))) ?? 'background';
     const start = match.index! + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1]!.index! : reply.length;
-    abstract[field] = reply.slice(start, end).replace(/\s+/g, ' ').trim();
+    const end = index + 1 < matches.length ? matches[index + 1]!.index! : cleanedReply.length;
+    abstract[field] = cleanedReply.slice(start, end).replace(/\s+/g, ' ').trim();
   });
   return abstract;
 }

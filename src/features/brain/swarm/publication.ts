@@ -1,5 +1,10 @@
 import type { EvidenceItem } from '@platform/index';
-import { SECTION_PLAN, type Manuscript, type ManuscriptSection } from './manuscript';
+import {
+  containsPromptLeakage,
+  SECTION_PLAN,
+  type Manuscript,
+  type ManuscriptSection,
+} from './manuscript';
 import type {
   AnalysisPlan,
   CanonicalReference,
@@ -26,7 +31,11 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   rxnorm: 'RxNorm',
 };
 
-const SECTION_CITATION_EXEMPT = new Set(['Declarations']);
+const SECTION_CITATION_EXEMPT = new Set([
+  'Declarations',
+  'Dataset and Statistical Analysis',
+  'Figures, Tables, and Statistical Safeguards',
+]);
 
 function escXml(value: string): string {
   return value
@@ -527,6 +536,29 @@ function claimConsistencyIssues(manuscript: Manuscript): ValidationIssue[] {
   return issues;
 }
 
+function promptLeakageIssues(manuscript: Manuscript): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (containsPromptLeakage(manuscript.title)) {
+    issues.push({
+      severity: 'blocker',
+      code: 'prompt-leakage',
+      message: 'The title contains prompt or instruction text and must be regenerated.',
+    });
+  }
+  for (const section of manuscript.sections) {
+    const text = section.body.join('\n\n');
+    if (containsPromptLeakage(text)) {
+      issues.push({
+        severity: 'blocker',
+        code: 'prompt-leakage',
+        section: section.heading,
+        message: `${section.heading} contains prompt or instruction text and must be regenerated.`,
+      });
+    }
+  }
+  return issues;
+}
+
 function validateManuscript(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
@@ -605,6 +637,7 @@ function validateManuscript(
 
   issues.push(...unsupportedStatisticIssues(manuscript, evidence, dataset));
   issues.push(...claimConsistencyIssues(manuscript));
+  issues.push(...promptLeakageIssues(manuscript));
 
   if (references.length === 0 && citedSet.size > 0) {
     issues.push({

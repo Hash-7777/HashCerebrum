@@ -6,6 +6,7 @@
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import type { EvidenceItem } from '@platform/index';
 import {
+  containsPromptLeakage,
   parseAbstract,
   sectionBodyFromReply,
   SECTION_PLAN,
@@ -20,8 +21,8 @@ import type { SpecialistResult } from './types';
 
 const SNIPPET_CHARS = 200;
 const MAX_EVIDENCE = 48;
-const SECTION_TOKENS = 2600;
-const MAX_SECTION_PASSES = 3;
+const SECTION_TOKENS = 3800;
+const MAX_SECTION_PASSES = 4;
 const MAX_REPAIR_PASSES = 2;
 
 const STOPWORDS = new Set([
@@ -30,12 +31,13 @@ const STOPWORDS = new Set([
   'within', 'what', 'which', 'while', 'review', 'research', 'paper', 'study',
 ]);
 
-const SECTION_SYSTEM = `You are a biomedical research writer drafting ONE section of an evidence-review manuscript for HashCerebrum.
+const SECTION_SYSTEM = `You are a biomedical research writer drafting ONE section of a biomedical manuscript for HashCerebrum.
 - Write only polished academic prose in full paragraphs for the requested section. Do not write other sections, a title, or a heading line.
 - Do not use markdown tables, pipe tables, ASCII tables, bullet lists, numbered lists, or chat-style summaries. Convert comparisons into prose.
 - Make the section read like a serious journal manuscript: dense, precise, source-grounded, and professionally edited.
 - Use only the retrieved records and specialist findings supplied. Cite every factual claim with its [S#] marker.
-- Never invent a statistic, study finding, PMID, DOI, author, year, or title. If the evidence is thin for this section, say so plainly.
+- If an uploaded dataset summary is supplied, you may narrate only the exact descriptive and inferential statistics already computed by the validated in-app statistics engine.
+- Never invent a statistic, study finding, PMID, DOI, author, year, or title. If the evidence or dataset is thin for this section, say so plainly.
 - Do not write a References or Bibliography section — references are added automatically.`;
 
 export interface DraftManuscriptOptions {
@@ -93,6 +95,98 @@ function keywordsFrom(question: string): string[] {
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length >= 4 && !STOPWORDS.has(word));
   return [...new Set(words)].slice(0, 6);
+}
+
+function titleTopic(question: string): string {
+  const topic = question
+    .replace(/^\s*(make|write|draft|create|generate)\s+(a\s+)?(full\s+)?(research\s+)?paper\s+(about|on|for)\s+/i, '')
+    .replace(/^\s*(make|write|draft|create|generate)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return topic || question.trim() || 'the requested biomedical question';
+}
+
+function fallbackTitle(question: string, dataset?: UploadedDatasetSummary | null): string {
+  const topic = titleTopic(question);
+  return dataset ? `Original Dataset Analysis of ${topic}` : `Evidence Review of ${topic}`;
+}
+
+function titleLooksUnsafe(title: string): boolean {
+  if (!title || title.length < 8 || title.length > 180) return true;
+  if (containsPromptLeakage(title)) return true;
+  return /\b(write|draft|generate)\s+(a\s+)?manuscript\b/i.test(title) ||
+    /\b(manuscript topic|retrieved records|specialist findings|section to write)\b/i.test(title);
+}
+
+function cleanTitle(reply: string, question: string, dataset?: UploadedDatasetSummary | null): string {
+  const firstLine = reply.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+  const candidate = firstLine
+    .replace(/^#+\s*/, '')
+    .replace(/^title\s*[:\-]\s*/i, '')
+    .replace(/^["'#\s]+|["'\s]+$/g, '')
+    .trim();
+  return titleLooksUnsafe(candidate) ? fallbackTitle(question, dataset) : candidate;
+}
+
+function fmt(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return 'not available';
+  return Math.abs(value) >= 100 ? value.toFixed(1) : value.toFixed(3).replace(/\.?0+$/, '');
+}
+
+function computedDatasetSection(dataset: UploadedDatasetSummary): ManuscriptSection {
+  const body: string[] = [];
+  body.push(
+    `The uploaded dataset (${dataset.filename}) contained ${dataset.rows} analysable rows and ${dataset.columns.length} columns. The raw-file SHA-256 fingerprint is ${dataset.sha256}, which allows the analysis to be audited against the exact uploaded data rather than a language-model reconstruction. HashCerebrum parsed the delimited file, typed variables as numeric or categorical from observed values, and computed descriptive summaries before any manuscript prose was generated.`,
+  );
+
+  const descriptive = dataset.columnSummaries
+    .slice(0, 10)
+    .map((column) => {
+      if (column.type === 'numeric') {
+        return `${column.name}: n=${column.nonMissing}, missing=${column.missing}, mean ${fmt(column.mean)}, SD ${fmt(column.sd)}, median ${fmt(column.median)}, range ${fmt(column.min)}-${fmt(column.max)}`;
+      }
+      const levels = column.levels?.slice(0, 5).map((level) => `${level.value} ${level.count}`).join(', ') ?? 'no observed levels';
+      return `${column.name}: n=${column.nonMissing}, missing=${column.missing}, levels ${levels}`;
+    })
+    .join('; ');
+  body.push(
+    `Descriptive statistics were computed directly in code and are summarized for the principal variables as follows: ${descriptive}. These values are deterministic outputs from the uploaded dataset and are not model-generated estimates.`,
+  );
+
+  const inferential = dataset.inferential;
+  if (!inferential?.generated) {
+    body.push(
+      `No validated inferential analysis plan could be generated from the available columns. The manuscript may discuss the dataset descriptively, but it must not report p-values, odds ratios, hazard ratios, confidence intervals, or subgroup effects for this dataset unless a future upload supplies the variables needed for a valid analysis. ${inferential?.notes.join(' ') ?? ''}`.trim(),
+    );
+    return { heading: 'Dataset and Statistical Analysis', body };
+  }
+
+  body.push(
+    `The validated in-app statistics engine generated an inferential analysis plan and produced the following analysis-ready results: ${inferential.analyses.map((analysis) => analysis.reportText).join(' ')}`,
+  );
+  if (inferential.subgroups) {
+    body.push(inferential.subgroups.reportText);
+  }
+  if (inferential.survival) {
+    body.push(inferential.survival.reportText);
+  }
+  if (inferential.notes.length > 0) {
+    body.push(`Statistical caveats from the analysis engine were: ${inferential.notes.join(' ')}`);
+  }
+  return { heading: 'Dataset and Statistical Analysis', body };
+}
+
+function insertDatasetSection(sections: ManuscriptSection[], dataset?: UploadedDatasetSummary | null): ManuscriptSection[] {
+  if (!dataset) return sections;
+  const section = computedDatasetSection(dataset);
+  if (sections.some((candidate) => candidate.heading === section.heading)) return sections;
+  const methodsIndex = sections.findIndex((candidate) => candidate.heading === 'Methods');
+  if (methodsIndex < 0) return [section, ...sections];
+  return [
+    ...sections.slice(0, methodsIndex + 1),
+    section,
+    ...sections.slice(methodsIndex + 1),
+  ];
 }
 
 async function callModel(
@@ -177,19 +271,18 @@ export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Man
   const datasetBlock = dataset ? datasetSummaryForPrompt(dataset) : '(no uploaded dataset was supplied)';
 
   // Title — a focused one-line call; falls back to the question.
-  let title = question.trim();
+  let title = fallbackTitle(question, dataset);
   try {
     opts.onSection?.('Title');
     const reply = await callModel(
       bossModel,
       'You write concise, formal academic manuscript titles. Reply with the title only — no quotation marks, no extra text.',
-      `Write a manuscript title for an evidence review addressing: ${question}`,
+      `Write a manuscript title for ${dataset ? 'an original-data biomedical manuscript with retrieved evidence context' : 'an evidence-review manuscript'} addressing: ${question}`,
       120,
     );
-    const firstLine = reply.split('\n').map((line) => line.trim()).find(Boolean);
-    if (firstLine) title = firstLine.replace(/^["'#\s]+|["'\s]+$/g, '') || title;
+    title = cleanTitle(reply, question, dataset);
   } catch {
-    /* keep the question as the title */
+    /* keep the fallback title */
   }
 
   // Sections — one focused call each; a failed section degrades to a note.
@@ -244,6 +337,9 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
       sections.push({ heading: spec.heading, body: [`This section could not be drafted: ${detail}`] });
     }
   }
+
+  const sectionsWithDataset = insertDatasetSection(sections, dataset);
+  sections.splice(0, sections.length, ...sectionsWithDataset);
 
   // Validation repair — after the first pass, regenerate only sections that
   // fail publication gates instead of throwing away the whole manuscript.
