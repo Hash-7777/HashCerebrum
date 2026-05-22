@@ -85,4 +85,38 @@ describe('layoutMemoryGraph', () => {
 
     expect(pinned).toHaveLength(0);
   });
+
+  it('spreads a dense single topic into an interpretable constellation', () => {
+    const graph: MemoryGraph = {
+      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], terms: ['dense'] }],
+      nodes: [],
+      edges: [],
+    };
+    graph.nodes = Array.from({ length: 64 }, (_, index) => {
+      const id = `n${index}`;
+      graph.clusters[0]!.nodeIds.push(id);
+      return {
+        id,
+        chunk: chunk(id),
+        label: id,
+        degree: 4,
+        clusterId: 'dense',
+        topicTerms: ['dense'],
+      };
+    });
+    graph.edges = graph.nodes.slice(1).map((node) => ({
+      source: graph.nodes[0]!.id,
+      target: node.id,
+      weight: 0.7,
+      reason: 'same_topic',
+      label: 'same topic',
+    }));
+
+    const positions = layoutMemoryGraph(graph, 1200);
+    const xs = [...positions.values()].map((point) => point.x);
+    const ys = [...positions.values()].map((point) => point.y);
+
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(260);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(220);
+  });
 });

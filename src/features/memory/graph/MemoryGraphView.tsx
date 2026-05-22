@@ -1,18 +1,15 @@
-// Memory graph view — a brain-shaped diagram of a project's saved RAG chunks.
-// Nodes are findings, edges are topic links, and the whole map is laid out
-// inside a brain silhouette so it reads as one mind rather than scattered
-// blobs. This component renders the layout and handles pan / zoom / drag /
-// selection.
+// Memory graph view — an Obsidian-style topic map of a project's saved RAG
+// chunks. Nodes are findings, edges are topic links, and clusters are labelled
+// research constellations so the map is interpretable before a node is opened.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { RagChunk } from '@core/store/ragStore';
 import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
 import { regionForChunk } from '../../brain/data/memoryRegions';
-import { buildMemoryGraph } from './memoryGraph';
-import { brainShape, type BrainBounds } from './brainShape';
-import { layoutMemoryGraph, type NodePosition } from './layout';
+import { buildMemoryGraph, type MemoryGraphCluster } from './memoryGraph';
+import { graphBounds, layoutMemoryGraph, type GraphBounds, type NodePosition } from './layout';
 
 const EXCERPT_CHARS = 280;
 const LABEL_CHARS = 30;
@@ -20,6 +17,7 @@ const MIN_SCALE = 0.06;
 const MAX_SCALE = 10;
 const WHEEL_ZOOM_STEP = 1.14;
 const CLICK_SLOP = 4; // px of movement below which a gesture counts as a click
+const CLUSTER_COLORS = ['#3dd1bf', '#8b9eff', '#f5b971', '#7fdcab', '#64d2ff', '#c7a2ff', '#ff8da1', '#d7e06f'];
 
 interface Transform {
   x: number;
@@ -32,11 +30,31 @@ type Gesture =
   | { kind: 'node'; id: string; px: number; py: number; ox: number; oy: number; moved: boolean };
 
 function nodeRadius(degree: number): number {
-  return 4.5 + Math.sqrt(degree) * 3.2;
+  return Math.min(11, 4 + Math.sqrt(Math.max(0, degree)) * 1.55);
 }
 
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+function clusterStyle(color: string): CSSProperties {
+  return { '--cluster-color': color } as CSSProperties;
+}
+
+function clusterColor(index: number): string {
+  return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
+}
+
+function clusterVisual(cluster: MemoryGraphCluster, positions: Map<string, NodePosition>) {
+  const points = cluster.nodeIds.map((id) => positions.get(id)).filter(Boolean) as NodePosition[];
+  if (points.length === 0) return null;
+  const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+  const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+  const radius = Math.max(
+    72,
+    ...points.map((point) => Math.hypot(point.x - x, point.y - y) + 32),
+  );
+  return { x, y, radius };
 }
 
 export function MemoryGraphView({
@@ -51,15 +69,23 @@ export function MemoryGraphView({
     () => new Map(graph.clusters.map((cluster) => [cluster.id, cluster])),
     [graph.clusters],
   );
-
-  // Lay the graph out in a virtual square sized by node count, so the
-  // simulation never reruns on container resize — only the fit transform does.
-  const span = useMemo(
-    () => Math.max(1000, Math.sqrt(graph.nodes.length) * 150),
-    [graph.nodes.length],
+  const nodeById = useMemo(
+    () => new Map(graph.nodes.map((node) => [node.id, node])),
+    [graph.nodes],
   );
-  const brain = useMemo(() => brainShape(span), [span]);
+  const clusterIndexById = useMemo(
+    () => new Map(graph.clusters.map((cluster, index) => [cluster.id, index])),
+    [graph.clusters],
+  );
+
+  // Lay the graph out in a virtual square sized by topic count and node count,
+  // so the simulation never reruns on container resize — only fit changes.
+  const span = useMemo(
+    () => Math.max(1200, Math.sqrt(graph.nodes.length) * 110, Math.sqrt(graph.clusters.length) * 540),
+    [graph.clusters.length, graph.nodes.length],
+  );
   const layout = useMemo(() => layoutMemoryGraph(graph, span), [graph, span]);
+  const bounds = useMemo(() => graphBounds(layout, span), [layout, span]);
 
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -82,15 +108,16 @@ export function MemoryGraphView({
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
 
-  // Fit a bounding box (the brain silhouette) into the current viewport.
+  // Fit a bounding box into the current viewport.
   const fitBox = useCallback(
-    (box: BrainBounds) => {
+    (box: GraphBounds) => {
       if (size.w === 0 || size.h === 0) return;
       const pad = Math.min(96, Math.max(44, Math.min(size.w, size.h) * 0.09));
       const boxW = Math.max(box.maxX - box.minX, 1);
@@ -112,12 +139,13 @@ export function MemoryGraphView({
   useEffect(() => {
     setPositions(new Map(layout));
     setSelectedId(null);
+    setSelectedClusterId(null);
   }, [layout]);
 
-  // Frame the brain once the viewport is measured and after every relayout.
+  // Frame the graph once the viewport is measured and after every relayout.
   useEffect(() => {
-    fitBox(brain.bounds);
-  }, [brain, fitBox]);
+    fitBox(bounds);
+  }, [bounds, fitBox]);
 
   // Track the container size.
   useEffect(() => {
@@ -240,9 +268,17 @@ export function MemoryGraphView({
 
   const activeId = selectedId ?? hoverId;
   const activeNeighbors = activeId ? (neighbors.get(activeId) ?? new Set<string>()) : null;
-  const selected = selectedId ? graph.nodes.find((node) => node.id === selectedId) : undefined;
+  const selected = selectedId ? nodeById.get(selectedId) : undefined;
+  const clusterVisuals = graph.clusters
+    .map((cluster, index) => ({ cluster, index, visual: clusterVisual(cluster, positions) }))
+    .filter((item): item is { cluster: MemoryGraphCluster; index: number; visual: NonNullable<ReturnType<typeof clusterVisual>> } =>
+      item.visual !== null,
+    );
 
   const nodeState = (id: string): 'normal' | 'lit' | 'dim' => {
+    const node = nodeById.get(id);
+    if (selectedClusterId && node?.clusterId !== selectedClusterId) return 'dim';
+    if (selectedClusterId && !activeId) return 'lit';
     if (!activeId) return 'normal';
     if (id === activeId || (activeNeighbors?.has(id) ?? false)) return 'lit';
     return 'dim';
@@ -261,12 +297,53 @@ export function MemoryGraphView({
         onPointerCancel={onPointerUp}
       >
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
+          {clusterVisuals.map(({ cluster, index, visual }) => {
+            const active = selectedClusterId === cluster.id;
+            const dim = selectedClusterId !== null && !active;
+            return (
+              <g
+                key={cluster.id}
+                className="memory-graph-cluster"
+                data-active={active}
+                data-dim={dim}
+                transform={`translate(${visual.x} ${visual.y})`}
+                style={clusterStyle(clusterColor(index))}
+              >
+                <circle className="memory-graph-cluster-halo" r={visual.radius} />
+                <text
+                  className="memory-graph-cluster-label"
+                  y={-visual.radius - 14 / transform.scale}
+                  fontSize={12 / transform.scale}
+                >
+                  {truncate(cluster.label, 42)}
+                </text>
+                <text
+                  className="memory-graph-cluster-meta"
+                  y={-visual.radius + 2 / transform.scale}
+                  fontSize={9.5 / transform.scale}
+                >
+                  {cluster.nodeIds.length} nodes
+                  {cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''}
+                </text>
+              </g>
+            );
+          })}
           {graph.edges.map((edge) => {
             const a = positions.get(edge.source);
             const b = positions.get(edge.target);
             if (!a || !b) return null;
+            const sourceNode = nodeById.get(edge.source);
+            const targetNode = nodeById.get(edge.target);
+            const clusterMatch =
+              selectedClusterId &&
+              sourceNode?.clusterId === selectedClusterId &&
+              targetNode?.clusterId === selectedClusterId;
             const edgeState = !activeId
-              ? 'normal'
+              ? selectedClusterId
+                ? clusterMatch
+                  ? 'lit'
+                  : 'dim'
+                : 'normal'
               : edge.source === activeId || edge.target === activeId
                 ? 'lit'
                 : 'dim';
@@ -290,7 +367,8 @@ export function MemoryGraphView({
             if (!point) return null;
             const radius = nodeRadius(node.degree);
             const state = nodeState(node.id);
-            const showLabel = state === 'lit' || (!activeId && transform.scale >= 0.55);
+            const clusterIndex = clusterIndexById.get(node.clusterId) ?? 0;
+            const showLabel = state === 'lit' || node.chunk.kind === 'answer' || (!activeId && transform.scale >= 0.9);
             return (
               <g
                 key={node.id}
@@ -300,6 +378,7 @@ export function MemoryGraphView({
                 data-selected={node.id === selectedId}
                 data-cluster={node.clusterId}
                 transform={`translate(${point.x} ${point.y})`}
+                style={clusterStyle(clusterColor(clusterIndex))}
                 onPointerDown={(event) => onNodePointerDown(event, node.id)}
                 onPointerEnter={() => setHoverId(node.id)}
                 onPointerLeave={() => setHoverId((current) => (current === node.id ? null : current))}
@@ -326,18 +405,43 @@ export function MemoryGraphView({
         {graph.clusters.length} {graph.clusters.length === 1 ? 'cluster' : 'clusters'}
       </div>
 
+      <div className="memory-graph-topics" aria-label="Topic clusters">
+        <button
+          type="button"
+          data-active={selectedClusterId === null}
+          onClick={() => setSelectedClusterId(null)}
+        >
+          All topics
+        </button>
+        {graph.clusters.slice(0, 8).map((cluster, index) => (
+          <button
+            type="button"
+            key={cluster.id}
+            data-active={selectedClusterId === cluster.id}
+            onClick={() => setSelectedClusterId((current) => (current === cluster.id ? null : cluster.id))}
+            style={clusterStyle(clusterColor(index))}
+            title={cluster.terms.join(', ')}
+          >
+            <span className="memory-graph-topic-dot" />
+            {truncate(cluster.label, 28)}
+            <span>{cluster.nodeIds.length}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="memory-graph-controls">
         <span className="memory-graph-legend">
-          <span className="memory-graph-swatch" data-kind="evidence" /> Evidence
+          <span className="memory-graph-swatch" data-kind="evidence" /> Topic evidence
           <span className="memory-graph-swatch" data-kind="answer" /> Answer
         </span>
+        <span className="memory-graph-zoom-value">{Math.round(transform.scale * 100)}%</span>
         <button type="button" onClick={() => zoomFromCenter(1 / 1.28)} aria-label="Zoom out">
           <Icon name="minus" size={12} />
         </button>
         <button type="button" onClick={() => zoomFromCenter(1.28)} aria-label="Zoom in">
           <Icon name="plus" size={12} />
         </button>
-        <button type="button" onClick={() => fitBox(brain.bounds)}>
+        <button type="button" onClick={() => fitBox(bounds)}>
           <Icon name="refresh" size={12} /> Reset view
         </button>
       </div>

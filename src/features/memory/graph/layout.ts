@@ -1,15 +1,11 @@
-// Force-directed layout for the memory graph, warped to fill a brain shape.
+// Obsidian-style topic-constellation layout for the memory graph.
 //
-// The graph is laid out freely first — a normal Fruchterman–Reingold
-// simulation with topic-anchor gravity and a gentle pull to the centre, which
-// settles the disconnected topic clusters into one cohesive, evenly-filled
-// blob. The settled blob is then normalized to a unit disc and warped through
-// the brain silhouette, so the point cloud itself fills a brain. There is no
-// hard boundary clamp — that was what piled the nodes into edge rings.
-//
-// Pure and deterministic (a golden-angle seed, no Math.random).
+// The old layout warped every node into a brain silhouette. That looked novel,
+// but large research runs collapsed into dense piles of identical dots. This
+// layout makes the information legible first: each topic gets a deterministic
+// centre, nodes orbit that centre in readable rings, and a short force pass
+// separates nearby dots while keeping clusters coherent.
 
-import { brainShape } from './brainShape';
 import type { MemoryGraph } from './memoryGraph';
 
 export interface NodePosition {
@@ -17,76 +13,151 @@ export interface NodePosition {
   y: number;
 }
 
-const ITERATIONS = 320;
+export interface GraphBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const RELAX_ITERATIONS = 120;
+
+function clusterRadius(size: number): number {
+  return Math.min(360, Math.max(82, 48 + Math.sqrt(size) * 24 + size * 0.45));
+}
+
+function nodeRadius(degree: number): number {
+  return Math.min(11, 4 + Math.sqrt(Math.max(0, degree)) * 1.55);
+}
+
+function placeClusterCenters(graph: MemoryGraph, span: number): Map<string, NodePosition> {
+  const cx = span / 2;
+  const cy = span / 2;
+  const clusters = [...graph.clusters].sort((a, b) => b.nodeIds.length - a.nodeIds.length || a.label.localeCompare(b.label));
+  const centers = new Map<string, NodePosition>();
+  const placed: { x: number; y: number; r: number }[] = [];
+  const baseStep = Math.max(190, Math.min(340, span / Math.max(4, Math.sqrt(clusters.length) * 2.4)));
+
+  clusters.forEach((cluster, index) => {
+    const r = clusterRadius(cluster.nodeIds.length);
+    if (index === 0) {
+      centers.set(cluster.id, { x: cx, y: cy });
+      placed.push({ x: cx, y: cy, r });
+      return;
+    }
+
+    let chosen: NodePosition | null = null;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const ring = Math.max(1, Math.floor(Math.sqrt(attempt + index)));
+      const angle = (attempt + index * 11) * GOLDEN_ANGLE;
+      const distance = baseStep * Math.sqrt(ring) + r * 0.38;
+      const x = cx + Math.cos(angle) * distance;
+      const y = cy + Math.sin(angle) * distance;
+      const collides = placed.some((other) => Math.hypot(x - other.x, y - other.y) < r + other.r + 54);
+      if (!collides) {
+        chosen = { x, y };
+        break;
+      }
+    }
+
+    const fallbackAngle = index * GOLDEN_ANGLE;
+    const fallbackDistance = baseStep * Math.sqrt(index + 1);
+    const point = chosen ?? {
+      x: cx + Math.cos(fallbackAngle) * fallbackDistance,
+      y: cy + Math.sin(fallbackAngle) * fallbackDistance,
+    };
+    centers.set(cluster.id, point);
+    placed.push({ ...point, r });
+  });
+
+  return centers;
+}
+
+export function graphBounds(positions: Map<string, NodePosition>, fallbackSpan = 1000): GraphBounds {
+  if (positions.size === 0) {
+    return { minX: 0, minY: 0, maxX: fallbackSpan, maxY: fallbackSpan };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of positions.values()) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  const pad = 150;
+  return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+}
 
 export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string, NodePosition> {
   const result = new Map<string, NodePosition>();
   const n = graph.nodes.length;
   if (n === 0) return result;
 
-  const brain = brainShape(span);
-  const cx = span / 2;
-  const cy = span / 2;
-  if (n === 1) {
-    result.set(graph.nodes[0]!.id, { x: cx, y: cy });
-    return result;
+  const centers = placeClusterCenters(graph, span);
+  const nodesByCluster = new Map<string, typeof graph.nodes>();
+  graph.nodes.forEach((node) => {
+    const list = nodesByCluster.get(node.clusterId) ?? [];
+    list.push(node);
+    nodesByCluster.set(node.clusterId, list);
+  });
+
+  for (const cluster of graph.clusters) {
+    const center = centers.get(cluster.id) ?? { x: span / 2, y: span / 2 };
+    const clusterNodes = [...(nodesByCluster.get(cluster.id) ?? [])].sort((a, b) => {
+      if (a.chunk.kind !== b.chunk.kind) return a.chunk.kind === 'answer' ? -1 : 1;
+      return b.degree - a.degree || b.chunk.createdAt.localeCompare(a.chunk.createdAt);
+    });
+    const radius = clusterRadius(clusterNodes.length);
+    const maxOrbit = radius * 0.82;
+
+    clusterNodes.forEach((node, index) => {
+      if (clusterNodes.length === 1) {
+        result.set(node.id, { ...center });
+        return;
+      }
+      const isCentralAnswer = index === 0 && node.chunk.kind === 'answer';
+      const orbitIndex = isCentralAnswer ? 0 : index + (clusterNodes[0]?.chunk.kind === 'answer' ? 0 : 1);
+      const t = orbitIndex / Math.max(1, clusterNodes.length - 1);
+      const distance = isCentralAnswer ? 0 : 24 + Math.sqrt(t) * maxOrbit;
+      const angle = index * GOLDEN_ANGLE + cluster.label.length * 0.031;
+      result.set(node.id, {
+        x: center.x + Math.cos(angle) * distance,
+        y: center.y + Math.sin(angle) * distance,
+      });
+    });
   }
 
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-
-  // One anchor per topic cluster, in a tight spread near the centre. Global
-  // gravity then fuses the clusters into a single blob with sub-regions.
-  const clusterIds = [...new Set(graph.nodes.map((node) => node.clusterId))];
-  const anchorRadius = span * 0.13;
-  const anchorByCluster = new Map(
-    clusterIds.map((id, i) => {
-      if (clusterIds.length === 1) return [id, { x: cx, y: cy }];
-      const t = i / (clusterIds.length - 1);
-      const r = anchorRadius * Math.sqrt(t);
-      const a = i * goldenAngle;
-      return [id, { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }];
-    }),
-  );
-
   const index = new Map(graph.nodes.map((node, i) => [node.id, i]));
-
-  // Seed each node in a small scatter around its topic's anchor.
-  const pos: NodePosition[] = graph.nodes.map((node, i) => {
-    const anchor = anchorByCluster.get(node.clusterId) ?? { x: cx, y: cy };
-    const r = 6 + (i % 29) * 5;
-    const a = i * goldenAngle;
-    return { x: anchor.x + r * Math.cos(a), y: anchor.y + r * Math.sin(a) };
-  });
-  const disp: NodePosition[] = pos.map(() => ({ x: 0, y: 0 }));
-
+  const pos = graph.nodes.map((node) => result.get(node.id) ?? { x: span / 2, y: span / 2 });
+  const disp = pos.map(() => ({ x: 0, y: 0 }));
   const edges = graph.edges
     .map((edge) => ({ a: index.get(edge.source), b: index.get(edge.target), weight: edge.weight }))
-    .filter((edge): edge is { a: number; b: number; weight: number } =>
-      edge.a !== undefined && edge.b !== undefined,
-    );
+    .filter((edge): edge is { a: number; b: number; weight: number } => edge.a !== undefined && edge.b !== undefined);
 
-  const ideal = Math.sqrt((span * span * 0.36) / n) * 0.9;
-  let temperature = span * 0.07;
-  const cooling = temperature / (ITERATIONS + 1);
-
-  for (let iter = 0; iter < ITERATIONS; iter += 1) {
-    for (let i = 0; i < n; i += 1) {
-      disp[i]!.x = 0;
-      disp[i]!.y = 0;
+  for (let iter = 0; iter < RELAX_ITERATIONS; iter += 1) {
+    for (const d of disp) {
+      d.x = 0;
+      d.y = 0;
     }
 
-    // Repulsion between every pair — fills the blob evenly.
     for (let i = 0; i < n; i += 1) {
       for (let j = i + 1; j < n; j += 1) {
+        const sameCluster = graph.nodes[i]!.clusterId === graph.nodes[j]!.clusterId;
         let dx = pos[i]!.x - pos[j]!.x;
         let dy = pos[i]!.y - pos[j]!.y;
         let dist = Math.hypot(dx, dy);
         if (dist < 0.01) {
-          dx = (i - j) * 0.02 + 0.02;
-          dy = 0.017;
+          dx = (i - j) * 0.04 + 0.03;
+          dy = 0.025;
           dist = Math.hypot(dx, dy);
         }
-        const force = (ideal * ideal) / dist;
+        const minDist = nodeRadius(graph.nodes[i]!.degree) + nodeRadius(graph.nodes[j]!.degree) + (sameCluster ? 10 : 34);
+        if (dist >= minDist * 1.6) continue;
+        const force = ((minDist * 1.6 - dist) / (minDist * 1.6)) * (sameCluster ? 1.6 : 2.6);
         const ux = dx / dist;
         const uy = dy / dist;
         disp[i]!.x += ux * force;
@@ -96,57 +167,37 @@ export function layoutMemoryGraph(graph: MemoryGraph, span: number): Map<string,
       }
     }
 
-    // Attraction along edges — a stronger link pulls harder.
     for (const edge of edges) {
-      const dx = pos[edge.a]!.x - pos[edge.b]!.x;
-      const dy = pos[edge.a]!.y - pos[edge.b]!.y;
+      const source = graph.nodes[edge.a]!;
+      const target = graph.nodes[edge.b]!;
+      const sameCluster = source.clusterId === target.clusterId;
+      const desired = sameCluster ? 118 + (1 - edge.weight) * 64 : 210 + (1 - edge.weight) * 110;
+      const dx = pos[edge.b]!.x - pos[edge.a]!.x;
+      const dy = pos[edge.b]!.y - pos[edge.a]!.y;
       const dist = Math.max(Math.hypot(dx, dy), 0.01);
-      const force = ((dist * dist) / ideal) * (0.5 + edge.weight);
+      const force = (dist - desired) * (sameCluster ? 0.00155 : 0.0012) * (0.5 + edge.weight);
       const ux = dx / dist;
       const uy = dy / dist;
-      disp[edge.a]!.x -= ux * force;
-      disp[edge.a]!.y -= uy * force;
-      disp[edge.b]!.x += ux * force;
-      disp[edge.b]!.y += uy * force;
+      disp[edge.a]!.x += ux * force;
+      disp[edge.a]!.y += uy * force;
+      disp[edge.b]!.x -= ux * force;
+      disp[edge.b]!.y -= uy * force;
     }
 
     for (let i = 0; i < n; i += 1) {
-      // Topic gravity keeps a cluster in its region; global gravity holds the
-      // disconnected clusters together as one blob.
-      const anchor = anchorByCluster.get(graph.nodes[i]!.clusterId) ?? { x: cx, y: cy };
-      disp[i]!.x += (anchor.x - pos[i]!.x) * 0.05 + (cx - pos[i]!.x) * 0.012;
-      disp[i]!.y += (anchor.y - pos[i]!.y) * 0.05 + (cy - pos[i]!.y) * 0.012;
-    }
-
-    for (let i = 0; i < n; i += 1) {
+      const node = graph.nodes[i]!;
+      const center = centers.get(node.clusterId) ?? { x: span / 2, y: span / 2 };
+      disp[i]!.x += (center.x - pos[i]!.x) * 0.005;
+      disp[i]!.y += (center.y - pos[i]!.y) * 0.005;
+      const step = Math.min(7, Math.hypot(disp[i]!.x, disp[i]!.y));
       const magnitude = Math.max(Math.hypot(disp[i]!.x, disp[i]!.y), 0.01);
-      const step = Math.min(magnitude, temperature);
       pos[i]!.x += (disp[i]!.x / magnitude) * step;
       pos[i]!.y += (disp[i]!.y / magnitude) * step;
     }
-    temperature = Math.max(temperature - cooling, 0.6);
   }
-
-  // Normalize the settled blob to a unit disc (centroid + max radius), then
-  // warp it through the brain silhouette so the cloud fills a brain.
-  let centroidX = 0;
-  let centroidY = 0;
-  for (const point of pos) {
-    centroidX += point.x;
-    centroidY += point.y;
-  }
-  centroidX /= n;
-  centroidY /= n;
-  let maxRadius = 1e-6;
-  for (const point of pos) {
-    maxRadius = Math.max(maxRadius, Math.hypot(point.x - centroidX, point.y - centroidY));
-  }
-  const scale = 1 / (maxRadius * 1.03);
 
   graph.nodes.forEach((node, i) => {
-    const discX = (pos[i]!.x - centroidX) * scale;
-    const discY = (pos[i]!.y - centroidY) * scale;
-    result.set(node.id, brain.mapInto(discX, discY));
+    result.set(node.id, pos[i]!);
   });
   return result;
 }

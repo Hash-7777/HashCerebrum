@@ -13,7 +13,9 @@ import { tokenize, type RagChunk } from '@core/store/ragStore';
 export const MAX_GRAPH_NODES = 240;
 
 const MIN_RELATEDNESS = 0.2;
-const MAX_EDGES_PER_NODE = 6;
+const MAX_EDGES_PER_NODE = 4;
+const MAX_ANSWER_EDGES = 10;
+const MAX_PLAIN_RUN_EDGES_PER_NODE = 2;
 const MAX_CLUSTER_TERMS = 6;
 
 // Domain-generic words are allowed in the retriever, but they should not be
@@ -336,6 +338,7 @@ export function buildMemoryGraph(chunks: RagChunk[]): MemoryGraph {
     .slice(0, MAX_GRAPH_NODES);
 
   const profiles = buildProfiles(ordered);
+  const profileById = new Map(profiles.map((profile) => [profile.chunk.id, profile]));
   const df = documentFrequency(profiles);
   const totalDocs = Math.max(profiles.length, 1);
   finalizeEntityTerms(profiles, df);
@@ -348,15 +351,39 @@ export function buildMemoryGraph(chunks: RagChunk[]): MemoryGraph {
       if (edge) candidates.push(edge);
     }
   }
-  candidates.sort((a, b) => b.weight - a.weight);
+  const edgePriority = (edge: MemoryGraphEdge): number => {
+    const source = profileById.get(edge.source)?.chunk;
+    const target = profileById.get(edge.target)?.chunk;
+    const answerHub = source?.kind === 'answer' || target?.kind === 'answer';
+    if (edge.reason === 'same_run' && answerHub) return 0.12;
+    if (edge.reason === 'shared_entities') return 0.08;
+    if (edge.reason === 'same_topic') return 0.04;
+    return 0;
+  };
+  candidates.sort((a, b) => (b.weight + edgePriority(b)) - (a.weight + edgePriority(a)));
 
   // Greedily keep edges, strongest first, while neither endpoint is full.
   const degree = new Map<string, number>();
+  const plainRunDegree = new Map<string, number>();
   const edges: MemoryGraphEdge[] = [];
   for (const edge of candidates) {
     const sourceDegree = degree.get(edge.source) ?? 0;
     const targetDegree = degree.get(edge.target) ?? 0;
-    if (sourceDegree >= MAX_EDGES_PER_NODE || targetDegree >= MAX_EDGES_PER_NODE) continue;
+    const source = profileById.get(edge.source)?.chunk;
+    const target = profileById.get(edge.target)?.chunk;
+    const sourceLimit = source?.kind === 'answer' ? MAX_ANSWER_EDGES : MAX_EDGES_PER_NODE;
+    const targetLimit = target?.kind === 'answer' ? MAX_ANSWER_EDGES : MAX_EDGES_PER_NODE;
+    if (sourceDegree >= sourceLimit || targetDegree >= targetLimit) continue;
+    const plainRunEdge = edge.reason === 'same_run' && source?.kind !== 'answer' && target?.kind !== 'answer';
+    if (plainRunEdge) {
+      const sourceRunDegree = plainRunDegree.get(edge.source) ?? 0;
+      const targetRunDegree = plainRunDegree.get(edge.target) ?? 0;
+      if (sourceRunDegree >= MAX_PLAIN_RUN_EDGES_PER_NODE || targetRunDegree >= MAX_PLAIN_RUN_EDGES_PER_NODE) {
+        continue;
+      }
+      plainRunDegree.set(edge.source, sourceRunDegree + 1);
+      plainRunDegree.set(edge.target, targetRunDegree + 1);
+    }
     edges.push(edge);
     degree.set(edge.source, sourceDegree + 1);
     degree.set(edge.target, targetDegree + 1);
