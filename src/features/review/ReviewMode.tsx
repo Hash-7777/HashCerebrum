@@ -4,7 +4,9 @@
 // pasting into a manuscript or external tool.
 
 import { useMemo, useState } from 'react';
+import { useProjectStore } from '@core/store/projectStore';
 import { Icon } from '@ui/icons';
+import { useReviewStorage } from './useReviewStorage';
 import {
   ROB2_DOMAINS,
   ROBINSI_DOMAINS,
@@ -106,6 +108,8 @@ function overallLabel(tool: Tool, overall: string): string {
 }
 
 export function ReviewMode() {
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const { assessments, save, remove } = useReviewStorage(activeProjectId);
   const [tool, setTool] = useState<Tool>('rob2');
   const [studyTitle, setStudyTitle] = useState('');
   const [rob2Domains, setRob2Domains] = useState<Record<string, { judgement: Rob2Judgement; support: string }>>(() =>
@@ -443,6 +447,20 @@ export function ReviewMode() {
             <button type="button" className="review-export" onClick={() => void copyMarkdown()}>
               <Icon name="copy" size={12} /> Copy Markdown
             </button>
+            <button
+              type="button"
+              className="review-export"
+              onClick={() => {
+                let payload: unknown;
+                if (tool === 'rob2') payload = rob2Domains;
+                else if (tool === 'robins-i') payload = robinsIDomains;
+                else if (tool === 'quadas2') payload = quadas2Domains;
+                else payload = { outcome: gradeOutcome, initial: gradeInitial, domains: gradeDomains };
+                save(tool, studyTitle, payload);
+              }}
+            >
+              <Icon name="document" size={12} /> Save
+            </button>
           </div>
         </header>
 
@@ -484,6 +502,26 @@ export function ReviewMode() {
         {tool === 'robins-i' && renderRobinsI()}
         {tool === 'quadas2' && renderQuadas2()}
         {tool === 'grade' && renderGrade()}
+
+        {assessments.length > 0 && (
+          <div className="review-saved">
+            <h3>Saved assessments</h3>
+            <ul>
+              {assessments.map((a) => (
+                <li key={a.id}>
+                  <span className="review-saved-meta">
+                    <strong>{a.studyTitle}</strong>
+                    <span>{TOOLS.find((t) => t.id === a.tool)?.label}</span>
+                    <span>{new Date(a.createdAt).toLocaleDateString()}</span>
+                  </span>
+                  <button type="button" className="review-saved-delete" onClick={() => remove(a.id)} aria-label={`Delete ${a.studyTitle}`}>
+                    <Icon name="close" size={11} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
     </div>
   );

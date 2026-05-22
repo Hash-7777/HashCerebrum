@@ -244,3 +244,66 @@
   height: 16px;
   accent-color: var(--hc-accent-strong);
 }
+
+/* Saved assessments */
+.review-saved {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hc-border);
+}
+.review-saved h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--hc-fg-muted);
+}
+.review-saved ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.review-saved li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--hc-surface);
+  border: 1px solid var(--hc-border);
+}
+.review-saved-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.review-saved-meta strong {
+  font-size: 12px;
+  color: var(--hc-fg-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.review-saved-meta span {
+  font-size: 11px;
+  color: var(--hc-fg-muted);
+}
+.review-saved-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--hc-fg-muted);
+  cursor: pointer;
+}
+.review-saved-delete:hover {
+  background: color-mix(in srgb, var(--hc-error) 15%, transparent);
+  color: var(--hc-error);
+}
