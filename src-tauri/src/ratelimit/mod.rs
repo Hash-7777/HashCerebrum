@@ -12,7 +12,7 @@
 //! conservative; we'd rather throttle ourselves than be 429'd.
 
 use dashmap::DashMap;
-use std::sync::LazyLock;
+use once_cell::sync::Lazy;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
@@ -94,7 +94,7 @@ fn default_spec(host: &str) -> BucketSpec {
     }
 }
 
-static BUCKETS: LazyLock<DashMap<String, Bucket>> = LazyLock::new(DashMap::new);
+static BUCKETS: Lazy<DashMap<String, Bucket>> = Lazy::new(DashMap::new);
 
 /// Acquire one token for `host`. Blocks (via tokio sleep) if the bucket
 /// is empty. Always returns once the token is consumed.
