@@ -1,12 +1,13 @@
 //! RxNorm. Docs: https://lhncbc.nlm.nih.gov/RxNav/APIs/RxNormAPIs.html
 
 use crate::commands::medical::{evidence, fetch_json, EvidenceItem};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use url::Url;
 
 #[tauri::command]
 pub async fn rxnorm_lookup(drug: String) -> AppResult<Vec<EvidenceItem>> {
-    let mut url = Url::parse("https://rxnav.nlm.nih.gov/REST/drugs.json").unwrap();
+    let mut url = Url::parse("https://rxnav.nlm.nih.gov/REST/drugs.json")
+        .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut().append_pair("name", &drug);
     let json = fetch_json(url).await?;
     let groups = json

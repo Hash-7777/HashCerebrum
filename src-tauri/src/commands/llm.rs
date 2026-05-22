@@ -14,10 +14,20 @@ use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::ipc::Channel;
 use url::Url;
+
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(600))
+        .user_agent("HashCerebrum/0.1 (research-app)")
+        .build()
+        .expect("reqwest client build")
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmHttpResponse {
@@ -69,12 +79,7 @@ pub async fn llm_http_get(
     check(Action::Net { host: &host })?;
     crate::ratelimit::acquire(&host).await;
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .user_agent("HashCerebrum/0.1 (research-app)")
-        .build()?;
-
-    let mut request = client.get(parsed.clone());
+    let mut request = HTTP_CLIENT.get(parsed.clone()).timeout(Duration::from_secs(30));
     for (name, value) in &headers {
         request = request.header(name, value);
     }
@@ -113,12 +118,7 @@ pub async fn llm_http_post(
     check(Action::Net { host: &host })?;
     crate::ratelimit::acquire(&host).await;
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .user_agent("HashCerebrum/0.1 (research-app)")
-        .build()?;
-
-    let mut request = client.post(parsed.clone()).body(body);
+    let mut request = HTTP_CLIENT.post(parsed.clone()).body(body).timeout(Duration::from_secs(120));
     for (name, value) in &headers {
         request = request.header(name, value);
     }
@@ -163,13 +163,7 @@ pub async fn llm_chat_stream(
     check(Action::Net { host: &host })?;
     crate::ratelimit::acquire(&host).await;
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(600))
-        .user_agent("HashCerebrum/0.1 (research-app)")
-        .build()?;
-
-    let mut request = client.post(parsed.clone()).body(body);
+    let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
     for (name, value) in &headers {
         request = request.header(name, value);
     }

@@ -4,7 +4,7 @@
 use crate::commands::medical::{
     evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use url::Url;
 
 /// ClinicalTrials.gov's `query.term` field uses the Essie search syntax, which
@@ -25,7 +25,8 @@ fn sanitize_term(query: &str) -> String {
 pub async fn ctgov_search(query: String, max_results: Option<u32>) -> AppResult<Vec<EvidenceItem>> {
     let limit = clamp_max_results(max_results.unwrap_or(8), 8, 20);
     let term = sanitize_term(&query);
-    let mut url = Url::parse("https://clinicaltrials.gov/api/v2/studies").unwrap();
+    let mut url = Url::parse("https://clinicaltrials.gov/api/v2/studies")
+        .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut()
         .append_pair("query.term", if term.is_empty() { &query } else { &term })
         .append_pair("pageSize", &limit.to_string());

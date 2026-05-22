@@ -4,14 +4,15 @@
 use crate::commands::medical::{
     evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use url::Url;
 
 #[tauri::command]
 pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<EvidenceItem>> {
     let limit = clamp_max_results(max_results, 8, 20);
     let mut search_url =
-        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").unwrap();
+        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
+            .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     search_url
         .query_pairs_mut()
         .append_pair("db", "pubmed")
@@ -33,7 +34,8 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
     }
 
     let mut summary_url =
-        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi").unwrap();
+        Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi")
+            .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     summary_url
         .query_pairs_mut()
         .append_pair("db", "pubmed")

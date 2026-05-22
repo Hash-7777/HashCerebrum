@@ -3,7 +3,7 @@
 use crate::commands::medical::{
     evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use url::Url;
 
 #[tauri::command]
@@ -17,7 +17,8 @@ pub async fn openfda_query(
         _ => "drug/event".to_string(),
     };
     let limit = clamp_max_results(max_results.unwrap_or(5), 5, 10);
-    let mut url = Url::parse(&format!("https://api.fda.gov/{safe_endpoint}.json")).unwrap();
+    let mut url = Url::parse(&format!("https://api.fda.gov/{safe_endpoint}.json"))
+        .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut()
         .append_pair("search", &query)
         .append_pair("limit", &limit.to_string());
