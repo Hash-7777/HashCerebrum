@@ -47,7 +47,8 @@ pub type AppResult<T> = Result<T, AppError>;
 
 impl From<reqwest::Error> for AppError {
     fn from(e: reqwest::Error) -> Self {
-        AppError::Network(e.to_string())
+        tracing::error!(error = %e, "network error");
+        AppError::Network("upstream request failed".into())
     }
 }
 
@@ -59,7 +60,8 @@ impl From<rusqlite::Error> for AppError {
 
 impl From<serde_json::Error> for AppError {
     fn from(e: serde_json::Error) -> Self {
-        AppError::InvalidInput(e.to_string())
+        tracing::error!(error = %e, "json parse error");
+        AppError::InvalidInput("malformed JSON payload".into())
     }
 }
 
@@ -78,3 +80,23 @@ trait Tap: Sized {
     }
 }
 impl<T> Tap for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_error_is_generic() {
+        let err = AppError::Network("upstream request failed".into());
+        assert_eq!(err.to_string(), "network error: upstream request failed");
+    }
+
+    #[test]
+    fn serde_error_does_not_leak_content() {
+        let inner: serde_json::Error = serde_json::from_str::<serde_json::Value>("{bad").unwrap_err();
+        let app_err: AppError = inner.into();
+        let msg = app_err.to_string();
+        assert!(!msg.contains("bad"), "raw content should not leak in message: {msg}");
+        assert_eq!(msg, "invalid input: malformed JSON payload");
+    }
+}
