@@ -11,14 +11,16 @@ import {
   rob2Overall,
   robinsIOverall,
   quadas2Overall,
+  gradeDowngrade,
   type Rob2Domain,
   type RobinsIDomain,
   type Rob2Judgement,
   type RobinsIJudgement,
   type Quadas2Judgement,
+  type GradeRating,
 } from '@features/brain/swarm/evidenceQuality';
 
-type Tool = 'rob2' | 'robins-i' | 'quadas2';
+type Tool = 'rob2' | 'robins-i' | 'quadas2' | 'grade';
 
 const TOOLS: { id: Tool; label: string; description: string }[] = [
   {
@@ -35,6 +37,11 @@ const TOOLS: { id: Tool; label: string; description: string }[] = [
     id: 'quadas2',
     label: 'QUADAS-2',
     description: 'Quality Assessment of Diagnostic Accuracy Studies',
+  },
+  {
+    id: 'grade',
+    label: 'GRADE',
+    description: 'Certainty of Evidence — downgrade/upgrade assessment',
   },
 ];
 
@@ -58,6 +65,20 @@ const QUADAS2_OPTIONS: { value: Quadas2Judgement; label: string }[] = [
   { value: 'unclear', label: 'Unclear' },
 ];
 
+const GRADE_DOMAINS = [
+  { name: 'Risk of bias', key: 'rob' },
+  { name: 'Inconsistency', key: 'inconsistency' },
+  { name: 'Indirectness', key: 'indirectness' },
+  { name: 'Imprecision', key: 'imprecision' },
+  { name: 'Publication bias', key: 'publication_bias' },
+] as const;
+
+const GRADE_SERIOUSNESS_OPTIONS = [
+  { value: 'none' as const, label: 'No concern' },
+  { value: 'serious' as const, label: 'Serious concern' },
+  { value: 'very_serious' as const, label: 'Very serious concern' },
+];
+
 function judgementClass(value: string): string {
   if (value === 'low') return 'judgement-low';
   if (value === 'some_concerns' || value === 'moderate' || value === 'unclear') return 'judgement-moderate';
@@ -67,6 +88,13 @@ function judgementClass(value: string): string {
 }
 
 function overallLabel(tool: Tool, overall: string): string {
+  if (tool === 'grade') {
+    if (overall === 'high') return 'High certainty';
+    if (overall === 'moderate') return 'Moderate certainty';
+    if (overall === 'low') return 'Low certainty';
+    if (overall === 'very_low') return 'Very low certainty';
+    return overall;
+  }
   if (overall === 'low') return tool === 'quadas2' ? 'Low concern' : 'Low risk';
   if (overall === 'some_concerns') return 'Some concerns';
   if (overall === 'moderate') return 'Moderate risk';
@@ -94,6 +122,11 @@ export function ReviewMode() {
       ]),
     ),
   );
+  const [gradeOutcome, setGradeOutcome] = useState('');
+  const [gradeInitial, setGradeInitial] = useState<GradeRating>('high');
+  const [gradeDomains, setGradeDomains] = useState<Record<string, { downgrade: boolean; seriousness: 'none' | 'serious' | 'very_serious'; reason: string }>>(() =>
+    Object.fromEntries(GRADE_DOMAINS.map((d) => [d.key, { downgrade: false, seriousness: 'none' as const, reason: '' }])),
+  );
 
   const overall = useMemo(() => {
     if (tool === 'rob2') {
@@ -112,32 +145,43 @@ export function ReviewMode() {
       }));
       return robinsIOverall(domains);
     }
-    const assessment = {
-      studyId: '',
-      title: '',
-      patientSelection: {
-        domain: 'Patient selection',
-        judgement: quadas2Domains['Patient selection']?.judgement ?? 'low',
-        support: quadas2Domains['Patient selection']?.support ?? '',
-      },
-      indexTest: {
-        domain: 'Index test',
-        judgement: quadas2Domains['Index test']?.judgement ?? 'low',
-        support: quadas2Domains['Index test']?.support ?? '',
-      },
-      referenceStandard: {
-        domain: 'Reference standard',
-        judgement: quadas2Domains['Reference standard']?.judgement ?? 'low',
-        support: quadas2Domains['Reference standard']?.support ?? '',
-      },
-      flowTiming: {
-        domain: 'Flow and timing',
-        judgement: quadas2Domains['Flow and timing']?.judgement ?? 'low',
-        support: quadas2Domains['Flow and timing']?.support ?? '',
-      },
-    };
-    return quadas2Overall(assessment);
-  }, [tool, rob2Domains, robinsIDomains, quadas2Domains]);
+    if (tool === 'quadas2') {
+      const assessment = {
+        studyId: '',
+        title: '',
+        patientSelection: {
+          domain: 'Patient selection',
+          judgement: quadas2Domains['Patient selection']?.judgement ?? 'low',
+          support: quadas2Domains['Patient selection']?.support ?? '',
+        },
+        indexTest: {
+          domain: 'Index test',
+          judgement: quadas2Domains['Index test']?.judgement ?? 'low',
+          support: quadas2Domains['Index test']?.support ?? '',
+        },
+        referenceStandard: {
+          domain: 'Reference standard',
+          judgement: quadas2Domains['Reference standard']?.judgement ?? 'low',
+          support: quadas2Domains['Reference standard']?.support ?? '',
+        },
+        flowTiming: {
+          domain: 'Flow and timing',
+          judgement: quadas2Domains['Flow and timing']?.judgement ?? 'low',
+          support: quadas2Domains['Flow and timing']?.support ?? '',
+        },
+      };
+      return quadas2Overall(assessment);
+    }
+    // grade
+    const domains = GRADE_DOMAINS.map((d) => ({
+      name: d.name,
+      downgrade: gradeDomains[d.key]?.downgrade ?? false,
+      seriousness: gradeDomains[d.key]?.seriousness ?? 'none',
+      reason: gradeDomains[d.key]?.reason ?? '',
+    }));
+    const { final } = gradeDowngrade(gradeInitial, domains);
+    return final;
+  }, [tool, rob2Domains, robinsIDomains, quadas2Domains, gradeInitial, gradeDomains]);
 
   const copyMarkdown = async () => {
     const lines: string[] = [];
@@ -163,12 +207,24 @@ export function ReviewMode() {
         if (d.support) lines.push(`- **Support:** ${d.support}`);
         lines.push('');
       }
-    } else {
+    } else if (tool === 'quadas2') {
       for (const domain of ['Patient selection', 'Index test', 'Reference standard', 'Flow and timing']) {
         const d = quadas2Domains[domain]!;
         lines.push(`## ${domain}`);
         lines.push(`- **Judgement:** ${d.judgement}`);
         if (d.support) lines.push(`- **Support:** ${d.support}`);
+        lines.push('');
+      }
+    } else {
+      lines.push(`**Outcome:** ${gradeOutcome || '(not specified)'}`);
+      lines.push(`**Initial certainty:** ${gradeInitial}`);
+      lines.push('');
+      for (const domain of GRADE_DOMAINS) {
+        const d = gradeDomains[domain.key]!;
+        lines.push(`## ${domain.name}`);
+        lines.push(`- **Downgrade:** ${d.downgrade ? 'Yes' : 'No'}`);
+        if (d.downgrade) lines.push(`- **Seriousness:** ${d.seriousness}`);
+        if (d.reason) lines.push(`- **Reason:** ${d.reason}`);
         lines.push('');
       }
     }
@@ -297,6 +353,81 @@ export function ReviewMode() {
     </div>
   );
 
+  const renderGrade = () => (
+    <div className="review-form">
+      <div className="review-grade-header">
+        <label>
+          <span>Outcome</span>
+          <input
+            type="text"
+            placeholder="e.g. All-cause mortality at 12 months"
+            value={gradeOutcome}
+            onChange={(e) => setGradeOutcome(e.target.value)}
+            maxLength={120}
+          />
+        </label>
+        <label>
+          <span>Initial certainty</span>
+          <select value={gradeInitial} onChange={(e) => setGradeInitial(e.target.value as GradeRating)}>
+            <option value="high">High (RCTs)</option>
+            <option value="low">Low (observational)</option>
+          </select>
+        </label>
+      </div>
+      {GRADE_DOMAINS.map((domain) => {
+        const d = gradeDomains[domain.key]!;
+        return (
+          <fieldset key={domain.key} className="review-domain">
+            <legend>{domain.name}</legend>
+            <div className="review-domain-row">
+              <label className="review-toggle">
+                <input
+                  type="checkbox"
+                  checked={d.downgrade}
+                  onChange={(e) =>
+                    setGradeDomains((prev) => ({
+                      ...prev,
+                      [domain.key]: { ...prev[domain.key]!, downgrade: e.target.checked },
+                    }))
+                  }
+                />
+                <span>Downgrade</span>
+              </label>
+              {d.downgrade && (
+                <select
+                  value={d.seriousness}
+                  onChange={(e) =>
+                    setGradeDomains((prev) => ({
+                      ...prev,
+                      [domain.key]: { ...prev[domain.key]!, seriousness: e.target.value as 'none' | 'serious' | 'very_serious' },
+                    }))
+                  }
+                >
+                  {GRADE_SERIOUSNESS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <textarea
+              placeholder="Reason for downgrade…"
+              value={d.reason}
+              onChange={(e) =>
+                setGradeDomains((prev) => ({
+                  ...prev,
+                  [domain.key]: { ...prev[domain.key]!, reason: e.target.value },
+                }))
+              }
+              rows={2}
+            />
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="mode review-mode">
       <section className="review-main" aria-label="Quality review">
@@ -352,6 +483,7 @@ export function ReviewMode() {
         {tool === 'rob2' && renderRob2()}
         {tool === 'robins-i' && renderRobinsI()}
         {tool === 'quadas2' && renderQuadas2()}
+        {tool === 'grade' && renderGrade()}
       </section>
     </div>
   );

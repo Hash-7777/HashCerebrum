@@ -194,3 +194,53 @@
 .judgement-high { color: #e67e22; }
 .judgement-critical { color: #e74c3c; }
 .judgement-none { color: var(--hc-fg-muted); }
+
+/* GRADE specific */
+.review-grade-header {
+  display: flex;
+  gap: 12px;
+  grid-column: 1 / -1;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hc-border);
+  background: var(--hc-surface);
+}
+.review-grade-header label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.review-grade-header label span {
+  font-size: 11px;
+  color: var(--hc-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.review-grade-header input,
+.review-grade-header select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--hc-border);
+  background: var(--hc-surface-raised);
+  color: var(--hc-fg);
+  font-size: 13px;
+}
+.review-grade-header input:focus,
+.review-grade-header select:focus {
+  outline: none;
+  border-color: var(--hc-accent-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hc-accent-strong) 20%, transparent);
+}
+.review-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.review-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--hc-accent-strong);
+}
