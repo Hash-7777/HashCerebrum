@@ -39,6 +39,9 @@ export interface SavedChat {
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
+  // True once the user has manually renamed the chat — saveActive then
+  // keeps that title instead of re-deriving it from the first message.
+  titleCustom?: boolean;
 }
 
 interface PersistShape {
@@ -52,6 +55,7 @@ interface ChatHistoryStore {
   hydrate: (fallbackProjectId?: string) => Promise<void>;
   newChat: () => string;
   selectChat: (id: string) => void;
+  renameChat: (id: string, title: string) => void;
   saveActive: (messages: ChatMessage[]) => void;
   deleteChat: (id: string) => void;
   deleteChatsForProject: (projectId: string) => void;
@@ -129,6 +133,16 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
 
   selectChat: (id) => set({ activeChatId: id }),
 
+  renameChat: (id, title) =>
+    set((state) => {
+      const next = title.replace(/\s+/g, ' ').trim().slice(0, TITLE_MAX) || 'Untitled chat';
+      const chats = state.chats.map((c) =>
+        c.id === id ? { ...c, title: next, titleCustom: true } : c,
+      );
+      persist(chats);
+      return { chats };
+    }),
+
   saveActive: (messages) => {
     const cleaned = messages.map((message) => ({ ...message, isStreaming: false }));
     const title = deriveTitle(cleaned);
@@ -139,7 +153,9 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       let chats: SavedChat[];
       if (hasActive) {
         chats = state.chats.map((c) =>
-          c.id === activeChatId ? { ...c, title, messages: cleaned, updatedAt: now } : c,
+          c.id === activeChatId
+            ? { ...c, title: c.titleCustom ? c.title : title, messages: cleaned, updatedAt: now }
+            : c,
         );
       } else {
         activeChatId = crypto.randomUUID();
