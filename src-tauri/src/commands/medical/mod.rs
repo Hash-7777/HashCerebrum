@@ -17,7 +17,68 @@ use crate::commands::net::net_get;
 use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use url::Url;
+
+const QUERY_STOP_WORDS: &[&str] = &[
+    "a",
+    "about",
+    "after",
+    "all",
+    "also",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "between",
+    "by",
+    "clinical",
+    "database",
+    "databases",
+    "do",
+    "does",
+    "during",
+    "evidence",
+    "find",
+    "for",
+    "from",
+    "how",
+    "in",
+    "include",
+    "including",
+    "into",
+    "is",
+    "of",
+    "on",
+    "or",
+    "patient",
+    "patients",
+    "pharmacology",
+    "public",
+    "query",
+    "record",
+    "records",
+    "research",
+    "review",
+    "search",
+    "source",
+    "sources",
+    "studies",
+    "study",
+    "the",
+    "these",
+    "this",
+    "to",
+    "trial",
+    "trials",
+    "using",
+    "what",
+    "when",
+    "where",
+    "with",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -105,4 +166,82 @@ pub async fn fetch_json(
 pub fn max_results(value: u32, fallback: u32, ceiling: u32) -> usize {
     let n = if value == 0 { fallback } else { value };
     n.min(ceiling).max(1) as usize
+}
+
+fn nct_id(query: &str) -> Option<String> {
+    query
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .map(str::to_ascii_uppercase)
+        .find(|token| {
+            token.len() == 11
+                && token.starts_with("NCT")
+                && token[3..].chars().all(|c| c.is_ascii_digit())
+        })
+}
+
+pub(super) fn compact_query_terms(query: &str, max_terms: usize) -> Vec<String> {
+    if let Some(id) = nct_id(query) {
+        return vec![id];
+    }
+
+    let mut seen = HashSet::new();
+    let mut terms = Vec::new();
+
+    for raw in query.split(|c: char| !(c.is_alphanumeric() || c == '-')) {
+        let word = raw.trim_matches('-');
+        if word.chars().count() < 2 || !word.chars().any(char::is_alphabetic) {
+            continue;
+        }
+
+        let key = word.to_lowercase();
+        if QUERY_STOP_WORDS.contains(&key.as_str()) || !seen.insert(key) {
+            continue;
+        }
+
+        terms.push(word.to_string());
+        if terms.len() >= max_terms {
+            break;
+        }
+    }
+
+    terms
+}
+
+pub(super) fn compact_query(query: &str, max_terms: usize) -> String {
+    compact_query_terms(query, max_terms).join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compact_query_terms_keep_search_simple_for_upstreams() {
+        let terms = compact_query_terms(
+            "What are the risks of warfarin and amiodarone interaction in elderly patients with atrial fibrillation clinical trial safety bleeding registry pharmacology public health?",
+            8,
+        );
+
+        assert_eq!(
+            terms,
+            [
+                "risks",
+                "warfarin",
+                "amiodarone",
+                "interaction",
+                "elderly",
+                "atrial",
+                "fibrillation",
+                "safety"
+            ]
+        );
+    }
+
+    #[test]
+    fn compact_query_terms_preserve_nct_ids() {
+        assert_eq!(
+            compact_query_terms("Please retrieve trial nct01234567 details", 8),
+            ["NCT01234567"]
+        );
+    }
 }

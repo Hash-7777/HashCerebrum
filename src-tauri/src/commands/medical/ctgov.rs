@@ -2,23 +2,16 @@
 //! Docs: https://clinicaltrials.gov/data-api/api
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+    compact_query, evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;
 
-/// ClinicalTrials.gov's `query.term` field uses the Essie search syntax, which
-/// rejects free text containing operator characters (parentheses, quotes,
-/// colons, brackets) or an over-long phrase with an upstream HTTP 400. Reduce
-/// any agent-supplied query to plain keyword search, which Essie always
-/// accepts. Unicode letters (e.g. "Behçet") and hyphenated terms are kept.
+/// ClinicalTrials.gov's `query.term` field uses the Essie search syntax and
+/// returns HTTP 400 for over-long "too complicated" searches. Reduce any
+/// agent-supplied free text to a short keyword query that avoids operators.
 fn sanitize_term(query: &str) -> String {
-    query
-        .split(|c: char| !(c.is_alphanumeric() || c == '-'))
-        .filter(|word| !word.is_empty())
-        .take(24)
-        .collect::<Vec<_>>()
-        .join(" ")
+    compact_query(query, 8)
 }
 
 #[tauri::command]
@@ -77,4 +70,23 @@ pub async fn ctgov_search(query: String, max_results: Option<u32>) -> AppResult<
             )
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_term_limits_complex_agent_text() {
+        let term = sanitize_term(
+            "What are the risks of warfarin and amiodarone interaction in elderly patients with atrial fibrillation clinical trial safety bleeding registry pharmacology public health?",
+        );
+
+        assert_eq!(
+            term,
+            "risks warfarin amiodarone interaction elderly atrial fibrillation safety"
+        );
+        assert!(term.split_whitespace().count() <= 8);
+        assert!(!term.contains('?'));
+    }
 }
