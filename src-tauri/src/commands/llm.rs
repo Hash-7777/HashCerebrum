@@ -32,6 +32,8 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .expect("reqwest client build")
 });
 
+const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
+
 static STREAM_ABORTS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -99,7 +101,15 @@ pub async fn llm_http_get(
 
     let response = request.send().await?;
     let status = response.status().as_u16();
+    if let Some(len) = response.content_length() {
+        if len > MAX_BODY_BYTES as u64 {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+    }
     let body = response.text().await?;
+    if body.len() > MAX_BODY_BYTES {
+        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+    }
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
@@ -146,7 +156,15 @@ pub async fn llm_http_post(
 
     let response = request.send().await?;
     let status = response.status().as_u16();
+    if let Some(len) = response.content_length() {
+        if len > MAX_BODY_BYTES as u64 {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+    }
     let resp_body = response.text().await?;
+    if resp_body.len() > MAX_BODY_BYTES {
+        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+    }
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);

@@ -19,6 +19,8 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .expect("reqwest client build")
 });
 
+const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpResponse {
     pub status: u16,
@@ -42,7 +44,17 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
 
     let resp = HTTP_CLIENT.get(&url).send().await?;
     let status = resp.status().as_u16();
+
+    // Defend against unbounded response bodies (DoS / OOM)
+    if let Some(len) = resp.content_length() {
+        if len > MAX_BODY_BYTES as u64 {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+    }
     let body = resp.text().await?;
+    if body.len() > MAX_BODY_BYTES {
+        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+    }
     let mut redacted = parsed.clone();
     redacted.set_query(None);
 
