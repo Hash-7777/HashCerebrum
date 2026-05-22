@@ -13,7 +13,7 @@ import { draftManuscript } from './manuscriptWriter';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SwarmOptions, SwarmResult } from './types';
 
-function evidenceKey(record: EvidenceItem): string {
+export function evidenceKey(record: EvidenceItem): string {
   return (
     record.url ||
     record.identifiers?.pmid ||
@@ -23,9 +23,33 @@ function evidenceKey(record: EvidenceItem): string {
   );
 }
 
+// Rank sources by clinical credibility so the most trustworthy records
+// reach the synthesis model first (context-window limits may truncate
+// the tail).
+const SOURCE_SCORE: Record<EvidenceItem['source'], number> = {
+  ctgov: 6,
+  pubmed: 6,
+  europepmc: 5,
+  openalex: 4,
+  openfda: 3,
+  rxnorm: 2,
+};
+
+export function evidenceScore(record: EvidenceItem): number {
+  let score = SOURCE_SCORE[record.source] ?? 1;
+  const year = typeof record.year === 'number' ? record.year : Number.parseInt(String(record.year ?? ''), 10);
+  if (Number.isFinite(year)) {
+    score += Math.max(0, Math.min(10, (year - 2010) / 2));
+  }
+  if (record.url) score += 1;
+  if (record.snippet && record.snippet.length > 20) score += 1;
+  return score;
+}
+
 // Merge every specialist's evidence into one de-duplicated set the boss
-// can cite with a single [S#] numbering.
-function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
+// can cite with a single [S#] numbering. Records are ranked by quality
+// so high-credibility evidence survives context-window truncation.
+export function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
   const seen = new Set<string>();
   const merged: EvidenceItem[] = [];
   for (const specialist of specialists) {
@@ -36,7 +60,7 @@ function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
       merged.push(record);
     }
   }
-  return merged;
+  return merged.sort((a, b) => evidenceScore(b) - evidenceScore(a));
 }
 
 function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: string): string {
