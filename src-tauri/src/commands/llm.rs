@@ -12,10 +12,10 @@ use crate::audit::store as audit;
 use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
+use dashmap::DashMap;
 use futures::StreamExt;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -35,8 +35,7 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
-static STREAM_ABORTS: Lazy<DashMap<String, Arc<AtomicBool>>> =
-    Lazy::new(DashMap::new);
+static STREAM_ABORTS: Lazy<DashMap<String, Arc<AtomicBool>>> = Lazy::new(DashMap::new);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmHttpResponse {
