@@ -110,17 +110,55 @@ function citationBlock(citations: EvidenceItem[] = []): string {
   if (citations.length === 0) return '';
   const rows = citations
     .slice(0, 40)
-    .map((item, index) => {
+    .map((item) => {
       const year = item.year ? ` (${escapeHtml(String(item.year))})` : '';
       const id = item.identifiers?.pmid
         ? ` PMID:${escapeHtml(item.identifiers.pmid)}`
         : item.identifiers?.doi
           ? ` DOI:${escapeHtml(item.identifiers.doi)}`
           : '';
-      return `<li>[S${index + 1}] ${escapeHtml(item.source.toUpperCase())}${year}. ${escapeHtml(item.title)}${id}</li>`;
+      return `<li>${escapeHtml(item.source.toUpperCase())}${year}. ${escapeHtml(item.title)}${id}</li>`;
     })
     .join('\n');
-  return `<section class="references"><h2>Exported Evidence Links</h2><ol>${rows}</ol></section>`;
+  return `<section class="references"><h2>References</h2><ol>${rows}</ol></section>`;
+}
+
+// Rewrite [S<n>] evidence markers as sequential [1], [2], … in order of
+// first appearance (Vancouver numbering), and return the cited evidence
+// in that same order so the reference list lines up with the body.
+export function renumberCitations(
+  content: string,
+  citations: EvidenceItem[],
+): { content: string; citations: EvidenceItem[] } {
+  const assigned = new Map<number, number>();
+  const order: number[] = [];
+  const rewritten = content.replace(/\[S(\d+)\]/g, (full, raw: string) => {
+    const original = Number(raw);
+    if (!Number.isInteger(original) || original < 1) return full;
+    let next = assigned.get(original);
+    if (next === undefined) {
+      next = order.length + 1;
+      assigned.set(original, next);
+      order.push(original);
+    }
+    return `[${next}]`;
+  });
+  if (order.length === 0) return { content: rewritten, citations };
+  const cited = order
+    .map((original) => citations[original - 1])
+    .filter((item): item is EvidenceItem => Boolean(item));
+  return { content: rewritten, citations: cited };
+}
+
+// Drop a leading level-1 markdown heading — the export already prints the
+// title in its own header block, so a repeated `# Title` line is noise.
+function dropLeadingTitleHeading(markdown: string): string {
+  const lines = markdown.split('\n');
+  const first = lines.findIndex((line) => line.trim());
+  if (first >= 0 && /^#\s+\S/.test(lines[first]!.trim())) {
+    lines.splice(first, 1);
+  }
+  return lines.join('\n').replace(/^\n+/, '');
 }
 
 export function buildExportHtml(message: ExportableMessage): string {
@@ -128,41 +166,99 @@ export function buildExportHtml(message: ExportableMessage): string {
   const artifact = message.manuscript
     ? (message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []))
     : null;
-  const body = artifact && message.manuscript
-    ? publicationHtml(
-        message.manuscript,
-        artifact,
-        markdownToHtml(manuscriptToReadableText(normalizeManuscriptForPublication(message.manuscript, artifact))),
-      )
-    : markdownToHtml(message.content);
-  const exportedAt = new Date().toISOString();
+
+  let body: string;
+  let referenceCitations: EvidenceItem[] = [];
+  if (artifact && message.manuscript) {
+    body = publicationHtml(
+      message.manuscript,
+      artifact,
+      markdownToHtml(manuscriptToReadableText(normalizeManuscriptForPublication(message.manuscript, artifact))),
+    );
+  } else {
+    const cleaned = dropLeadingTitleHeading(stripGeneratedReferenceSections(message.content));
+    const renumbered = renumberCitations(cleaned, message.citations ?? []);
+    body = markdownToHtml(renumbered.content);
+    referenceCitations = renumbered.citations;
+  }
+
+  const exportedAt = new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A4; margin: 18mm 16mm; }
-    html, body { background: #ffffff; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #111827; line-height: 1.5; }
-    header { border-bottom: 1px solid #cbd5e1; margin-bottom: 18px; padding-bottom: 10px; }
-    h1 { font-size: 22px; margin: 0 0 6px; }
-    h2 { font-size: 16px; margin: 18px 0 6px; }
-    h3 { font-size: 13px; margin: 14px 0 5px; }
-    p, li { font-size: 10.5pt; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1f5f9; padding: 1px 3px; border-radius: 3px; }
-    .meta { color: #64748b; font-size: 9pt; }
-    .content { max-width: 100%; }
-    .references { break-before: auto; border-top: 1px solid #e2e8f0; margin-top: 20px; padding-top: 10px; }
+    @page { size: A4; margin: 16mm 18mm; }
+    * { box-sizing: border-box; }
+    html { background: #eceff3; }
+    body {
+      margin: 0;
+      padding: 30px 18px 56px;
+      font-family: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+      color: #1b2330;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page {
+      display: block;
+      max-width: 730px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 52px 60px 60px;
+      border: 1px solid #d6dce4;
+      border-radius: 5px;
+      box-shadow: 0 14px 44px rgba(17, 24, 39, 0.16);
+    }
+    header { margin-bottom: 26px; padding-bottom: 16px; border-bottom: 2px solid #1b2330; }
+    h1 { margin: 0 0 10px; font-size: 26px; font-weight: 600; line-height: 1.24; letter-spacing: -0.012em; }
+    .meta {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #8a93a3;
+    }
+    h2 { margin: 28px 0 8px; font-size: 16.5px; font-weight: 600; letter-spacing: -0.005em; }
+    h3 { margin: 18px 0 5px; font-size: 13.5px; font-weight: 600; }
+    h4 { margin: 14px 0 4px; font-size: 12.5px; font-weight: 600; }
+    p { margin: 0 0 13px; font-size: 15px; }
+    ul, ol { margin: 0 0 13px; padding-left: 24px; }
+    li { font-size: 15px; margin: 0 0 5px; }
+    strong { font-weight: 600; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #f1f4f8;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.86em;
+    }
+    .content > h2:first-child, .content > h3:first-child { margin-top: 0; }
+    .references { margin-top: 34px; padding-top: 18px; border-top: 1px solid #d6dce4; }
+    .references h2 { margin-top: 0; }
+    .references ol { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .references li { font-size: 12.5px; color: #44505f; line-height: 1.5; margin-bottom: 7px; }
+    @media print {
+      html { background: #ffffff; }
+      body { padding: 0; }
+      .page { max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>${escapeHtml(title)}</h1>
-    <div class="meta">HashCerebrum · ${escapeHtml(message.modelLabel ?? message.role)} · exported ${escapeHtml(exportedAt)}</div>
-  </header>
-  <main class="content">${body}</main>
-  ${artifact ? '' : citationBlock(message.citations)}
+  <article class="page">
+    <header>
+      <h1>${escapeHtml(title)}</h1>
+      <p class="meta">HashCerebrum · Exported ${escapeHtml(exportedAt)}</p>
+    </header>
+    <main class="content">${body}</main>
+    ${artifact ? '' : citationBlock(referenceCitations)}
+  </article>
 </body>
 </html>`;
 }
@@ -172,15 +268,17 @@ export function buildMarkdownExport(message: ExportableMessage): string {
     const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
     return publicationMarkdown(message.manuscript, artifact);
   }
-  const content = stripGeneratedReferenceSections(message.content);
-  const citations = message.citations?.length
+  const renumbered = renumberCitations(stripGeneratedReferenceSections(message.content), message.citations ?? []);
+  const citations = renumbered.citations.length
     ? [
         '',
-        '## Exported Evidence Links',
-        ...message.citations.slice(0, 40).map((item, index) => `[S${index + 1}] ${item.source.toUpperCase()}: ${item.title}`),
+        '## References',
+        ...renumbered.citations
+          .slice(0, 40)
+          .map((item, index) => `${index + 1}. ${item.source.toUpperCase()}: ${item.title}`),
       ].join('\n')
     : '';
-  return `# ${message.title}\n\n${content}${citations}\n`;
+  return `# ${message.title}\n\n${renumbered.content}${citations}\n`;
 }
 
 export function downloadBlob(filename: string, blob: Blob): void {

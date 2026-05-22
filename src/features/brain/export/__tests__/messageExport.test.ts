@@ -5,6 +5,7 @@ import {
   buildMarkdownExport,
   escapeHtml,
   markdownToHtml,
+  renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
 } from '../messageExport';
@@ -45,9 +46,23 @@ describe('message export helpers', () => {
     };
 
     expect(slugifyFilename(message.title)).toBe('nsaids-and-warfarin-manuscript');
-    expect(buildMarkdownExport(message)).toContain('[S1] EUROPEPMC: Bleeding outcomes');
-    expect(buildExportHtml(message)).toContain('Exported Evidence Links');
+    expect(buildMarkdownExport(message)).toContain('1. EUROPEPMC: Bleeding outcomes');
+    expect(buildExportHtml(message)).toContain('<h2>References</h2>');
     expect(buildExportHtml(message)).toContain('DOI:10.0000/test');
+  });
+
+  it('renumbers [S<n>] markers to sequential [1], [2], … by first appearance', () => {
+    const fourth: EvidenceItem = { ...citations[0]!, title: 'Fourth source' };
+    const ninth: EvidenceItem = { ...citations[0]!, title: 'Ninth source' };
+    const pool = [...Array(8)].map((_, i) => ({ ...citations[0]!, title: `Source ${i + 1}` }));
+    pool[3] = fourth;
+    pool.push(ninth);
+    const { content, citations: cited } = renumberCitations(
+      'Claim one [S9]. Claim two [S4]. Claim three [S9] again.',
+      pool,
+    );
+    expect(content).toBe('Claim one [1]. Claim two [2]. Claim three [1] again.');
+    expect(cited.map((item) => item.title)).toEqual(['Ninth source', 'Fourth source']);
   });
 
   it('strips model-generated reference sections before appending canonical export references', () => {
@@ -67,10 +82,10 @@ describe('message export helpers', () => {
 
     expect(stripGeneratedReferenceSections(content)).not.toContain('Duplicated model reference');
     const markdown = buildMarkdownExport(message);
-    expect(markdown).toContain('Evidence synthesis [S1].');
+    expect(markdown).toContain('Evidence synthesis [1].');
     expect(markdown).not.toContain('Duplicated model reference');
-    expect(markdown).toContain('## Exported Evidence Links');
-    expect(markdown.match(/Exported Evidence Links/g)).toHaveLength(1);
+    expect(markdown).toContain('## References');
+    expect(markdown.match(/## References/g)).toHaveLength(1);
     expect(markdownToHtml(content)).not.toContain('Duplicated model reference');
   });
 });

@@ -193,7 +193,7 @@ export function Transcript({
                 <div className="inline-citations">
                   {message.citations.slice(0, 6).map((item, index) => (
                     <a key={evidenceKey(item, index)} href={item.url ?? undefined} target="_blank" rel="noreferrer">
-                      <Icon name="quote" size={10} /> [S{index + 1}] {item.source}
+                      <Icon name="quote" size={10} /> [{index + 1}] {item.source}
                     </a>
                   ))}
                 </div>
