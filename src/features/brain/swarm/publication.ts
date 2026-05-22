@@ -2,6 +2,7 @@ import type { EvidenceItem } from '@platform/index';
 import {
   containsPromptLeakage,
   SECTION_PLAN,
+  stripPromptLeakage,
   type Manuscript,
   type ManuscriptSection,
 } from './manuscript';
@@ -750,6 +751,10 @@ function replaceCitations(value: string, citationMap: Record<string, CitationMap
   return value.replace(/\[S(\d+)\]/g, (full, n: string) => citationMap[`S${n}`]?.displayMarker ?? full);
 }
 
+function exportText(value: string): string {
+  return stripPromptLeakage(value).replace(/\s+/g, ' ').trim();
+}
+
 function figureParagraphs(figures: ManuscriptFigure[]): string[] {
   return figures.map((figure, index) => {
     const data = Object.entries(figure.data)
@@ -775,8 +780,10 @@ export function normalizeManuscriptForPublication(
   const sections = manuscript.sections
     .filter((section) => !hasReferenceSection(section))
     .map((section) => ({
-      heading: section.heading,
-      body: section.body.map((paragraph) => replaceCitations(paragraph, artifact.citationMap)),
+      heading: exportText(section.heading),
+      body: section.body
+        .map((paragraph) => replaceCitations(exportText(paragraph), artifact.citationMap))
+        .filter(Boolean),
     }));
 
   const supplementalBody = [
@@ -787,12 +794,13 @@ export function normalizeManuscriptForPublication(
 
   return {
     ...manuscript,
+    title: exportText(manuscript.title) || 'HashCerebrum Research Manuscript',
     abstract: {
-      background: replaceCitations(manuscript.abstract.background, artifact.citationMap),
-      objective: replaceCitations(manuscript.abstract.objective, artifact.citationMap),
-      methods: replaceCitations(manuscript.abstract.methods, artifact.citationMap),
-      results: replaceCitations(manuscript.abstract.results, artifact.citationMap),
-      conclusions: replaceCitations(manuscript.abstract.conclusions, artifact.citationMap),
+      background: replaceCitations(exportText(manuscript.abstract.background), artifact.citationMap),
+      objective: replaceCitations(exportText(manuscript.abstract.objective), artifact.citationMap),
+      methods: replaceCitations(exportText(manuscript.abstract.methods), artifact.citationMap),
+      results: replaceCitations(exportText(manuscript.abstract.results), artifact.citationMap),
+      conclusions: replaceCitations(exportText(manuscript.abstract.conclusions), artifact.citationMap),
     },
     sections: includeSupplementalSection
       ? [

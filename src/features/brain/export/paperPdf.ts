@@ -140,6 +140,57 @@ function normalizeHeading(text: string): string {
   return plain(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+interface PdfTextWrapper {
+  getTextWidth(text: string): number;
+  splitTextToSize(text: string, width: number): string | string[];
+}
+
+function breakLongPdfToken(doc: PdfTextWrapper, token: string, width: number): string[] {
+  if (doc.getTextWidth(token) <= width) return [token];
+
+  const chunks: string[] = [];
+  let current = '';
+  const limit = Math.max(16, width * 0.96);
+  for (const char of token) {
+    const candidate = `${current}${char}`;
+    if (current && doc.getTextWidth(candidate) > limit) {
+      chunks.push(current);
+      current = char;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function reflowPdfLine(doc: PdfTextWrapper, line: string, width: number): string[] {
+  const words = line.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    for (const piece of breakLongPdfToken(doc, word, width)) {
+      const candidate = current ? `${current} ${piece}` : piece;
+      if (current && doc.getTextWidth(candidate) > width) {
+        lines.push(current);
+        current = piece;
+      } else {
+        current = candidate;
+      }
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [''];
+}
+
+export function splitPdfTextToSize(doc: PdfTextWrapper, text: string, width: number): string[] {
+  const rawLines = doc.splitTextToSize(text, width);
+  const baseLines = Array.isArray(rawLines) ? rawLines : [rawLines];
+  return baseLines.flatMap((line) => reflowPdfLine(doc, String(line), width));
+}
+
 function formatReference(record: EvidenceItem, index: number, style: 'source' | 'vancouver' = 'source'): string {
   const year = record.year ? ` (${record.year})` : '';
   const id = record.identifiers?.pmid
@@ -177,7 +228,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   doc.setFont('times', 'bold');
   doc.setFontSize(21);
   doc.setTextColor(15, 23, 42);
-  for (const line of doc.splitTextToSize(documentTitle, contentW) as string[]) {
+  for (const line of splitPdfTextToSize(doc, documentTitle, contentW)) {
     ensureSpace(27);
     doc.text(line, pageW / 2, y, { align: 'center' });
     y += 27;
@@ -204,7 +255,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     doc.setFont('times', 'bold');
     doc.setFontSize(size);
     doc.setTextColor(15, 23, 42);
-    for (const line of doc.splitTextToSize(plain(text), contentW) as string[]) {
+    for (const line of splitPdfTextToSize(doc, plain(text), contentW)) {
       ensureSpace(size + 4);
       doc.text(line, marginX, y);
       y += size + 4;
@@ -230,7 +281,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
       doc.setFont('times', 'bold');
       const labelW = doc.getTextWidth(labelText);
       doc.setFont('times', 'normal');
-      const restLines = doc.splitTextToSize(plain(label[2] ?? ''), width - labelW) as string[];
+      const restLines = splitPdfTextToSize(doc, plain(label[2] ?? ''), Math.max(40, width - labelW));
       ensureSpace(BODY_LEADING);
       doc.setFont('times', 'bold');
       doc.text(labelText, x, y);
@@ -249,7 +300,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     doc.setFont('times', 'normal');
     const cleaned = plain(text);
     const unsafeForJustify = /[|]/.test(text) || /-{4,}/.test(text) || /;\s*\w+:/i.test(cleaned);
-    const lines = doc.splitTextToSize(cleaned, width) as string[];
+    const lines = splitPdfTextToSize(doc, cleaned, width);
     lines.forEach((line, i) => {
       ensureSpace(BODY_LEADING);
       const isLast = i === lines.length - 1;
@@ -274,7 +325,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     doc.setFont('times', 'normal');
     doc.setFontSize(BODY_SIZE);
     doc.setTextColor(31, 41, 55);
-    const lines = doc.splitTextToSize(plain(text), width) as string[];
+    const lines = splitPdfTextToSize(doc, plain(text), width);
     lines.forEach((line, i) => {
       ensureSpace(BODY_LEADING);
       if (i === 0) doc.text(marker, marginX, y);
@@ -343,7 +394,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     for (const number of cited) {
       const record = input.citations[number - 1];
       if (!record) continue;
-      const lines = doc.splitTextToSize(formatReference(record, number - 1, markerStyle), contentW - 16) as string[];
+      const lines = splitPdfTextToSize(doc, formatReference(record, number - 1, markerStyle), contentW - 16);
       lines.forEach((line, li) => {
         ensureSpace(12);
         doc.text(line, marginX + (li === 0 ? 0 : 16), y);

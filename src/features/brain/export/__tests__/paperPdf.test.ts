@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBlocks } from '../paperPdf';
+import { parseBlocks, splitPdfTextToSize } from '../paperPdf';
 
 describe('paper PDF markdown parsing', () => {
   it('converts markdown tables into list blocks instead of raw pipe paragraphs', () => {
@@ -20,5 +20,22 @@ Interpretation remains source-grounded [S1].
     expect(texts).toContain('Record: [S2] CTGOV 2023; Design & Population: crossover interaction study');
     expect(texts).not.toContain('|');
     expect(texts).not.toContain('---');
+  });
+});
+
+describe('paper PDF text wrapping', () => {
+  it('breaks long unspaced identifiers before they can overflow the page', () => {
+    const doc = {
+      splitTextToSize: (text: string) => [text],
+      getTextWidth: (text: string) => text.length * 5,
+    };
+    const lines = splitPdfTextToSize(
+      doc,
+      'Reference https://example.org/research/supplement/verylongunbrokentokenabcdefghijklmnopqrstuvwxyz0123456789.pdf',
+      120,
+    );
+
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.every((line) => doc.getTextWidth(line) <= 120)).toBe(true);
   });
 });

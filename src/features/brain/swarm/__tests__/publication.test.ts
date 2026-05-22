@@ -89,6 +89,39 @@ describe('publication artifact contract', () => {
     expect(markdown).not.toContain('[S2]');
   });
 
+  it('cleans stale prompt leakage during export normalization', () => {
+    const artifact = buildPublicationArtifact(manuscript, evidence);
+    const normalized = normalizeManuscriptForPublication(
+      {
+        ...manuscript,
+        abstract: {
+          ...manuscript.abstract,
+          methods: 'Retrieved records:\n[S1] raw prompt context\n\nThe app searched guarded biomedical sources [S1].',
+        },
+        sections: [
+          {
+            heading: 'Methods',
+            body: [
+              'Formatting rules:\nWrite only polished academic prose.',
+              'The export should keep this source-grounded paragraph [S1].',
+            ],
+          },
+          ...manuscript.sections,
+        ],
+      },
+      artifact,
+      { includeSupplementalSection: false },
+    );
+    const text = [
+      normalized.abstract.methods,
+      ...normalized.sections.flatMap((section) => [section.heading, ...section.body]),
+    ].join(' ');
+
+    expect(text).toContain('keep this source-grounded paragraph [1]');
+    expect(text).not.toContain('raw prompt context');
+    expect(text).not.toContain('Formatting rules');
+  });
+
   it('flags internally inconsistent claim language for expert review', () => {
     const artifact = buildPublicationArtifact(
       {

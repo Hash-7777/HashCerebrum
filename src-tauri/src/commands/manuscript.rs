@@ -114,6 +114,36 @@ fn collapse_ws(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn soften_long_token(token: &str) -> String {
+    if token.chars().count() <= 42 {
+        return token.to_string();
+    }
+
+    let mut out = String::new();
+    let mut span = 0usize;
+    for ch in token.chars() {
+        out.push(ch);
+        span += 1;
+        if matches!(
+            ch,
+            '/' | '.' | ':' | '_' | '-' | '=' | '&' | '?' | '#' | ';' | ','
+        ) || span >= 24
+        {
+            out.push('\u{200B}');
+            span = 0;
+        }
+    }
+    out
+}
+
+fn soften_long_tokens(value: &str) -> String {
+    value
+        .split(' ')
+        .map(soften_long_token)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn table_rows_to_prose(rows: &[String]) -> Vec<String> {
     let parsed: Vec<Vec<String>> = rows
         .iter()
@@ -176,7 +206,7 @@ fn clean_body_text(value: &str) -> String {
     }
 
     flush_table(&mut output, &mut table);
-    collapse_ws(&output.join(" "))
+    soften_long_tokens(&collapse_ws(&output.join(" ")))
 }
 
 /// One body paragraph as a Typst string in markup context.
@@ -516,12 +546,51 @@ fn build_typ(
             doc.push_str(&format!(
                 "#par(hanging-indent: 1.2em)[*{}* #\"{}\"]\n\n",
                 esc_heading(&reference.marker),
-                esc(&reference.text)
+                esc(&soften_long_tokens(&collapse_ws(&reference.text)))
             ));
         }
     }
 
     doc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_body_text_soft_breaks_long_tokens() {
+        let cleaned = clean_body_text(
+            "Available from https://example.org/research/supplement/verylongunbrokentokenabcdefghijklmnopqrstuvwxyz0123456789.pdf",
+        );
+
+        assert!(cleaned.contains('\u{200B}'));
+    }
+
+    #[test]
+    fn build_typ_soft_breaks_long_reference_lines() {
+        let manuscript = Manuscript {
+            title: "Export wrap test".into(),
+            abstract_: Abstract::default(),
+            keywords: Vec::new(),
+            sections: vec![Section {
+                heading: "Results".into(),
+                body: vec!["A short result paragraph.".into()],
+            }],
+            publication: None,
+        };
+        let source = build_typ(
+            &manuscript,
+            &[ReferenceLine {
+                marker: "[1]".into(),
+                text: "A. Author. Long reference. Available from: https://example.org/research/supplement/verylongunbrokentokenabcdefghijklmnopqrstuvwxyz0123456789.pdf".into(),
+            }],
+            "HashCerebrum",
+            &[],
+        );
+
+        assert!(source.contains('\u{200B}'));
+    }
 }
 
 /// A heading is emitted inline (not as a string), so strip Typst markup
