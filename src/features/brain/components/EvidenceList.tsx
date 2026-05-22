@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { EvidenceItem } from '@platform/index';
 import { Icon } from '@ui/icons';
 
@@ -5,7 +6,7 @@ function sourceCount(items: EvidenceItem[]): number {
   return new Set(items.map((item) => item.source)).size;
 }
 
-export function EvidenceList({ items }: { items: EvidenceItem[] }) {
+export const EvidenceList = memo(function EvidenceList({ items }: { items: EvidenceItem[] }) {
   const sources = sourceCount(items);
   const label = items.length === 1 ? 'record' : 'records';
   const sourceLabel = sources === 1 ? 'source' : 'sources';
@@ -23,4 +24,4 @@ export function EvidenceList({ items }: { items: EvidenceItem[] }) {
       </div>
     </section>
   );
-}
+});

@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Bloom, EffectComposer, Outline, Selection, Select, Vignette } from '@react-three/postprocessing';
 import { Html, OrbitControls, useGLTF } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { RegionId } from '@config/agents';
@@ -64,7 +64,7 @@ function glowCurve(value: number): number {
 function useBrainMeshParts(): BrainMeshPart[] {
   const gltf = useGLTF(BRAIN_MODEL.path);
 
-  return useMemo(() => {
+  const parts = useMemo(() => {
     const rawParts: BrainMeshPart[] = [];
     const bounds = new THREE.Box3();
     gltf.scene.updateMatrixWorld(true);
@@ -95,6 +95,18 @@ function useBrainMeshParts(): BrainMeshPart[] {
       return meshPart;
     });
   }, [gltf.scene]);
+
+  useEffect(() => {
+    return () => {
+      for (const p of parts) {
+        p.geometry.dispose();
+        p.baseMaterial.dispose();
+      }
+      useGLTF.clear(BRAIN_MODEL.path);
+    };
+  }, [parts]);
+
+  return parts;
 }
 
 function LoadingModel() {
@@ -105,7 +117,7 @@ function LoadingModel() {
   );
 }
 
-function BrainMesh({
+const BrainMesh = React.memo(function BrainMesh({
   meshPart,
   selectedRegion,
   hoveredRegion,
@@ -170,6 +182,9 @@ function BrainMesh({
     material.needsUpdate = true;
     // Repaint on demand so the glow updates even in the performance frameloop.
     invalidate();
+    return () => {
+      material.dispose();
+    };
   }, [intensity, material, neutralColor, regionColor, invalidate]);
 
   const primaryRegion = primaryRegionForPart(meshPart.part);
@@ -200,7 +215,7 @@ function BrainMesh({
 
   if (performanceMode) return mesh;
   return <Select enabled={selected || hovered || intensity > 0.12}>{mesh}</Select>;
-}
+});
 
 interface BrainModelProps extends BrainCanvasProps {
   rotateEnabled: boolean;

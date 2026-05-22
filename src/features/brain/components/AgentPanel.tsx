@@ -2,6 +2,7 @@
 // per-run state. Replaces the old static medical-source list: this window
 // reflects the agents the boss actually assigned and how each is doing.
 
+import { memo } from 'react';
 import { agentById, AGENTS, type AgentId } from '@config/agents';
 import { regionById } from '../data/regions';
 import { Icon, type IconName } from '@ui/icons';
@@ -40,7 +41,7 @@ export const initialAgentStatuses = (): AgentStatus[] =>
     state: 'idle' as AgentRunState,
   }));
 
-export function AgentPanel({ statuses }: { statuses: AgentStatus[] }) {
+export const AgentPanel = memo(function AgentPanel({ statuses }: { statuses: AgentStatus[] }) {
   const activeCount = statuses.filter((status) => status.state === 'running').length;
   const doneCount = statuses.filter((status) => status.state === 'done').length;
   const errorCount = statuses.filter((status) => status.state === 'error').length;
@@ -83,4 +84,4 @@ export function AgentPanel({ statuses }: { statuses: AgentStatus[] }) {
       </ul>
     </section>
   );
-}
+});

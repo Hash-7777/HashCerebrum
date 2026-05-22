@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { AnalysisPlan, DatasetColumnSummary, UploadedDatasetSummary } from './publicationTypes';
 import { deriveAnalysisPlan } from './stats/analysisPlan';
 
@@ -129,7 +128,8 @@ async function sha256(text: string): Promise<string> {
   return `fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
 }
 
-function parseXlsx(buffer: ArrayBuffer): { headers: string[]; rows: Record<string, string>[] } {
+async function parseXlsx(buffer: ArrayBuffer): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const XLSX = await import('xlsx');
   const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]!];
   if (!sheet) throw new Error('Excel workbook has no readable sheets.');
@@ -172,7 +172,7 @@ export async function summarizeDatasetXlsx(filename: string, buffer: ArrayBuffer
   if (buffer.byteLength > MAX_DATASET_BYTES) {
     throw new Error('Dataset is too large for the in-app statistics preview. Use a file under 2 MB.');
   }
-  const { headers, rows } = parseXlsx(buffer);
+  const { headers, rows } = await parseXlsx(buffer);
   if (rows.length === 0) throw new Error('Excel sheet has no data rows.');
   return {
     filename,

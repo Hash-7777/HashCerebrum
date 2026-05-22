@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+
+const MESSAGE_CAP = 80;
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { useToastStore } from '@core/store/toastStore';
@@ -45,7 +47,7 @@ function DocumentArtifactCard({
   );
 }
 
-export function Transcript({
+export const Transcript = memo(function Transcript({
   messages,
   modelLabel,
   onCritique,
@@ -62,10 +64,15 @@ export function Transcript({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewDocument | null>(null);
+  const [showAll, setShowAll] = useState(false);
   // Whether the view is "pinned" to the bottom. We only auto-follow new
   // content while pinned, so scrolling up to read scrollback is never
   // interrupted by an incoming answer.
   const pinnedRef = useRef(true);
+
+  const capped = !showAll && messages.length > MESSAGE_CAP;
+  const visibleMessages = capped ? messages.slice(messages.length - MESSAGE_CAP) : messages;
+  const baseIndex = capped ? messages.length - MESSAGE_CAP : 0;
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -146,8 +153,18 @@ export function Transcript({
   return (
     <>
       <div className="transcript" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
-        {messages.map((message, index) => {
-          const title = titleFor(message, index);
+        {capped && (
+          <button
+            type="button"
+            className="transcript-load-more"
+            onClick={() => setShowAll(true)}
+          >
+            Load {messages.length - MESSAGE_CAP} earlier messages
+          </button>
+        )}
+        {visibleMessages.map((message, index) => {
+          const actualIndex = baseIndex + index;
+          const title = titleFor(message, actualIndex);
           // A finished research result — a structured manuscript or any
           // answer with retrieved citations — is collapsed to a compact card
           // instead of dumping the whole paper into the chat. The card opens
@@ -181,7 +198,7 @@ export function Transcript({
                   title={title}
                   typeLabel={message.manuscript ? 'Research manuscript' : 'Research result'}
                   referenceCount={message.citations?.length ?? 0}
-                  onOpen={() => void openPdfPreview(message, index)}
+                  onOpen={() => void openPdfPreview(message, actualIndex)}
                 />
               ) : (
                 <p>
@@ -216,14 +233,14 @@ export function Transcript({
                   )}
                   <button
                     type="button"
-                    onClick={() => void openPdfPreview(message, index)}
+                    onClick={() => void openPdfPreview(message, actualIndex)}
                     className="chat-action"
                   >
                     <Icon name="eye" size={12} /> PDF
                   </button>
                   <button
                     type="button"
-                    onClick={() => openMarkdownPreview(message, index)}
+                    onClick={() => openMarkdownPreview(message, actualIndex)}
                     className="chat-action"
                   >
                     <Icon name="document" size={12} /> MD
@@ -242,4 +259,4 @@ export function Transcript({
       {preview && <DocumentPreviewWindow document={preview} onClose={() => setPreview(null)} />}
     </>
   );
-}
+});

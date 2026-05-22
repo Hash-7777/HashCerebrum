@@ -51,6 +51,8 @@ export default defineConfig({
           r3f: ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
           react: ['react', 'react-dom'],
           zustand: ['zustand'],
+          xlsx: ['xlsx'],
+          jspdf: ['jspdf'],
         },
       },
     },
