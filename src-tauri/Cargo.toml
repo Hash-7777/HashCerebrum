@@ -59,6 +59,7 @@ rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 async-trait = "0.1"
 futures     = "0.3"
 once_cell   = "1"
+dashmap     = "6"
 
 # Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
 sha2 = "0.10"

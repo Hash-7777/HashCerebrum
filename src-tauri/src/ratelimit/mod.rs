@@ -7,13 +7,12 @@
 //! request. If the bucket is empty, the caller backs off until it
 //! refills.
 //!
-//! The buckets live in a global lazy-initialized `Mutex<HashMap>` —
+//! The buckets live in a global lazy-initialized `DashMap` —
 //! shared across every Tauri command. Defaults are intentionally
 //! conservative; we'd rather throttle ourselves than be 429'd.
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::sync::OnceLock;
+use dashmap::DashMap;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
@@ -95,20 +94,14 @@ fn default_spec(host: &str) -> BucketSpec {
     }
 }
 
-fn buckets() -> &'static Mutex<HashMap<String, Bucket>> {
-    static B: OnceLock<Mutex<HashMap<String, Bucket>>> = OnceLock::new();
-    B.get_or_init(|| Mutex::new(HashMap::new()))
-}
+static BUCKETS: LazyLock<DashMap<String, Bucket>> = LazyLock::new(DashMap::new);
 
 /// Acquire one token for `host`. Blocks (via tokio sleep) if the bucket
 /// is empty. Always returns once the token is consumed.
 pub async fn acquire(host: &str) {
     loop {
         let wait = {
-            let mut guard = buckets()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let bucket = guard
+            let mut bucket = BUCKETS
                 .entry(host.to_string())
                 .or_insert_with(|| Bucket::new(default_spec(host)));
             bucket.try_take()

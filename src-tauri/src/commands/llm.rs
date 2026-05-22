@@ -15,9 +15,10 @@ use crate::security::guard::{check, Action};
 use futures::StreamExt;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tauri::ipc::Channel;
 use url::Url;
@@ -34,8 +35,8 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
-static STREAM_ABORTS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static STREAM_ABORTS: Lazy<DashMap<String, Arc<AtomicBool>>> =
+    Lazy::new(DashMap::new);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmHttpResponse {
@@ -209,13 +210,7 @@ pub async fn llm_chat_stream(
     crate::ratelimit::acquire(&host).await;
 
     let abort = Arc::new(AtomicBool::new(false));
-    {
-        let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| {
-            tracing::error!("abort map poisoned");
-            poisoned.into_inner()
-        });
-        map.insert(stream_id.clone(), abort.clone());
-    }
+    STREAM_ABORTS.insert(stream_id.clone(), abort.clone());
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
     for (name, value) in &headers {
@@ -243,12 +238,7 @@ pub async fn llm_chat_stream(
                 "bytes": text.len(),
             }),
         );
-        {
-            let mut map = STREAM_ABORTS
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            map.remove(&stream_id);
-        }
+        STREAM_ABORTS.remove(&stream_id);
         return Ok(());
     }
 
@@ -301,12 +291,7 @@ pub async fn llm_chat_stream(
         }
     }
 
-    {
-        let mut map = STREAM_ABORTS
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        map.remove(&stream_id);
-    }
+    STREAM_ABORTS.remove(&stream_id);
 
     let _ = audit::append(
         "llm",
@@ -324,10 +309,7 @@ pub async fn llm_chat_stream(
 
 #[tauri::command]
 pub fn llm_chat_stream_abort(stream_id: String) {
-    let map = STREAM_ABORTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some(flag) = map.get(&stream_id) {
+    if let Some(flag) = STREAM_ABORTS.get(&stream_id) {
         flag.store(true, Ordering::Relaxed);
         tracing::debug!(stream_id = %stream_id, "abort flag set");
     }
@@ -341,20 +323,13 @@ mod tests {
     #[test]
     fn abort_flag_is_set_and_removed() {
         let id = "test-abort-1".to_string();
-        {
-            let mut map = STREAM_ABORTS.lock().unwrap();
-            map.insert(id.clone(), Arc::new(AtomicBool::new(false)));
-        }
+        STREAM_ABORTS.insert(id.clone(), Arc::new(AtomicBool::new(false)));
         llm_chat_stream_abort(id.clone());
         {
-            let map = STREAM_ABORTS.lock().unwrap();
-            let flag = map.get(&id).unwrap();
+            let flag = STREAM_ABORTS.get(&id).unwrap();
             assert!(flag.load(Ordering::Relaxed));
         }
-        {
-            let mut map = STREAM_ABORTS.lock().unwrap();
-            map.remove(&id);
-        }
+        STREAM_ABORTS.remove(&id);
     }
 
     #[test]
