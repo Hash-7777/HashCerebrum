@@ -18,6 +18,14 @@ const MAX_SCALE = 10;
 const WHEEL_ZOOM_STEP = 1.14;
 const CLICK_SLOP = 4; // px of movement below which a gesture counts as a click
 const CLUSTER_COLORS = ['#3dd1bf', '#8b9eff', '#f5b971', '#7fdcab', '#64d2ff', '#c7a2ff', '#ff8da1', '#d7e06f'];
+// Label decluttering. At the framed (fit) zoom every cluster and node label
+// would render at once and collapse into an unreadable pile. Cluster labels
+// appear once zoomed past CLUSTER_LABEL_SCALE — plus the few biggest clusters
+// and the selected one, kept as orientation anchors. Node labels appear only
+// when lit (hover / select) or zoomed past NODE_LABEL_SCALE.
+const CLUSTER_LABEL_SCALE = 0.34;
+const NODE_LABEL_SCALE = 0.85;
+const ANCHOR_CLUSTER_COUNT = 5;
 
 interface Transform {
   x: number;
@@ -71,6 +79,18 @@ export function MemoryGraphView({
   );
   const clusterIndexById = useMemo(
     () => new Map(graph.clusters.map((cluster, index) => [cluster.id, index])),
+    [graph.clusters],
+  );
+
+  // The few biggest clusters keep their label even at fit-zoom, as anchors.
+  const anchorClusterIds = useMemo(
+    () =>
+      new Set(
+        [...graph.clusters]
+          .sort((a, b) => b.chunkCount - a.chunkCount)
+          .slice(0, ANCHOR_CLUSTER_COUNT)
+          .map((cluster) => cluster.id),
+      ),
     [graph.clusters],
   );
 
@@ -301,6 +321,10 @@ export function MemoryGraphView({
           {clusterAnchors.map(({ cluster, index, visual }) => {
             const active = selectedClusterId === cluster.id;
             const dim = selectedClusterId !== null && !active;
+            const showClusterLabel =
+              active ||
+              transform.scale >= CLUSTER_LABEL_SCALE ||
+              anchorClusterIds.has(cluster.id);
             return (
               <g
                 key={cluster.id}
@@ -310,21 +334,25 @@ export function MemoryGraphView({
                 transform={`translate(${visual.x} ${visual.y})`}
                 style={clusterStyle(clusterColor(index))}
               >
-                <text
-                  className="memory-graph-cluster-label"
-                  y={-36 / transform.scale}
-                  fontSize={12 / transform.scale}
-                >
-                  {truncate(cluster.label, 42)}
-                </text>
-                <text
-                  className="memory-graph-cluster-meta"
-                  y={-20 / transform.scale}
-                  fontSize={9.5 / transform.scale}
-                >
-                  {cluster.nodeIds.length} capsules · {cluster.chunkCount} memories
-                  {cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''}
-                </text>
+                {showClusterLabel ? (
+                  <>
+                    <text
+                      className="memory-graph-cluster-label"
+                      y={-36 / transform.scale}
+                      fontSize={12 / transform.scale}
+                    >
+                      {truncate(cluster.label, 42)}
+                    </text>
+                    <text
+                      className="memory-graph-cluster-meta"
+                      y={-20 / transform.scale}
+                      fontSize={9.5 / transform.scale}
+                    >
+                      {cluster.nodeIds.length} capsules · {cluster.chunkCount} memories
+                      {cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''}
+                    </text>
+                  </>
+                ) : null}
               </g>
             );
           })}
@@ -368,7 +396,7 @@ export function MemoryGraphView({
             const radius = nodeRadius(node.degree, node.chunkCount);
             const state = nodeState(node.id);
             const clusterIndex = clusterIndexById.get(node.clusterId) ?? 0;
-            const showLabel = state === 'lit' || node.chunkCount > 1 || node.chunk.kind === 'answer' || (!activeId && transform.scale >= 0.9);
+            const showLabel = state === 'lit' || (!activeId && transform.scale >= NODE_LABEL_SCALE);
             return (
               <g
                 key={node.id}
