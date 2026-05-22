@@ -7,6 +7,7 @@ import {
   normalizeManuscriptForPublication,
   publicationMarkdown,
   referenceLinesForPublication,
+  sanitizeSvgForHtml,
 } from '../publication';
 
 const evidence: EvidenceItem[] = [
@@ -106,5 +107,31 @@ describe('publication artifact contract', () => {
     );
 
     expect(artifact.validation.warnings.some((issue) => issue.code === 'claim-consistency-scarcity-strength')).toBe(true);
+  });
+});
+
+describe('sanitizeSvgForHtml', () => {
+  it('removes script tags from SVG', () => {
+    const svg = '<svg><script>alert(1)</script><rect/></svg>';
+    expect(sanitizeSvgForHtml(svg)).not.toContain('<script');
+    expect(sanitizeSvgForHtml(svg)).toContain('<rect');
+  });
+
+  it('removes event handlers from SVG elements', () => {
+    const svg = '<svg><rect onclick="alert(1)" onload="evil()"/></svg>';
+    const cleaned = sanitizeSvgForHtml(svg);
+    expect(cleaned).not.toContain('onclick');
+    expect(cleaned).not.toContain('onload');
+    expect(cleaned).toContain('<rect');
+  });
+
+  it('removes javascript: URIs', () => {
+    const svg = '<svg><a href="javascript:alert(1)">x</a></svg>';
+    expect(sanitizeSvgForHtml(svg)).not.toContain('javascript:');
+  });
+
+  it('preserves benign SVG content', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="10" fill="red"/></svg>';
+    expect(sanitizeSvgForHtml(svg)).toBe(svg);
   });
 });

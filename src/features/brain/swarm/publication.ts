@@ -45,6 +45,21 @@ function escXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Strip dangerous tags and attributes from SVG before embedding in HTML.
+ *  This is a lightweight allowlist sanitizer — the Rust backend runs a
+ *  stricter version via safe_svg_bytes() during PDF compilation.
+ */
+export function sanitizeSvgForHtml(svg: string): string {
+  // Remove script tags (case-insensitive, handles nested tags)
+  let cleaned = svg.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove event handlers (onclick, onload, onerror, etc.)
+  cleaned = cleaned.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|`[^`]*`|[^\s>]*)/gi, '');
+  // Remove javascript: and data: URIs in href/src/xlink:href
+  cleaned = cleaned.replace(/(href|src|xlink:href)\s*=\s*("javascript:[^"]*"|'javascript:[^']*'|`javascript:[^`]*`|javascript:[^\s>]*)/gi, '');
+  cleaned = cleaned.replace(/(href|src|xlink:href)\s*=\s*("data:[^"]*"|'data:[^']*'|`data:[^`]*`|data:[^\s>]*)/gi, '');
+  return cleaned;
+}
+
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
@@ -830,7 +845,7 @@ export function publicationMarkdown(manuscript: Manuscript, artifact: Publicatio
 export function publicationHtml(_manuscript: Manuscript, artifact: PublicationArtifact, bodyHtml: string): string {
   const figures = artifact.figures
     .map(
-      (figure, index) => `<figure>${figure.svg}<figcaption>Figure ${index + 1}. ${escXml(figure.title)}. ${escXml(figure.caption)}</figcaption></figure>`,
+      (figure, index) => `<figure>${sanitizeSvgForHtml(figure.svg)}<figcaption>Figure ${index + 1}. ${escXml(figure.title)}. ${escXml(figure.caption)}</figcaption></figure>`,
     )
     .join('\n');
   const references = artifact.references
