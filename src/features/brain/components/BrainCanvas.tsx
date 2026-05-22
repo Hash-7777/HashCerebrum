@@ -150,10 +150,11 @@ function BrainMesh({
   useEffect(() => {
     const visual = glowCurve(intensity);
     material.emissive.copy(regionColor);
-    // Vivid lit regions: strong emissive and a near-full colour blend so an
-    // active region reads clearly as its agent colour, not a washed tan.
-    material.emissiveIntensity = visual > 0.02 ? 0.28 + visual * 2.35 : 0.08;
-    material.color.lerpColors(neutralColor, regionColor, visual > 0.02 ? Math.min(1, 0.2 + visual * 0.88) : 0);
+    // A lit region reads as its own hue: the surface colour blends fully to
+    // the region colour, while emissive is kept moderate so the bloom adds a
+    // glow halo instead of blowing every region out to white.
+    material.emissiveIntensity = visual > 0.02 ? 0.16 + visual * 1.05 : 0.06;
+    material.color.lerpColors(neutralColor, regionColor, visual > 0.02 ? Math.min(1, 0.22 + visual * 0.82) : 0);
     material.needsUpdate = true;
     // Repaint on demand so the glow updates even in the performance frameloop.
     invalidate();
@@ -270,7 +271,7 @@ function BrainScene({ cameraRef, controlsRef, performanceMode, ...props }: Scene
       {!performanceMode && (
         <EffectComposer multisampling={4} autoClear={false}>
           <Outline blur edgeStrength={3.4} pulseSpeed={0.25} visibleEdgeColor={0x3dd1bf} hiddenEdgeColor={0x1d2533} />
-          <Bloom intensity={0.34} luminanceThreshold={0.5} luminanceSmoothing={0.48} mipmapBlur />
+          <Bloom intensity={0.4} luminanceThreshold={0.62} luminanceSmoothing={0.5} mipmapBlur />
           <Vignette eskil={false} offset={0.18} darkness={0.7} />
         </EffectComposer>
       )}

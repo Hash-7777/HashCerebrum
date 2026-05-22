@@ -9,12 +9,15 @@ export interface RegionMeta {
   anchor: [number, number, number];
 }
 
+// Each region glows in its own vivid hue, picked as a distinct
+// categorical palette so several lit regions read as separate colours
+// rather than merging into one wash.
 export const REGIONS: RegionMeta[] = [
   {
     id: 'frontal',
     label: 'Frontal lobe',
     meshName: 'Frontal_Lobe',
-    emissive: '#5b8def',
+    emissive: '#4f8cff', // sky blue
     description: 'Executive function, planning',
     anchor: [0.18, 0.7, 0.92],
   },
@@ -22,7 +25,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'parietal',
     label: 'Parietal lobe',
     meshName: 'Parietal_Lobe',
-    emissive: '#7ed3b2',
+    emissive: '#3ddc84', // green
     description: 'Integration, attention',
     anchor: [0.08, 1.02, 0.04],
   },
@@ -30,7 +33,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'temporal',
     label: 'Temporal lobe',
     meshName: 'Temporal_Lobe',
-    emissive: '#f0a868',
+    emissive: '#ff9636', // orange
     description: 'Auditory, language, pathology context',
     anchor: [0.84, 0.0, 0.26],
   },
@@ -38,7 +41,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'occipital',
     label: 'Occipital lobe',
     meshName: 'Occipital_Lobe',
-    emissive: '#c7a3ff',
+    emissive: '#c77dff', // orchid
     description: 'Visual processing, imaging',
     anchor: [0.12, 0.52, -0.92],
   },
@@ -46,7 +49,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'cerebellum',
     label: 'Cerebellum',
     meshName: 'Cerebellum',
-    emissive: '#e87a90',
+    emissive: '#ff5fa8', // pink
     description: 'Motor coordination',
     anchor: [0.28, -0.5, -0.68],
   },
@@ -54,7 +57,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'brainstem',
     label: 'Brainstem',
     meshName: 'Brainstem',
-    emissive: '#d4b85a',
+    emissive: '#ffc63d', // amber
     description: 'Cardiorespiratory, autonomic',
     anchor: [0, -0.92, -0.18],
   },
@@ -62,7 +65,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'hippocampus',
     label: 'Hippocampus',
     meshName: 'Hippocampus',
-    emissive: '#62c8d6',
+    emissive: '#22d3ee', // cyan
     description: 'Memory, recall — Librarian binding',
     anchor: [-0.5, -0.2, 0.16],
   },
@@ -70,7 +73,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'amygdala',
     label: 'Amygdala',
     meshName: 'Amygdala',
-    emissive: '#ff6b6b',
+    emissive: '#ff5a5a', // red
     description: 'Skepticism, threat — Critic binding',
     anchor: [-0.62, -0.22, 0.45],
   },
@@ -78,7 +81,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'thalamus',
     label: 'Thalamus',
     meshName: 'Thalamus',
-    emissive: '#ffffff',
+    emissive: '#b9f24a', // lime
     description: 'Central relay — agent orchestration',
     anchor: [0, 0.05, 0.1],
   },
@@ -86,7 +89,7 @@ export const REGIONS: RegionMeta[] = [
     id: 'basal_ganglia',
     label: 'Basal ganglia',
     meshName: 'Basal_Ganglia',
-    emissive: '#a78bfa',
+    emissive: '#6d5cff', // indigo
     description: 'Neurochemistry — Pharmacologist binding',
     anchor: [0.48, -0.03, 0.22],
   },
