@@ -1,38 +1,41 @@
 # Agents
 
-HashCerebrum runs a fixed swarm of six agents. Adding a seventh is a
-compile-time error (`AGENTS` tuple in `src/config/agents.ts`).
+HashCerebrum runs a fixed swarm of six agents: one boss and five specialists.
+Adding a seventh is a compile-time error (`AGENTS` tuple in
+`src/config/agents.ts`).
 
 ## Roster
 
-| Agent          | Region binding   | Role |
-|----------------|------------------|------|
-| Librarian      | Hippocampus      | PubMed / Europe PMC / OpenAlex literature search |
-| Trialist       | Frontal          | ClinicalTrials.gov queries, cohort analysis |
-| Pharmacologist | Basal ganglia    | RxNorm / OpenFDA — drug interactions & safety |
-| Synthesizer    | Parietal         | PICO / GRADE evidence synthesis drafts |
-| Citation       | Occipital        | BibTeX / CSL-JSON / provenance |
-| Critic         | Amygdala         | Evidence-hierarchy + hallucination audit |
+| Agent              | Region binding | Role |
+|--------------------|----------------|------|
+| Boss               | Frontal        | Routes questions, delegates research, synthesizes findings |
+| Pharmacology       | Basal ganglia  | RxNorm / OpenFDA drug interactions and safety |
+| Clinical trials    | Parietal       | ClinicalTrials.gov queries, cohorts, and outcomes |
+| Literature & evidence | Hippocampus | PubMed / Europe PMC / OpenAlex literature search |
+| Dentistry          | Temporal       | Oral health and dental treatment evidence |
+| Public health      | Occipital      | Epidemiology, prevention, vaccination, and population health |
 
 The Thalamus is unbound — it represents the orchestrator (the ToolLoop
-itself). When *any* agent is active, the thalamus pulses subtly.
+itself). When agent activity is emitted, the thalamus pulses subtly alongside
+the agent's bound region.
 
 ## Lifecycle
 
 ```
-AgentBase.run({ input })
-  → bus.emit('agent:activity', { phase: 'start' })
-  → bus.emit('region:light',   { region: <bound>, source: 'agent', intensity: 0.7, ttlMs: 30000 })
-  → ToolLoop:
-      loop until no tool_calls or maxIter (12):
-        provider.complete(messages + tools)
+BrainMode.runTurn(query)
+  → runSwarm({ question, callbacks })
+  → callbacks emit bus.emit('agent:activity', { agentId, phase, light? })
+  → brainStore maps agent:activity → region:light for <bound> + thalamus
+  → runSpecialist:
+      loop until no tool_calls or max rounds (3):
+        completeWithModelChain(messages + tools)
         for each tool_call:
-          bus.emit('agent:activity', { phase: 'tool_call' })
+          callbacks.onToolCall(agentId, toolName) → agent:activity
           tool.execute(args)
-          bus.emit('agent:activity', { phase: 'tool_result' })
+          callbacks.onToolResult(agentId, toolName, count) → agent:activity
           messages.push({ role: 'tool', content: result })
         classify(model_output) → topic:detected → region:light accents
-  → bus.emit('agent:activity', { phase: 'done' })
+  → callbacks.onSpecialistDone(agentId, recordCount) → agent:activity
 ```
 
 ## Adding tools to an agent
@@ -40,7 +43,7 @@ AgentBase.run({ input })
 1. Implement `Tool` in a new file under `src/core/tools/`.
 2. Register it on app boot (typically `main.tsx` or a `tools/index.ts`
    barrel).
-3. Add the tool name to the agent's `ctx.tools` array.
+3. Add the tool name to the agent's `tools` array in `src/config/agents.ts`.
 4. If the tool calls a medical source, the underlying Rust command must
    already exist (`src-tauri/src/commands/medical/*.rs`).
 

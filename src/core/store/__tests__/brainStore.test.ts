@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bus } from '@core/bus/EventBus';
 import { createInitialBrainRegions, useBrainStore } from '../brainStore';
 
 describe('brainStore lighting decay', () => {
@@ -67,5 +68,19 @@ describe('brainStore lighting decay', () => {
     expect(after).not.toBe(before);
     expect(after.regions).not.toBe(before.regions);
     expect(after.regions.frontal.base).toBeLessThan(before.regions.frontal.base);
+  });
+
+  it('lights an agent bound region and thalamus from activity events', () => {
+    bus.emit('agent:activity', {
+      agentId: 'literature',
+      phase: 'tool_call',
+      detail: 'PubMed',
+      light: { intensity: 0.8, ttlMs: 1600 },
+    });
+
+    const regions = useBrainStore.getState().regions;
+    expect(regions.hippocampus.base).toBe(0.8);
+    expect(regions.thalamus.base).toBeGreaterThan(0);
+    expect(regions.thalamus.base).toBeLessThan(regions.hippocampus.base);
   });
 });

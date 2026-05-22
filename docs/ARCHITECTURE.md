@@ -7,7 +7,7 @@ src/ui/                  React shell — never calls Tauri directly
    ↓
 src/modes/               Per-mode views (Brain, Research, ...)
    ↓
-src/agents/              Agent classes + tool loop
+src/features/brain/swarm Boss routing, specialist runs, manuscript drafting
    ↓
 src/core/                Bus, store, llm registry, topic classifier
    ↓
@@ -35,18 +35,22 @@ into `platform/`) is a code review rejection.
 | Renderer calling external APIs directly     | All external HTTP gated through Rust `security::guard`      |
 | Audit log tampering                         | Hash-chained — tampering is detectable via `audit_log_verify` |
 
-## Data flow — example: Librarian agent run
+## Data flow — example: Literature specialist run
 
-1. UI dispatches `getAgent('librarian').run({ input: [...] })`
-2. `AgentBase.run` emits `agent:activity start` and `region:light hippocampus`
-3. `ToolLoop` calls the LLM via `ProviderRegistry`
-4. LLM returns tool_calls → loop executes each via `ToolRegistry`
-5. Each medical tool calls `platform().medical.pubmed(...)` → `invoke('pubmed_search')`
-6. Rust `commands::medical::pubmed::pubmed_search` calls `commands::net::net_get`
-7. `net_get` → `security::guard::check(Net{host})` → `denylist` then `policy::host_allowed`
-8. If allowed: HTTP fetch, audit-append, return body
-9. Response streams back; topic classifier hits emit `region:light` accents
-10. `agent:activity done` decays the region glow over 30 s
+1. `BrainMode.runTurn` calls `runSwarm({ question, callbacks })`.
+2. `runSwarm` asks the boss to route the turn with `planResearch`.
+3. `BrainMode` callbacks emit `agent:activity`; `brainStore` maps activity to
+   `region:light` for the bound region plus a subtle thalamus relay.
+4. `runSpecialist(agentById('literature'), ...)` calls the LLM via
+   `ProviderRegistry`.
+5. LLM tool calls execute through `ToolRegistry`.
+6. Each medical tool calls `platform().medical.pubmed(...)` → `invoke('pubmed_search')`.
+7. Rust `commands::medical::pubmed::pubmed_search` calls `commands::net::net_get`.
+8. `net_get` → `security::guard::check(Net{host})` → `denylist` then
+   `policy::host_allowed`.
+9. If allowed: HTTP fetch, audit-append, return body.
+10. Tool-result callbacks keep emitting `agent:activity`, and source/topic hits
+    emit `region:light` accents while the brain glow decays.
 
 ## Per-mode hard cap
 

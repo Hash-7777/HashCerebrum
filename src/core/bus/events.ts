@@ -27,6 +27,10 @@ export interface AgentActivityEvent {
   agentId: AgentId | 'system';
   phase: 'start' | 'tool_call' | 'tool_result' | 'token' | 'done' | 'error';
   detail?: string;
+  light?: {
+    intensity?: number;
+    ttlMs?: number;
+  };
 }
 
 export interface TopicEvent {
