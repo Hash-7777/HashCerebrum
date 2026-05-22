@@ -29,9 +29,7 @@ mod ratelimit;
 mod security;
 
 use commands::{
-    audit::{
-        audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify,
-    },
+    audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
     cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
@@ -55,56 +53,56 @@ pub fn run() {
         .init();
 
     match tauri::Builder::default()
-            .plugin(tauri_plugin_opener::init())
-            .plugin(tauri_plugin_shell::init())
-            .plugin(tauri_plugin_fs::init())
-            .plugin(tauri_plugin_dialog::init())
-            .plugin(tauri_plugin_store::Builder::default().build())
-            .plugin(tauri_plugin_notification::init())
-            .plugin(tauri_plugin_window_state::Builder::default().build())
-            .setup(|app| {
-                security::guard::init(app.handle())?;
-                audit::init(app.handle())?;
-                cache::init(app.handle())?;
-                Ok(())
-            })
-            .invoke_handler(tauri::generate_handler![
-                keychain_store,
-                keychain_retrieve,
-                keychain_delete,
-                audit_log_read,
-                audit_log_read_page,
-                audit_log_count,
-                audit_log_verify,
-                net_get,
-                llm_http_get,
-                llm_http_post,
-                llm_chat_stream,
-                llm_chat_stream_abort,
-                pubmed_search,
-                europepmc_fetch,
-                openalex_query,
-                ctgov_search,
-                openfda_query,
-                rxnorm_lookup,
-                pdf_extract_text,
-                render_manuscript_pdf,
-                cache_stats,
-                cache_clear,
-                cache_clear_expired,
-            ])
-            .build(tauri::generate_context!())
-        {
-            Ok(app) => app.run(|_app_handle, event| {
-                if let tauri::RunEvent::Exit = event {
-                    if let Err(e) = cache::close_connection() {
-                        tracing::warn!("Cache close error on exit: {}", e);
-                    }
-                    if let Err(e) = audit::close_connection() {
-                        tracing::warn!("Audit close error on exit: {}", e);
-                    }
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(|app| {
+            security::guard::init(app.handle())?;
+            audit::init(app.handle())?;
+            cache::init(app.handle())?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            keychain_store,
+            keychain_retrieve,
+            keychain_delete,
+            audit_log_read,
+            audit_log_read_page,
+            audit_log_count,
+            audit_log_verify,
+            net_get,
+            llm_http_get,
+            llm_http_post,
+            llm_chat_stream,
+            llm_chat_stream_abort,
+            pubmed_search,
+            europepmc_fetch,
+            openalex_query,
+            ctgov_search,
+            openfda_query,
+            rxnorm_lookup,
+            pdf_extract_text,
+            render_manuscript_pdf,
+            cache_stats,
+            cache_clear,
+            cache_clear_expired,
+        ])
+        .build(tauri::generate_context!())
+    {
+        Ok(app) => app.run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Err(e) = cache::close_connection() {
+                    tracing::warn!("Cache close error on exit: {}", e);
                 }
-            }),
-            Err(e) => tracing::error!("Tauri build error: {}", e),
-        };
+                if let Err(e) = audit::close_connection() {
+                    tracing::warn!("Audit close error on exit: {}", e);
+                }
+            }
+        }),
+        Err(e) => tracing::error!("Tauri build error: {}", e),
+    };
 }

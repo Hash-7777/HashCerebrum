@@ -79,12 +79,19 @@ pub async fn llm_http_get(
     url: String,
     headers: HashMap<String, String>,
 ) -> AppResult<LlmHttpResponse> {
-    check(Action::Llm { provider: &provider })?;
+    check(Action::Llm {
+        provider: &provider,
+    })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host, port: parsed.port() })?;
+    check(Action::Net {
+        host: &host,
+        port: parsed.port(),
+    })?;
     crate::ratelimit::acquire(&host).await;
 
-    let mut request = HTTP_CLIENT.get(parsed.clone()).timeout(Duration::from_secs(30));
+    let mut request = HTTP_CLIENT
+        .get(parsed.clone())
+        .timeout(Duration::from_secs(30));
     for (name, value) in &headers {
         request = request.header(name, value);
     }
@@ -118,12 +125,20 @@ pub async fn llm_http_post(
     headers: HashMap<String, String>,
     body: String,
 ) -> AppResult<LlmHttpResponse> {
-    check(Action::Llm { provider: &provider })?;
+    check(Action::Llm {
+        provider: &provider,
+    })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host, port: parsed.port() })?;
+    check(Action::Net {
+        host: &host,
+        port: parsed.port(),
+    })?;
     crate::ratelimit::acquire(&host).await;
 
-    let mut request = HTTP_CLIENT.post(parsed.clone()).body(body).timeout(Duration::from_secs(120));
+    let mut request = HTTP_CLIENT
+        .post(parsed.clone())
+        .body(body)
+        .timeout(Duration::from_secs(120));
     for (name, value) in &headers {
         request = request.header(name, value);
     }
@@ -164,9 +179,14 @@ pub async fn llm_chat_stream(
     stream_id: String,
     on_event: Channel<StreamEvent>,
 ) -> AppResult<()> {
-    check(Action::Llm { provider: &provider })?;
+    check(Action::Llm {
+        provider: &provider,
+    })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host, port: parsed.port() })?;
+    check(Action::Net {
+        host: &host,
+        port: parsed.port(),
+    })?;
     crate::ratelimit::acquire(&host).await;
 
     let abort = Arc::new(AtomicBool::new(false));
@@ -205,7 +225,9 @@ pub async fn llm_chat_stream(
             }),
         );
         {
-            let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut map = STREAM_ABORTS
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             map.remove(&stream_id);
         }
         return Ok(());
@@ -236,12 +258,14 @@ pub async fn llm_chat_stream(
             let line: Vec<u8> = buf.drain(..=pos).collect();
             let text = String::from_utf8_lossy(&line);
             let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                if on_event.send(StreamEvent::Line {
-                    text: trimmed.to_string(),
-                }).is_err() {
-                    break;
-                }
+            if !trimmed.is_empty()
+                && on_event
+                    .send(StreamEvent::Line {
+                        text: trimmed.to_string(),
+                    })
+                    .is_err()
+            {
+                break;
             }
         }
         if abort.load(Ordering::Relaxed) {
@@ -259,7 +283,9 @@ pub async fn llm_chat_stream(
     }
 
     {
-        let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut map = STREAM_ABORTS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         map.remove(&stream_id);
     }
 
@@ -279,7 +305,9 @@ pub async fn llm_chat_stream(
 
 #[tauri::command]
 pub fn llm_chat_stream_abort(stream_id: String) {
-    let map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let map = STREAM_ABORTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(flag) = map.get(&stream_id) {
         flag.store(true, Ordering::Relaxed);
         tracing::debug!(stream_id = %stream_id, "abort flag set");

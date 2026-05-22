@@ -39,7 +39,9 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
                 return Err(AppError::PermissionDenied(format!("host blocked: {host}")));
             }
             if !policy::host_allowed(host) {
-                return Err(AppError::PermissionDenied(format!("host not allowlisted: {host}")));
+                return Err(AppError::PermissionDenied(format!(
+                    "host not allowlisted: {host}"
+                )));
             }
             if is_localhost(host) {
                 let p = port.unwrap_or(0);
@@ -70,9 +72,8 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
             }
 
             // Reject symlinks — use symlink_metadata which does not follow links
-            let meta = std::fs::symlink_metadata(path).map_err(|e| {
-                AppError::PermissionDenied(format!("cannot stat path: {e}"))
-            })?;
+            let meta = std::fs::symlink_metadata(path)
+                .map_err(|e| AppError::PermissionDenied(format!("cannot stat path: {e}")))?;
             if meta.file_type().is_symlink() {
                 return Err(AppError::PermissionDenied(
                     "filesystem read denied: symlinks are not allowed".into(),
@@ -124,15 +125,17 @@ fn is_localhost(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;
     }
-    host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
+    host.parse::<IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
 }
 
 #[cfg(unix)]
 fn is_sensitive_system_path(path: &Path) -> bool {
     let s = path.to_string_lossy();
     [
-        "/etc", "/proc", "/sys", "/dev", "/var", "/usr", "/bin", "/sbin", "/lib",
-        "/lib64", "/boot", "/root",
+        "/etc", "/proc", "/sys", "/dev", "/var", "/usr", "/bin", "/sbin", "/lib", "/lib64",
+        "/boot", "/root",
     ]
     .iter()
     .any(|prefix| s.starts_with(prefix))
@@ -174,13 +177,17 @@ mod tests {
 
     #[test]
     fn fs_guard_rejects_traversal() {
-        let result = check(Action::Fs { path: "../etc/passwd" });
+        let result = check(Action::Fs {
+            path: "../etc/passwd",
+        });
         assert!(result.is_err());
     }
 
     #[test]
     fn fs_guard_rejects_non_pdf() {
-        let result = check(Action::Fs { path: "/tmp/data.txt" });
+        let result = check(Action::Fs {
+            path: "/tmp/data.txt",
+        });
         assert!(result.is_err());
     }
 }

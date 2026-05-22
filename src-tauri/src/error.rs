@@ -93,10 +93,14 @@ mod tests {
 
     #[test]
     fn serde_error_does_not_leak_content() {
-        let inner: serde_json::Error = serde_json::from_str::<serde_json::Value>("{bad").unwrap_err();
+        let inner: serde_json::Error =
+            serde_json::from_str::<serde_json::Value>("{bad").unwrap_err();
         let app_err: AppError = inner.into();
         let msg = app_err.to_string();
-        assert!(!msg.contains("bad"), "raw content should not leak in message: {msg}");
+        assert!(
+            !msg.contains("bad"),
+            "raw content should not leak in message: {msg}"
+        );
         assert_eq!(msg, "invalid input: malformed JSON payload");
     }
 }

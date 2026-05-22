@@ -91,20 +91,20 @@ pub fn load_default() -> AppResult<()> {
 pub fn host_allowed(host: &str) -> bool {
     POLICY
         .get()
-        .map(|p| p.allowed_hosts.iter().any(|h| *h == host))
+        .map(|p| p.allowed_hosts.contains(&host))
         .unwrap_or(false)
 }
 
 pub fn keychain_key_allowed(key: &str) -> bool {
     POLICY
         .get()
-        .map(|p| p.allowed_keychain_keys.iter().any(|allowed| *allowed == key))
+        .map(|p| p.allowed_keychain_keys.contains(&key))
         .unwrap_or(false)
 }
 
 pub fn llm_provider_allowed(provider: &str) -> bool {
     POLICY
         .get()
-        .map(|p| p.allowed_llm_providers.iter().any(|allowed| *allowed == provider))
+        .map(|p| p.allowed_llm_providers.contains(&provider))
         .unwrap_or(false)
 }

@@ -1,7 +1,7 @@
 use crate::error::{AppError, AppResult};
+use rusqlite::Connection;
 #[allow(unused_imports)]
 use serde::Serialize;
-use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
@@ -31,7 +31,9 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_cache_host ON cache(host);
          CREATE INDEX IF NOT EXISTS idx_cache_fetched ON cache(fetched_at);",
     )?;
-    let mut guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
     *guard = Some(conn);
     Ok(())
 }
@@ -51,7 +53,9 @@ pub struct HostStat {
 }
 
 fn with_conn<T>(f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
-    let guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
+    let guard = DB
+        .lock()
+        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_ref()
         .ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
@@ -113,9 +117,12 @@ pub fn purge_expired() -> AppResult<u64> {
 }
 
 pub fn close_connection() -> AppResult<()> {
-    let mut guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
     if let Some(conn) = guard.take() {
-        conn.close().map_err(|(_, e)| AppError::Cache(e.to_string()))?;
+        conn.close()
+            .map_err(|(_, e)| AppError::Cache(e.to_string()))?;
     }
     Ok(())
 }

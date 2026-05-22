@@ -97,10 +97,7 @@ fn esc(value: &str) -> String {
 
 fn is_table_separator(line: &str) -> bool {
     let trimmed = line.trim();
-    trimmed.contains('-')
-        && trimmed
-            .chars()
-            .all(|c| matches!(c, ' ' | '|' | ':' | '-'))
+    trimmed.contains('-') && trimmed.chars().all(|c| matches!(c, ' ' | '|' | ':' | '-'))
 }
 
 fn table_cells(line: &str) -> Vec<String> {
@@ -130,7 +127,11 @@ fn table_rows_to_prose(rows: &[String]) -> Vec<String> {
 
     let has_header = parsed.len() > 1;
     let header = &parsed[0];
-    let data_rows: &[Vec<String>] = if has_header { &parsed[1..] } else { &parsed[..] };
+    let data_rows: &[Vec<String>] = if has_header {
+        &parsed[1..]
+    } else {
+        &parsed[..]
+    };
     data_rows
         .iter()
         .map(|cells| {
@@ -250,9 +251,27 @@ fn render_style(manuscript: &Manuscript) -> RenderStyle {
 }
 
 const SVG_ALLOWLIST: &[&str] = &[
-    "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
-    "text", "tspan", "defs", "use", "clipPath", "mask", "linearGradient",
-    "radialGradient", "stop", "title", "desc", "style",
+    "svg",
+    "g",
+    "path",
+    "rect",
+    "circle",
+    "ellipse",
+    "line",
+    "polyline",
+    "polygon",
+    "text",
+    "tspan",
+    "defs",
+    "use",
+    "clipPath",
+    "mask",
+    "linearGradient",
+    "radialGradient",
+    "stop",
+    "title",
+    "desc",
+    "style",
 ];
 
 fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
@@ -268,7 +287,9 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
     // Scan for disallowed tags, event handlers, and dangerous URLs.
     // We do a simple stateful scan over '<' delimited chunks.
     for chunk in trimmed.split('<').skip(1) {
-        let tag_end = chunk.find(['>', ' ', '\t', '\n', '\r']).unwrap_or(chunk.len());
+        let tag_end = chunk
+            .find(['>', ' ', '\t', '\n', '\r'])
+            .unwrap_or(chunk.len());
         let tag = &chunk[..tag_end];
         let tag_lower = tag.to_lowercase();
 
@@ -290,8 +311,7 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
         if let Some(gt_pos) = chunk.find('>') {
             let attr_section = &chunk[..gt_pos];
             // Reject event handlers: on...= (case-insensitive)
-            if attr_section.to_lowercase().contains("on")
-                && attr_section.chars().any(|c| c == '=')
+            if attr_section.to_lowercase().contains("on") && attr_section.chars().any(|c| c == '=')
             {
                 // More precise: look for on[a-z]+\s*=
                 let attr_lower = attr_section.to_lowercase();
@@ -364,7 +384,10 @@ fn build_typ(
     let mut doc = String::new();
     let style = render_style(manuscript);
 
-    doc.push_str(&format!("#set document(title: \"{}\")\n", esc(&manuscript.title)));
+    doc.push_str(&format!(
+        "#set document(title: \"{}\")\n",
+        esc(&manuscript.title)
+    ));
     doc.push_str(&format!(
         "#set page(paper: \"a4\", margin: (x: {}, y: {}), numbering: \"1 / 1\", number-align: center)\n",
         style.margin_x, style.margin_y
@@ -398,16 +421,26 @@ fn build_typ(
 
     // Abstract.
     let a = &manuscript.abstract_;
-    let has_abstract = [&a.background, &a.objective, &a.methods, &a.results, &a.conclusions]
-        .iter()
-        .any(|field| !field.trim().is_empty());
+    let has_abstract = [
+        &a.background,
+        &a.objective,
+        &a.methods,
+        &a.results,
+        &a.conclusions,
+    ]
+    .iter()
+    .any(|field| !field.trim().is_empty());
     if has_abstract {
         doc.push_str("= Abstract\n");
         let field = |label: &str, value: &str| -> String {
             if value.trim().is_empty() {
                 String::new()
             } else {
-                format!("#par[*{}.* #\"{}\"]\n\n", label, esc(&clean_body_text(value)))
+                format!(
+                    "#par[*{}.* #\"{}\"]\n\n",
+                    label,
+                    esc(&clean_body_text(value))
+                )
             }
         };
         doc.push_str(&field("Background", &a.background));
@@ -532,7 +565,8 @@ pub async fn render_manuscript_pdf(
     references: Vec<ReferenceLine>,
     meta: Option<String>,
 ) -> AppResult<Vec<u8>> {
-    let json_bytes = serde_json::to_vec(&manuscript).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    let json_bytes =
+        serde_json::to_vec(&manuscript).map_err(|e| AppError::InvalidInput(e.to_string()))?;
     if json_bytes.len() > MAX_MANUSCRIPT_JSON_BYTES {
         return Err(AppError::InvalidInput(format!(
             "manuscript payload exceeds {} bytes",
@@ -550,12 +584,15 @@ pub async fn render_manuscript_pdf(
             MAX_SECTIONS
         )));
     }
-    let figure_count = manuscript.publication.as_ref().map(|p| p.figures.len()).unwrap_or(0);
+    let figure_count = manuscript
+        .publication
+        .as_ref()
+        .map(|p| p.figures.len())
+        .unwrap_or(0);
     if figure_count > MAX_FIGURES {
         return Err(AppError::InvalidInput(format!(
             "manuscript has {} figures (max {})",
-            figure_count,
-            MAX_FIGURES
+            figure_count, MAX_FIGURES
         )));
     }
     let figures = prepare_figures(&manuscript);

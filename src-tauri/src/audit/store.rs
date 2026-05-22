@@ -36,7 +36,9 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
          CREATE INDEX IF NOT EXISTS idx_audit_cat ON audit(category);",
     )?;
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     *guard = Some(conn);
     Ok(())
 }
@@ -47,7 +49,9 @@ pub(crate) fn append(
     action: &str,
     payload: &serde_json::Value,
 ) -> AppResult<AuditEntry> {
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
@@ -78,7 +82,9 @@ pub(crate) fn append(
 }
 
 pub fn read_all() -> AppResult<Vec<AuditEntry>> {
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
@@ -107,7 +113,9 @@ pub fn read_all() -> AppResult<Vec<AuditEntry>> {
 }
 
 pub fn count() -> AppResult<u64> {
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
@@ -116,7 +124,9 @@ pub fn count() -> AppResult<u64> {
 }
 
 pub fn read_page(offset: u64, limit: u64) -> AppResult<Vec<AuditEntry>> {
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
@@ -170,9 +180,12 @@ pub fn verify() -> AppResult<Option<u64>> {
 }
 
 pub fn close_connection() -> AppResult<()> {
-    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
     if let Some(conn) = guard.take() {
-        conn.close().map_err(|(_, e)| AppError::Audit(e.to_string()))?;
+        conn.close()
+            .map_err(|(_, e)| AppError::Audit(e.to_string()))?;
     }
     Ok(())
 }

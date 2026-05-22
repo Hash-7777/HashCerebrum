@@ -12,8 +12,8 @@
 //! conservative; we'd rather throttle ourselves than be 429'd.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
@@ -63,14 +63,35 @@ impl Bucket {
 fn default_spec(host: &str) -> BucketSpec {
     // Match published polite-pool rates where they exist.
     match host {
-        h if h.contains("eutils.ncbi.nlm.nih.gov") => BucketSpec { rate: 3.0, capacity: 6.0 },
-        h if h.contains("clinicaltrials.gov") => BucketSpec { rate: 5.0, capacity: 10.0 },
-        h if h.contains("api.openalex.org") => BucketSpec { rate: 10.0, capacity: 20.0 },
-        h if h.contains("europepmc.org") => BucketSpec { rate: 5.0, capacity: 10.0 },
-        h if h.contains("api.fda.gov") => BucketSpec { rate: 4.0, capacity: 8.0 },
-        h if h.contains("rxnav.nlm.nih.gov") => BucketSpec { rate: 5.0, capacity: 10.0 },
+        h if h.contains("eutils.ncbi.nlm.nih.gov") => BucketSpec {
+            rate: 3.0,
+            capacity: 6.0,
+        },
+        h if h.contains("clinicaltrials.gov") => BucketSpec {
+            rate: 5.0,
+            capacity: 10.0,
+        },
+        h if h.contains("api.openalex.org") => BucketSpec {
+            rate: 10.0,
+            capacity: 20.0,
+        },
+        h if h.contains("europepmc.org") => BucketSpec {
+            rate: 5.0,
+            capacity: 10.0,
+        },
+        h if h.contains("api.fda.gov") => BucketSpec {
+            rate: 4.0,
+            capacity: 8.0,
+        },
+        h if h.contains("rxnav.nlm.nih.gov") => BucketSpec {
+            rate: 5.0,
+            capacity: 10.0,
+        },
         // Conservative default for any host that didn't get a specific bucket.
-        _ => BucketSpec { rate: 2.0, capacity: 5.0 },
+        _ => BucketSpec {
+            rate: 2.0,
+            capacity: 5.0,
+        },
     }
 }
 
@@ -84,7 +105,9 @@ fn buckets() -> &'static Mutex<HashMap<String, Bucket>> {
 pub async fn acquire(host: &str) {
     loop {
         let wait = {
-            let mut guard = buckets().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut guard = buckets()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let bucket = guard
                 .entry(host.to_string())
                 .or_insert_with(|| Bucket::new(default_spec(host)));

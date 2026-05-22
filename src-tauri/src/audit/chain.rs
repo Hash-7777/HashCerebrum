@@ -35,7 +35,8 @@ impl AuditEntry {
         let prev_hash = prev_hash.into();
         let ts = Utc::now();
         let data_hash = sha256_hex(payload.to_string().as_bytes());
-        let entry_hash = Self::compute_entry_hash(&prev_hash, &ts, &category, &subject, &action, &data_hash);
+        let entry_hash =
+            Self::compute_entry_hash(&prev_hash, &ts, &category, &subject, &action, &data_hash);
         Self {
             seq,
             ts,
@@ -113,9 +114,30 @@ mod tests {
 
     #[test]
     fn chain_integrity_detects_broken_link() {
-        let e1 = AuditEntry::new(1, "net", "host1", "get", &serde_json::Value::Null, GENESIS_HASH);
-        let e2 = AuditEntry::new(2, "net", "host2", "get", &serde_json::Value::Null, &e1.entry_hash);
-        let e3_bad = AuditEntry::new(3, "net", "host3", "get", &serde_json::Value::Null, "tampered-prev");
+        let e1 = AuditEntry::new(
+            1,
+            "net",
+            "host1",
+            "get",
+            &serde_json::Value::Null,
+            GENESIS_HASH,
+        );
+        let e2 = AuditEntry::new(
+            2,
+            "net",
+            "host2",
+            "get",
+            &serde_json::Value::Null,
+            &e1.entry_hash,
+        );
+        let e3_bad = AuditEntry::new(
+            3,
+            "net",
+            "host3",
+            "get",
+            &serde_json::Value::Null,
+            "tampered-prev",
+        );
 
         assert_eq!(e2.prev_hash, e1.entry_hash);
         assert_ne!(e3_bad.prev_hash, e2.entry_hash);
