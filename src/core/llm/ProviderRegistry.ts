@@ -55,20 +55,18 @@ function toTextMessages(req: LlmRequest) {
 
 // Non-streaming chat POST through the Rust proxy (guard + rate-limit +
 // audit). Returns the parsed JSON body; throws on a non-2xx status.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function postJson(
+async function postJson<T = unknown>(
   provider: LlmProviderId,
   url: string,
   headers: Record<string, string>,
   body: Record<string, unknown>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
+): Promise<T> {
   const { status, body: text } = await platform().llm.httpPost(provider, url, headers, JSON.stringify(body));
   if (status < 200 || status >= 300) {
     throw new Error(`${provider} HTTP ${status}: ${redactSecrets(text.slice(0, 240), secretValuesFromHeaders(headers))}`);
   }
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
     throw new Error(`${provider} returned a non-JSON response`);
   }
@@ -113,7 +111,10 @@ async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmReque
     body.tools = asOpenAiTools(req.tools);
     body.tool_choice = 'auto';
   }
-  const data = await postJson(providerId, url, headers, body);
+  const data = await postJson<{
+    choices?: Array<{ message?: { content?: string; tool_calls?: unknown[] } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  }>(providerId, url, headers, body);
   const message = data.choices?.[0]?.message ?? {};
   const result: LlmResponse = {
     content: message.content || '',
@@ -134,7 +135,12 @@ async function completeOllama(req: LlmRequest): Promise<LlmResponse> {
     options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
-  const data = await postJson('ollama', `${getOllamaHost()}/api/chat`, { 'Content-Type': 'application/json' }, body);
+  const data = await postJson<{ message?: { content?: string; tool_calls?: unknown[] } }>(
+    'ollama',
+    `${getOllamaHost()}/api/chat`,
+    { 'Content-Type': 'application/json' },
+    body,
+  );
   const message = data.message ?? {};
   return {
     content: message.content || '',
@@ -165,7 +171,9 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
       input_schema: tool.parameters,
     }));
   }
-  const data = await postJson(
+  const data = await postJson<{
+    content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+  }>(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
     { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -175,7 +183,7 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
   let content = '';
   for (const block of data.content ?? []) {
     if (block.type === 'text') content += block.text;
-    if (block.type === 'tool_use') toolCalls.push({ id: block.id, name: block.name, args: block.input ?? {} });
+    if (block.type === 'tool_use') toolCalls.push({ id: block.id ?? '', name: block.name ?? '', args: block.input ?? {} });
   }
   return { content, toolCalls };
 }
@@ -224,7 +232,7 @@ function toGeminiBody(req: LlmRequest): Record<string, unknown> {
 
 async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
   const key = await requireKey('gemini');
-  const data = await postJson(
+  const data = await postJson<unknown>(
     'gemini',
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:generateContent`,
     { 'Content-Type': 'application/json', 'x-goog-api-key': key },

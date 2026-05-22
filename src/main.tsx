@@ -10,7 +10,7 @@ import './styles/globals.css';
 
 // Detect runtime. The Tauri global is injected by the runtime when running
 // under the desktop shell. In `vite dev` (browser) we fall back to mock.
-const isTauri = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined';
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 setPlatform(isTauri ? tauriPlatform : browserPlatform);
 registerMedicalTools();
 registerMemoryTools();
