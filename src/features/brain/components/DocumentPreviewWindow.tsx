@@ -215,7 +215,7 @@ export function DocumentPreviewWindow({
               <Icon name="download" size={13} />
               Download
             </button>
-            <button type="button" onClick={onClose} title="Close">
+            <button type="button" onClick={onClose} title="Close" aria-label="Close preview">
               <Icon name="close" size={13} />
             </button>
           </div>

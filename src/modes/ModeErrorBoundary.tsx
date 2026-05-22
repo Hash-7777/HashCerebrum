@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import type { ModeId } from '@config/modes';
+import { bus } from '@core/bus/EventBus';
 
 interface ModeErrorBoundaryProps {
   children: ReactNode;
@@ -16,6 +17,14 @@ export class ModeErrorBoundary extends Component<ModeErrorBoundaryProps, ModeErr
 
   static getDerivedStateFromError(error: Error): ModeErrorBoundaryState {
     return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    bus.emit('agent:activity', {
+      agentId: 'system',
+      phase: 'error',
+      detail: `Mode ${this.props.mode}: ${error.message}`,
+    });
   }
 
   componentDidUpdate(prevProps: ModeErrorBoundaryProps) {

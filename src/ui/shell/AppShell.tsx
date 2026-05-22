@@ -8,6 +8,7 @@ import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useRagStore } from '@core/store/ragStore';
 import { useAgentModelStore } from '@core/store/agentModelStore';
+import { useAgentStore } from '@core/store/agentStore';
 import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
@@ -65,6 +66,25 @@ export function AppShell() {
     hydrateResearchRuns,
     refreshModels,
   ]);
+
+  useEffect(() => {
+    const pushError = (source: string, message: string) => {
+      useAgentStore.getState().push({ agentId: 'system', phase: 'error', detail: `${source}: ${message}` });
+    };
+    const onError = (event: ErrorEvent) => {
+      pushError('window.onerror', event.message);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const detail = event.reason instanceof Error ? event.reason.message : String(event.reason);
+      pushError('unhandledrejection', detail);
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
 
   // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
   // reflects this binding (⌘1, ⌘2, …).

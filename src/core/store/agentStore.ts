@@ -4,7 +4,7 @@ import { bus } from '@core/bus/EventBus';
 
 export interface ActivityRecord {
   id: string;
-  agentId: AgentId;
+  agentId: AgentId | 'system';
   phase: string;
   detail?: string;
   ts: number;

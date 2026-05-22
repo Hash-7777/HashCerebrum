@@ -24,7 +24,7 @@ export interface RegionLightEvent {
 }
 
 export interface AgentActivityEvent {
-  agentId: AgentId;
+  agentId: AgentId | 'system';
   phase: 'start' | 'tool_call' | 'tool_result' | 'token' | 'done' | 'error';
   detail?: string;
 }

@@ -9,6 +9,7 @@
 
 import { Component, type ReactNode } from 'react';
 import { Icon } from '@ui/icons';
+import { bus } from '@core/bus/EventBus';
 
 interface Props {
   name: string;
@@ -29,7 +30,11 @@ export class FeatureBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
-    console.error(`[FeatureBoundary:${this.props.name}]`, error);
+    bus.emit('agent:activity', {
+      agentId: 'system',
+      phase: 'error',
+      detail: `${this.props.name}: ${error.message}`,
+    });
   }
 
   componentDidUpdate(prevProps: Props) {
