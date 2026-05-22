@@ -21,7 +21,7 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     let host = parsed
         .host_str()
         .ok_or_else(|| AppError::InvalidInput("no host".into()))?;
-    check(Action::Net { host })?;
+    check(Action::Net { host, port: parsed.port() })?;
 
     // Token-bucket: block until we have headroom for this host. Keeps us
     // off the 429 path even when the agent fans out queries in parallel.

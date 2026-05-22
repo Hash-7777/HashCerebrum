@@ -76,7 +76,7 @@ pub async fn llm_http_get(
 ) -> AppResult<LlmHttpResponse> {
     check(Action::Llm { provider: &provider })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host })?;
+    check(Action::Net { host: &host, port: parsed.port() })?;
     crate::ratelimit::acquire(&host).await;
 
     let mut request = HTTP_CLIENT.get(parsed.clone()).timeout(Duration::from_secs(30));
@@ -115,7 +115,7 @@ pub async fn llm_http_post(
 ) -> AppResult<LlmHttpResponse> {
     check(Action::Llm { provider: &provider })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host })?;
+    check(Action::Net { host: &host, port: parsed.port() })?;
     crate::ratelimit::acquire(&host).await;
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body).timeout(Duration::from_secs(120));
@@ -160,7 +160,7 @@ pub async fn llm_chat_stream(
 ) -> AppResult<()> {
     check(Action::Llm { provider: &provider })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net { host: &host })?;
+    check(Action::Net { host: &host, port: parsed.port() })?;
     crate::ratelimit::acquire(&host).await;
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
