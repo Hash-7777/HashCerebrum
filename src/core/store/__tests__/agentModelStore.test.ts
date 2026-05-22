@@ -54,4 +54,22 @@ describe('agentModelFor', () => {
 
     expect(agentModelFor('boss')).toBe(DEFAULT_MODEL);
   });
+
+  it('assigns the boss the larger model when same-family models would tie on coarse tier', () => {
+    useModelCatalogStore.setState({
+      groups: [
+        {
+          provider: 'groq',
+          label: 'Groq',
+          keyName: 'llm.groq',
+          models: [
+            model('cloud:groq:llama-4-scout-17b', 'Llama 4 Scout 17B'),
+            model('cloud:groq:llama-3.3-70b-versatile', 'Llama 3.3 70B'),
+          ],
+        },
+      ],
+    });
+
+    expect(agentModelFor('boss')).toBe('cloud:groq:llama-3.3-70b-versatile');
+  });
 });
