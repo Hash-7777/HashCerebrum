@@ -222,19 +222,6 @@
 }
 .memory-graph-canvas:active { cursor: grabbing; }
 
-/* Brain silhouette behind the nodes — two soft hemispheres + a fissure. */
-.memory-brain-lobe {
-  fill: rgba(125, 211, 252, 0.05);
-  stroke: rgba(125, 211, 252, 0.14);
-  stroke-width: 1.5;
-}
-.memory-brain-fissure {
-  stroke: rgba(125, 211, 252, 0.2);
-  stroke-width: 1.4;
-  stroke-dasharray: 7 7;
-  stroke-linecap: round;
-}
-
 .memory-graph-edge {
   stroke: var(--hc-fg-dim);
   stroke-opacity: 0.22;

@@ -261,29 +261,6 @@ export function MemoryGraphView({
         onPointerCancel={onPointerUp}
       >
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
-          <g className="memory-brain" aria-hidden="true">
-            <ellipse
-              className="memory-brain-lobe"
-              cx={brain.left.cx}
-              cy={brain.left.cy}
-              rx={brain.left.rx}
-              ry={brain.left.ry}
-            />
-            <ellipse
-              className="memory-brain-lobe"
-              cx={brain.right.cx}
-              cy={brain.right.cy}
-              rx={brain.right.rx}
-              ry={brain.right.ry}
-            />
-            <line
-              className="memory-brain-fissure"
-              x1={brain.fissureX}
-              y1={brain.fissureTop}
-              x2={brain.fissureX}
-              y2={brain.fissureBottom}
-            />
-          </g>
           {graph.edges.map((edge) => {
             const a = positions.get(edge.source);
             const b = positions.get(edge.target);
