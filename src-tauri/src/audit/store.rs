@@ -23,7 +23,12 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
     let path = audit_path(app)?;
     let conn = Connection::open(&path)?;
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS audit (
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA foreign_keys = ON;
+         PRAGMA temp_store = MEMORY;
+
+         CREATE TABLE IF NOT EXISTS audit (
             seq         INTEGER PRIMARY KEY AUTOINCREMENT,
             ts          TEXT NOT NULL,
             category    TEXT NOT NULL,
@@ -36,6 +41,16 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
          CREATE INDEX IF NOT EXISTS idx_audit_cat ON audit(category);",
     )?;
+
+    // Integrity check on startup — corrupt DB should be detected early
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap_or_else(|_| "unknown".into());
+    if integrity != "ok" {
+        tracing::error!(result = %integrity, "audit database integrity check failed");
+        return Err(AppError::Audit(format!("integrity check: {integrity}")));
+    }
+
     let mut guard = DB
         .lock()
         .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
@@ -56,7 +71,11 @@ pub(crate) fn append(
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
 
-    let (prev_seq, prev_hash): (u64, String) = conn
+    let tx = conn
+        .transaction()
+        .map_err(|e| AppError::Audit(format!("transaction begin: {e}")))?;
+
+    let (prev_seq, prev_hash): (u64, String) = tx
         .query_row(
             "SELECT seq, entry_hash FROM audit ORDER BY seq DESC LIMIT 1",
             [],
@@ -65,7 +84,7 @@ pub(crate) fn append(
         .unwrap_or((0, GENESIS_HASH.to_string()));
 
     let entry = AuditEntry::new(prev_seq + 1, category, subject, action, payload, prev_hash);
-    conn.execute(
+    tx.execute(
         "INSERT INTO audit (ts, category, subject, action, data_hash, prev_hash, entry_hash)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
@@ -78,6 +97,8 @@ pub(crate) fn append(
             entry.entry_hash,
         ],
     )?;
+    tx.commit()
+        .map_err(|e| AppError::Audit(format!("transaction commit: {e}")))?;
     Ok(entry)
 }
 

@@ -17,7 +17,7 @@ pub async fn openalex_query(
     url.query_pairs_mut()
         .append_pair("search", &query)
         .append_pair("per-page", &limit.to_string());
-    let json = fetch_json(url).await?;
+    let json = fetch_json(url, Some(21600)).await?;
     let results = json["results"].as_array().cloned().unwrap_or_default();
     Ok(results
         .into_iter()

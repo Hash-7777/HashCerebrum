@@ -4,7 +4,7 @@
 
 pub mod sqlite;
 
-pub use sqlite::{close_connection, purge_all, purge_expired, stats, CacheStats};
+pub use sqlite::{close_connection, get, purge_all, purge_expired, set, stats, CacheStats};
 
 use crate::error::AppResult;
 use tauri::AppHandle;

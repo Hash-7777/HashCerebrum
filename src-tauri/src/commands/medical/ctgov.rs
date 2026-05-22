@@ -35,7 +35,7 @@ pub async fn ctgov_search(query: String, max_results: Option<u32>) -> AppResult<
     url.query_pairs_mut()
         .append_pair("query.term", &term)
         .append_pair("pageSize", &limit.to_string());
-    let json = fetch_json(url).await?;
+    let json = fetch_json(url, Some(172800)).await?;
     let studies = json["studies"].as_array().cloned().unwrap_or_default();
     Ok(studies
         .into_iter()

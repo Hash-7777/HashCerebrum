@@ -22,7 +22,7 @@ pub async fn openfda_query(
     url.query_pairs_mut()
         .append_pair("search", &query)
         .append_pair("limit", &limit.to_string());
-    let json = fetch_json(url).await?;
+    let json = fetch_json(url, Some(172800)).await?;
     let results = json["results"].as_array().cloned().unwrap_or_default();
     Ok(results.into_iter().enumerate().map(|(i, item)| {
         let title = item["patient"]["drug"].as_array()

@@ -9,7 +9,7 @@ pub async fn rxnorm_lookup(drug: String) -> AppResult<Vec<EvidenceItem>> {
     let mut url = Url::parse("https://rxnav.nlm.nih.gov/REST/drugs.json")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut().append_pair("name", &drug);
-    let json = fetch_json(url).await?;
+    let json = fetch_json(url, Some(604800)).await?;
     let groups = json
         .pointer("/drugGroup/conceptGroup")
         .and_then(|v| v.as_array())

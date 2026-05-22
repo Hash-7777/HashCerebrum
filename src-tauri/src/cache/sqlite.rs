@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 #[allow(unused_imports)]
 use serde::Serialize;
 use std::path::PathBuf;
@@ -21,7 +21,12 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
     let path = cache_path(app)?;
     let conn = Connection::open(&path)?;
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS cache (
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA foreign_keys = ON;
+         PRAGMA temp_store = MEMORY;
+
+         CREATE TABLE IF NOT EXISTS cache (
             key         TEXT PRIMARY KEY,
             host        TEXT NOT NULL,
             payload     BLOB NOT NULL,
@@ -31,6 +36,15 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_cache_host ON cache(host);
          CREATE INDEX IF NOT EXISTS idx_cache_fetched ON cache(fetched_at);",
     )?;
+
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap_or_else(|_| "unknown".into());
+    if integrity != "ok" {
+        tracing::error!(result = %integrity, "cache database integrity check failed");
+        return Err(AppError::Cache(format!("integrity check: {integrity}")));
+    }
+
     let mut guard = DB
         .lock()
         .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
@@ -113,6 +127,48 @@ pub fn purge_expired() -> AppResult<u64> {
             [],
         )? as u64;
         Ok(removed)
+    })
+}
+
+/// Read a cached entry if it exists and has not expired.
+/// ttl_seconds = 0 means "live forever".
+pub fn get(key: &str) -> AppResult<Option<Vec<u8>>> {
+    with_conn(|conn| {
+        let row: Option<(Vec<u8>, i64, i64)> = conn
+            .query_row(
+                "SELECT payload, ttl_seconds, strftime('%s', fetched_at)
+                 FROM cache WHERE key = ?1",
+                [key],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        let Some((payload, ttl, fetched_at)) = row else {
+            return Ok(None);
+        };
+        if ttl > 0 {
+            let now = chrono::Utc::now().timestamp();
+            if now - fetched_at > ttl {
+                return Ok(None);
+            }
+        }
+        Ok(Some(payload))
+    })
+}
+
+/// Write or overwrite a cached entry.
+pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult<()> {
+    with_conn(|conn| {
+        conn.execute(
+            "INSERT INTO cache (key, host, payload, fetched_at, ttl_seconds)
+             VALUES (?1, ?2, ?3, datetime('now'), ?4)
+             ON CONFLICT(key) DO UPDATE SET
+               host = excluded.host,
+               payload = excluded.payload,
+               fetched_at = excluded.fetched_at,
+               ttl_seconds = excluded.ttl_seconds",
+            params![key, host, payload, ttl_seconds],
+        )?;
+        Ok(())
     })
 }
 

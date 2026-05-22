@@ -18,7 +18,7 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
         .append_pair("retmode", "json")
         .append_pair("retmax", &limit.to_string())
         .append_pair("term", &query);
-    let search = fetch_json(search_url).await?;
+    let search = fetch_json(search_url, Some(86400)).await?;
     let ids: Vec<String> = search
         .pointer("/esearchresult/idlist")
         .and_then(|v| v.as_array())
@@ -39,7 +39,7 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
         .append_pair("db", "pubmed")
         .append_pair("retmode", "json")
         .append_pair("id", &ids.join(","));
-    let summary = fetch_json(summary_url).await?;
+    let summary = fetch_json(summary_url, Some(86400)).await?;
     let mut out = Vec::new();
     for id in ids {
         let item = &summary["result"][&id];

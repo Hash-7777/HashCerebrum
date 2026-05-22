@@ -11,6 +11,7 @@ pub mod openfda;
 pub mod pubmed;
 pub mod rxnorm;
 
+use crate::cache;
 use crate::commands::net::net_get;
 use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
@@ -68,7 +69,18 @@ pub fn evidence(
     }
 }
 
-pub async fn fetch_json(mut url: Url) -> AppResult<serde_json::Value> {
+pub async fn fetch_json(
+    mut url: Url,
+    cache_ttl_seconds: Option<i64>,
+) -> AppResult<serde_json::Value> {
+    let cache_key = sha256_hex(url.as_str().as_bytes());
+
+    // Check cache first
+    if let Some(cached) = cache::get(&cache_key)? {
+        tracing::debug!(url = %url, "cache hit");
+        return Ok(serde_json::from_slice(&cached)?);
+    }
+
     let response = net_get(url.to_string()).await?;
     if !(200..300).contains(&response.status) {
         url.set_query(None);
@@ -77,6 +89,15 @@ pub async fn fetch_json(mut url: Url) -> AppResult<serde_json::Value> {
             response.status, url
         )));
     }
+
+    // Write to cache if TTL is specified
+    if let Some(ttl) = cache_ttl_seconds {
+        let host = url.host_str().unwrap_or("unknown").to_string();
+        if let Err(e) = cache::set(&cache_key, &host, response.body.as_bytes(), ttl) {
+            tracing::warn!(error = %e, "cache write failed");
+        }
+    }
+
     Ok(serde_json::from_str(&response.body)?)
 }
 

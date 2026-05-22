@@ -18,7 +18,7 @@ pub async fn europepmc_fetch(
         .append_pair("query", &query)
         .append_pair("format", "json")
         .append_pair("pageSize", &limit.to_string());
-    let json = fetch_json(url).await?;
+    let json = fetch_json(url, Some(86400)).await?;
     let results = json
         .pointer("/resultList/result")
         .and_then(|v| v.as_array())
