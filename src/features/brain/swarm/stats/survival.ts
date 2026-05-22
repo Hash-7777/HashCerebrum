@@ -35,15 +35,27 @@ export function kaplanMeier(label: string, times: number[], events: number[]): K
   const eventTimes = [...new Set(data.filter((d) => d.event === 1).map((d) => d.time))].sort(
     (a, b) => a - b,
   );
+
+  // Pre-bin counts per unique time for O(n log n) instead of O(n²).
+  const timeMap = new Map<number, { failed: number; total: number }>();
+  for (const d of data) {
+    const entry = timeMap.get(d.time) ?? { failed: 0, total: 0 };
+    entry.total++;
+    if (d.event === 1) entry.failed++;
+    timeMap.set(d.time, entry);
+  }
+
   const points: KmPoint[] = [];
   let survival = 1;
   let median: number | null = null;
+  let atRisk = data.length;
   for (const t of eventTimes) {
-    const atRisk = data.filter((d) => d.time >= t).length;
-    const failed = data.filter((d) => d.time === t && d.event === 1).length;
+    const entry = timeMap.get(t);
+    const failed = entry?.failed ?? 0;
     if (atRisk > 0) survival *= 1 - failed / atRisk;
     points.push({ time: t, atRisk, events: failed, survival });
     if (median === null && survival <= 0.5) median = t;
+    atRisk -= entry?.total ?? 0;
   }
   return {
     label,

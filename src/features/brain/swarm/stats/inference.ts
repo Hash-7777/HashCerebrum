@@ -45,7 +45,10 @@ function rankWithTies(values: number[]): { ranks: number[]; tieGroups: number[] 
 
 /** Natural log of the binomial coefficient C(n, k). */
 function logChoose(n: number, k: number): number {
-  if (k < 0 || k > n) return -Infinity;
+  if (!Number.isFinite(n) || !Number.isFinite(k) || n < 0 || k < 0 || !Number.isInteger(n) || !Number.isInteger(k)) {
+    throw new Error('logChoose requires non-negative integer arguments');
+  }
+  if (k > n) return -Infinity;
   return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1);
 }
 
@@ -342,7 +345,13 @@ export function twoByTwoEffects(a: number, b: number, c: number, d: number): Two
   const cc = zeroCellCorrection ? c + 0.5 : c;
   const cd = zeroCellCorrection ? d + 0.5 : d;
 
-  const oddsRatio = (ca * cd) / (cb * cc);
+  const safeProduct = (a: number, b: number): number => {
+    if (a > Number.MAX_SAFE_INTEGER / Math.max(1, b)) {
+      return Number(BigInt(Math.round(a)) * BigInt(Math.round(b)));
+    }
+    return a * b;
+  };
+  const oddsRatio = safeProduct(ca, cd) / safeProduct(cb, cc);
   const lnOrSe = Math.sqrt(1 / ca + 1 / cb + 1 / cc + 1 / cd);
   const lnOr = Math.log(oddsRatio);
 
