@@ -168,3 +168,11 @@ pub fn verify() -> AppResult<Option<u64>> {
     }
     Ok(None)
 }
+
+pub fn close_connection() -> AppResult<()> {
+    let mut guard = DB.lock().map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    if let Some(conn) = guard.take() {
+        conn.close().map_err(|(_, e)| AppError::Audit(e.to_string()))?;
+    }
+    Ok(())
+}

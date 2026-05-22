@@ -13,6 +13,8 @@ pub mod store;
 use crate::error::AppResult;
 use tauri::AppHandle;
 
+pub use store::close_connection;
+
 pub fn init(app: &AppHandle) -> AppResult<()> {
     store::init(app)?;
     Ok(())

@@ -106,3 +106,11 @@ pub fn purge_expired() -> AppResult<u64> {
         Ok(removed)
     })
 }
+
+pub fn close_connection() -> AppResult<()> {
+    let mut guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
+    if let Some(conn) = guard.take() {
+        conn.close().map_err(|(_, e)| AppError::Cache(e.to_string()))?;
+    }
+    Ok(())
+}
