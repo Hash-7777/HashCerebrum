@@ -150,18 +150,18 @@ pub fn verify() -> AppResult<Option<u64>> {
     let entries = read_all()?;
     let mut prev = GENESIS_HASH.to_string();
     for e in &entries {
-        let recomputed = AuditEntry::new(
-            e.seq,
+        let recomputed = AuditEntry::compute_entry_hash(
+            &prev,
+            &e.ts,
             &e.category,
             &e.subject,
             &e.action,
-            &serde_json::Value::Null, // payload hash already in data_hash
-            &prev,
+            &e.data_hash,
         );
         if e.prev_hash != prev {
             return Ok(Some(e.seq));
         }
-        if recomputed.entry_hash != e.entry_hash {
+        if recomputed != e.entry_hash {
             return Ok(Some(e.seq));
         }
         prev = e.entry_hash.clone();
