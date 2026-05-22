@@ -13,6 +13,7 @@ import type {
 } from '../publicationTypes';
 import { chiSquareTest, fisherExact2x2, mannWhitneyU, mantelHaenszel, oneWayAnova, pearson, twoByTwoEffects, welchTTest, type MhStratum } from './inference';
 import { coxRegression, kaplanMeier, logRankTest, type CoxSubject } from './survival';
+import { computeRiskScores, RISK_SCORES } from './riskScores';
 
 // Column-name hints — best-effort role detection, not a hard requirement.
 const OUTCOME_HINT = /(outcome|event|death|died|mortality|relapse|remission|response|cured|case|positive|infect|complicat|readmiss|progress)/i;
@@ -439,6 +440,49 @@ function buildSurvival(
  * Deterministic and total — never throws; an unsuitable dataset yields an
  * empty plan whose `notes` explain, in plain language, why.
  */
+function buildRiskScoreAnalysis(headers: string[], rows: Record<string, string>[]): AnalysisResult | null {
+  // Check if any risk-score column hints are present
+  const headerLower = headers.map((h) => h.toLowerCase());
+  const hasRiskHints = RISK_SCORES.some((rs) =>
+    rs.requiredColumns.some((col) => headerLower.some((h) => h.includes(col.toLowerCase()))),
+  );
+  if (!hasRiskHints || rows.length === 0) return null;
+
+  // Compute risk scores for every row
+  const scored = rows.map((r) => computeRiskScores(r)).filter((arr) => arr.length > 0);
+  if (scored.length === 0) return null;
+
+  // Summarize the first applicable score across all rows
+  const firstEntry = scored[0]![0]! as unknown as { scoreId?: string; scoreName?: string };
+  const firstScoreId = firstEntry.scoreId ?? 'unknown';
+  const firstScoreName = firstEntry.scoreName ?? 'Risk Score';
+  const distribution = new Map<number, number>();
+  let totalScore = 0;
+  for (const patientScores of scored) {
+    const s = patientScores.find((ps) => (ps as unknown as { scoreId: string }).scoreId === firstScoreId);
+    if (s) {
+      distribution.set(s.score, (distribution.get(s.score) ?? 0) + 1);
+      totalScore += s.score;
+    }
+  }
+  if (distribution.size === 0) return null;
+
+  const mean = totalScore / scored.length;
+  const distText = [...distribution.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([score, count]) => `${score}: ${count} (${((count / scored.length) * 100).toFixed(1)}%)`)
+    .join(', ');
+
+  return {
+    id: `risk-${firstScoreId}`,
+    kind: 'risk_score',
+    title: firstScoreName,
+    outcome: firstScoreName,
+    reportText: `${firstScoreName} computed for ${scored.length} patients. Mean score = ${fmt(mean)}. Distribution: ${distText}.`,
+    caveats: ['Risk scores are computed deterministically from column values. Verify that column names match the intended clinical variables.'],
+  };
+}
+
 export function deriveAnalysisPlan(
   headers: string[],
   rows: Record<string, string>[],
@@ -534,6 +578,12 @@ export function deriveAnalysisPlan(
       analyses: [],
       notes: ['The inferential analysis could not be derived from this dataset; only descriptive statistics are reported.'],
     };
+  }
+
+  // Risk scores — always evaluated, independent of inferential tests
+  const riskAnalysis = buildRiskScoreAnalysis(headers, rows);
+  if (riskAnalysis) {
+    analyses.push(riskAnalysis);
   }
 
   return {

@@ -116,7 +116,8 @@ export type AnalysisKind =
   | 'anova'
   | 'pearson'
   | 'chi_square'
-  | 'fisher_exact';
+  | 'fisher_exact'
+  | 'risk_score';
 
 /** One computed inferential analysis. */
 export interface AnalysisResult {
