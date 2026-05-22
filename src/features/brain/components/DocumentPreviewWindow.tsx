@@ -13,6 +13,7 @@ export interface PreviewDocument {
   typeLabel: string;
   blob: Blob;
   copyText: string;
+  previewHtml?: string;
 }
 
 interface Rect {
@@ -86,10 +87,15 @@ export function DocumentPreviewWindow({
 }) {
   const [rect, setRect] = useState(loadRect);
   const [copied, setCopied] = useState(false);
-  const url = useMemo(() => URL.createObjectURL(document.blob), [document.blob]);
+  const url = useMemo(
+    () => (document.kind === 'pdf' && !document.previewHtml ? URL.createObjectURL(document.blob) : ''),
+    [document.blob, document.kind, document.previewHtml],
+  );
   const emptyBlob = document.blob.size < 64;
 
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
   useEffect(() => {
     const onResize = () => setRect((current) => clampRect(current));
     window.addEventListener('resize', onResize);
@@ -221,6 +227,13 @@ export function DocumentPreviewWindow({
               <strong>Preview unavailable</strong>
               <p>The exported file has no readable bytes. Regenerate the document, then export again.</p>
             </div>
+          ) : document.kind === 'pdf' && document.previewHtml ? (
+            <iframe
+              className="document-preview-pdf"
+              title={document.title}
+              srcDoc={document.previewHtml}
+              sandbox=""
+            />
           ) : document.kind === 'pdf' ? (
             <iframe className="document-preview-pdf" title={document.title} src={url} />
           ) : (

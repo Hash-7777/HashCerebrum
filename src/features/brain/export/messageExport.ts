@@ -143,6 +143,7 @@ export function buildExportHtml(message: ExportableMessage): string {
   <title>${escapeHtml(title)}</title>
   <style>
     @page { size: A4; margin: 18mm 16mm; }
+    html, body { background: #ffffff; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #111827; line-height: 1.5; }
     header { border-bottom: 1px solid #cbd5e1; margin-bottom: 18px; padding-bottom: 10px; }
     h1 { font-size: 22px; margin: 0 0 6px; }
