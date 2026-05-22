@@ -54,7 +54,10 @@ impl From<reqwest::Error> for AppError {
 
 impl From<rusqlite::Error> for AppError {
     fn from(e: rusqlite::Error) -> Self {
-        AppError::Cache(e.to_string())
+        // Log the detail server-side only; the message that crosses IPC must
+        // not carry SQL text or a database file path.
+        tracing::error!(error = %e, "sqlite error");
+        AppError::Cache("database operation failed".into())
     }
 }
 
