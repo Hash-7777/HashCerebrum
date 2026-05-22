@@ -9,6 +9,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::security::{denylist, policy};
+use std::net::IpAddr;
 use std::path::Path;
 use tauri::AppHandle;
 
@@ -120,7 +121,10 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
 }
 
 fn is_localhost(host: &str) -> bool {
-    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)
 }
 
 #[cfg(unix)]
@@ -148,4 +152,35 @@ fn is_sensitive_system_path(path: &Path) -> bool {
     ]
     .iter()
     .any(|prefix| s.starts_with(&prefix.to_lowercase()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn localhost_detection() {
+        assert!(is_localhost("localhost"));
+        assert!(is_localhost("LOCALHOST"));
+        assert!(is_localhost("127.0.0.1"));
+        assert!(is_localhost("::1"));
+        assert!(is_localhost("127.0.0.2"));
+        assert!(is_localhost("127.255.255.255"));
+        assert!(!is_localhost("192.168.1.1"));
+        assert!(!is_localhost("10.0.0.1"));
+        assert!(!is_localhost("example.com"));
+        assert!(!is_localhost("169.254.169.254"));
+    }
+
+    #[test]
+    fn fs_guard_rejects_traversal() {
+        let result = check(Action::Fs { path: "../etc/passwd" });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn fs_guard_rejects_non_pdf() {
+        let result = check(Action::Fs { path: "/tmp/data.txt" });
+        assert!(result.is_err());
+    }
 }
