@@ -13,9 +13,11 @@ use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::ipc::Channel;
 use url::Url;
@@ -28,6 +30,9 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .build()
         .expect("reqwest client build")
 });
+
+static STREAM_ABORTS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmHttpResponse {
@@ -156,12 +161,22 @@ pub async fn llm_chat_stream(
     url: String,
     headers: HashMap<String, String>,
     body: String,
+    stream_id: String,
     on_event: Channel<StreamEvent>,
 ) -> AppResult<()> {
     check(Action::Llm { provider: &provider })?;
     let (parsed, host) = parse_host(&url)?;
     check(Action::Net { host: &host, port: parsed.port() })?;
     crate::ratelimit::acquire(&host).await;
+
+    let abort = Arc::new(AtomicBool::new(false));
+    {
+        let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| {
+            tracing::error!("abort map poisoned");
+            poisoned.into_inner()
+        });
+        map.insert(stream_id.clone(), abort.clone());
+    }
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
     for (name, value) in &headers {
@@ -189,6 +204,10 @@ pub async fn llm_chat_stream(
                 "bytes": text.len(),
             }),
         );
+        {
+            let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            map.remove(&stream_id);
+        }
         return Ok(());
     }
 
@@ -198,6 +217,10 @@ pub async fn llm_chat_stream(
     let mut buf: Vec<u8> = Vec::new();
     let mut total: usize = 0;
     while let Some(chunk) = stream.next().await {
+        if abort.load(Ordering::Relaxed) {
+            tracing::debug!(stream_id = %stream_id, "chat stream aborted");
+            break;
+        }
         let chunk = match chunk {
             Ok(c) => c,
             Err(e) => {
@@ -214,13 +237,18 @@ pub async fn llm_chat_stream(
             let text = String::from_utf8_lossy(&line);
             let trimmed = text.trim();
             if !trimmed.is_empty() {
-                let _ = on_event.send(StreamEvent::Line {
+                if on_event.send(StreamEvent::Line {
                     text: trimmed.to_string(),
-                });
+                }).is_err() {
+                    break;
+                }
             }
         }
+        if abort.load(Ordering::Relaxed) {
+            break;
+        }
     }
-    if !buf.is_empty() {
+    if !abort.load(Ordering::Relaxed) && !buf.is_empty() {
         let text = String::from_utf8_lossy(&buf);
         let trimmed = text.trim();
         if !trimmed.is_empty() {
@@ -228,6 +256,11 @@ pub async fn llm_chat_stream(
                 text: trimmed.to_string(),
             });
         }
+    }
+
+    {
+        let mut map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        map.remove(&stream_id);
     }
 
     let _ = audit::append(
@@ -242,4 +275,43 @@ pub async fn llm_chat_stream(
     );
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn llm_chat_stream_abort(stream_id: String) {
+    let map = STREAM_ABORTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(flag) = map.get(&stream_id) {
+        flag.store(true, Ordering::Relaxed);
+        tracing::debug!(stream_id = %stream_id, "abort flag set");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn abort_flag_is_set_and_removed() {
+        let id = "test-abort-1".to_string();
+        {
+            let mut map = STREAM_ABORTS.lock().unwrap();
+            map.insert(id.clone(), Arc::new(AtomicBool::new(false)));
+        }
+        llm_chat_stream_abort(id.clone());
+        {
+            let map = STREAM_ABORTS.lock().unwrap();
+            let flag = map.get(&id).unwrap();
+            assert!(flag.load(Ordering::Relaxed));
+        }
+        {
+            let mut map = STREAM_ABORTS.lock().unwrap();
+            map.remove(&id);
+        }
+    }
+
+    #[test]
+    fn abort_unknown_stream_id_is_noop() {
+        llm_chat_stream_abort("nonexistent-id".to_string());
+    }
 }

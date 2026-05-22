@@ -34,7 +34,7 @@ use commands::{
     },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
-    llm::{llm_chat_stream, llm_http_get, llm_http_post},
+    llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
@@ -80,6 +80,7 @@ pub fn run() {
                 llm_http_get,
                 llm_http_post,
                 llm_chat_stream,
+                llm_chat_stream_abort,
                 pubmed_search,
                 europepmc_fetch,
                 openalex_query,
