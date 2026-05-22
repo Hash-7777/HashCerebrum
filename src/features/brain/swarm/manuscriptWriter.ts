@@ -14,12 +14,12 @@ import {
   type Manuscript,
   type ManuscriptSection,
 } from './manuscript';
+import { formatEvidenceList } from './evidenceFormat';
 import { buildPublicationArtifact } from './publication';
 import { datasetSummaryForPrompt } from './statistics';
 import type { ManuscriptStandard, UploadedDatasetSummary } from './publicationTypes';
 import type { SpecialistResult } from './types';
 
-const SNIPPET_CHARS = 200;
 const MAX_EVIDENCE = 48;
 const SECTION_TOKENS = 3800;
 const MAX_SECTION_PASSES = 4;
@@ -51,22 +51,7 @@ export interface DraftManuscriptOptions {
 }
 
 function formatEvidence(evidence: EvidenceItem[]): string {
-  if (evidence.length === 0) return '(no source records were retrieved)';
-  return evidence
-    .slice(0, MAX_EVIDENCE)
-    .map((record, index) => {
-      const year = record.year ? ` (${record.year})` : '';
-      const id = record.identifiers?.pmid
-        ? ` PMID:${record.identifiers.pmid}`
-        : record.identifiers?.doi
-          ? ` DOI:${record.identifiers.doi}`
-          : '';
-      const snippet = record.snippet
-        ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, SNIPPET_CHARS)}`
-        : '';
-      return `[S${index + 1}] ${record.source.toUpperCase()}${year} ${record.title}.${id}${snippet}`;
-    })
-    .join('\n');
+  return formatEvidenceList(evidence, { maxItems: MAX_EVIDENCE });
 }
 
 function specialistDigest(specialists: SpecialistResult[]): string {

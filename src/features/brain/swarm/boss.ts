@@ -7,10 +7,10 @@ import { completeWithModelChain, streamWithModelChain } from '@core/llm/Provider
 import { SPECIALIST_AGENTS, type AgentId } from '@config/agents';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
+import { formatEvidenceList } from './evidenceFormat';
 import { paperSystemInstruction, type PaperRequest } from './paper';
 import type { SpecialistResult, SpecialistTask } from './types';
 
-const SNIPPET_CHARS = 240;
 const MAX_TASKS = 4;
 
 export interface BossPlan {
@@ -112,18 +112,7 @@ export async function bossChat(
   return { content: res.content, modelUsed: res.modelUsed };
 }
 
-function formatEvidenceLine(record: EvidenceItem, index: number): string {
-  const year = record.year ? ` (${record.year})` : '';
-  const id = record.identifiers?.pmid
-    ? ` PMID:${record.identifiers.pmid}`
-    : record.identifiers?.doi
-      ? ` DOI:${record.identifiers.doi}`
-      : '';
-  const snippet = record.snippet
-    ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, SNIPPET_CHARS)}`
-    : '';
-  return `[S${index + 1}] ${record.source.toUpperCase()}${year} ${record.title}.${id}${snippet}`;
-}
+
 
 // Synthesize the specialists' findings into the final answer — streamed.
 export async function synthesize(
@@ -136,9 +125,7 @@ export async function synthesize(
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
   const evidenceBlock =
-    mergedEvidence.length > 0
-      ? mergedEvidence.map((record, index) => formatEvidenceLine(record, index)).join('\n')
-      : '(no records were retrieved)';
+    formatEvidenceList(mergedEvidence);
   const specialistBlock = specialists
     .map((specialist) => {
       const body = specialist.error

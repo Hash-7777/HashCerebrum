@@ -5,13 +5,14 @@
 
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
+import { formatEvidenceItem } from './evidenceFormat';
 import type { AgentDef } from '@config/agents';
 import type { LlmMessage, LlmToolSpec } from '@core/llm/types';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 import type { SpecialistResult, SwarmCallbacks } from './types';
 
 const MAX_ROUNDS = 3;
-const SNIPPET_CHARS = 280;
+
 
 interface DirectSearchPlan {
   name: string;
@@ -47,19 +48,12 @@ function asRecords(result: unknown): EvidenceItem[] {
 // records to reason from.
 function formatRecords(toolName: string, records: EvidenceItem[], startIndex: number): string {
   if (records.length === 0) return `${toolName}: no records returned.`;
-  const lines = records.map((record, offset) => {
-    const marker = `S${startIndex + offset + 1}`;
-    const year = record.year ? ` (${record.year})` : '';
-    const id = record.identifiers?.pmid
-      ? ` PMID:${record.identifiers.pmid}`
-      : record.identifiers?.doi
-        ? ` DOI:${record.identifiers.doi}`
-        : '';
-    const snippet = record.snippet
-      ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, SNIPPET_CHARS)}`
-      : '';
-    return `[${marker}] ${record.source.toUpperCase()}${year} ${record.title}.${id}${snippet}`;
-  });
+  const lines = records.map((record, offset) =>
+    formatEvidenceItem(record, {
+      index: startIndex + offset,
+      markerPrefix: 'S',
+    }),
+  );
   return `${toolName} returned ${records.length} record(s):\n${lines.join('\n')}`;
 }
 
