@@ -133,28 +133,34 @@ fn is_localhost(host: &str) -> bool {
 #[cfg(unix)]
 fn is_sensitive_system_path(path: &Path) -> bool {
     let s = path.to_string_lossy();
-    [
+    let prefixes = [
         "/etc", "/proc", "/sys", "/dev", "/var", "/usr", "/bin", "/sbin", "/lib", "/lib64",
         "/boot", "/root",
-    ]
-    .iter()
-    .any(|prefix| s.starts_with(prefix))
+        // macOS canonicalized paths (symlinks /etc → /private/etc, /var → /private/var)
+        "/private/etc", "/private/var", "/private/tmp", "/System", "/Library", "/Users",
+        "/Volumes",
+    ];
+    prefixes.iter().any(|prefix| {
+        s.starts_with(&format!("{prefix}/")) || s == *prefix
+    })
 }
 
 #[cfg(windows)]
 fn is_sensitive_system_path(path: &Path) -> bool {
     let s = path.to_string_lossy().to_lowercase();
-    [
-        r"C:\Windows",
-        r"C:\Program Files",
-        r"C:\Program Files (x86)",
-        r"C:\ProgramData",
-        r"C:\Users\All Users",
-        r"C:\Users\Default",
-        r"C:\Windows\System32",
-    ]
-    .iter()
-    .any(|prefix| s.starts_with(&prefix.to_lowercase()))
+    // Extract drive letter so we block sensitive dirs on ALL drives, not just C:\
+    let drive = s.chars().next().and_then(|c| c.is_ascii_alphabetic().then_some(c));
+    let drive_str = drive.map(|d| format!("{d}:")).unwrap_or_else(|| "c:".to_string());
+    let sensitive = [
+        format!("{drive_str}\\windows"),
+        format!("{drive_str}\\program files"),
+        format!("{drive_str}\\program files (x86)"),
+        format!("{drive_str}\\programdata"),
+        format!("{drive_str}\\users\\all users"),
+        format!("{drive_str}\\users\\default"),
+        format!("{drive_str}\\windows\\system32"),
+    ];
+    sensitive.iter().any(|prefix| s.starts_with(prefix))
 }
 
 #[cfg(test)]
@@ -189,5 +195,46 @@ mod tests {
             path: "/tmp/data.txt",
         });
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn fs_guard_blocks_macos_private_paths() {
+        // /private/etc and /private/var are macOS canonicalized symlinks.
+        // We must block them even though the raw path doesn't start with /etc.
+        let blocked = [
+            "/private/etc/passwd",
+            "/private/var/db/shadow",
+            "/System/Library/Extensions",
+            "/Library/Application Support",
+        ];
+        for path in &blocked {
+            let result = check(Action::Fs {
+                path: path,
+            });
+            assert!(
+                result.is_err(),
+                "expected {path} to be blocked but got Ok"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn fs_guard_allows_etcetera_false_positive() {
+        // The old /etc prefix blocked /etcetera/file.pdf (false positive).
+        // With the fixed prefix check (/etc/ or exactly /etc), this should pass
+        // the sensitive-path check but still fail because it's not a real file.
+        let result = check(Action::Fs {
+            path: "/etcetera/data.pdf",
+        });
+        // Sensitive-path should NOT be the reason for rejection here.
+        // It will be rejected because the file does not exist.
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            !msg.contains("sensitive system directory"),
+            "false positive: /etcetera was treated as /etc: {msg}"
+        );
     }
 }
