@@ -7,7 +7,7 @@
 // stays contained by FeatureBoundary instead of taking the workspace down.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { type AgentId, type RegionId } from '@config/agents';
+import { agentById, type AgentId, type RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 import type { LlmMessage } from '@core/llm/types';
@@ -99,6 +99,26 @@ export function BrainMode() {
     );
   };
 
+  const lightRegion = (
+    region: RegionId,
+    source: 'agent' | 'topic',
+    intensity: number,
+    ttlMs: number,
+    agentId?: AgentId,
+  ) => {
+    bus.emit('region:light', {
+      region,
+      source,
+      intensity,
+      ttlMs,
+      ...(agentId ? { agentId } : {}),
+    });
+  };
+
+  const lightAgent = (agentId: AgentId, intensity = 0.72, ttlMs = 1800) => {
+    lightRegion(agentById(agentId).regionBinding, 'agent', intensity, ttlMs, agentId);
+  };
+
   // Load a transcript when one is opened from the left rail. activeChatId
   // only becomes non-null after an explicit rail action or the first
   // saved turn, so this never clobbers an in-progress conversation.
@@ -176,6 +196,7 @@ export function BrainMode() {
         if (seenTerms.has(hit.term)) continue;
         seenTerms.add(hit.term);
         bus.emit('topic:detected', hit);
+        lightRegion(hit.region, 'topic', Math.max(0.35, Math.min(0.9, hit.confidence * 0.85)), 1450);
       }
     };
 
@@ -197,6 +218,7 @@ export function BrainMode() {
       onBossPhase: (phase) => {
         if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
         updateAgentStatus('boss', { state: 'running', detail: bossDetail[phase] });
+        lightAgent('boss', phase === 'answering' ? 0.55 : 0.82, phase === 'routing' ? 1100 : 2100);
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: phase === 'routing' || phase === 'answering' ? 'start' : 'tool_call',
@@ -206,6 +228,7 @@ export function BrainMode() {
       onSpecialistStart: (agentId, subQuery) => {
         ensureResearchRun();
         updateAgentStatus(agentId, { state: 'running', detail: subQuery });
+        lightAgent(agentId, 0.86, 2400);
         bus.emit('agent:activity', { agentId, phase: 'start', detail: subQuery });
       },
       onSpecialistDone: (agentId, recordCount) => {
@@ -213,18 +236,24 @@ export function BrainMode() {
           state: 'done',
           detail: `${recordCount} record${recordCount === 1 ? '' : 's'}`,
         });
+        lightAgent(agentId, recordCount > 0 ? 0.72 : 0.38, recordCount > 0 ? 1700 : 900);
         bus.emit('agent:activity', { agentId, phase: 'done', detail: `${recordCount} records` });
       },
       onSpecialistError: (agentId, message) => {
         updateAgentStatus(agentId, { state: 'error', detail: message });
+        lightAgent(agentId, 0.42, 1200);
         bus.emit('agent:activity', { agentId, phase: 'error', detail: message });
       },
       onToolCall: (agentId, toolName) => {
         const def = sourceForTool(toolName);
+        lightAgent(agentId, 0.68, 1600);
+        if (def) lightRegion(def.region, 'topic', 0.55, 1250);
         bus.emit('agent:activity', { agentId, phase: 'tool_call', detail: def?.label ?? toolName });
       },
       onToolResult: (agentId, toolName, count) => {
         const def = sourceForTool(toolName);
+        lightAgent(agentId, count > 0 ? 0.76 : 0.36, count > 0 ? 1700 : 850);
+        if (def && count > 0) lightRegion(def.region, 'topic', Math.min(0.88, 0.42 + count / 30), 1550);
         bus.emit('agent:activity', {
           agentId,
           phase: 'tool_result',
@@ -240,6 +269,7 @@ export function BrainMode() {
         // A paper is drafted section by section (no token stream) — show
         // progress in the pending bubble and the boss status.
         updateAgentStatus('boss', { state: 'running', detail: `drafting ${heading}` });
+        lightAgent('boss', 0.88, 2300);
         setMessages((current) =>
           current.map((m) =>
             m.id === assistantId ? { ...m, content: `Drafting manuscript — ${heading}…` } : m,
@@ -311,6 +341,7 @@ export function BrainMode() {
         state: 'done',
         detail: result.kind === 'research' ? 'synthesis complete' : 'reply complete',
       });
+      lightAgent('boss', result.kind === 'research' ? 0.74 : 0.52, 1800);
       bus.emit('agent:activity', {
         agentId: 'boss',
         phase: 'done',
@@ -321,6 +352,7 @@ export function BrainMode() {
       const fallback = streamedContent || `HashCerebrum could not complete the request: ${detail}`;
       if (activeRunId) runs.failRun(activeRunId, detail);
       updateAgentStatus('boss', { state: 'error', detail });
+      lightAgent('boss', 0.46, 1200);
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
@@ -377,6 +409,7 @@ export function BrainMode() {
     critiquedRef.current.add(messageId);
 
     bus.emit('agent:activity', { agentId: 'boss', phase: 'start', detail: 'on-demand critique' });
+    lightRegion('amygdala', 'topic', 0.86, 2200);
 
     const critiqueId = crypto.randomUUID();
     setMessages((current) => [
@@ -416,6 +449,7 @@ export function BrainMode() {
             setMessages((current) =>
               current.map((m) => (m.id === critiqueId ? { ...m, content: buffer } : m)),
             );
+            lightRegion('amygdala', 'topic', 0.48, 900);
           },
         },
       );
@@ -427,6 +461,7 @@ export function BrainMode() {
         ),
       );
       bus.emit('agent:activity', { agentId: 'boss', phase: 'done' });
+      lightRegion('amygdala', 'topic', 0.62, 1500);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
@@ -437,6 +472,7 @@ export function BrainMode() {
         ),
       );
       bus.emit('agent:activity', { agentId: 'boss', phase: 'error', detail });
+      lightRegion('amygdala', 'topic', 0.42, 1100);
     }
   };
 
