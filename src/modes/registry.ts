@@ -8,6 +8,7 @@ const MODE_COMPONENTS: Record<ModeId, ModeComponent> = {
   resources: lazy(() => import('@features/resources')),
   memory: lazy(() => import('@features/memory')),
   review: lazy(() => import('@features/review')),
+  protocol: lazy(() => import('@features/protocol')),
 };
 
 export function getModeComponent(mode: ModeId): ModeComponent {

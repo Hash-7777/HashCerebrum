@@ -7,6 +7,7 @@ const MODE_ICONS: Record<ModeId, IconName> = {
   resources: 'book',
   memory: 'database',
   review: 'shield',
+  protocol: 'flask',
 };
 
 export function ModeRail() {

@@ -1,0 +1,115 @@
+/* =================================================================
+   Protocol mode — study design and PICO-driven protocol drafting
+   ================================================================= */
+.protocol-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 14px;
+  min-width: 0;
+}
+.protocol-main {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+.protocol-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hc-border);
+}
+.protocol-toolbar .eyebrow {
+  margin: 0 0 5px;
+  color: var(--hc-accent-strong);
+  font: 10px/1 var(--hc-font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.protocol-toolbar h1 {
+  margin: 0;
+  font-family: var(--hc-font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--hc-fg-strong);
+}
+.protocol-subtitle { margin: 4px 0 0; color: var(--hc-fg-muted); font-size: 12px; }
+.protocol-tools { display: flex; gap: 8px; }
+.protocol-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--hc-border);
+  background: var(--hc-surface);
+  color: var(--hc-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+.protocol-export:hover { background: var(--hc-surface-raised); }
+
+.protocol-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.protocol-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.protocol-field-wide { grid-column: 1 / -1; }
+.protocol-field span {
+  font-size: 11px;
+  color: var(--hc-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.protocol-field input,
+.protocol-field select,
+.protocol-field textarea {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--hc-border);
+  background: var(--hc-surface);
+  color: var(--hc-fg);
+  font-size: 13px;
+}
+.protocol-field input:focus,
+.protocol-field select:focus,
+.protocol-field textarea:focus {
+  outline: none;
+  border-color: var(--hc-accent-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hc-accent-strong) 20%, transparent);
+}
+.protocol-field textarea { resize: vertical; min-height: 60px; }
+
+.protocol-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.protocol-preview h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--hc-fg-muted);
+}
+.protocol-preview pre {
+  flex: 1;
+  min-height: 120px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hc-border);
+  background: var(--hc-surface);
+  color: var(--hc-fg);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

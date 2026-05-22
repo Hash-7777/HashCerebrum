@@ -48,6 +48,12 @@ export const MODES = defineModes([
     shortcut: '⌘4',
     description: 'Structured quality assessment — RoB 2, ROBINS-I, QUADAS-2',
   },
+  {
+    id: 'protocol',
+    label: 'Protocol',
+    shortcut: '⌘5',
+    description: 'Study design and PICO-driven protocol drafting',
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];
