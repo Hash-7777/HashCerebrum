@@ -31,7 +31,8 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_cache_host ON cache(host);
          CREATE INDEX IF NOT EXISTS idx_cache_fetched ON cache(fetched_at);",
     )?;
-    *DB.lock().unwrap() = Some(conn);
+    let mut guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
+    *guard = Some(conn);
     Ok(())
 }
 
@@ -50,7 +51,7 @@ pub struct HostStat {
 }
 
 fn with_conn<T>(f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
-    let guard = DB.lock().expect("cache db poisoned");
+    let guard = DB.lock().map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
     let conn = guard
         .as_ref()
         .ok_or_else(|| AppError::Cache("cache not initialized".into()))?;

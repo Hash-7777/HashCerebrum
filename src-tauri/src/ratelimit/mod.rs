@@ -84,7 +84,7 @@ fn buckets() -> &'static Mutex<HashMap<String, Bucket>> {
 pub async fn acquire(host: &str) {
     loop {
         let wait = {
-            let mut guard = buckets().lock().expect("ratelimit buckets poisoned");
+            let mut guard = buckets().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let bucket = guard
                 .entry(host.to_string())
                 .or_insert_with(|| Bucket::new(default_spec(host)));
