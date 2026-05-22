@@ -42,6 +42,12 @@ export const MODES = defineModes([
     shortcut: '⌘3',
     description: "The active project's saved research memory — evidence and answers",
   },
+  {
+    id: 'review',
+    label: 'Review',
+    shortcut: '⌘4',
+    description: 'Structured quality assessment — RoB 2, ROBINS-I, QUADAS-2',
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];

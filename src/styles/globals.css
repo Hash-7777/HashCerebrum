@@ -9,4 +9,5 @@
 @import './sections/memory.css';
 @import './sections/execution-trace.css';
 @import './sections/region-editor.css';
+@import './sections/review.css';
 @import './sections/system.css';
