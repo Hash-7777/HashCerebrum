@@ -40,9 +40,9 @@ export function formatEvidenceList(
   evidence: EvidenceItem[],
   opts?: { startIndex?: number; markerPrefix?: string; snippetChars?: number; maxItems?: number },
 ): string {
-  if (evidence.length === 0) return '(no source records were retrieved)';
   const start = opts?.startIndex ?? 0;
   const slice = opts?.maxItems !== undefined ? evidence.slice(0, opts.maxItems) : evidence;
+  if (slice.length === 0) return '(no source records were retrieved)';
   return slice
     .map((record, offset) =>
       formatEvidenceItem(record, {

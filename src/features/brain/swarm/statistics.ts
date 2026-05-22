@@ -45,17 +45,29 @@ function parseDelimited(text: string): { delimiter: ',' | '\t'; headers: string[
   if (!headerLine) throw new Error('Dataset has no header row.');
   const delimiter = detectDelimiter(headerLine);
   const headers = parseDelimitedLine(headerLine, delimiter).map((header, index) => header || `column_${index + 1}`);
+  // Deduplicate headers so duplicate column names don't silently overwrite data.
+  const seen = new Set<string>();
+  const uniqueHeaders = headers.map((header) => {
+    let unique = header;
+    let suffix = 2;
+    while (seen.has(unique)) {
+      unique = `${header}_${suffix}`;
+      suffix += 1;
+    }
+    seen.add(unique);
+    return unique;
+  });
   if (headers.length < 2) throw new Error('Dataset must contain at least two columns.');
   const rows = lines.slice(1).map((line) => {
     const cells = parseDelimitedLine(line, delimiter);
     const row: Record<string, string> = {};
-    headers.forEach((header, index) => {
+    uniqueHeaders.forEach((header, index) => {
       row[header] = cells[index] ?? '';
     });
     return row;
   });
   if (rows.length === 0) throw new Error('Dataset has no data rows.');
-  return { delimiter, headers, rows };
+  return { delimiter, headers: uniqueHeaders, rows };
 }
 
 function numericValues(rows: Record<string, string>[], column: string): number[] {
@@ -114,7 +126,7 @@ function columnSummary(rows: Record<string, string>[], column: string): DatasetC
   return { name: column, type: 'categorical', nonMissing, missing, levels };
 }
 
-async function sha256(text: string): Promise<string> {
+async function sha256Text(text: string): Promise<string> {
   if (globalThis.crypto?.subtle) {
     const bytes = new TextEncoder().encode(text);
     const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
@@ -128,6 +140,21 @@ async function sha256(text: string): Promise<string> {
   return `fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
 }
 
+async function sha256Buffer(buffer: ArrayBuffer): Promise<string> {
+  if (globalThis.crypto?.subtle) {
+    const hash = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+    return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  // FNV-1a fallback on raw bytes
+  const bytes = new Uint8Array(buffer);
+  let fallback = 2166136261;
+  for (let i = 0; i < bytes.length; i += 1) {
+    fallback ^= bytes[i]!;
+    fallback = Math.imul(fallback, 16777619);
+  }
+  return `fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
+}
+
 async function parseXlsx(buffer: ArrayBuffer): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
   const XLSX = await import('xlsx');
   const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
@@ -135,9 +162,21 @@ async function parseXlsx(buffer: ArrayBuffer): Promise<{ headers: string[]; rows
   if (!sheet) throw new Error('Excel workbook has no readable sheets.');
   const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
   if (json.length === 0) throw new Error('Excel sheet is empty.');
-  const headers = (json[0] as unknown[]).map((cell, index) => {
+  const rawHeaders = (json[0] as unknown[]).map((cell, index) => {
     const value = cell == null ? '' : String(cell);
     return value || `column_${index + 1}`;
+  });
+  // Deduplicate headers so duplicate column names don't silently overwrite data.
+  const seen = new Set<string>();
+  const headers = rawHeaders.map((header) => {
+    let unique = header;
+    let suffix = 2;
+    while (seen.has(unique)) {
+      unique = `${header}_${suffix}`;
+      suffix += 1;
+    }
+    seen.add(unique);
+    return unique;
   });
   if (headers.length < 2) throw new Error('Dataset must contain at least two columns.');
   const rows = json.slice(1).map((row) => {
@@ -156,7 +195,7 @@ export async function summarizeDatasetText(filename: string, text: string): Prom
   const { delimiter, headers, rows } = parseDelimited(text);
   return {
     filename,
-    sha256: await sha256(text),
+    sha256: await sha256Text(text),
     rows: rows.length,
     columns: headers,
     delimiter,
@@ -176,7 +215,7 @@ export async function summarizeDatasetXlsx(filename: string, buffer: ArrayBuffer
   if (rows.length === 0) throw new Error('Excel sheet has no data rows.');
   return {
     filename,
-    sha256: await sha256(new TextDecoder().decode(buffer)),
+    sha256: await sha256Buffer(buffer),
     rows: rows.length,
     columns: headers,
     delimiter: null,

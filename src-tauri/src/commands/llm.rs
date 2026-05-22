@@ -106,10 +106,11 @@ pub async fn llm_http_get(
             return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
         }
     }
-    let body = response.text().await?;
-    if body.len() > MAX_BODY_BYTES {
+    let body_bytes = response.bytes().await?;
+    if body_bytes.len() > MAX_BODY_BYTES {
         return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
     }
+    let body = String::from_utf8_lossy(&body_bytes).into_owned();
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
@@ -161,10 +162,11 @@ pub async fn llm_http_post(
             return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
         }
     }
-    let resp_body = response.text().await?;
-    if resp_body.len() > MAX_BODY_BYTES {
+    let resp_bytes = response.bytes().await?;
+    if resp_bytes.len() > MAX_BODY_BYTES {
         return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
     }
+    let resp_body = String::from_utf8_lossy(&resp_bytes).into_owned();
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
@@ -209,6 +211,12 @@ pub async fn llm_chat_stream(
     crate::ratelimit::acquire(&host).await;
 
     let abort = Arc::new(AtomicBool::new(false));
+    if STREAM_ABORTS.contains_key(&stream_id) {
+        let _ = on_event.send(StreamEvent::Error {
+            message: "duplicate stream id".into(),
+        });
+        return Ok(());
+    }
     STREAM_ABORTS.insert(stream_id.clone(), abort.clone());
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
@@ -246,6 +254,7 @@ pub async fn llm_chat_stream(
     let mut stream = response.bytes_stream();
     let mut buf: Vec<u8> = Vec::new();
     let mut total: usize = 0;
+    let mut channel_closed = false;
     while let Some(chunk) = stream.next().await {
         if abort.load(Ordering::Relaxed) {
             tracing::debug!(stream_id = %stream_id, "chat stream aborted");
@@ -261,6 +270,12 @@ pub async fn llm_chat_stream(
             }
         };
         total += chunk.len();
+        if total > MAX_BODY_BYTES {
+            let _ = on_event.send(StreamEvent::Error {
+                message: "stream exceeded 50 MB".into(),
+            });
+            break;
+        }
         buf.extend_from_slice(&chunk);
         while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
             let line: Vec<u8> = buf.drain(..=pos).collect();
@@ -273,10 +288,11 @@ pub async fn llm_chat_stream(
                     })
                     .is_err()
             {
+                channel_closed = true;
                 break;
             }
         }
-        if abort.load(Ordering::Relaxed) {
+        if channel_closed || abort.load(Ordering::Relaxed) {
             break;
         }
     }

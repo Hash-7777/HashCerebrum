@@ -44,7 +44,9 @@ impl Bucket {
     /// proceed immediately.
     fn try_take(&mut self) -> Option<Duration> {
         let now = Instant::now();
-        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        let elapsed = now
+            .saturating_duration_since(self.last_refill)
+            .as_secs_f64();
         self.tokens = (self.tokens + elapsed * self.spec.rate).min(self.spec.capacity);
         self.last_refill = now;
         if self.tokens >= 1.0 {

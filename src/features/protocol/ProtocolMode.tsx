@@ -116,7 +116,7 @@ function generateOutline(fields: {
 
 export function ProtocolMode() {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
-  const { assessments, save, remove } = useReviewStorage(activeProjectId);
+  const { assessments, save, remove } = useReviewStorage(activeProjectId, 'protocol');
   const [title, setTitle] = useState('');
   const [design, setDesign] = useState<StudyDesign>('rct');
   const [population, setPopulation] = useState('');
@@ -180,7 +180,7 @@ export function ProtocolMode() {
               type="button"
               className="protocol-export"
               onClick={() =>
-                save('rob2' as 'rob2', title || '(untitled protocol)', {
+                save('protocol', title || '(untitled protocol)', {
                   title,
                   design,
                   population,
