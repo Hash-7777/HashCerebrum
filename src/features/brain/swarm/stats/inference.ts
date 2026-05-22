@@ -69,6 +69,11 @@ export interface TTestResult {
 export function welchTTest(groupA: number[], groupB: number[]): TTestResult {
   const nA = groupA.length;
   const nB = groupB.length;
+  if (nA < 2 || nB < 2) {
+    throw new Error(
+      `Welch t-test requires at least 2 observations per group (got ${nA} and ${nB})`,
+    );
+  }
   const meanA = mean(groupA);
   const meanB = mean(groupB);
   const varA = sampleVariance(groupA, meanA);
@@ -202,6 +207,11 @@ export function pearson(x: number[], y: number[]): CorrelationResult {
     sxx += dx * dx;
     syy += dy * dy;
   }
+  if (sxx === 0 || syy === 0) {
+    throw new Error(
+      'Pearson correlation requires non-zero variance in both variables',
+    );
+  }
   const r = sxy / Math.sqrt(sxx * syy);
   const df = n - 2;
   const t = r * Math.sqrt(df / (1 - r * r));
@@ -234,8 +244,11 @@ export interface ChiSquareResult {
 
 /** Pearson chi-square test of independence for an r×c table of counts. */
 export function chiSquareTest(table: number[][]): ChiSquareResult {
+  if (table.length === 0 || !table[0]) {
+    throw new Error('Chi-square test requires a non-empty contingency table');
+  }
   const rows = table.length;
-  const cols = table[0]!.length;
+  const cols = table[0].length;
   const rowSums = table.map((row) => row.reduce((sum, value) => sum + value, 0));
   const colSums = Array.from({ length: cols }, (_, j) =>
     table.reduce((sum, row) => sum + row[j]!, 0),

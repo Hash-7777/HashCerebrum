@@ -105,6 +105,11 @@ export function logRankTest(
     groupA.filter((d) => d.event === 1).length + groupB.filter((d) => d.event === 1).length;
   const observedB = totalEvents - observedA;
   const expectedB = totalEvents - expectedA;
+  if (expectedA <= 0 || expectedB <= 0) {
+    throw new Error(
+      `Log-rank hazard ratio undefined: zero expected events in a group (expectedA=${expectedA}, expectedB=${expectedB})`,
+    );
+  }
   const chiSquare = variance > 0 ? (observedA - expectedA) ** 2 / variance : 0;
   const hazardRatio = (observedA / expectedA) / (observedB / expectedB);
   const lnHr = Math.log(hazardRatio);

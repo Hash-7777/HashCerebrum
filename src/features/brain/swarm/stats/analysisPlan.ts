@@ -143,8 +143,14 @@ function buildGroupComparison(outcome: Column, group: Column): AnalysisResult[] 
   }
   if (valuesA.length < MIN_GROUP_N || valuesB.length < MIN_GROUP_N) return [];
 
-  const t = welchTTest(valuesA, valuesB);
-  const mw = mannWhitneyU(valuesA, valuesB);
+  let t: ReturnType<typeof welchTTest>;
+  let mw: ReturnType<typeof mannWhitneyU>;
+  try {
+    t = welchTTest(valuesA, valuesB);
+    mw = mannWhitneyU(valuesA, valuesB);
+  } catch {
+    return [];
+  }
   return [
     {
       id: 'analysis-welch-t',
@@ -213,7 +219,17 @@ function buildPearson(x: Column, y: Column): AnalysisResult | null {
   }
   if (xs.length < 4) return null;
 
-  const r = pearson(xs, ys);
+  // Guard zero-variance inputs that would crash Pearson correlation.
+  const varianceX = xs.reduce((sum, v) => sum + (v - xs.reduce((s, x) => s + x, 0) / xs.length) ** 2, 0);
+  const varianceY = ys.reduce((sum, v) => sum + (v - ys.reduce((s, y) => s + y, 0) / ys.length) ** 2, 0);
+  if (varianceX === 0 || varianceY === 0) return null;
+
+  let r: ReturnType<typeof pearson>;
+  try {
+    r = pearson(xs, ys);
+  } catch {
+    return null;
+  }
   return {
     id: 'analysis-pearson',
     kind: 'pearson',
@@ -329,14 +345,18 @@ function buildSurvival(
       }
     }
     if (tA.length >= MIN_GROUP_N && tB.length >= MIN_GROUP_N) {
-      const lr = logRankTest(tA, eA, tB, eB);
-      logRank = {
-        chiSquare: lr.chiSquare,
-        pValue: lr.pValue,
-        hazardRatio: lr.hazardRatio,
-        ciLow: lr.hrCiLow,
-        ciHigh: lr.hrCiHigh,
-      };
+      try {
+        const lr = logRankTest(tA, eA, tB, eB);
+        logRank = {
+          chiSquare: lr.chiSquare,
+          pValue: lr.pValue,
+          hazardRatio: lr.hazardRatio,
+          ciLow: lr.hrCiLow,
+          ciHigh: lr.hrCiHigh,
+        };
+      } catch {
+        // Zero expected events — skip log-rank for this grouping.
+      }
     }
   }
 
