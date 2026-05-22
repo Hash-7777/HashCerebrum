@@ -14,4 +14,10 @@ describe('DocumentPreviewWindow security', () => {
       expect(iframe).toContain('sandbox');
     }
   });
+
+  it('renders generated PDF previews through either srcDoc or blob URLs', () => {
+    expect(source).toContain('srcDoc={document.previewHtml}');
+    expect(source).toContain('URL.createObjectURL(document.blob)');
+    expect(source).toContain('src={url}');
+  });
 });

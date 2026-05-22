@@ -38,7 +38,10 @@ attacks on dependencies.
    every launch, at the cost of at-rest encryption. An opt-in OS-keychain
    path remains implemented in `commands/keychain.rs`.
 5. **CSP is strict.** No external `script-src`, no `'unsafe-inline'` on
-   scripts. Style allows `'unsafe-inline'` for dynamic theme tokens only.
+   scripts, and no broad `'unsafe-eval'`. The only script relaxation is
+   `'wasm-unsafe-eval'`, which permits WebAssembly compilation needed by
+   WebKit/PDF rendering paths without allowing general JavaScript string
+   evaluation. Style allows `'unsafe-inline'` for dynamic theme tokens only.
 6. **`withGlobalTauri: false`.** No implicit `window.__TAURI__`. The
    renderer must import from `@tauri-apps/api/core`, which is
    bundle-introspectable.
