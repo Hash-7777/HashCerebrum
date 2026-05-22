@@ -16,15 +16,48 @@ function chunk(
 
 describe('buildMemoryGraph', () => {
   it('returns an empty graph for no chunks', () => {
-    expect(buildMemoryGraph([])).toEqual({ nodes: [], edges: [], clusters: [] });
+    expect(buildMemoryGraph([])).toEqual({
+      nodes: [],
+      edges: [],
+      clusters: [],
+      stats: { savedChunks: 0, capsuleCount: 0, mergedChunks: 0, duplicateGroups: 0 },
+    });
   });
 
-  it('makes one node per chunk', () => {
+  it('keeps unrelated chunks as separate memory capsules', () => {
     const graph = buildMemoryGraph([
       chunk({ id: 'a', title: 'Warfarin bleeding', text: 'anticoagulant risk' }),
       chunk({ id: 'b', title: 'Bone density', text: 'calcium intake' }),
     ]);
-    expect(graph.nodes.map((n) => n.id).sort()).toEqual(['a', 'b']);
+    expect(graph.nodes).toHaveLength(2);
+    expect(graph.nodes.flatMap((n) => n.chunkIds).sort()).toEqual(['a', 'b']);
+  });
+
+  it('merges repeated answer memories for the same research topic', () => {
+    const graph = buildMemoryGraph([
+      chunk({
+        id: 'answer-1',
+        kind: 'answer',
+        source: 'answer',
+        title: 'Panadol liver safety answer',
+        text: 'Panadol liver safety synthesis.',
+        query: 'make a full research paper about panadol liver safety in elders',
+      }),
+      chunk({
+        id: 'answer-2',
+        kind: 'answer',
+        source: 'answer',
+        title: 'Panadol liver safety answer',
+        text: 'Updated Panadol liver safety synthesis.',
+        query: 'research about panadol liver safety in elders',
+      }),
+    ]);
+
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.nodes[0]?.chunkIds.sort()).toEqual(['answer-1', 'answer-2']);
+    expect(graph.nodes[0]?.chunkCount).toBe(2);
+    expect(graph.stats.mergedChunks).toBe(1);
+    expect(graph.stats.duplicateGroups).toBe(1);
   });
 
   it('links chunks that share enough terms and leaves unrelated ones isolated', () => {
@@ -47,11 +80,14 @@ describe('buildMemoryGraph', () => {
     ]);
     expect(graph.edges).toHaveLength(1);
     const edge = graph.edges[0]!;
-    expect([edge.source, edge.target].sort()).toEqual(['nsaid-1', 'nsaid-2']);
+    const endpointChunks = [edge.source, edge.target]
+      .map((id) => graph.nodes.find((node) => node.id === id)?.chunkIds[0])
+      .sort();
+    expect(endpointChunks).toEqual(['nsaid-1', 'nsaid-2']);
     expect(edge.weight).toBeGreaterThan(0);
     expect(edge.label).toContain('warfarin');
 
-    const degree = Object.fromEntries(graph.nodes.map((n) => [n.id, n.degree]));
+    const degree = Object.fromEntries(graph.nodes.map((n) => [n.chunkIds[0], n.degree]));
     expect(degree['nsaid-1']).toBe(1);
     expect(degree['nsaid-2']).toBe(1);
     expect(degree['unrelated']).toBe(0);
@@ -75,7 +111,7 @@ describe('buildMemoryGraph', () => {
     expect(graph.nodes.every((node) => node.degree === 0)).toBe(true);
   });
 
-  it('links sparse findings from the same research run and labels the cluster', () => {
+  it('groups sparse findings from the same research topic and labels the cluster', () => {
     const graph = buildMemoryGraph([
       chunk({
         id: 'run-a',
@@ -93,12 +129,11 @@ describe('buildMemoryGraph', () => {
       }),
     ]);
 
-    expect(graph.edges).toHaveLength(1);
-    expect(graph.edges[0]?.reason).toBe('same_run');
-    expect(graph.edges[0]?.label).toBe('same research run');
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.nodes[0]?.chunkCount).toBe(2);
     expect(graph.clusters).toHaveLength(1);
     expect(graph.clusters[0]?.label.toLowerCase()).toContain('nsaids');
-    expect(graph.nodes.every((node) => node.clusterId === 'run:run-1')).toBe(true);
+    expect(graph.clusters[0]?.chunkCount).toBe(2);
   });
 
   it('caps the number of edges on any single node', () => {
@@ -107,16 +142,18 @@ describe('buildMemoryGraph', () => {
       id: 'hub',
       title: 'serotonin dopamine norepinephrine receptor signalling pathway',
       text: 'serotonin dopamine norepinephrine receptor signalling pathway neuron',
+      url: 'https://example.org/hub',
     });
     const spokes = Array.from({ length: 12 }, (_, i) =>
       chunk({
         id: `spoke-${i}`,
-        title: 'serotonin dopamine norepinephrine receptor signalling pathway',
-        text: 'serotonin dopamine norepinephrine receptor signalling pathway neuron',
+        title: `serotonin dopamine norepinephrine receptor signalling pathway variant ${i}`,
+        text: `serotonin dopamine norepinephrine receptor signalling pathway neuron variant ${i}`,
+        url: `https://example.org/spoke-${i}`,
       }),
     );
     const graph = buildMemoryGraph([hub, ...spokes]);
-    const hubDegree = graph.nodes.find((n) => n.id === 'hub')!.degree;
+    const hubDegree = graph.nodes.find((n) => n.chunkIds.includes('hub'))!.degree;
     expect(hubDegree).toBeLessThanOrEqual(6);
   });
 
@@ -126,6 +163,7 @@ describe('buildMemoryGraph', () => {
         id: `c${i}`,
         title: `Finding ${i}`,
         text: 'body',
+        url: `https://example.org/finding-${i}`,
         // Higher index → later timestamp → newer.
         createdAt: new Date(2026, 0, 1, 0, 0, i).toISOString(),
       }),
@@ -133,6 +171,6 @@ describe('buildMemoryGraph', () => {
     const graph = buildMemoryGraph(many);
     expect(graph.nodes).toHaveLength(MAX_GRAPH_NODES);
     // The very first (oldest) chunk must have been dropped.
-    expect(graph.nodes.some((n) => n.id === 'c0')).toBe(false);
+    expect(graph.nodes.some((n) => n.chunkIds.includes('c0'))).toBe(false);
   });
 });

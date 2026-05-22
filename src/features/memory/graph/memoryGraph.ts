@@ -4,6 +4,11 @@
 // Phase 35 deliberately avoids raw Jaccard edges. Links are now grounded in
 // rarity-weighted terms, topic phrases, run/query grouping, and medical-ish
 // entity terms, so a generic word like "study" cannot create a false link.
+//
+// The rendered graph uses memory capsules rather than one dot for every saved
+// RAG chunk. Repeated answers and duplicate source records stay in storage, but
+// they merge visually so Memory mode feels like an adapting brain instead of a
+// growing pile of identical nodes.
 
 import { tokenize, type RagChunk } from '@core/store/ragStore';
 
@@ -35,11 +40,13 @@ const GRAPH_GENERIC_TERMS = new Set([
   'evidence',
   'finding',
   'findings',
+  'full',
   'health',
   'introduction',
   'journal',
   'limitation',
   'limitations',
+  'make',
   'manuscript',
   'method',
   'methods',
@@ -52,6 +59,7 @@ const GRAPH_GENERIC_TERMS = new Set([
   'publication',
   'record',
   'records',
+  'reasearch',
   'research',
   'result',
   'results',
@@ -74,6 +82,9 @@ const MEDICAL_ENTITY_HINT = /(?:ase|itis|osis|emia|oma|pathy|plasty|ectomy|otomy
 export interface MemoryGraphNode {
   id: string;
   chunk: RagChunk;
+  chunks: RagChunk[];
+  chunkIds: string[];
+  chunkCount: number;
   label: string;
   degree: number; // edge count — drives the rendered node radius
   clusterId: string;
@@ -94,16 +105,25 @@ export interface MemoryGraphCluster {
   id: string;
   label: string;
   nodeIds: string[];
+  chunkCount: number;
   terms: string[];
+}
+
+export interface MemoryGraphStats {
+  savedChunks: number;
+  capsuleCount: number;
+  mergedChunks: number;
+  duplicateGroups: number;
 }
 
 export interface MemoryGraph {
   nodes: MemoryGraphNode[];
   edges: MemoryGraphEdge[];
   clusters: MemoryGraphCluster[];
+  stats: MemoryGraphStats;
 }
 
-interface ChunkProfile {
+interface GraphProfile {
   chunk: RagChunk;
   index: number;
   terms: Map<string, number>;
@@ -112,6 +132,17 @@ interface ChunkProfile {
   queryTerms: Set<string>;
   topicKey: string;
   clusterId: string;
+}
+
+interface ChunkProfile extends GraphProfile {}
+
+interface CapsuleProfile extends GraphProfile {
+  id: string;
+  chunks: RagChunk[];
+  chunkIds: string[];
+  chunkCount: number;
+  label: string;
+  runIds: Set<string>;
 }
 
 function graphTokens(value: string | undefined): string[] {
@@ -135,11 +166,16 @@ function phrasesFrom(tokens: string[], maxPhrases: number): string[] {
   return phrases;
 }
 
+function uniqueSortedTerms(value: string | undefined, maxTerms: number): string[] {
+  return [...new Set(graphTokens(value))]
+    .sort()
+    .slice(0, maxTerms);
+}
+
 function topicKeyFrom(chunk: RagChunk): string {
-  if (chunk.runId) return `run:${chunk.runId}`;
-  const queryTerms = graphTokens(chunk.query).slice(0, 8).sort();
+  const queryTerms = uniqueSortedTerms(cleanTopicLabel(chunk.query, ''), 8);
   if (queryTerms.length >= 2) return `query:${queryTerms.join('|')}`;
-  const titleTerms = graphTokens(chunk.title).slice(0, 5).sort();
+  const titleTerms = uniqueSortedTerms(cleanTopicLabel(chunk.title, ''), 6);
   return titleTerms.length > 0 ? `topic:${titleTerms.join('|')}` : `chunk:${chunk.id}`;
 }
 
@@ -186,7 +222,7 @@ function buildProfiles(chunks: RagChunk[]): ChunkProfile[] {
   });
 }
 
-function documentFrequency(profiles: ChunkProfile[]): Map<string, number> {
+function documentFrequency(profiles: GraphProfile[]): Map<string, number> {
   const df = new Map<string, number>();
   for (const profile of profiles) {
     for (const term of profile.terms.keys()) df.set(term, (df.get(term) ?? 0) + 1);
@@ -198,7 +234,7 @@ function idfFor(totalDocs: number, df: Map<string, number>, term: string): numbe
   return 1 + Math.log((totalDocs + 1) / ((df.get(term) ?? 0) + 0.5));
 }
 
-function finalizeEntityTerms(profiles: ChunkProfile[], df: Map<string, number>) {
+function finalizeEntityTerms(profiles: GraphProfile[], df: Map<string, number>) {
   const totalDocs = Math.max(profiles.length, 1);
   for (const profile of profiles) {
     for (const term of profile.terms.keys()) {
@@ -212,6 +248,113 @@ function finalizeEntityTerms(profiles: ChunkProfile[], df: Map<string, number>) 
       }
     }
   }
+}
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function stableEvidenceKey(chunk: RagChunk): string | null {
+  const url = chunk.url?.trim().toLowerCase();
+  if (url) return `url:${url}`;
+  const titleTerms = uniqueSortedTerms(cleanTopicLabel(chunk.title, ''), 10);
+  return titleTerms.length >= 3 ? `title:${titleTerms.join('|')}` : null;
+}
+
+function capsuleKeyFor(profile: ChunkProfile): string {
+  const stableEvidence = profile.chunk.kind === 'evidence' ? stableEvidenceKey(profile.chunk) : null;
+  if (stableEvidence) return `evidence:${profile.chunk.source.toLowerCase()}:${stableEvidence}`;
+  if (!profile.topicKey.startsWith('chunk:')) return `${profile.chunk.kind}:${profile.topicKey}`;
+  const titleTerms = uniqueSortedTerms(cleanTopicLabel(profile.chunk.title, ''), 8);
+  if (titleTerms.length >= 2) return `${profile.chunk.kind}:title:${titleTerms.join('|')}`;
+  return `${profile.chunk.kind}:chunk:${profile.chunk.id}`;
+}
+
+function mergeTerms(target: Map<string, number>, source: Map<string, number>, weight = 1) {
+  for (const [term, value] of source) target.set(term, (target.get(term) ?? 0) + value * weight);
+}
+
+function addAll<T>(target: Set<T>, source: Iterable<T>) {
+  for (const item of source) target.add(item);
+}
+
+function bestClusterId(profiles: ChunkProfile[], terms: Map<string, number>): string {
+  const topicCounts = new Map<string, number>();
+  for (const profile of profiles) {
+    if (profile.topicKey.startsWith('chunk:')) continue;
+    topicCounts.set(profile.topicKey, (topicCounts.get(profile.topicKey) ?? 0) + 1);
+  }
+  const topic = [...topicCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  if (topic) return topic;
+  const strongest = [...terms.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 4)
+    .map(([term]) => term);
+  return strongest.length > 0 ? `topic:${strongest.sort().join('|')}` : `capsule:${profiles[0]?.chunk.id ?? 'untitled'}`;
+}
+
+function capsuleLabelFor(representative: RagChunk, profiles: ChunkProfile[], fallbackTerms: string[]): string {
+  const query = profiles.find((profile) => profile.chunk.query)?.chunk.query;
+  const fallback = fallbackTerms.length > 0 ? fallbackTerms.slice(0, 3).join(' / ') : representative.title || 'Untitled';
+  if (representative.kind === 'answer') return cleanTopicLabel(query, fallback);
+  return cleanTopicLabel(representative.title, cleanTopicLabel(query, fallback));
+}
+
+function buildCapsules(profiles: ChunkProfile[]): CapsuleProfile[] {
+  const groups = new Map<string, ChunkProfile[]>();
+  for (const profile of profiles) {
+    const key = capsuleKeyFor(profile);
+    const list = groups.get(key) ?? [];
+    list.push(profile);
+    groups.set(key, list);
+  }
+
+  return [...groups.entries()].map(([key, group], index) => {
+    const profilesByAge = [...group].sort((a, b) => b.chunk.createdAt.localeCompare(a.chunk.createdAt));
+    const representative = profilesByAge[0]!.chunk;
+    const terms = new Map<string, number>();
+    const phrases = new Set<string>();
+    const entityTerms = new Set<string>();
+    const queryTerms = new Set<string>();
+    const runIds = new Set<string>();
+
+    profilesByAge.forEach((profile, profileIndex) => {
+      mergeTerms(terms, profile.terms, profileIndex === 0 ? 1 : 0.82);
+      addAll(phrases, profile.phrases);
+      addAll(entityTerms, profile.entityTerms);
+      addAll(queryTerms, profile.queryTerms);
+      if (profile.chunk.runId) runIds.add(profile.chunk.runId);
+    });
+
+    const clusterId = bestClusterId(profilesByAge, terms);
+    const fallbackTerms = [...terms.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([term]) => term)
+      .slice(0, 5);
+    const topicKey = clusterId.startsWith('topic:') || clusterId.startsWith('query:') ? clusterId : profilesByAge[0]!.topicKey;
+
+    return {
+      id: `capsule-${hashString(key)}`,
+      chunk: representative,
+      chunks: profilesByAge.map((profile) => profile.chunk),
+      chunkIds: profilesByAge.map((profile) => profile.chunk.id),
+      chunkCount: profilesByAge.length,
+      index,
+      terms,
+      phrases,
+      entityTerms,
+      queryTerms,
+      topicKey,
+      clusterId,
+      label: capsuleLabelFor(representative, profilesByAge, fallbackTerms),
+      runIds,
+    };
+  });
 }
 
 function weightedCosine(a: Map<string, number>, b: Map<string, number>, df: Map<string, number>, totalDocs: number): number {
@@ -252,8 +395,17 @@ function sharedTerms(a: Set<string>, b: Set<string>, df: Map<string, number>, to
     .slice(0, 3);
 }
 
-function edgeFor(a: ChunkProfile, b: ChunkProfile, df: Map<string, number>, totalDocs: number): MemoryGraphEdge | null {
-  const sameRun = !!a.chunk.runId && a.chunk.runId === b.chunk.runId;
+function intersects(a: Set<string>, b: Set<string>): boolean {
+  if (a.size === 0 || b.size === 0) return false;
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const value of small) {
+    if (large.has(value)) return true;
+  }
+  return false;
+}
+
+function edgeFor(a: CapsuleProfile, b: CapsuleProfile, df: Map<string, number>, totalDocs: number): MemoryGraphEdge | null {
+  const sameRun = intersects(a.runIds, b.runIds);
   const sameTopic = a.topicKey === b.topicKey && !a.topicKey.startsWith('chunk:');
   const entityScore = weightedJaccard(a.entityTerms, b.entityTerms, df, totalDocs);
   const phraseScore = weightedJaccard(a.phrases, b.phrases, df, totalDocs);
@@ -285,10 +437,10 @@ function edgeFor(a: ChunkProfile, b: ChunkProfile, df: Map<string, number>, tota
           ? shared.join(', ')
           : 'topic phrase overlap';
 
-  return { source: a.chunk.id, target: b.chunk.id, weight: score, reason, label };
+  return { source: a.id, target: b.id, weight: score, reason, label };
 }
 
-function topTermsForCluster(profiles: ChunkProfile[], df: Map<string, number>, totalDocs: number): string[] {
+function topTermsForCluster(profiles: GraphProfile[], df: Map<string, number>, totalDocs: number): string[] {
   const scores = new Map<string, number>();
   for (const profile of profiles) {
     for (const term of profile.entityTerms) {
@@ -303,8 +455,8 @@ function topTermsForCluster(profiles: ChunkProfile[], df: Map<string, number>, t
     .slice(0, MAX_CLUSTER_TERMS);
 }
 
-function buildClusters(profiles: ChunkProfile[], df: Map<string, number>, totalDocs: number): MemoryGraphCluster[] {
-  const byCluster = new Map<string, ChunkProfile[]>();
+function buildClusters(profiles: CapsuleProfile[], df: Map<string, number>, totalDocs: number): MemoryGraphCluster[] {
+  const byCluster = new Map<string, CapsuleProfile[]>();
   for (const profile of profiles) {
     const list = byCluster.get(profile.clusterId) ?? [];
     list.push(profile);
@@ -319,26 +471,40 @@ function buildClusters(profiles: ChunkProfile[], df: Map<string, number>, totalD
       return {
         id,
         label: cleanTopicLabel(query, fallback),
-        nodeIds: list.map((profile) => profile.chunk.id),
+        nodeIds: list.map((profile) => profile.id),
+        chunkCount: list.reduce((sum, profile) => sum + profile.chunkCount, 0),
         terms,
       };
     })
-    .sort((a, b) => b.nodeIds.length - a.nodeIds.length || a.label.localeCompare(b.label));
+    .sort((a, b) => b.chunkCount - a.chunkCount || a.label.localeCompare(b.label));
 }
 
 /**
- * Build the relatedness graph for a set of project chunks. Every chunk
- * becomes a node; edges are the strongest semantic/topic links between them,
- * capped per node so the diagram stays legible. Isolated chunks are still
- * returned as zero-degree nodes.
+ * Build the relatedness graph for a set of project chunks. Chunks first merge
+ * into capsules by stable source identity or canonical research topic, then
+ * edges are computed between those capsules. The underlying chunks stay
+ * available through node.chunkIds so delete/detail actions can still operate
+ * on the real store records.
  */
 export function buildMemoryGraph(chunks: RagChunk[]): MemoryGraph {
   const ordered = [...chunks]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, MAX_GRAPH_NODES);
 
-  const profiles = buildProfiles(ordered);
-  const profileById = new Map(profiles.map((profile) => [profile.chunk.id, profile]));
+  const emptyStats: MemoryGraphStats = {
+    savedChunks: ordered.length,
+    capsuleCount: 0,
+    mergedChunks: 0,
+    duplicateGroups: 0,
+  };
+  if (ordered.length === 0) return { nodes: [], edges: [], clusters: [], stats: emptyStats };
+
+  const rawProfiles = buildProfiles(ordered);
+  const rawDf = documentFrequency(rawProfiles);
+  finalizeEntityTerms(rawProfiles, rawDf);
+
+  const profiles = buildCapsules(rawProfiles);
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
   const df = documentFrequency(profiles);
   const totalDocs = Math.max(profiles.length, 1);
   finalizeEntityTerms(profiles, df);
@@ -392,10 +558,13 @@ export function buildMemoryGraph(chunks: RagChunk[]): MemoryGraph {
   const clusters = buildClusters(profiles, df, totalDocs);
   const clusterOrder = new Map(clusters.map((cluster, index) => [cluster.id, index]));
   const nodes: MemoryGraphNode[] = profiles.map((profile) => ({
-    id: profile.chunk.id,
+    id: profile.id,
     chunk: profile.chunk,
-    label: profile.chunk.title.trim() || 'Untitled',
-    degree: degree.get(profile.chunk.id) ?? 0,
+    chunks: profile.chunks,
+    chunkIds: profile.chunkIds,
+    chunkCount: profile.chunkCount,
+    label: profile.label.trim() || 'Untitled',
+    degree: degree.get(profile.id) ?? 0,
     clusterId: profile.clusterId,
     topicTerms: topTermsForCluster([profile], df, totalDocs),
   }));
@@ -406,5 +575,15 @@ export function buildMemoryGraph(chunks: RagChunk[]): MemoryGraph {
       b.chunk.createdAt.localeCompare(a.chunk.createdAt),
   );
 
-  return { nodes, edges, clusters };
+  return {
+    nodes,
+    edges,
+    clusters,
+    stats: {
+      savedChunks: ordered.length,
+      capsuleCount: nodes.length,
+      mergedChunks: Math.max(0, ordered.length - nodes.length),
+      duplicateGroups: nodes.filter((node) => node.chunkCount > 1).length,
+    },
+  };
 }

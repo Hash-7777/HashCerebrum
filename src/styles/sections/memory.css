@@ -241,16 +241,6 @@
   transition: opacity 0.14s var(--hc-ease);
 }
 .memory-graph-cluster[data-dim='true'] { opacity: 0.18; }
-.memory-graph-cluster-halo {
-  fill: color-mix(in srgb, var(--cluster-color) 8%, transparent);
-  stroke: color-mix(in srgb, var(--cluster-color) 34%, transparent);
-  stroke-width: 1;
-  stroke-dasharray: 10 12;
-}
-.memory-graph-cluster[data-active='true'] .memory-graph-cluster-halo {
-  fill: color-mix(in srgb, var(--cluster-color) 13%, transparent);
-  stroke: color-mix(in srgb, var(--cluster-color) 62%, transparent);
-}
 .memory-graph-cluster-label,
 .memory-graph-cluster-meta {
   text-anchor: middle;
@@ -263,6 +253,7 @@
   fill: color-mix(in srgb, var(--cluster-color) 70%, var(--hc-fg-strong));
   font-family: var(--hc-font-serif);
   font-weight: 600;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--cluster-color) 18%, transparent));
   stroke-width: 4px;
 }
 .memory-graph-cluster-meta {
@@ -273,7 +264,8 @@
   text-transform: uppercase;
 }
 
-.memory-graph-node { cursor: pointer; }
+.memory-graph-node { cursor: grab; }
+.memory-graph-node:active { cursor: grabbing; }
 .memory-graph-dot {
   fill: var(--cluster-color, var(--hc-accent));
   stroke: var(--hc-bg-canvas);
@@ -319,14 +311,18 @@
 .memory-graph-topics {
   position: absolute;
   left: 12px;
-  top: 34px;
-  right: 380px;
+  top: 42px;
+  right: 12px;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-content: flex-start;
+  align-items: flex-start;
   gap: 6px;
-  max-height: 72px;
-  overflow: hidden;
+  max-height: 118px;
+  overflow: auto;
+  padding: 3px 4px 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 158, 255, 0.34) transparent;
 }
 .memory-graph-topics button {
   display: inline-flex;
@@ -342,6 +338,7 @@
   font-size: 10.5px;
   cursor: pointer;
   backdrop-filter: blur(8px);
+  white-space: nowrap;
 }
 .memory-graph-topics button[data-active='true'] {
   border-color: color-mix(in srgb, var(--cluster-color, var(--hc-accent)) 48%, var(--hc-border));
@@ -367,6 +364,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: calc(100% - 24px);
 }
 .memory-graph-legend {
   display: inline-flex;
@@ -420,6 +418,78 @@
   padding: 0;
 }
 .memory-graph-controls button:hover { color: var(--hc-fg); border-color: var(--hc-border-strong); }
+
+.memory-graph-arranger {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: 286px;
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid rgba(61, 209, 191, 0.18);
+  border-radius: var(--hc-radius);
+  background: rgba(3, 7, 12, 0.72);
+  color: var(--hc-fg-muted);
+  box-shadow: var(--hc-shadow-1);
+  backdrop-filter: blur(10px);
+}
+.memory-graph-arranger header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.memory-graph-arranger header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--hc-fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.memory-graph-arranger header svg { color: var(--hc-accent-strong); }
+.memory-graph-arranger header strong {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid rgba(61, 209, 191, 0.24);
+  border-radius: var(--hc-radius-pill);
+  background: rgba(61, 209, 191, 0.08);
+  color: var(--hc-accent-strong);
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.memory-graph-arranger p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.memory-graph-arranger dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+.memory-graph-arranger dl div {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: var(--hc-radius-sm);
+  background: rgba(255, 255, 255, 0.032);
+}
+.memory-graph-arranger dt {
+  color: var(--hc-fg-dim);
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.memory-graph-arranger dd {
+  margin: 3px 0 0;
+  color: var(--hc-fg);
+  font: 13px var(--hc-font-mono);
+}
 
 .memory-graph-hint {
   position: absolute;
@@ -505,6 +575,32 @@
   line-height: 1.45;
   color: var(--hc-fg-muted);
 }
+.memory-graph-detail-list {
+  display: grid;
+  gap: 5px;
+  max-height: 104px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.memory-graph-detail-list li {
+  display: grid;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: var(--hc-radius-sm);
+  background: rgba(255, 255, 255, 0.028);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.memory-graph-detail-list li span {
+  color: var(--hc-fg-dim);
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .memory-graph-detail footer {
   display: flex;
   align-items: center;
@@ -536,4 +632,12 @@
   color: var(--hc-danger);
   border-color: rgba(255, 122, 138, 0.32);
   background: rgba(255, 122, 138, 0.08);
+}
+
+@media (max-width: 980px) {
+  .memory-graph-legend { display: none; }
+  .memory-graph-topics { max-height: 92px; }
+  .memory-graph-arranger {
+    width: 240px;
+  }
 }

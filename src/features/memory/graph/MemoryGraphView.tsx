@@ -29,8 +29,8 @@ type Gesture =
   | { kind: 'pan'; px: number; py: number; tx: number; ty: number; moved: boolean }
   | { kind: 'node'; id: string; px: number; py: number; ox: number; oy: number; moved: boolean };
 
-function nodeRadius(degree: number): number {
-  return Math.min(11, 4 + Math.sqrt(Math.max(0, degree)) * 1.55);
+function nodeRadius(degree: number, chunkCount: number): number {
+  return Math.min(15, 4.5 + Math.sqrt(Math.max(0, degree)) * 1.35 + Math.log2(chunkCount + 1) * 1.15);
 }
 
 function truncate(value: string, max: number): string {
@@ -45,16 +45,12 @@ function clusterColor(index: number): string {
   return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
 }
 
-function clusterVisual(cluster: MemoryGraphCluster, positions: Map<string, NodePosition>) {
+function clusterAnchor(cluster: MemoryGraphCluster, positions: Map<string, NodePosition>) {
   const points = cluster.nodeIds.map((id) => positions.get(id)).filter(Boolean) as NodePosition[];
   if (points.length === 0) return null;
   const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
   const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-  const radius = Math.max(
-    72,
-    ...points.map((point) => Math.hypot(point.x - x, point.y - y) + 32),
-  );
-  return { x, y, radius };
+  return { x, y };
 }
 
 export function MemoryGraphView({
@@ -269,11 +265,16 @@ export function MemoryGraphView({
   const activeId = selectedId ?? hoverId;
   const activeNeighbors = activeId ? (neighbors.get(activeId) ?? new Set<string>()) : null;
   const selected = selectedId ? nodeById.get(selectedId) : undefined;
-  const clusterVisuals = graph.clusters
-    .map((cluster, index) => ({ cluster, index, visual: clusterVisual(cluster, positions) }))
-    .filter((item): item is { cluster: MemoryGraphCluster; index: number; visual: NonNullable<ReturnType<typeof clusterVisual>> } =>
+  const clusterAnchors = graph.clusters
+    .map((cluster, index) => ({ cluster, index, visual: clusterAnchor(cluster, positions) }))
+    .filter((item): item is { cluster: MemoryGraphCluster; index: number; visual: NonNullable<ReturnType<typeof clusterAnchor>> } =>
       item.visual !== null,
     );
+
+  const arrangerStatus =
+    graph.stats.mergedChunks > 0
+      ? `${graph.stats.mergedChunks} repeated memories merged into ${graph.stats.duplicateGroups} adaptive capsules.`
+      : 'No repeated memory patterns detected in the current view.';
 
   const nodeState = (id: string): 'normal' | 'lit' | 'dim' => {
     const node = nodeById.get(id);
@@ -297,7 +298,7 @@ export function MemoryGraphView({
         onPointerCancel={onPointerUp}
       >
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
-          {clusterVisuals.map(({ cluster, index, visual }) => {
+          {clusterAnchors.map(({ cluster, index, visual }) => {
             const active = selectedClusterId === cluster.id;
             const dim = selectedClusterId !== null && !active;
             return (
@@ -309,20 +310,19 @@ export function MemoryGraphView({
                 transform={`translate(${visual.x} ${visual.y})`}
                 style={clusterStyle(clusterColor(index))}
               >
-                <circle className="memory-graph-cluster-halo" r={visual.radius} />
                 <text
                   className="memory-graph-cluster-label"
-                  y={-visual.radius - 14 / transform.scale}
+                  y={-36 / transform.scale}
                   fontSize={12 / transform.scale}
                 >
                   {truncate(cluster.label, 42)}
                 </text>
                 <text
                   className="memory-graph-cluster-meta"
-                  y={-visual.radius + 2 / transform.scale}
+                  y={-20 / transform.scale}
                   fontSize={9.5 / transform.scale}
                 >
-                  {cluster.nodeIds.length} nodes
+                  {cluster.nodeIds.length} capsules · {cluster.chunkCount} memories
                   {cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''}
                 </text>
               </g>
@@ -365,10 +365,10 @@ export function MemoryGraphView({
           {graph.nodes.map((node) => {
             const point = positions.get(node.id);
             if (!point) return null;
-            const radius = nodeRadius(node.degree);
+            const radius = nodeRadius(node.degree, node.chunkCount);
             const state = nodeState(node.id);
             const clusterIndex = clusterIndexById.get(node.clusterId) ?? 0;
-            const showLabel = state === 'lit' || node.chunk.kind === 'answer' || (!activeId && transform.scale >= 0.9);
+            const showLabel = state === 'lit' || node.chunkCount > 1 || node.chunk.kind === 'answer' || (!activeId && transform.scale >= 0.9);
             return (
               <g
                 key={node.id}
@@ -390,7 +390,7 @@ export function MemoryGraphView({
                     y={radius + 11 / transform.scale}
                     fontSize={11 / transform.scale}
                   >
-                    {truncate(node.label, LABEL_CHARS)}
+                    {truncate(`${node.label}${node.chunkCount > 1 ? ` x${node.chunkCount}` : ''}`, LABEL_CHARS)}
                   </text>
                 ) : null}
               </g>
@@ -400,8 +400,9 @@ export function MemoryGraphView({
       </svg>
 
       <div className="memory-graph-info">
-        {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} ·{' '}
-        {graph.edges.length} {graph.edges.length === 1 ? 'topic link' : 'topic links'} ·{' '}
+        {graph.stats.capsuleCount} {graph.stats.capsuleCount === 1 ? 'capsule' : 'capsules'} ·{' '}
+        {graph.stats.savedChunks} {graph.stats.savedChunks === 1 ? 'memory' : 'memories'} ·{' '}
+        {graph.edges.length} {graph.edges.length === 1 ? 'adaptive link' : 'adaptive links'} ·{' '}
         {graph.clusters.length} {graph.clusters.length === 1 ? 'cluster' : 'clusters'}
       </div>
 
@@ -420,19 +421,19 @@ export function MemoryGraphView({
             data-active={selectedClusterId === cluster.id}
             onClick={() => setSelectedClusterId((current) => (current === cluster.id ? null : cluster.id))}
             style={clusterStyle(clusterColor(index))}
-            title={cluster.terms.join(', ')}
+            title={`${cluster.chunkCount} memories · ${cluster.terms.join(', ')}`}
           >
             <span className="memory-graph-topic-dot" />
             {truncate(cluster.label, 28)}
-            <span>{cluster.nodeIds.length}</span>
+            <span>{cluster.chunkCount}</span>
           </button>
         ))}
       </div>
 
       <div className="memory-graph-controls">
         <span className="memory-graph-legend">
-          <span className="memory-graph-swatch" data-kind="evidence" /> Topic evidence
-          <span className="memory-graph-swatch" data-kind="answer" /> Answer
+          <span className="memory-graph-swatch" data-kind="evidence" /> Evidence capsule
+          <span className="memory-graph-swatch" data-kind="answer" /> Synthesis
         </span>
         <span className="memory-graph-zoom-value">{Math.round(transform.scale * 100)}%</span>
         <button type="button" onClick={() => zoomFromCenter(1 / 1.28)} aria-label="Zoom out">
@@ -445,6 +446,30 @@ export function MemoryGraphView({
           <Icon name="refresh" size={12} /> Reset view
         </button>
       </div>
+
+      <aside className="memory-graph-arranger" aria-label="Memory Arranger">
+        <header>
+          <span>
+            <Icon name="brain" size={13} /> Memory Arranger
+          </span>
+          <strong>Adaptive</strong>
+        </header>
+        <p>{arrangerStatus}</p>
+        <dl>
+          <div>
+            <dt>Clusters</dt>
+            <dd>{graph.clusters.length}</dd>
+          </div>
+          <div>
+            <dt>Merged</dt>
+            <dd>{graph.stats.mergedChunks}</dd>
+          </div>
+          <div>
+            <dt>Links</dt>
+            <dd>{graph.edges.length}</dd>
+          </div>
+        </dl>
+      </aside>
 
       {graph.edges.length === 0 && graph.nodes.length > 1 ? (
         <p className="memory-graph-hint">
@@ -469,9 +494,10 @@ export function MemoryGraphView({
           </header>
           <h4>{selected.chunk.title || 'Untitled'}</h4>
           <p className="memory-graph-detail-meta">
-            <span>{selected.chunk.source}</span>
+            <span>{[...new Set(selected.chunks.map((chunk) => chunk.source))].slice(0, 2).join(' / ')}</span>
             <span>
-              {selected.degree} {selected.degree === 1 ? 'topic link' : 'topic links'}
+              {selected.chunkCount} {selected.chunkCount === 1 ? 'memory' : 'memories'} · {selected.degree}{' '}
+              {selected.degree === 1 ? 'link' : 'links'}
             </span>
           </p>
           <p className="memory-graph-detail-topic">
@@ -480,6 +506,16 @@ export function MemoryGraphView({
           <p className="memory-graph-detail-text">
             {truncate(selected.chunk.text.replace(/\s+/g, ' ').trim(), EXCERPT_CHARS)}
           </p>
+          {selected.chunkCount > 1 ? (
+            <ul className="memory-graph-detail-list">
+              {selected.chunks.slice(0, 4).map((chunk) => (
+                <li key={chunk.id}>
+                  <span>{chunk.kind === 'answer' ? 'Answer' : chunk.source}</span>
+                  {truncate(chunk.title || 'Untitled', 46)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <footer>
             {selected.chunk.url ? (
               <a href={selected.chunk.url} target="_blank" rel="noreferrer noopener">
@@ -492,11 +528,11 @@ export function MemoryGraphView({
               type="button"
               className="memory-graph-detail-remove"
               onClick={() => {
-                onRemove(selected.id);
+                selected.chunkIds.forEach(onRemove);
                 setSelectedId(null);
               }}
             >
-              <Icon name="close" size={11} /> Delete
+              <Icon name="close" size={11} /> Delete capsule
             </button>
           </footer>
         </aside>

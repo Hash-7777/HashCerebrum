@@ -15,23 +15,39 @@ function chunk(id: string): RagChunk {
   };
 }
 
+function graphNode(id: string, clusterId: string, topicTerms: string[], degree: number) {
+  const source = chunk(id);
+  return {
+    id,
+    chunk: source,
+    chunks: [source],
+    chunkIds: [id],
+    chunkCount: 1,
+    label: id,
+    degree,
+    clusterId,
+    topicTerms,
+  };
+}
+
 describe('layoutMemoryGraph', () => {
   it('keeps topic clusters separated with finite positions', () => {
     const graph: MemoryGraph = {
       clusters: [
-        { id: 'c1', label: 'Warfarin', nodeIds: ['a', 'b'], terms: ['warfarin'] },
-        { id: 'c2', label: 'Calcium', nodeIds: ['c', 'd'], terms: ['calcium'] },
+        { id: 'c1', label: 'Warfarin', nodeIds: ['a', 'b'], chunkCount: 2, terms: ['warfarin'] },
+        { id: 'c2', label: 'Calcium', nodeIds: ['c', 'd'], chunkCount: 2, terms: ['calcium'] },
       ],
       nodes: [
-        { id: 'a', chunk: chunk('a'), label: 'a', degree: 1, clusterId: 'c1', topicTerms: ['warfarin'] },
-        { id: 'b', chunk: chunk('b'), label: 'b', degree: 1, clusterId: 'c1', topicTerms: ['warfarin'] },
-        { id: 'c', chunk: chunk('c'), label: 'c', degree: 1, clusterId: 'c2', topicTerms: ['calcium'] },
-        { id: 'd', chunk: chunk('d'), label: 'd', degree: 1, clusterId: 'c2', topicTerms: ['calcium'] },
+        graphNode('a', 'c1', ['warfarin'], 1),
+        graphNode('b', 'c1', ['warfarin'], 1),
+        graphNode('c', 'c2', ['calcium'], 1),
+        graphNode('d', 'c2', ['calcium'], 1),
       ],
       edges: [
         { source: 'a', target: 'b', weight: 0.8, reason: 'same_topic', label: 'same topic' },
         { source: 'c', target: 'd', weight: 0.8, reason: 'same_topic', label: 'same topic' },
       ],
+      stats: { savedChunks: 4, capsuleCount: 4, mergedChunks: 0, duplicateGroups: 0 },
     };
 
     const positions = layoutMemoryGraph(graph, 900);
@@ -50,21 +66,16 @@ describe('layoutMemoryGraph', () => {
 
   it('does not pin dense graphs to the virtual canvas border', () => {
     const graph: MemoryGraph = {
-      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], terms: ['dense'] }],
+      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], chunkCount: 0, terms: ['dense'] }],
       nodes: [],
       edges: [],
+      stats: { savedChunks: 80, capsuleCount: 80, mergedChunks: 0, duplicateGroups: 0 },
     };
     graph.nodes = Array.from({ length: 80 }, (_, index) => {
       const id = `n${index}`;
       graph.clusters[0]!.nodeIds.push(id);
-      return {
-        id,
-        chunk: chunk(id),
-        label: id,
-        degree: 6,
-        clusterId: 'dense',
-        topicTerms: ['dense'],
-      };
+      graph.clusters[0]!.chunkCount += 1;
+      return graphNode(id, 'dense', ['dense'], 6);
     });
     graph.edges = graph.nodes.slice(1).map((node) => ({
       source: graph.nodes[0]!.id,
@@ -88,21 +99,16 @@ describe('layoutMemoryGraph', () => {
 
   it('spreads a dense single topic into an interpretable constellation', () => {
     const graph: MemoryGraph = {
-      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], terms: ['dense'] }],
+      clusters: [{ id: 'dense', label: 'Dense topic', nodeIds: [], chunkCount: 0, terms: ['dense'] }],
       nodes: [],
       edges: [],
+      stats: { savedChunks: 64, capsuleCount: 64, mergedChunks: 0, duplicateGroups: 0 },
     };
     graph.nodes = Array.from({ length: 64 }, (_, index) => {
       const id = `n${index}`;
       graph.clusters[0]!.nodeIds.push(id);
-      return {
-        id,
-        chunk: chunk(id),
-        label: id,
-        degree: 4,
-        clusterId: 'dense',
-        topicTerms: ['dense'],
-      };
+      graph.clusters[0]!.chunkCount += 1;
+      return graphNode(id, 'dense', ['dense'], 4);
     });
     graph.edges = graph.nodes.slice(1).map((node) => ({
       source: graph.nodes[0]!.id,
