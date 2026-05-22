@@ -26,6 +26,7 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(600))
+        .redirect(reqwest::redirect::Policy::none())
         .user_agent("HashCerebrum/0.1 (research-app)")
         .build()
         .expect("reqwest client build")
