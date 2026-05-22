@@ -8,7 +8,6 @@ import { bus } from '@core/bus/EventBus';
 interface RegionState {
   base: number; // 0..1 transient glow (held + decays)
   accent: number; // 0..1 transient accent (held + decays)
-  memory: number; // 0..1 steady glow from the project's saved memory — no decay
   baseHoldUntil: number; // epoch ms
   accentHoldUntil: number; // epoch ms
 }
@@ -18,8 +17,6 @@ interface BrainStore {
   // The region currently addressed in the memory diagram, lit on the 3D brain.
   focusRegion: RegionId | null;
   setRegion: (region: RegionId, source: 'agent' | 'topic', intensity: number, ttlMs: number) => void;
-  // Bind the steady glow to the active project's memory (Phase 43).
-  setMemoryWeights: (weights: Partial<Record<RegionId, number>>) => void;
   setFocusRegion: (region: RegionId | null) => void;
   tick: (deltaMs?: number) => void;
 }
@@ -27,7 +24,6 @@ interface BrainStore {
 const initialRegion = (): RegionState => ({
   base: 0,
   accent: 0,
-  memory: 0,
   baseHoldUntil: 0,
   accentHoldUntil: 0,
 });
@@ -89,21 +85,6 @@ export const useBrainStore = create<BrainStore>((set) => ({
         },
       };
     }),
-  // Steady, non-decaying glow proportional to how much of the project's saved
-  // memory maps to each region. Regions not listed reset to zero.
-  setMemoryWeights: (weights) =>
-    set((state) => {
-      const regions = { ...state.regions };
-      let changed = false;
-      for (const region of BRAIN_REGIONS) {
-        const target = Math.min(1, Math.max(0, weights[region] ?? 0));
-        if (regions[region].memory !== target) {
-          regions[region] = { ...regions[region], memory: target };
-          changed = true;
-        }
-      }
-      return changed ? { regions } : state;
-    }),
   setFocusRegion: (region) => set({ focusRegion: region }),
   tick: (deltaMs = 16.7) =>
     set((state) => {
@@ -126,11 +107,7 @@ export const useBrainStore = create<BrainStore>((set) => ({
         if (accent < 0.006) accent = 0;
         if (base !== cur.base || accent !== cur.accent) {
           changed = true;
-          // Reset the transient channels but keep the steady memory glow.
-          next[r] =
-            base === 0 && accent === 0
-              ? { ...cur, base: 0, accent: 0, baseHoldUntil: 0, accentHoldUntil: 0 }
-              : { ...cur, base, accent };
+          next[r] = base === 0 && accent === 0 ? initialRegion() : { ...cur, base, accent };
         }
       }
       if (!changed) return state;

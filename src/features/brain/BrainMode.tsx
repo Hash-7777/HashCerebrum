@@ -31,7 +31,6 @@ import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
-import { useMemoryBrainBinding } from './useMemoryBrainBinding';
 import { runSwarm } from './swarm/runSwarm';
 import { summarizeDatasetText } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
@@ -63,11 +62,6 @@ export function BrainMode() {
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
   const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
-
-  // The 3D brain's steady glow is bound to the active project's memory, not
-  // to agent activity — addressing a finding in the memory diagram lights the
-  // matching anatomical region.
-  useMemoryBrainBinding();
 
   const attachDataset = async (file: File) => {
     try {

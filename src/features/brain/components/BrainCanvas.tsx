@@ -130,14 +130,12 @@ function BrainMesh({
   const hovered = hoveredRegion ? meshPart.part.regionIds.includes(hoveredRegion) : false;
 
   // A mesh part can map to more than one region. Glow in the colour of
-  // whichever region carries the most signal — the steady memory glow joins
-  // the transient channels, so the brain reads as a physical map of the
-  // project's saved knowledge.
+  // whichever region carries the most signal right now.
   let activeRegion = primaryRegionForPart(meshPart.part);
   let glow = 0;
   for (const regionId of meshPart.part.regionIds) {
     const state = regionState[regionId];
-    const lit = Math.max(state.base, state.accent, state.memory);
+    const lit = Math.max(state.base, state.accent);
     if (lit > glow) {
       glow = lit;
       activeRegion = regionId;
