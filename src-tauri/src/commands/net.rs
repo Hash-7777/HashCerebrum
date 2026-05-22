@@ -5,9 +5,18 @@ use crate::audit::store as audit;
 use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
 use crate::security::guard::{check, Action};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use url::Url;
+
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent("HashCerebrum/0.1 (research-app)")
+        .build()
+        .expect("reqwest client build")
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpResponse {
@@ -27,12 +36,7 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     // off the 429 path even when the agent fans out queries in parallel.
     crate::ratelimit::acquire(host).await;
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .user_agent("HashCerebrum/0.1 (research-app)")
-        .build()?;
-
-    let resp = client.get(&url).send().await?;
+    let resp = HTTP_CLIENT.get(&url).send().await?;
     let status = resp.status().as_u16();
     let body = resp.text().await?;
     let mut redacted = parsed.clone();
@@ -51,4 +55,20 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     );
 
     Ok(HttpResponse { status, body })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_response_serializes() {
+        let resp = HttpResponse {
+            status: 200,
+            body: "hello".into(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("200"));
+        assert!(json.contains("hello"));
+    }
 }
