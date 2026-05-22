@@ -93,9 +93,14 @@ yarn-error.log*
 Sketches.jpg
 
 # =============================================================
-# Session handoff files — contain sensitive operational data
-# (passphrases, API keys, internal URLs) that must never be
-# committed. See docs/SESSION_HANDOFF.md for local use only.
+# Local-only files — NEVER committed. Operational notes, AI-coder
+# instructions, session handoffs, progress reports and audit reports
+# stay on the local machine only. Name any such file `*.local.md`
+# and it is ignored automatically. See COMMIT_RULES.local.md.
 # =============================================================
-docs/SESSION_HANDOFF.md
+*.local.md
 SESSION_HANDOFF.md
+docs/SESSION_HANDOFF.md
+REMAINING_WORK.md
+*_REPORT.md
+*_AUDIT.md
