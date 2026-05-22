@@ -79,8 +79,10 @@ export const tauriPlatform: Platform = {
   },
 
   audit: {
-    append: (category, subject, action, payload) =>
-      invoke<AuditEntry>('audit_log_append', { category, subject, action, payload }),
+    append: (_category, _subject, _action, _payload) =>
+      // audit_log_append removed from renderer surface — all audit entries
+      // originate from guarded Rust commands only.
+      Promise.reject(new Error('audit_log_append is not available from renderer')),
     read: (options) =>
       options
         ? invoke<AuditEntry[]>('audit_log_read_page', {

@@ -41,7 +41,7 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-pub fn append(
+pub(crate) fn append(
     category: &str,
     subject: &str,
     action: &str,
