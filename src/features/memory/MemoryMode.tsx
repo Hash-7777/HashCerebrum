@@ -19,9 +19,11 @@ export function MemoryMode() {
   const projects = useProjectStore((s) => s.projects);
   const chunks = useRagStore((s) => s.chunks);
   const removeChunk = useRagStore((s) => s.removeChunk);
+  const clearProject = useRagStore((s) => s.clearProject);
 
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<MemoryView>('list');
+  // Graph is the default view — the topic map is the primary way to read memory.
+  const [view, setView] = useState<MemoryView>('graph');
 
   const projectName = projects.find((p) => p.id === activeProjectId)?.name ?? 'Project';
 
@@ -80,6 +82,23 @@ export function MemoryMode() {
                 <Icon name="graph" size={13} /> Graph
               </button>
             </div>
+            <button
+              type="button"
+              className="memory-clear"
+              disabled={projectChunks.length === 0}
+              title="Delete all saved memory in this project"
+              onClick={() => {
+                if (!activeProjectId || projectChunks.length === 0) return;
+                const ok = window.confirm(
+                  `Delete all ${projectChunks.length} saved ${
+                    projectChunks.length === 1 ? 'finding' : 'findings'
+                  } in "${projectName}"? This permanently empties this project's memory and cannot be undone.`,
+                );
+                if (ok) clearProject(activeProjectId);
+              }}
+            >
+              <Icon name="close" size={13} /> Delete all
+            </button>
           </div>
         </header>
 

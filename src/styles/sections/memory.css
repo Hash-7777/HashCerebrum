@@ -203,6 +203,30 @@
   background: var(--hc-accent-soft);
   color: var(--hc-accent-strong);
 }
+.memory-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-elev);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--hc-ease), border-color var(--hc-ease), background var(--hc-ease);
+}
+.memory-clear:hover:not(:disabled) {
+  color: var(--hc-danger);
+  border-color: rgba(255, 122, 138, 0.4);
+  background: rgba(255, 122, 138, 0.1);
+}
+.memory-clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* --- Graph view --- */
 .memory-graph {
