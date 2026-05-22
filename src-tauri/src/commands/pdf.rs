@@ -10,15 +10,19 @@ use crate::security::guard::{check, Action};
 use lopdf::Document;
 use std::path::PathBuf;
 
+const MAX_PDF_BYTES: u64 = 50 * 1024 * 1024; // 50 MB
+
 #[tauri::command]
 pub async fn pdf_extract_text(path: String) -> AppResult<String> {
     check(Action::Fs { path: &path })?;
     let path: PathBuf = path.into();
-    if !path.exists() {
-        return Err(AppError::InvalidInput(format!(
-            "pdf not found: {}",
-            path.display()
-        )));
+    let path_str = path.to_string_lossy().to_string();
+
+    // File must exist and be within size limits before parsing
+    let meta =
+        std::fs::metadata(&path).map_err(|_e| AppError::InvalidInput("pdf not found".into()))?;
+    if meta.len() > MAX_PDF_BYTES {
+        return Err(AppError::InvalidInput("pdf exceeds 50 MB limit".into()));
     }
 
     // Read on a blocking thread so we don't tie up the tokio runtime
@@ -38,6 +42,13 @@ pub async fn pdf_extract_text(path: String) -> AppResult<String> {
     .await
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
+
+    let _ = crate::audit::store::append(
+        "fs",
+        &path_str,
+        "extract",
+        &serde_json::json!({ "bytes": meta.len() }),
+    );
 
     Ok(extracted)
 }

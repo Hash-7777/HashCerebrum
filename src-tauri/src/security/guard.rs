@@ -13,6 +13,11 @@ use std::net::IpAddr;
 use std::path::Path;
 use tauri::AppHandle;
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+
 /// Ports allowed for localhost connections. Ollama default is 11434.
 const LOCALHOST_PORTS: &[u16] = &[11434];
 
@@ -36,28 +41,30 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
     match action {
         Action::Net { host, port } => {
             if denylist::is_blocked(host) {
-                return Err(AppError::PermissionDenied(format!("host blocked: {host}")));
+                tracing::debug!(host, "host blocked by denylist");
+                return Err(AppError::PermissionDenied("host blocked".into()));
             }
             if !policy::host_allowed(host) {
-                return Err(AppError::PermissionDenied(format!(
-                    "host not allowlisted: {host}"
-                )));
+                tracing::debug!(host, "host not in allowlist");
+                return Err(AppError::PermissionDenied("host not allowlisted".into()));
             }
             if is_localhost(host) {
                 let p = port.unwrap_or(0);
                 if !LOCALHOST_PORTS.contains(&p) {
-                    return Err(AppError::PermissionDenied(format!(
-                        "localhost port {p} not allowed"
-                    )));
+                    tracing::debug!(port = p, "localhost port not allowed");
+                    return Err(AppError::PermissionDenied(
+                        "localhost port not allowed".into(),
+                    ));
                 }
             }
             Ok(())
         }
         Action::Keychain { key } => {
             if !policy::keychain_key_allowed(key) {
-                return Err(AppError::PermissionDenied(format!(
-                    "keychain key not allowlisted: {key}"
-                )));
+                tracing::debug!(key, "keychain key not allowlisted");
+                return Err(AppError::PermissionDenied(
+                    "keychain key not allowlisted".into(),
+                ));
             }
             Ok(())
         }
@@ -71,9 +78,9 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
                 ));
             }
 
-            // Reject symlinks — use symlink_metadata which does not follow links
+            // Reject symlinks and capture metadata for TOCTOU check
             let meta = std::fs::symlink_metadata(path)
-                .map_err(|e| AppError::PermissionDenied(format!("cannot stat path: {e}")))?;
+                .map_err(|_e| AppError::PermissionDenied("path validation failed".into()))?;
             if meta.file_type().is_symlink() {
                 return Err(AppError::PermissionDenied(
                     "filesystem read denied: symlinks are not allowed".into(),
@@ -81,9 +88,9 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
             }
 
             // Canonicalize to resolve any remaining relative components
-            let canonical = path.canonicalize().map_err(|e| {
-                AppError::PermissionDenied(format!("cannot canonicalize path: {e}"))
-            })?;
+            let canonical = path
+                .canonicalize()
+                .map_err(|_e| AppError::PermissionDenied("path validation failed".into()))?;
 
             // Reject sensitive system directories
             if is_sensitive_system_path(&canonical) {
@@ -102,19 +109,39 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
                     "filesystem read denied: only PDF extraction is allowed".into(),
                 ));
             }
-            if !path.is_file() {
-                return Err(AppError::PermissionDenied(format!(
-                    "filesystem read denied: not a file: {}",
-                    path.display()
-                )));
+
+            // TOCTOU defense: ensure the canonical file is the same inode+device
+            // we inspected at symlink_metadata time. This catches races where the
+            // file is replaced between our stat and canonicalize.
+            let canonical_meta = std::fs::metadata(&canonical)
+                .map_err(|_e| AppError::PermissionDenied("path validation failed".into()))?;
+            if !same_file(&meta, &canonical_meta) {
+                return Err(AppError::PermissionDenied(
+                    "filesystem read denied: path changed during validation".into(),
+                ));
+            }
+
+            // Hardlink defense: reject files with more than one link.
+            // Both the original and each hardlink increment the count.
+            if has_multiple_hardlinks(&meta) {
+                return Err(AppError::PermissionDenied(
+                    "filesystem read denied: hardlinks are not allowed".into(),
+                ));
+            }
+
+            if !canonical_meta.is_file() {
+                return Err(AppError::PermissionDenied(
+                    "filesystem read denied: not a file".into(),
+                ));
             }
             Ok(())
         }
         Action::Llm { provider } => {
             if !policy::llm_provider_allowed(provider) {
-                return Err(AppError::PermissionDenied(format!(
-                    "LLM provider not allowlisted: {provider}"
-                )));
+                tracing::debug!(provider, "LLM provider not allowlisted");
+                return Err(AppError::PermissionDenied(
+                    "LLM provider not allowlisted".into(),
+                ));
             }
             Ok(())
         }
@@ -134,23 +161,43 @@ fn is_localhost(host: &str) -> bool {
 fn is_sensitive_system_path(path: &Path) -> bool {
     let s = path.to_string_lossy();
     let prefixes = [
-        "/etc", "/proc", "/sys", "/dev", "/var", "/usr", "/bin", "/sbin", "/lib", "/lib64",
-        "/boot", "/root",
+        "/etc",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/var",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/boot",
+        "/root",
         // macOS canonicalized paths (symlinks /etc → /private/etc, /var → /private/var)
-        "/private/etc", "/private/var", "/private/tmp", "/System", "/Library", "/Users",
+        "/private/etc",
+        "/private/var",
+        "/private/tmp",
+        "/System",
+        "/Library",
+        "/Users",
         "/Volumes",
     ];
-    prefixes.iter().any(|prefix| {
-        s.starts_with(&format!("{prefix}/")) || s == *prefix
-    })
+    prefixes
+        .iter()
+        .any(|prefix| s.starts_with(&format!("{prefix}/")) || s == *prefix)
 }
 
 #[cfg(windows)]
 fn is_sensitive_system_path(path: &Path) -> bool {
     let s = path.to_string_lossy().to_lowercase();
     // Extract drive letter so we block sensitive dirs on ALL drives, not just C:\
-    let drive = s.chars().next().and_then(|c| c.is_ascii_alphabetic().then_some(c));
-    let drive_str = drive.map(|d| format!("{d}:")).unwrap_or_else(|| "c:".to_string());
+    let drive = s
+        .chars()
+        .next()
+        .and_then(|c| c.is_ascii_alphabetic().then_some(c));
+    let drive_str = drive
+        .map(|d| format!("{d}:"))
+        .unwrap_or_else(|| "c:".to_string());
     let sensitive = [
         format!("{drive_str}\\windows"),
         format!("{drive_str}\\program files"),
@@ -161,6 +208,35 @@ fn is_sensitive_system_path(path: &Path) -> bool {
         format!("{drive_str}\\windows\\system32"),
     ];
     sensitive.iter().any(|prefix| s.starts_with(prefix))
+}
+
+/// Compare two metadata structs to verify they refer to the same underlying
+/// file (same device + inode). This defends against TOCTOU races where the
+/// file is swapped between our initial stat and canonicalization.
+#[cfg(unix)]
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(windows)]
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    // Windows file_index is the NTFS MFT record number; volume_serial
+    // identifies the volume. Together they uniquely identify a file.
+    a.file_index() == b.file_index() && a.volume_serial_number() == b.volume_serial_number()
+}
+
+/// Reject files with multiple hardlinks. On Unix nlink > 1 means there are
+/// additional directory entries pointing to the same inode.
+#[cfg(unix)]
+fn has_multiple_hardlinks(meta: &std::fs::Metadata) -> bool {
+    meta.nlink() > 1
+}
+
+#[cfg(windows)]
+fn has_multiple_hardlinks(_meta: &std::fs::Metadata) -> bool {
+    // Windows hardlinks are rarer and harder to detect portably without
+    // WinAPI calls. We rely on the same_file + canonical path checks.
+    false
 }
 
 #[cfg(test)]
@@ -209,13 +285,8 @@ mod tests {
             "/Library/Application Support",
         ];
         for path in &blocked {
-            let result = check(Action::Fs {
-                path: path,
-            });
-            assert!(
-                result.is_err(),
-                "expected {path} to be blocked but got Ok"
-            );
+            let result = check(Action::Fs { path: path });
+            assert!(result.is_err(), "expected {path} to be blocked but got Ok");
         }
     }
 
