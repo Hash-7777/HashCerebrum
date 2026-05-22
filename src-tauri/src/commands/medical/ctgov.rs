@@ -27,8 +27,13 @@ pub async fn ctgov_search(query: String, max_results: Option<u32>) -> AppResult<
     let term = sanitize_term(&query);
     let mut url = Url::parse("https://clinicaltrials.gov/api/v2/studies")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    if term.is_empty() {
+        return Err(AppError::InvalidInput(
+            "Query contains no valid search terms after sanitization".into(),
+        ));
+    }
     url.query_pairs_mut()
-        .append_pair("query.term", if term.is_empty() { &query } else { &term })
+        .append_pair("query.term", &term)
         .append_pair("pageSize", &limit.to_string());
     let json = fetch_json(url).await?;
     let studies = json["studies"].as_array().cloned().unwrap_or_default();

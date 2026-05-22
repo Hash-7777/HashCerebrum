@@ -249,27 +249,87 @@ fn render_style(manuscript: &Manuscript) -> RenderStyle {
     }
 }
 
+const SVG_ALLOWLIST: &[&str] = &[
+    "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+    "text", "tspan", "defs", "use", "clipPath", "mask", "linearGradient",
+    "radialGradient", "stop", "title", "desc", "style",
+];
+
 fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
     let trimmed = value.trim();
-    let lowered = trimmed.to_lowercase();
     if trimmed.len() > 512 * 1024 {
         return None;
     }
+    let lowered = trimmed.to_lowercase();
     if !lowered.starts_with("<svg") && !lowered.contains("<svg") {
         return None;
     }
-    let blocked = [
-        "<script",
-        "<foreignobject",
-        "javascript:",
-        "file:",
-        "http://",
-        "https://",
-        "data:",
-    ];
-    if blocked.iter().any(|needle| lowered.contains(needle)) {
-        return None;
+
+    // Scan for disallowed tags, event handlers, and dangerous URLs.
+    // We do a simple stateful scan over '<' delimited chunks.
+    for chunk in trimmed.split('<').skip(1) {
+        let tag_end = chunk.find(['>', ' ', '\t', '\n', '\r']).unwrap_or(chunk.len());
+        let tag = &chunk[..tag_end];
+        let tag_lower = tag.to_lowercase();
+
+        // Reject script and foreignObject outright
+        if tag_lower == "script" || tag_lower == "foreignobject" {
+            return None;
+        }
+
+        // Skip closing tags and comments
+        if tag.starts_with('/') || tag.starts_with('!') {
+            continue;
+        }
+
+        if !SVG_ALLOWLIST.iter().any(|allowed| tag_lower == *allowed) {
+            return None;
+        }
+
+        // Check attributes in the remainder of the chunk (before '>')
+        if let Some(gt_pos) = chunk.find('>') {
+            let attr_section = &chunk[..gt_pos];
+            // Reject event handlers: on...= (case-insensitive)
+            if attr_section.to_lowercase().contains("on")
+                && attr_section.chars().any(|c| c == '=')
+            {
+                // More precise: look for on[a-z]+\s*=
+                let attr_lower = attr_section.to_lowercase();
+                if attr_lower.contains("onload")
+                    || attr_lower.contains("onclick")
+                    || attr_lower.contains("onerror")
+                    || attr_lower.contains("onmouse")
+                    || attr_lower.contains("onkey")
+                    || attr_lower.contains("onfocus")
+                    || attr_lower.contains("onblur")
+                    || attr_lower.contains("onsubmit")
+                    || attr_lower.contains("onchange")
+                    || attr_lower.contains("ondblclick")
+                    || attr_lower.contains("oncontextmenu")
+                    || attr_lower.contains("ondrag")
+                    || attr_lower.contains("ondrop")
+                    || attr_lower.contains("onscroll")
+                    || attr_lower.contains("onwheel")
+                    || attr_lower.contains("ontouch")
+                    || attr_lower.contains("onpointer")
+                    || attr_lower.contains("onanimation")
+                    || attr_lower.contains("ontransition")
+                {
+                    return None;
+                }
+            }
+
+            // Reject dangerous href / xlink:href values
+            let attr_lower = attr_section.to_lowercase();
+            if attr_lower.contains("javascript:")
+                || attr_lower.contains("data:")
+                || attr_lower.contains("file:")
+            {
+                return None;
+            }
+        }
     }
+
     Some(trimmed.as_bytes().to_vec())
 }
 
