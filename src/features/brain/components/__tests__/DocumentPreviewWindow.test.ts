@@ -15,11 +15,18 @@ describe('DocumentPreviewWindow security', () => {
     }
   });
 
-  it('renders PDF previews through a blob object URL — preview and download use the same blob', () => {
+  it('primary PDF path renders via srcDoc HTML (Tauri WKWebView compatible)', () => {
+    // The primary display path uses srcDoc with pre-built HTML so the preview
+    // works in every host WebView, including Tauri's WKWebView which cannot
+    // render PDF blobs inline in iframes.
+    expect(source).toContain('srcDoc=');
+    expect(source).toContain('htmlContent');
+  });
+
+  it('blob URL path retained as fallback for non-Tauri environments', () => {
+    // The blob URL path is kept so the component still works when htmlContent
+    // is absent (e.g. legacy call-sites that predate the htmlContent field).
     expect(source).toContain('URL.createObjectURL(document.blob)');
     expect(source).toContain('src={url}');
-    // previewHtml was intentionally removed: in-app preview and download now
-    // both render the same Typst/jsPDF blob so they look identical.
-    expect(source).not.toContain('srcDoc={document.previewHtml}');
   });
 });

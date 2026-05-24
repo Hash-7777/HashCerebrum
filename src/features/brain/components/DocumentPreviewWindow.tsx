@@ -13,6 +13,10 @@ export interface PreviewDocument {
   typeLabel: string;
   blob: Blob;
   copyText: string;
+  /** When provided, the preview renders this HTML string (via srcDoc) instead
+   *  of the raw PDF blob URL.  Tauri's WKWebView does not support inline PDF
+   *  rendering; the HTML path is reliable across every host WebView. */
+  htmlContent?: string;
 }
 
 interface Rect {
@@ -86,11 +90,15 @@ export function DocumentPreviewWindow({
 }) {
   const [rect, setRect] = useState(loadRect);
   const [copied, setCopied] = useState(false);
+  // A blob object URL is only created when we need to fall back to native PDF
+  // rendering (i.e. when no htmlContent is provided).  Tauri's WKWebView does
+  // not support inline PDF display in iframes, so the blob URL path is a
+  // best-effort fallback for non-Tauri environments.
   const url = useMemo(
-    () => (document.kind === 'pdf' ? URL.createObjectURL(document.blob) : ''),
-    [document.blob, document.kind],
+    () => (!document.htmlContent && document.kind === 'pdf' ? URL.createObjectURL(document.blob) : ''),
+    [document.blob, document.kind, document.htmlContent],
   );
-  const emptyBlob = document.blob.size < 64;
+  const emptyBlob = document.blob.size < 64 && !document.htmlContent;
 
   useEffect(() => () => {
     if (url) URL.revokeObjectURL(url);
@@ -226,7 +234,17 @@ export function DocumentPreviewWindow({
               <strong>Preview unavailable</strong>
               <p>The exported file has no readable bytes. Regenerate the document, then export again.</p>
             </div>
+          ) : document.kind === 'pdf' && document.htmlContent ? (
+            // HTML preview: works in every WebView including Tauri WKWebView.
+            // Inline styles are fully rendered; sandbox="" blocks scripts/navigation.
+            <iframe
+              className="document-preview-pdf"
+              title={document.title}
+              srcDoc={document.htmlContent}
+              sandbox=""
+            />
           ) : document.kind === 'pdf' ? (
+            // Fallback: blob URL for non-Tauri Chromium environments.
             <iframe className="document-preview-pdf" title={document.title} src={url} sandbox="" />
           ) : (
             <pre>{document.copyText}</pre>

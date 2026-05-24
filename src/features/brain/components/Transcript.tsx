@@ -10,6 +10,7 @@ import { useModeStore } from '@core/store/modeStore';
 import { manuscriptToReadableText } from '../swarm/manuscript';
 import { Icon } from '@ui/icons';
 import {
+  buildExportHtml,
   buildMarkdownExport,
   buildMessagePdfBlob,
   slugifyFilename,
@@ -130,20 +131,33 @@ export const Transcript = memo(function Transcript({
 
   const openPdfPreview = async (message: ChatMessage, index: number) => {
     const exportable = exportableFor(message, index);
-    const filename = `${slugifyFilename(exportable.title)}.pdf`;
+    const title = exportable.title;
+    // Build beautiful HTML for the preview first — this is synchronous and
+    // always succeeds.  Tauri's WKWebView cannot render PDF blobs inline, so
+    // the srcDoc path is the reliable display route for all host environments.
+    const htmlContent = buildExportHtml(exportable);
+    // Then attempt the PDF blob for the download button.  If PDF generation
+    // fails (Typst unavailable, jsPDF error) we fall back to an HTML blob so
+    // the user can still save the document.
+    let blob: Blob;
+    let filename: string;
     try {
-      const blob = await buildMessagePdfBlob(exportable);
-      setPreview({
-        title: exportable.title,
-        filename,
-        kind: 'pdf',
-        typeLabel: message.manuscript ? 'Research manuscript PDF' : 'Message PDF',
-        blob,
-        copyText: stripGeneratedReferenceSections(message.content),
-      });
+      blob = await buildMessagePdfBlob(exportable);
+      filename = `${slugifyFilename(title)}.pdf`;
     } catch {
-      useToastStore.getState().show('PDF preview failed', 'error');
+      blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      filename = `${slugifyFilename(title)}.html`;
+      useToastStore.getState().show('PDF generation failed — saved as HTML', 'info');
     }
+    setPreview({
+      title,
+      filename,
+      kind: 'pdf',
+      typeLabel: message.manuscript ? 'Research manuscript' : 'Research result',
+      blob,
+      htmlContent,
+      copyText: stripGeneratedReferenceSections(message.content),
+    });
   };
 
   const sendToReview = async (message: ChatMessage, index: number) => {
@@ -151,13 +165,16 @@ export const Transcript = memo(function Transcript({
     const text = message.manuscript
       ? manuscriptToReadableText(message.manuscript)
       : message.content;
+    // HTML preview is always available (no async, no failure path).
+    const htmlContent = buildExportHtml(exportable);
+    // PDF blob is optional — review still works from text alone.
     let pdfBlob: Blob | undefined;
     try {
       pdfBlob = await buildMessagePdfBlob(exportable);
     } catch {
-      // PDF optional — review still works from text alone
+      // PDF optional
     }
-    usePeerReviewStore.getState().addManuscript(exportable.title, text, pdfBlob);
+    usePeerReviewStore.getState().addManuscript(exportable.title, text, pdfBlob, htmlContent);
     useModeStore.getState().setMode('peer_review');
   };
 

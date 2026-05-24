@@ -110,14 +110,20 @@ function citationBlock(citations: EvidenceItem[] = []): string {
   if (citations.length === 0) return '';
   const rows = citations
     .slice(0, 40)
-    .map((item) => {
+    .map((item, i) => {
+      const authors = item.authors?.length
+        ? escapeHtml(
+            item.authors.slice(0, 4).join(', ') + (item.authors.length > 4 ? ' et al.' : ''),
+          )
+        : escapeHtml(item.source.toUpperCase());
       const year = item.year ? ` (${escapeHtml(String(item.year))})` : '';
       const id = item.identifiers?.pmid
-        ? ` PMID:${escapeHtml(item.identifiers.pmid)}`
+        ? ` PMID:&nbsp;${escapeHtml(item.identifiers.pmid)}.`
         : item.identifiers?.doi
-          ? ` DOI:${escapeHtml(item.identifiers.doi)}`
+          ? ` doi:&nbsp;${escapeHtml(item.identifiers.doi)}.`
           : '';
-      return `<li>${escapeHtml(item.source.toUpperCase())}${year}. ${escapeHtml(item.title)}${id}</li>`;
+      const source = escapeHtml(item.source.toUpperCase());
+      return `<li><span class="ref-num">${i + 1}.</span> ${authors}${year}. <em>${escapeHtml(item.title)}</em>. ${source}.${id}</li>`;
     })
     .join('\n');
   return `<section class="references"><h2>References</h2><ol>${rows}</ol></section>`;
@@ -187,77 +193,234 @@ export function buildExportHtml(message: ExportableMessage): string {
     month: 'long',
     day: 'numeric',
   });
+  const modelMeta = message.modelLabel ? ` · ${escapeHtml(message.modelLabel)}` : '';
   return `<!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A4; margin: 16mm 18mm; }
-    * { box-sizing: border-box; }
-    html { background: #eceff3; }
+    @page { size: A4; margin: 18mm 20mm; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { background: #e8ecf1; }
+
     body {
-      margin: 0;
-      padding: 30px 18px 56px;
-      font-family: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
-      color: #1b2330;
-      line-height: 1.65;
+      font-family: "New York", "Iowan Old Style", "Charter", "Palatino Linotype",
+                   Palatino, Georgia, "Times New Roman", serif;
+      color: #18202e;
+      line-height: 1.72;
       -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      padding: 36px 22px 72px;
     }
+
+    /* ── Page card ───────────────────────────────────────────── */
     .page {
-      display: block;
-      max-width: 730px;
+      position: relative;
+      max-width: 760px;
       margin: 0 auto;
       background: #ffffff;
-      padding: 52px 60px 60px;
-      border: 1px solid #d6dce4;
-      border-radius: 5px;
-      box-shadow: 0 14px 44px rgba(17, 24, 39, 0.16);
+      padding: 0 0 68px;
+      border-radius: 8px;
+      box-shadow:
+        0 1px 2px rgba(0,0,0,0.05),
+        0 8px 24px rgba(15,23,42,0.09),
+        0 28px 72px rgba(15,23,42,0.12);
+      overflow: hidden;
     }
-    header { margin-bottom: 26px; padding-bottom: 16px; border-bottom: 2px solid #1b2330; }
-    h1 { margin: 0 0 10px; font-size: 26px; font-weight: 600; line-height: 1.24; letter-spacing: -0.012em; }
+
+    /* Mint accent top bar */
+    .page-bar {
+      height: 5px;
+      background: linear-gradient(90deg, #4ec9a4 0%, #82e0c2 55%, #b2eeda 100%);
+    }
+
+    .page-inner {
+      padding: 52px 64px 0;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    header {
+      margin-bottom: 34px;
+      padding-bottom: 22px;
+      border-bottom: 1.5px solid #d8e2ed;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.22;
+      letter-spacing: -0.018em;
+      color: #0c1625;
+      margin-bottom: 12px;
+    }
+
     .meta {
-      margin: 0;
-      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
-      letter-spacing: 0.07em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Fira Code",
+                   "Fira Mono", "Courier New", monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #8a93a3;
+      color: #8fa3be;
     }
-    h2 { margin: 28px 0 8px; font-size: 16.5px; font-weight: 600; letter-spacing: -0.005em; }
-    h3 { margin: 18px 0 5px; font-size: 13.5px; font-weight: 600; }
-    h4 { margin: 14px 0 4px; font-size: 12.5px; font-weight: 600; }
-    p { margin: 0 0 13px; font-size: 15px; }
-    ul, ol { margin: 0 0 13px; padding-left: 24px; }
-    li { font-size: 15px; margin: 0 0 5px; }
-    strong { font-weight: 600; }
+
+    .meta-pip {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: #82e0c2;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    /* ── Body typography ─────────────────────────────────────── */
+    main.content { line-height: 1.74; }
+
+    h2 {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.006em;
+      color: #0f1e33;
+      margin: 36px 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5ecf5;
+    }
+
+    h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e334f;
+      margin: 24px 0 6px;
+    }
+
+    h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #36475e;
+      margin: 16px 0 4px;
+    }
+
+    .content > h2:first-child,
+    .content > h3:first-child { margin-top: 0; }
+
+    p { font-size: 15.5px; margin: 0 0 15px; color: #18202e; }
+
+    ul, ol { margin: 0 0 15px; padding-left: 26px; }
+    li { font-size: 15.5px; margin-bottom: 7px; color: #18202e; }
+
+    strong { font-weight: 700; color: #0f172a; }
+    em { font-style: italic; }
+
     code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #f1f4f8;
-      padding: 1px 5px;
+      font-family: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+      background: #f1f5fb;
+      border: 1px solid #dde5f2;
+      padding: 2px 6px;
       border-radius: 4px;
-      font-size: 0.86em;
+      font-size: 0.875em;
+      color: #b5173e;
     }
-    .content > h2:first-child, .content > h3:first-child { margin-top: 0; }
-    .references { margin-top: 34px; padding-top: 18px; border-top: 1px solid #d6dce4; }
-    .references h2 { margin-top: 0; }
-    .references ol { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    .references li { font-size: 12.5px; color: #44505f; line-height: 1.5; margin-bottom: 7px; }
+
+    blockquote {
+      margin: 0 0 15px;
+      padding: 12px 18px;
+      border-left: 3px solid #82e0c2;
+      background: #f5fdfb;
+      color: #334155;
+      font-style: italic;
+    }
+
+    /* ── Manuscript figures ──────────────────────────────────── */
+    figure { margin: 28px 0; }
+    figure svg { width: 100%; max-height: 340px; border-radius: 8px; display: block; }
+    figcaption {
+      margin-top: 10px;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 12.5px;
+      color: #607080;
+      line-height: 1.55;
+    }
+
+    /* ── References ─────────────────────────────────────────── */
+    .references {
+      margin-top: 48px;
+      padding-top: 26px;
+      border-top: 1.5px solid #d8e2ed;
+    }
+
+    .references h2 {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #7a96b2;
+      border-bottom: none;
+      padding-bottom: 0;
+      margin: 0 0 16px;
+    }
+
+    .references ol {
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .references li {
+      font-size: 12.5px;
+      color: #4a6078;
+      line-height: 1.58;
+      margin-bottom: 11px;
+      padding-left: 32px;
+      position: relative;
+    }
+
+    .ref-num {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-weight: 700;
+      color: #82e0c2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .references li em { font-style: italic; color: #334155; }
+
+    /* ── Print overrides ─────────────────────────────────────── */
     @media print {
-      html { background: #ffffff; }
+      html { background: #fff; }
       body { padding: 0; }
-      .page { max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+      .page {
+        max-width: none;
+        border-radius: 0;
+        box-shadow: none;
+        overflow: visible;
+        padding-bottom: 0;
+      }
+      .page-bar { height: 3px; }
+      .page-inner { padding: 28px 0 0; }
     }
   </style>
 </head>
 <body>
   <article class="page">
-    <header>
-      <h1>${escapeHtml(title)}</h1>
-      <p class="meta">HashCerebrum · Exported ${escapeHtml(exportedAt)}</p>
-    </header>
-    <main class="content">${body}</main>
-    ${artifact ? '' : citationBlock(referenceCitations)}
+    <div class="page-bar"></div>
+    <div class="page-inner">
+      <header>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="meta">
+          <span class="meta-pip"></span>
+          HashCerebrum${modelMeta} &nbsp;·&nbsp; ${escapeHtml(exportedAt)}
+        </p>
+      </header>
+      <main class="content">${body}</main>
+      ${artifact ? '' : citationBlock(referenceCitations)}
+    </div>
   </article>
 </body>
 </html>`;

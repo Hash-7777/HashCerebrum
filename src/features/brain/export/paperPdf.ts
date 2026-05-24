@@ -191,16 +191,26 @@ export function splitPdfTextToSize(doc: PdfTextWrapper, text: string, width: num
   return baseLines.flatMap((line) => reflowPdfLine(doc, String(line), width));
 }
 
-function formatReference(record: EvidenceItem, index: number, style: 'source' | 'vancouver' = 'source'): string {
+function formatReference(record: EvidenceItem, index: number, _style: 'source' | 'vancouver' = 'source'): string {
   const year = record.year ? ` (${record.year})` : '';
   const id = record.identifiers?.pmid
-    ? ` PMID: ${record.identifiers.pmid}`
+    ? ` PMID: ${record.identifiers.pmid}.`
     : record.identifiers?.doi
-      ? ` DOI: ${record.identifiers.doi}`
+      ? ` doi: ${record.identifiers.doi}.`
       : '';
-  const marker = style === 'vancouver' ? `[${index + 1}]` : `[${index + 1}]`;
-  return `${marker} ${record.source.toUpperCase()}${year}. ${record.title}.${id}`;
+  const authors =
+    record.authors.length > 0
+      ? record.authors.slice(0, 4).join(', ') + (record.authors.length > 4 ? ' et al.' : '') + '.'
+      : record.source.toUpperCase() + '.';
+  // The leading "[n]" marker is drawn separately in accent colour; we only
+  // return the body text here (marker is NOT prepended to avoid duplication).
+  return `[${index + 1}] ${authors} ${record.title}.${year} ${record.source.toUpperCase()}.${id}`;
 }
+
+// Accent mint colour (#82e0c2) used across headings and decorative elements.
+const ACCENT_R = 130;
+const ACCENT_G = 224;
+const ACCENT_B = 194;
 
 export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
@@ -208,9 +218,9 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const marginX = 64;
-  const marginTop = 70;
-  const marginBottom = 64;
+  const marginX = 60;
+  const marginTop = 76;
+  const marginBottom = 60;
   const contentW = pageW - marginX * 2;
   const bottomLimit = pageH - marginBottom;
 
@@ -219,48 +229,63 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   const ensureSpace = (need: number) => {
     if (y + need > bottomLimit) {
       doc.addPage();
+      // Accent bar on each new page
+      doc.setFillColor(ACCENT_R, ACCENT_G, ACCENT_B);
+      doc.rect(0, 0, pageW, 3, 'F');
       y = marginTop;
     }
   };
 
+  // ---- Accent bar (top of first page) ------------------------------------
+  doc.setFillColor(ACCENT_R, ACCENT_G, ACCENT_B);
+  doc.rect(0, 0, pageW, 4, 'F');
+
   // ---- Title block -------------------------------------------------------
   const documentTitle = plain(input.manuscript?.title ?? input.title) || 'HashCerebrum Research Manuscript';
   doc.setFont('times', 'bold');
-  doc.setFontSize(21);
-  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(22);
+  doc.setTextColor(12, 22, 37);
   for (const line of splitPdfTextToSize(doc, documentTitle, contentW)) {
-    ensureSpace(27);
+    ensureSpace(28);
     doc.text(line, pageW / 2, y, { align: 'center' });
-    y += 27;
+    y += 28;
   }
 
-  y += 3;
-  doc.setFont('times', 'italic');
-  doc.setFontSize(9.5);
-  doc.setTextColor(110, 116, 130);
+  y += 5;
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(135, 155, 180);
   const meta = `HashCerebrum${input.modelLabel ? ` · ${input.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
-  doc.text(meta, pageW / 2, y, { align: 'center' });
-  y += 17;
+  doc.text(meta.toUpperCase(), pageW / 2, y, { align: 'center' });
+  y += 6;
 
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.8);
-  doc.line(marginX, y, pageW - marginX, y);
+  // Thin accent rule below meta
+  doc.setFillColor(ACCENT_R, ACCENT_G, ACCENT_B);
+  doc.rect(marginX + contentW * 0.3, y + 4, contentW * 0.4, 1.5, 'F');
   y += 22;
 
   // ---- Body --------------------------------------------------------------
   const heading = (text: string, level: 1 | 2 | 3) => {
-    const size = level === 1 ? 14.5 : level === 2 ? 12.5 : 11;
-    y += level === 3 ? 11 : 16;
-    ensureSpace(size + 8);
+    const size = level === 1 ? 15 : level === 2 ? 12.5 : 11;
+    y += level === 3 ? 13 : 20;
+    ensureSpace(size + 12);
     doc.setFont('times', 'bold');
     doc.setFontSize(size);
-    doc.setTextColor(15, 23, 42);
+    doc.setTextColor(12, 22, 37);
     for (const line of splitPdfTextToSize(doc, plain(text), contentW)) {
       ensureSpace(size + 4);
       doc.text(line, marginX, y);
-      y += size + 4;
+      y += size + 5;
     }
-    y += 4;
+    if (level === 2) {
+      // Subtle separator rule under every H2
+      doc.setDrawColor(220, 230, 242);
+      doc.setLineWidth(0.5);
+      doc.line(marginX, y + 1, pageW - marginX, y + 1);
+      y += 7;
+    } else {
+      y += 3;
+    }
   };
 
   const BODY_SIZE = 10.5;
@@ -377,31 +402,53 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     });
   }
 
-  // ---- References — only the records actually cited in the body ----------
-  // The swarm retrieves far more evidence than a paper cites; a real
-  // reference list contains only the works the manuscript [#]-cites.
-  const citedNumbers = new Set<number>();
-  const markerStyle = input.manuscript?.publication ? 'vancouver' : 'source';
-  for (const match of input.content.matchAll(/\[(?:S)?(\d+)\]/g)) {
-    citedNumbers.add(Number(match[1]));
-  }
-  const cited = [...citedNumbers].sort((a, b) => a - b);
-  if (input.citations && input.citations.length > 0 && cited.length > 0) {
+  // ---- References --------------------------------------------------------
+  // Prefer citing only records that appear as [S1] / [1] inline markers.
+  // If the body has no inline markers (e.g. plain AI chat response), fall
+  // back to listing every attached citation record in source order.
+  if (input.citations && input.citations.length > 0) {
+    const citedNumbers = new Set<number>();
+    const markerStyle = input.manuscript?.publication ? 'vancouver' : 'source';
+    for (const match of input.content.matchAll(/\[(?:S)?(\d+)\]/g)) {
+      citedNumbers.add(Number(match[1]));
+    }
+    // Fallback: no inline markers found → show all citations sequentially.
+    const cited =
+      citedNumbers.size > 0
+        ? [...citedNumbers].sort((a, b) => a - b)
+        : input.citations.map((_, i) => i + 1);
+
     heading('References', 2);
     doc.setFont('times', 'normal');
     doc.setFontSize(9);
-    doc.setTextColor(55, 65, 81);
-    for (const number of cited) {
-      const record = input.citations[number - 1];
-      if (!record) continue;
-      const lines = splitPdfTextToSize(doc, formatReference(record, number - 1, markerStyle), contentW - 16);
+    doc.setTextColor(60, 80, 100);
+    cited.forEach((number, listIndex) => {
+      const record = input.citations![number - 1];
+      if (!record) return;
+      const refText = formatReference(record, listIndex, markerStyle);
+      const lines = splitPdfTextToSize(doc, refText, contentW - 22);
+      // Accent-coloured bracket marker on first line
       lines.forEach((line, li) => {
-        ensureSpace(12);
-        doc.text(line, marginX + (li === 0 ? 0 : 16), y);
-        y += 12;
+        ensureSpace(13);
+        if (li === 0) {
+          // Draw the [n] marker in accent colour
+          const markerStr = `[${listIndex + 1}]`;
+          doc.setTextColor(ACCENT_R, ACCENT_G, ACCENT_B);
+          doc.setFont('times', 'bold');
+          doc.text(markerStr, marginX, y);
+          const markerW = doc.getTextWidth(markerStr) + 4;
+          doc.setTextColor(60, 80, 100);
+          doc.setFont('times', 'normal');
+          // Strip the leading marker from the line jsPDF already has
+          const bodyLine = line.replace(/^\[\d+\]\s*/, '');
+          doc.text(bodyLine, marginX + markerW, y);
+        } else {
+          doc.text(line, marginX + 22, y);
+        }
+        y += 13;
       });
-      y += 3;
-    }
+      y += 4;
+    });
   }
 
   // ---- Page numbers ------------------------------------------------------

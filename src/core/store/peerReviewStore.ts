@@ -27,6 +27,9 @@ export interface ReviewedPaper {
   text: string;
   // Object URL for the PDF viewer — valid for the current session only
   blobUrl?: string;
+  /** Pre-built HTML for the in-app preview iframe (srcDoc).  Tauri's WKWebView
+   *  cannot render PDF blobs inline; the HTML path works in every WebView. */
+  htmlContent?: string;
   review?: PaperReview;
   reviewStreaming?: boolean;
   reviewError?: string;
@@ -38,7 +41,7 @@ interface PeerReviewStore {
   // Add a paper from a file upload
   addUpload: (file: File) => Promise<string>;
   // Add a paper from a Brain-mode manuscript
-  addManuscript: (title: string, text: string, pdfBlob?: Blob) => string;
+  addManuscript: (title: string, text: string, pdfBlob?: Blob, htmlContent?: string) => string;
   setActive: (id: string | null) => void;
   setReview: (id: string, review: PaperReview) => void;
   setReviewStreaming: (id: string, streaming: boolean) => void;
@@ -88,7 +91,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
     return id;
   },
 
-  addManuscript: (title, text, pdfBlob) => {
+  addManuscript: (title, text, pdfBlob, htmlContent) => {
     const id = uid();
     const base: ReviewedPaper = {
       id,
@@ -97,6 +100,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       addedAt: new Date().toISOString(),
       source: 'manuscript',
       text,
+      ...(htmlContent ? { htmlContent } : {}),
     };
     const paper: ReviewedPaper = pdfBlob
       ? { ...base, blobUrl: URL.createObjectURL(pdfBlob) }

@@ -47,8 +47,11 @@ describe('message export helpers', () => {
 
     expect(slugifyFilename(message.title)).toBe('nsaids-and-warfarin-manuscript');
     expect(buildMarkdownExport(message)).toContain('1. EUROPEPMC: Bleeding outcomes');
-    expect(buildExportHtml(message)).toContain('<h2>References</h2>');
-    expect(buildExportHtml(message)).toContain('DOI:10.0000/test');
+    const html = buildExportHtml(message);
+    expect(html).toContain('<h2>References</h2>');
+    // New citation format uses lowercase doi: with author name and italic title
+    expect(html).toContain('10.0000/test');
+    expect(html).toContain('Bleeding outcomes');
   });
 
   it('renumbers [S<n>] markers to sequential [1], [2], … by first appearance', () => {

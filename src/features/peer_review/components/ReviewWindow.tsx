@@ -155,11 +155,21 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
 
       <div className="review-window-body">
         <div className="review-pdf-pane">
-          {paper.blobUrl ? (
+          {paper.htmlContent ? (
+            // HTML srcDoc: works in every WebView including Tauri WKWebView.
+            <iframe
+              srcDoc={paper.htmlContent}
+              title={paper.title}
+              className="review-pdf-frame"
+              sandbox=""
+            />
+          ) : paper.blobUrl ? (
+            // Fallback: blob URL for non-Tauri / file-upload papers.
             <iframe
               src={paper.blobUrl}
               title={paper.title}
               className="review-pdf-frame"
+              sandbox=""
             />
           ) : (
             <div className="review-pdf-text">
