@@ -157,28 +157,14 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
   }
 
   if (paper.blobUrl && isPdfBinary(paper.text)) {
+    // object-src 'none' in the app CSP blocks <object> entirely.
+    // frame-src explicitly allows blob: so <iframe src={blobUrl}> is the correct path.
     return (
-      <div className="review-pdf-frame-wrap">
-        <object
-          data={paper.blobUrl}
-          type="application/pdf"
-          className="review-pdf-frame"
-          aria-label={paper.title}
-        >
-          <div className="review-upload-placeholder">
-            <Icon name="document" size={40} />
-            <strong>{paper.title}</strong>
-            <p>Inline PDF rendering is unavailable. The AI review ran on extracted text.</p>
-            <a
-              href={paper.blobUrl}
-              download={paper.filename}
-              className="review-upload-download"
-            >
-              <Icon name="download" size={13} /> Download original PDF
-            </a>
-          </div>
-        </object>
-      </div>
+      <iframe
+        src={paper.blobUrl}
+        title={paper.title}
+        className="review-pdf-frame"
+      />
     );
   }
 
