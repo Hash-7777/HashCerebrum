@@ -47,7 +47,7 @@ export function evidenceScore(record: EvidenceItem): number {
 }
 
 // Merge every specialist's evidence into one de-duplicated set the boss
-// can cite with a single [S#] numbering. Records are ranked by quality
+// can cite with a single [#] numbering. Records are ranked by quality
 // so high-credibility evidence survives context-window truncation.
 export function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
   const seen = new Set<string>();
@@ -72,7 +72,7 @@ function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: st
     .map((record, index) => {
       const year = record.year ? ` (${record.year})` : '';
       const snippet = record.snippet ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, 220)}` : '';
-      return `[S${index + 1}] ${record.source.toUpperCase()}${year}: ${record.title}${snippet}`;
+      return `[${index + 1}] ${record.source.toUpperCase()}${year}: ${record.title}${snippet}`;
     })
     .join('\n');
   return [

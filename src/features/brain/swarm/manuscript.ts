@@ -54,28 +54,28 @@ export const SECTION_PLAN: SectionSpec[] = [
   {
     heading: 'Evidence Base and Search Yield',
     instruction:
-      'Describe the retrieved evidence base, source mix, record types, date spread where available, and the highest-value records for the research question. Cite every factual claim with its [S#] marker.',
+      'Describe the retrieved evidence base, source mix, record types, date spread where available, and the highest-value records for the research question. Cite every factual claim with its [#] marker.',
     targetWords: '500-750 words across 4-6 paragraphs',
     minWords: 420,
   },
   {
     heading: 'Mechanistic and Pharmacologic Evidence',
     instruction:
-      'Explain the mechanistic and pharmacologic evidence relevant to the question. For drug-interaction topics, separate pharmacokinetic mechanisms, pharmacodynamic mechanisms, transporter/enzyme considerations, and biological plausibility. Cite every factual claim with its [S#] marker.',
+      'Explain the mechanistic and pharmacologic evidence relevant to the question. For drug-interaction topics, separate pharmacokinetic mechanisms, pharmacodynamic mechanisms, transporter/enzyme considerations, and biological plausibility. Cite every factual claim with its [#] marker.',
     targetWords: '650-900 words across 5-7 paragraphs',
     minWords: 540,
   },
   {
     heading: 'Clinical Evidence and Safety Outcomes',
     instruction:
-      'Synthesize the clinical evidence and safety outcomes. Distinguish direct evidence from indirect evidence, registry signals from trial results, and outcome evidence from mechanistic inference. Cite every factual claim with its [S#] marker.',
+      'Synthesize the clinical evidence and safety outcomes. Distinguish direct evidence from indirect evidence, registry signals from trial results, and outcome evidence from mechanistic inference. Cite every factual claim with its [#] marker.',
     targetWords: '700-950 words across 5-8 paragraphs',
     minWords: 580,
   },
   {
     heading: 'Trial and Registry Evidence',
     instruction:
-      'Summarize clinical-trial and registry evidence without using markdown tables. Write prose grouped by trial purpose, population, intervention/exposure, and relevance to the research question. If evidence is indirect or incomplete, say so explicitly. Cite every factual claim with its [S#] marker.',
+      'Summarize clinical-trial and registry evidence without using markdown tables. Write prose grouped by trial purpose, population, intervention/exposure, and relevance to the research question. If evidence is indirect or incomplete, say so explicitly. Cite every factual claim with its [#] marker.',
     targetWords: '550-800 words across 4-6 paragraphs',
     minWords: 450,
   },

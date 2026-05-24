@@ -44,7 +44,7 @@ function asRecords(result: unknown): EvidenceItem[] {
   return Array.isArray(records) ? records : [];
 }
 
-// Render tool results with stable [S#] markers so the model has concrete
+// Render tool results with stable [#] markers so the model has concrete
 // records to reason from.
 function formatRecords(toolName: string, records: EvidenceItem[], startIndex: number): string {
   if (records.length === 0) return `${toolName}: no records returned.`;
@@ -108,7 +108,7 @@ Workflow:
 
 Hard rules:
 - State only facts that came from a tool result in this conversation. Never invent a PMID, DOI, author, year, title, or statistic.
-- Each retrieved record is tagged [S#]; refer to records by their source and title.
+- Each retrieved record is tagged [#]; refer to records by their source and title.
 - If the databases return little or nothing, say so plainly — do not fill the gap from memory.
 - Stay within your specialty (${agent.topicHint}); ignore parts of the question outside it.`;
 }

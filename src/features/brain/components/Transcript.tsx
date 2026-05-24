@@ -6,7 +6,6 @@ import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
 import {
-  buildExportHtml,
   buildMarkdownExport,
   buildMessagePdfBlob,
   slugifyFilename,
@@ -129,7 +128,6 @@ export const Transcript = memo(function Transcript({
         kind: 'pdf',
         typeLabel: message.manuscript ? 'Research manuscript PDF' : 'Message PDF',
         blob,
-        previewHtml: buildExportHtml(exportable),
         copyText: stripGeneratedReferenceSections(message.content),
       });
     } catch {

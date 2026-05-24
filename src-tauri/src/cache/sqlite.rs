@@ -2,7 +2,7 @@ use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection, OptionalExtension};
 #[allow(unused_imports)]
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
@@ -17,9 +17,8 @@ fn cache_path(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(dir.join("cache.sqlite"))
 }
 
-pub fn init(app: &AppHandle) -> AppResult<()> {
-    let path = cache_path(app)?;
-    let conn = Connection::open(&path)?;
+fn try_open(path: &Path) -> AppResult<Connection> {
+    let conn = Connection::open(path)?;
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
@@ -44,6 +43,22 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
         tracing::error!(result = %integrity, "cache database integrity check failed");
         return Err(AppError::Cache(format!("integrity check: {integrity}")));
     }
+
+    Ok(conn)
+}
+
+pub fn init(app: &AppHandle) -> AppResult<()> {
+    let path = cache_path(app)?;
+
+    let conn = match try_open(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            // Corrupt or unreadable — delete the file and start fresh.
+            tracing::warn!(error = %e, "cache init failed, deleting and retrying");
+            let _ = std::fs::remove_file(&path);
+            try_open(&path)?
+        }
+    };
 
     let mut guard = DB
         .lock()
@@ -73,6 +88,19 @@ fn with_conn<T>(f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
     let conn = guard
         .as_ref()
         .ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
+    f(conn)
+}
+
+/// Like `with_conn` but returns `Ok(None)` when the cache is unavailable.
+/// Used for `get` and `set` so a cache miss never fails a network call.
+fn with_conn_opt<T>(f: impl FnOnce(&Connection) -> AppResult<Option<T>>) -> AppResult<Option<T>> {
+    let guard = match DB.lock() {
+        Ok(g) => g,
+        Err(_) => return Ok(None),
+    };
+    let Some(conn) = guard.as_ref() else {
+        return Ok(None);
+    };
     f(conn)
 }
 
@@ -132,8 +160,9 @@ pub fn purge_expired() -> AppResult<u64> {
 
 /// Read a cached entry if it exists and has not expired.
 /// ttl_seconds = 0 means "live forever".
+/// Returns Ok(None) when the cache is unavailable — callers treat this as a miss.
 pub fn get(key: &str) -> AppResult<Option<Vec<u8>>> {
-    with_conn(|conn| {
+    with_conn_opt(|conn| {
         let row: Option<(Vec<u8>, i64, i64)> = conn
             .query_row(
                 "SELECT payload, ttl_seconds, strftime('%s', fetched_at)
@@ -156,20 +185,26 @@ pub fn get(key: &str) -> AppResult<Option<Vec<u8>>> {
 }
 
 /// Write or overwrite a cached entry.
+/// Silently no-ops when the cache is unavailable — the caller's request still completes.
 pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult<()> {
-    with_conn(|conn| {
-        conn.execute(
-            "INSERT INTO cache (key, host, payload, fetched_at, ttl_seconds)
-             VALUES (?1, ?2, ?3, datetime('now'), ?4)
-             ON CONFLICT(key) DO UPDATE SET
-               host = excluded.host,
-               payload = excluded.payload,
-               fetched_at = excluded.fetched_at,
-               ttl_seconds = excluded.ttl_seconds",
-            params![key, host, payload, ttl_seconds],
-        )?;
-        Ok(())
-    })
+    let guard = match DB.lock() {
+        Ok(g) => g,
+        Err(_) => return Ok(()),
+    };
+    let Some(conn) = guard.as_ref() else {
+        return Ok(());
+    };
+    conn.execute(
+        "INSERT INTO cache (key, host, payload, fetched_at, ttl_seconds)
+         VALUES (?1, ?2, ?3, datetime('now'), ?4)
+         ON CONFLICT(key) DO UPDATE SET
+           host = excluded.host,
+           payload = excluded.payload,
+           fetched_at = excluded.fetched_at,
+           ttl_seconds = excluded.ttl_seconds",
+        params![key, host, payload, ttl_seconds],
+    )?;
+    Ok(())
 }
 
 pub fn close_connection() -> AppResult<()> {

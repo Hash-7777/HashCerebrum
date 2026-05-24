@@ -9,15 +9,17 @@ describe('DocumentPreviewWindow security', () => {
   it('has sandbox on every PDF iframe', () => {
     const iframeRegex = /<iframe[^>]*\/>/g;
     const matches = source.match(iframeRegex) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(2);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
     for (const iframe of matches) {
       expect(iframe).toContain('sandbox');
     }
   });
 
-  it('renders generated PDF previews through either srcDoc or blob URLs', () => {
-    expect(source).toContain('srcDoc={document.previewHtml}');
+  it('renders PDF previews through a blob object URL — preview and download use the same blob', () => {
     expect(source).toContain('URL.createObjectURL(document.blob)');
     expect(source).toContain('src={url}');
+    // previewHtml was intentionally removed: in-app preview and download now
+    // both render the same Typst/jsPDF blob so they look identical.
+    expect(source).not.toContain('srcDoc={document.previewHtml}');
   });
 });

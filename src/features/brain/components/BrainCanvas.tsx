@@ -102,7 +102,10 @@ function useBrainMeshParts(): BrainMeshPart[] {
         p.geometry.dispose();
         p.baseMaterial.dispose();
       }
-      useGLTF.clear(BRAIN_MODEL.path);
+      // Do NOT call useGLTF.clear here — clearing the global cache causes the
+      // Suspense boundary to re-fire as "Loading brain model" whenever parts
+      // are disposed during a re-render. The module-level preload keeps the
+      // GLB warm for the lifetime of the session.
     };
   }, [parts]);
 

@@ -35,7 +35,7 @@ const SECTION_SYSTEM = `You are a biomedical research writer drafting ONE sectio
 - Write only polished academic prose in full paragraphs for the requested section. Do not write other sections, a title, or a heading line.
 - Do not use markdown tables, pipe tables, ASCII tables, bullet lists, numbered lists, or chat-style summaries. Convert comparisons into prose.
 - Make the section read like a serious journal manuscript: dense, precise, source-grounded, and professionally edited.
-- Use only the retrieved records and specialist findings supplied. Cite every factual claim with its [S#] marker.
+- Use only the retrieved records and specialist findings supplied. Cite every factual claim with its [#] marker.
 - If an uploaded dataset summary is supplied, you may narrate only the exact descriptive and inferential statistics already computed by the validated in-app statistics engine.
 - Never invent a statistic, study finding, PMID, DOI, author, year, or title. If the evidence or dataset is thin for this section, say so plainly.
 - Do not write a References or Bibliography section — references are added automatically.`;
@@ -243,7 +243,7 @@ ${opts.datasetBlock}
 Other drafted sections for continuity:
 ${opts.priorDigest}
 
-Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix missing citations, unsupported statistics, thin analysis, and note-like prose. Every factual claim must use real [S#] markers from the retrieved records. Do not invent p-values, confidence intervals, hazard ratios, or odds ratios — report only the statistics already computed in the dataset analysis block above. Do not invent trial outcomes, titles, PMIDs, DOIs, or years. Do not write headings, lists, tables, References, or Bibliography.`,
+Rewrite the complete ${opts.spec.heading} section as a full replacement. Fix missing citations, unsupported statistics, thin analysis, and note-like prose. Every factual claim must use real [#] markers from the retrieved records. Do not invent p-values, confidence intervals, hazard ratios, or odds ratios — report only the statistics already computed in the dataset analysis block above. Do not invent trial outcomes, titles, PMIDs, DOIs, or years. Do not write headings, lists, tables, References, or Bibliography.`,
     SECTION_TOKENS,
   );
   return sectionBodyFromReply(opts.spec.heading, reply);
@@ -310,7 +310,7 @@ Write the ${spec.heading} section now as final manuscript prose, not notes. If a
 The current ${spec.heading} draft is ${bodyWordCount(body)} words, below the required minimum of ${spec.minWords} words:
 ${body.join('\n\n')}
 
-Rewrite the complete ${spec.heading} section as a full replacement. Target ${spec.targetWords}, and do not stop early. Keep every factual claim tied to [S#] citations. If the retrieved evidence is genuinely thin, still write a complete, transparent section that explains the uncertainty instead of returning notes. Do not use markdown tables or lists.`,
+Rewrite the complete ${spec.heading} section as a full replacement. Target ${spec.targetWords}, and do not stop early. Keep every factual claim tied to [#] citations. If the retrieved evidence is genuinely thin, still write a complete, transparent section that explains the uncertainty instead of returning notes. Do not use markdown tables or lists.`,
           SECTION_TOKENS,
         );
         body = sectionBodyFromReply(spec.heading, expansion);

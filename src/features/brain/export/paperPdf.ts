@@ -198,7 +198,7 @@ function formatReference(record: EvidenceItem, index: number, style: 'source' | 
     : record.identifiers?.doi
       ? ` DOI: ${record.identifiers.doi}`
       : '';
-  const marker = style === 'vancouver' ? `[${index + 1}]` : `[S${index + 1}]`;
+  const marker = style === 'vancouver' ? `[${index + 1}]` : `[${index + 1}]`;
   return `${marker} ${record.source.toUpperCase()}${year}. ${record.title}.${id}`;
 }
 
@@ -379,7 +379,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
 
   // ---- References — only the records actually cited in the body ----------
   // The swarm retrieves far more evidence than a paper cites; a real
-  // reference list contains only the works the manuscript [S#]-cites.
+  // reference list contains only the works the manuscript [#]-cites.
   const citedNumbers = new Set<number>();
   const markerStyle = input.manuscript?.publication ? 'vancouver' : 'source';
   for (const match of input.content.matchAll(/\[(?:S)?(\d+)\]/g)) {

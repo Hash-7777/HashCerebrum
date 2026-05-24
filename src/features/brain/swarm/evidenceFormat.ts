@@ -3,9 +3,9 @@ import type { EvidenceItem } from '@platform/index';
 const SNIPPET_CHARS = 320;
 
 export interface FormatEvidenceOptions {
-  /** Zero-based index used to build the [S#] marker. */
+  /** Zero-based index used to build the [#] marker. */
   index: number;
-  /** Optional prefix for the marker (default 'S'). */
+  /** Optional prefix for the marker (default ''). */
   markerPrefix?: string | undefined;
   /** Max characters for the snippet (default 320). */
   snippetChars?: number | undefined;
@@ -14,13 +14,13 @@ export interface FormatEvidenceOptions {
 /**
  * Shared evidence formatter used by the boss synthesizer, manuscript writer,
  * and specialist result renderer. Keeps the citation shape identical across
- * the pipeline so the model sees a consistent [S#] scheme.
+ * the pipeline so the model sees a consistent [#] scheme.
  */
 export function formatEvidenceItem(
   record: EvidenceItem,
   options: FormatEvidenceOptions,
 ): string {
-  const { index, markerPrefix = 'S', snippetChars = SNIPPET_CHARS } = options;
+  const { index, markerPrefix = '', snippetChars = SNIPPET_CHARS } = options;
   const year = record.year ? ` (${record.year})` : '';
   const id = record.identifiers?.pmid
     ? ` PMID:${record.identifiers.pmid}`

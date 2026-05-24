@@ -78,7 +78,7 @@ describe('paper request helpers', () => {
     expect(fallback).toContain('## Structured Abstract');
     expect(fallback).toContain('## Methods');
     expect(fallback).toContain('## References');
-    expect(fallback).toContain('[S1] PUBMED');
+    expect(fallback).toContain('[1] PUBMED');
     expect(fallback).toContain('boss unavailable');
   });
 });
