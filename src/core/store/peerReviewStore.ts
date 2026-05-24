@@ -4,6 +4,15 @@
 
 import { create } from 'zustand';
 
+export interface AgentReviewResult {
+  agentId: string;
+  label: string;
+  status: 'idle' | 'running' | 'done' | 'error';
+  text: string;
+  items: string[];
+  error?: string;
+}
+
 export interface PaperReview {
   score: number; // 1–10
   summary: string;
@@ -15,6 +24,8 @@ export interface PaperReview {
   publishReadiness: string;
   reviewedAt: string;
   modelUsed: string;
+  /** Per-agent swarm results (grammar, originality, vocabulary, stats, overall). */
+  agentResults?: AgentReviewResult[];
 }
 
 export interface ReviewedPaper {
@@ -33,6 +44,8 @@ export interface ReviewedPaper {
   review?: PaperReview;
   reviewStreaming?: boolean;
   reviewError?: string;
+  /** Live per-agent swarm progress (set before review completes). */
+  reviewAgents?: AgentReviewResult[];
 }
 
 interface PeerReviewStore {
@@ -46,6 +59,8 @@ interface PeerReviewStore {
   setReview: (id: string, review: PaperReview) => void;
   setReviewStreaming: (id: string, streaming: boolean) => void;
   setReviewError: (id: string, error: string) => void;
+  setReviewAgents: (id: string, agents: AgentReviewResult[]) => void;
+  patchReviewAgent: (id: string, agentId: string, patch: Partial<AgentReviewResult>) => void;
   removePaper: (id: string) => void;
 }
 
@@ -130,6 +145,22 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       papers: s.papers.map((p) =>
         p.id === id ? { ...p, reviewError: error, reviewStreaming: false } : p,
       ),
+    })),
+
+  setReviewAgents: (id, agents) =>
+    set((s) => ({
+      papers: s.papers.map((p) => (p.id === id ? { ...p, reviewAgents: agents } : p)),
+    })),
+
+  patchReviewAgent: (id, agentId, patch) =>
+    set((s) => ({
+      papers: s.papers.map((p) => {
+        if (p.id !== id) return p;
+        const agents = (p.reviewAgents ?? []).map((a) =>
+          a.agentId === agentId ? { ...a, ...patch } : a,
+        );
+        return { ...p, reviewAgents: agents };
+      }),
     })),
 
   removePaper: (id) =>
