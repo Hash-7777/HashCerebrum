@@ -54,7 +54,7 @@ function buildHighlightedHtml(text: string, suggestions: Suggestion[]): string {
   for (const span of spans) {
     html += escapeHtml(text.slice(cursor, span.start));
     html +=
-      `<mark class="doc-mark doc-mark--${span.type}" data-sid="${span.sid}">` +
+      `<mark class="doc-mark doc-mark--${escapeHtml(span.type)}" data-sid="${escapeHtml(span.sid)}">` +
       escapeHtml(text.slice(span.start, span.end)) +
       '</mark>';
     cursor = span.end;
@@ -569,6 +569,14 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                 contentEditable
                 suppressContentEditableWarning
                 spellCheck={false}
+                onPaste={(e) => {
+                  // Strip rich-text markup — insert plain text only to prevent
+                  // injected DOM elements (img, script, etc.) from landing in the
+                  // editor and being preserved in the undo-history snapshots.
+                  e.preventDefault();
+                  const plain = e.clipboardData?.getData('text/plain') ?? '';
+                  document.execCommand('insertText', false, plain);
+                }}
                 aria-label="Document editor"
                 aria-multiline="true"
               />
