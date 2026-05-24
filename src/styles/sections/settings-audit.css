@@ -338,7 +338,52 @@
   min-height: 34px;
   padding: 0 9px;
   font-size: 12px;
+  background: var(--ink-3);
+  color: var(--text-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
 }
+.settings-panel input:focus,
+.settings-panel select:focus {
+  border-color: var(--accent-line);
+  background: var(--ink-4);
+}
+.settings-panel input::placeholder { color: var(--text-4); }
+/* Re-add a minimal select arrow since appearance:none removes the OS one */
+.settings-panel select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238c8f97'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  padding-right: 28px;
+}
+/* Plain <button> elements inside the panel (not .icon-button / .btn) */
+.settings-panel button:not(.icon-button):not(.btn):not(.settings-theme-swatch):not(.settings-audit-button) {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 11.5px;
+  font-family: inherit;
+  background: var(--ink-4);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.settings-panel button:not(.icon-button):not(.btn):not(.settings-theme-swatch):not(.settings-audit-button):hover:not(:disabled) {
+  background: var(--ink-5);
+  color: var(--text-1);
+  border-color: var(--line-strong);
+}
+.settings-panel button:not(.icon-button):not(.btn):not(.settings-theme-swatch):not(.settings-audit-button):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .settings-panel .field.inline {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;

@@ -202,12 +202,12 @@ const BrainMesh = React.memo(function BrainMesh({
       onPointerOver={(event: ThreeEvent<PointerEvent>) => {
         event.stopPropagation();
         onHover(primaryRegion);
-        document.body.style.cursor = 'pointer';
+        (event.nativeEvent.target as HTMLElement).style.cursor = 'pointer';
       }}
       onPointerOut={(event: ThreeEvent<PointerEvent>) => {
         event.stopPropagation();
         onHover(null);
-        document.body.style.cursor = '';
+        (event.nativeEvent.target as HTMLElement).style.cursor = '';
       }}
       onClick={(event: ThreeEvent<MouseEvent>) => {
         event.stopPropagation();

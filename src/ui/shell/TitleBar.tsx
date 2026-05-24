@@ -7,14 +7,21 @@ const maskStyle = {
   maskImage: `url(${logoMark})`,
 } as React.CSSProperties;
 
+function focusSearch() {
+  document.querySelector<HTMLInputElement>('.search-input')?.focus();
+}
+
+function openSettings() {
+  window.dispatchEvent(new CustomEvent('hc:open-settings'));
+}
+
+function focusTrace() {
+  window.dispatchEvent(new CustomEvent('hc:expand-trace'));
+}
+
 export function TitleBar() {
   return (
     <header className="titlebar" data-tauri-drag-region>
-      <div className="traffic" aria-hidden="true">
-        <span className="tl-r" />
-        <span className="tl-y" />
-        <span className="tl-g" />
-      </div>
       <div className="brand">
         <span className="logo logo-mask" style={maskStyle} aria-hidden="true" />
         <span>{APP_NAME}</span>
@@ -22,13 +29,13 @@ export function TitleBar() {
       </div>
       <div className="spacer" />
       <div className="titlebar-right">
-        <button className="icon-btn" type="button" title="Search">
+        <button className="icon-btn" type="button" title="Search (⌘F)" onClick={focusSearch}>
           <Icon name="search" size={15} />
         </button>
-        <button className="icon-btn" type="button" title="Activity">
+        <button className="icon-btn" type="button" title="Execution trace" onClick={focusTrace}>
           <Icon name="activity" size={15} />
         </button>
-        <button className="icon-btn" type="button" title="Settings">
+        <button className="icon-btn" type="button" title="Settings (⌘,)" onClick={openSettings}>
           <Icon name="settings" size={15} />
         </button>
       </div>

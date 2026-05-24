@@ -13,7 +13,6 @@ import { getModeComponent } from '@modes/registry';
 import { ModeErrorBoundary } from '@modes/ModeErrorBoundary';
 import { TitleBar } from './TitleBar';
 import { LeftRail } from './LeftRail';
-import { StatusBar } from './StatusBar';
 import { ExecutionTrace } from './ExecutionTrace';
 import { Toast } from './Toast';
 
@@ -133,7 +132,6 @@ export function AppShell() {
           })}
         </main>
       </div>
-      <StatusBar />
       <ExecutionTrace />
       <Toast />
     </div>

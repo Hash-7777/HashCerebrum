@@ -92,6 +92,7 @@ export function BrainMode() {
   }, []);
 
   // Cmd+, / Ctrl+, opens settings — matches HashCortx muscle memory.
+  // Also listens for the toolbar button's custom event.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === ',') {
@@ -101,8 +102,13 @@ export function BrainMode() {
         setSettingsOpen(false);
       }
     };
+    const onOpenSettings = () => setSettingsOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('hc:open-settings', onOpenSettings);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('hc:open-settings', onOpenSettings);
+    };
   }, [settingsOpen]);
 
   const updateAgentStatus = (agentId: AgentId, update: Partial<AgentStatus>) => {

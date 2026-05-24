@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
 import { Icon, type IconName } from '@ui/icons';
 
@@ -44,6 +44,12 @@ export function ExecutionTrace() {
   const activity = useAgentStore((s) => s.activity);
   const clear = useAgentStore((s) => s.clear);
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const onExpand = () => setExpanded(true);
+    window.addEventListener('hc:expand-trace', onExpand);
+    return () => window.removeEventListener('hc:expand-trace', onExpand);
+  }, []);
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);
   const startTime = visible[0]?.ts ?? Date.now();

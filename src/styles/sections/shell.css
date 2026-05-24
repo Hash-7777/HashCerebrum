@@ -30,7 +30,8 @@
   height: 44px;
   display: flex;
   align-items: center;
-  padding: 0 14px;
+  /* 80px left clearance for native macOS traffic lights (titleBarStyle: Overlay) */
+  padding: 0 14px 0 80px;
   border-bottom: 1px solid var(--line);
   background: var(--ink-1);
   position: relative;
@@ -38,22 +39,6 @@
   user-select: none;
   -webkit-app-region: drag;
 }
-
-.traffic {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.traffic span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--ink-5);
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.4);
-}
-.traffic .tl-r { background: #ed6a5e; }
-.traffic .tl-y { background: #f4be4f; }
-.traffic .tl-g { background: #61c554; }
 
 .brand {
   margin-left: 20px;
