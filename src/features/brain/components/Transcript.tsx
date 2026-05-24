@@ -4,6 +4,9 @@ const MESSAGE_CAP = 80;
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { useToastStore } from '@core/store/toastStore';
+import { usePeerReviewStore } from '@core/store/peerReviewStore';
+import { useModeStore } from '@core/store/modeStore';
+import { manuscriptToReadableText } from '../swarm/manuscript';
 import { Icon } from '@ui/icons';
 import {
   buildMarkdownExport,
@@ -25,24 +28,31 @@ function DocumentArtifactCard({
   typeLabel,
   referenceCount,
   onOpen,
+  onReview,
 }: {
   title: string;
   typeLabel: string;
   referenceCount: number;
   onOpen: () => void;
+  onReview: () => void;
 }) {
   return (
-    <button type="button" className="document-artifact-card" onClick={onOpen}>
-      <span className="document-artifact-icon" aria-hidden="true">
-        <Icon name="document" size={22} />
-        <span>PDF</span>
-      </span>
-      <span className="document-artifact-meta">
-        <strong>{title}</strong>
-        <span>{typeLabel}{referenceCount > 0 ? ` · ${referenceCount} references` : ''}</span>
-      </span>
-      <Icon name="eye" size={14} />
-    </button>
+    <div className="document-artifact-card">
+      <button type="button" className="document-artifact-main" onClick={onOpen}>
+        <span className="document-artifact-icon" aria-hidden="true">
+          <Icon name="document" size={22} />
+          <span>PDF</span>
+        </span>
+        <span className="document-artifact-meta">
+          <strong>{title}</strong>
+          <span>{typeLabel}{referenceCount > 0 ? ` · ${referenceCount} references` : ''}</span>
+        </span>
+        <Icon name="eye" size={14} />
+      </button>
+      <button type="button" className="document-artifact-review" onClick={onReview} title="Open in Peer Review">
+        <Icon name="shield" size={13} /> Review
+      </button>
+    </div>
   );
 }
 
@@ -135,6 +145,21 @@ export const Transcript = memo(function Transcript({
     }
   };
 
+  const sendToReview = async (message: ChatMessage, index: number) => {
+    const exportable = exportableFor(message, index);
+    const text = message.manuscript
+      ? manuscriptToReadableText(message.manuscript)
+      : message.content;
+    let pdfBlob: Blob | undefined;
+    try {
+      pdfBlob = await buildMessagePdfBlob(exportable);
+    } catch {
+      // PDF optional — review still works from text alone
+    }
+    usePeerReviewStore.getState().addManuscript(exportable.title, text, pdfBlob);
+    useModeStore.getState().setMode('peer_review');
+  };
+
   const openMarkdownPreview = (message: ChatMessage, index: number) => {
     const exportable = exportableFor(message, index);
     const body = buildMarkdownExport(exportable);
@@ -197,6 +222,7 @@ export const Transcript = memo(function Transcript({
                   typeLabel={message.manuscript ? 'Research manuscript' : 'Research result'}
                   referenceCount={message.citations?.length ?? 0}
                   onOpen={() => void openPdfPreview(message, actualIndex)}
+                  onReview={() => void sendToReview(message, actualIndex)}
                 />
               ) : (
                 <p>
@@ -243,6 +269,11 @@ export const Transcript = memo(function Transcript({
                   >
                     <Icon name="document" size={12} /> MD
                   </button>
+                  {message.role === 'assistant' && !message.critiqueOf && (message.manuscript || (message.citations?.length ?? 0) > 0) && (
+                    <button type="button" onClick={() => void sendToReview(message, actualIndex)} className="chat-action">
+                      <Icon name="shield" size={12} /> Review
+                    </button>
+                  )}
                   {message.role === 'assistant' && !message.critiqueOf && onCritique && (
                     <button type="button" onClick={() => onCritique(message.id)} className="chat-action">
                       <Icon name="shield" size={12} /> Critique

@@ -1,3 +1,1 @@
-export default function PeerReviewMode() {
-  return <div className="mode mode-peer-review" />;
-}
+export { default } from './PeerReviewMode';
