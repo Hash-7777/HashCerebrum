@@ -41,6 +41,10 @@ export function evidenceScore(record: EvidenceItem): number {
   if (Number.isFinite(year)) {
     score += Math.max(0, Math.min(10, (year - 2010) / 2));
   }
+  // Peer-reviewed indexed records with a PMID or DOI rank above regulatory
+  // entries that lack a journal identifier.
+  if (record.identifiers?.pmid) score += 2;
+  else if (record.identifiers?.doi) score += 1;
   if (record.url) score += 1;
   if (record.snippet && record.snippet.length > 20) score += 1;
   return score;

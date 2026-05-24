@@ -51,7 +51,6 @@ function formatRecords(toolName: string, records: EvidenceItem[], startIndex: nu
   const lines = records.map((record, offset) =>
     formatEvidenceItem(record, {
       index: startIndex + offset,
-      markerPrefix: 'S',
     }),
   );
   return `${toolName} returned ${records.length} record(s):\n${lines.join('\n')}`;
@@ -102,9 +101,15 @@ function systemPrompt(agent: AgentDef): string {
 You report only from records you retrieve with tools in this conversation — never from training memory.
 
 Workflow:
-1. Call rag_search first to reuse what this project already found.
-2. Search the medical databases for your angle of the question. If results are thin or off-target, refine and search again.
-3. Stop calling tools once you have enough, then write a concise findings summary.
+1. Search the medical databases FIRST using your assigned tools (pubmed_search, europepmc_fetch, openalex_query, ctgov_search, etc.). Always execute at least one live database search before anything else.
+2. If results are thin or off-target, refine your query and search again (up to your round limit).
+3. After collecting live evidence, optionally call rag_search to supplement with relevant prior findings from this project.
+4. Write a concise findings summary once you have enough evidence.
+
+Source quality rules:
+- Prioritise records with a PMID or DOI — these are peer-reviewed, indexed literature from journals like NEJM, Lancet, JAMA, BMJ, PLoS Medicine, Cochrane, and similar.
+- openfda and rxnorm supply FDA label and drug-name data; use them only for drug safety, interactions, or pharmacokinetics sub-questions — never as primary clinical evidence.
+- Do not cite blog posts, news articles, conference abstracts without a DOI, or any source lacking a PMID, DOI, or NCT number.
 
 Hard rules:
 - State only facts that came from a tool result in this conversation. Never invent a PMID, DOI, author, year, title, or statistic.
