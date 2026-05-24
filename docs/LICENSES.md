@@ -14,9 +14,40 @@ All bundled binary assets must be reviewed here before each release.
 - **Notes:** No attribution legally required under CC0. We attribute anyway as a courtesy in the in-app `BRAIN_MODEL.source` string.
 - **Audited:** 2026-05-19
 
+## Rust / Cargo dependencies — notable copyleft / patent-sensitive
+
+### Typst (typesetting engine)
+
+- **Crates:** `typst-as-lib 0.15`, `typst-pdf 0.14`, `typst-assets 0.14`
+- **License:** Apache 2.0
+- **Source:** https://github.com/typst/typst
+- **Usage:** Embedded at compile time in `src-tauri`; used to render research manuscripts to PDF. `typst-assets` bundles the Typst built-in font files (used only by the Typst renderer, not as UI fonts).
+- **Obligations under Apache 2.0:**
+  - Retain all NOTICE files from Typst in any binary distribution.
+  - State that modifications were made if you fork the Typst source.
+  - No additional patent grant obligations beyond what Apache 2.0 provides.
+- **NOTICE file location:** Cargo unpacks crates to `~/.cargo/registry/src/`; for release builds the Tauri bundler copies the binary. A `NOTICE` file is not required in the repo itself, only in the distributed binary if one is produced.
+- **Audited:** 2026-05-24
+
 ## Fonts
 
-System fonts only — no bundled font files. The CSS declares Inter / Iowan Old Style / JetBrains Mono as preferences and falls back through `ui-sans-serif`, `Georgia`, `ui-monospace`. No font binary is shipped in `dist/`.
+UI fonts are loaded at runtime from Google Fonts (no binaries bundled in `dist/`). The `index.html` `<link>` tag fetches them on first load; they are not vendored into the repository.
+
+| Family | Google Fonts page | License |
+|---|---|---|
+| Source Serif 4 | fonts.google.com/specimen/Source+Serif+4 | SIL Open Font License 1.1 |
+| Source Sans 3 | fonts.google.com/specimen/Source+Sans+3 | SIL Open Font License 1.1 |
+| IBM Plex Mono | fonts.google.com/specimen/IBM+Plex+Mono | SIL Open Font License 1.1 |
+
+The SIL OFL permits use in applications without restriction. No attribution is legally required in the UI, but the font families are credited here as good practice.
+
+If the app is ever shipped for fully offline use (no network access), the font files must be vendored under `public/fonts/` and a copy of the OFL placed alongside them.
+
+## Static assets
+
+### `public/noise.svg`
+
+An inline SVG containing an `<feTurbulence>` filter node that generates a tileable film-grain overlay. This file has no third-party origin — it was authored for this project and is in the public domain. No attribution required.
 
 ## Icons
 
