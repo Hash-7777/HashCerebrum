@@ -35,6 +35,7 @@ function buildHighlightedHtml(text: string, suggestions: Suggestion[]): string {
     if (s.status !== 'pending') continue;
     const idx = text.indexOf(s.originalText);
     if (idx === -1) continue;
+    if (!s.originalText) continue; // unanchored — no mark to place
     const overlaps = spans.some(
       (sp) => idx < sp.end && idx + s.originalText.length > sp.start,
     );
@@ -238,15 +239,19 @@ function SuggestionCard({
         <span className="suggestion-card-source">{suggestion.description}</span>
       </div>
 
-      <div className="suggestion-diff">
-        <span className="suggestion-diff-before">&ldquo;{suggestion.originalText}&rdquo;</span>
-        {suggestedText && (
-          <>
+      {(suggestion.originalText || suggestedText) && (
+        <div className="suggestion-diff">
+          {suggestion.originalText && (
+            <span className="suggestion-diff-before">&ldquo;{suggestion.originalText}&rdquo;</span>
+          )}
+          {suggestion.originalText && suggestedText && (
             <span className="suggestion-diff-arrow">→</span>
+          )}
+          {suggestedText && (
             <span className="suggestion-diff-after">&ldquo;{suggestedText}&rdquo;</span>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="suggestion-card-actions">
         {suggestedText ? (
@@ -354,11 +359,23 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
     if (!editorRef.current) return;
     const mark = editorRef.current.querySelector<HTMLElement>(`mark[data-sid="${s.id}"]`);
     if (mark) {
+      // Anchored suggestion: replace the <mark> in-place
       saveHistory();
       const span = document.createElement('span');
       span.className = 'doc-fix-accepted';
       span.textContent = s.suggestedText;
       mark.replaceWith(span);
+    } else if (s.originalText && s.suggestedText) {
+      // No mark exists (unanchored that was fixed): find the first occurrence
+      // of the escaped original in innerHTML and replace it
+      const escaped = escapeHtml(s.originalText);
+      if (editorRef.current.innerHTML.includes(escaped)) {
+        saveHistory();
+        editorRef.current.innerHTML = editorRef.current.innerHTML.replace(
+          escaped,
+          `<span class="doc-fix-accepted">${escapeHtml(s.suggestedText)}</span>`,
+        );
+      }
     }
     setSuggestions((prev) =>
       prev.map((x) => (x.id === s.id ? { ...x, status: 'accepted' } : x)),
@@ -382,39 +399,59 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       prev.map((x) => (x.id === s.id ? { ...x, status: 'fixing' } : x)),
     );
     try {
-      const rawText = editorRef.current?.innerText ?? paper.text;
-      const idx     = rawText.indexOf(s.originalText);
-      const ctxStart = Math.max(0, idx - 200);
-      const ctxEnd   = Math.min(rawText.length, (idx < 0 ? 0 : idx) + s.originalText.length + 200);
-      const context  = idx >= 0 ? rawText.slice(ctxStart, ctxEnd) : s.originalText;
+      const rawText   = editorRef.current?.innerText ?? paper.text;
+      const isAnchored = s.originalText.length > 0;
+      const idx       = isAnchored ? rawText.indexOf(s.originalText) : -1;
+      const ctxStart  = Math.max(0, (idx < 0 ? 0 : idx) - 300);
+      const ctxEnd    = Math.min(rawText.length, (idx < 0 ? rawText.length / 2 : idx) + (s.originalText.length || 0) + 300);
+      const context   = rawText.slice(ctxStart, ctxEnd);
 
       const model = agentModelFor('boss');
       let result  = '';
+
+      const systemPrompt = isAnchored
+        ? 'You are a biomedical writing expert. Propose a specific replacement for a flagged passage.\nRespond ONLY with:\nFIXED: <replacement text>\nNo preamble. No extra lines.'
+        : 'You are a biomedical writing expert. A reviewer flagged an issue. Find the EXACT passage in the excerpt that needs changing and propose a replacement.\nRespond ONLY with:\nORIGINAL: <exact passage from the text>\nFIXED: <replacement text>\nNo preamble. No extra lines.';
+
+      const userPrompt = isAnchored
+        ? `Issue: ${s.description}\nOriginal: "${s.originalText}"\n\nContext:\n${context}\n\nProvide a concise replacement.`
+        : `Issue: ${s.description}\n\nDocument excerpt:\n${context}\n\nFind the exact passage and provide a replacement.`;
+
       await streamWithModelChain(
         model,
         {
           messages: [
-            {
-              role: 'system' as const,
-              content:
-                'You are a biomedical writing expert. Propose a specific replacement for a flagged passage. Respond ONLY with:\nFIXED: <replacement text>\nNo preamble. No extra lines.',
-            },
-            {
-              role: 'user' as const,
-              content: `Issue type: ${s.type}\nDescription: ${s.description}\nOriginal: "${s.originalText}"\n\nContext:\n${context}\n\nProvide a concise replacement.`,
-            },
+            { role: 'system' as const, content: systemPrompt },
+            { role: 'user'   as const, content: userPrompt   },
           ],
           temperature: 0.2,
-          maxTokens:   300,
+          maxTokens:   400,
         },
         { onToken: (t) => { result += t; } },
       );
 
-      const m = /^FIXED:\s*(.+)$/m.exec(result.trim());
-      const fixedText = m ? m[1]!.trim() : result.trim();
+      const origMatch  = /^ORIGINAL:\s*(.+)$/m.exec(result.trim());
+      const fixedMatch = /^FIXED:\s*(.+)$/m.exec(result.trim());
+      const newOriginal  = origMatch  ? origMatch[1]!.trim()  : s.originalText;
+      const fixedText    = fixedMatch ? fixedMatch[1]!.trim() : result.trim();
+
+      // For a newly-anchored suggestion: inject a live <mark> into the editor
+      // so the user can see exactly what will change before clicking Accept.
+      if (!isAnchored && newOriginal && editorRef.current) {
+        const escaped = escapeHtml(newOriginal);
+        if (editorRef.current.innerHTML.includes(escaped)) {
+          editorRef.current.innerHTML = editorRef.current.innerHTML.replace(
+            escaped,
+            `<mark class="doc-mark doc-mark--${escapeHtml(s.type)}" data-sid="${escapeHtml(s.id)}">${escaped}</mark>`,
+          );
+        }
+      }
+
       setSuggestions((prev) =>
         prev.map((x) =>
-          x.id === s.id ? { ...x, suggestedText: fixedText, status: 'pending' } : x,
+          x.id === s.id
+            ? { ...x, originalText: newOriginal, suggestedText: fixedText, status: 'pending' }
+            : x,
         ),
       );
     } catch (err) {
@@ -429,12 +466,6 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const enterEditor = () => {
     const agentResults = paper.review?.agentResults ?? paper.reviewAgents ?? [];
     const parsed       = parseSuggestions(agentResults);
-    if (parsed.length === 0) {
-      useToastStore
-        .getState()
-        .show('No inline fixes found — try reviewing again with a larger model', 'error');
-      return;
-    }
     enterDataRef.current = { text: paper.text, sugs: parsed };
     setSuggestions(parsed);
     setShowEditor(true);

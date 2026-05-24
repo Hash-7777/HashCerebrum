@@ -347,6 +347,7 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
   const arrowRe =
     /["""„]([^"""„\n]{2,120})["""„]\s*(?:→|->)\s*["""„]([^"""„\n]{2,300})["""„]/g;
 
+  // Pass 1 — extract explicit arrow-pair fixes ("original" → "replacement")
   for (const agent of agentResults) {
     if (agent.status === 'error' || !agent.text) continue;
     const type: SuggestionType = SUGGESTION_TYPE_MAP[agent.agentId] ?? 'style';
@@ -356,7 +357,6 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
       const original  = match[1]!.trim();
       const suggested = match[2]!.trim();
       if (original === suggested || original.length === 0) continue;
-      // De-duplicate within the same agent
       if (list.some((s) => s.agentId === agent.agentId && s.originalText === original)) continue;
       list.push({
         id: `sug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -369,5 +369,36 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
       });
     }
   }
+
+  // Pass 2 — for agents that produced no arrow pairs, harvest their bullet-point
+  // items (or the first meaningful lines of raw text) as unanchored suggestions.
+  // These surface with a "Get Fix" button that asks the LLM to identify the
+  // specific text and generate a replacement.
+  for (const agent of agentResults) {
+    if (agent.status !== 'done' || !agent.text) continue;
+    // Skip if this agent already contributed anchored suggestions above
+    if (list.some((s) => s.agentId === agent.agentId && s.originalText)) continue;
+    const type: SuggestionType = SUGGESTION_TYPE_MAP[agent.agentId] ?? 'style';
+    // Prefer extracted bullet items; fall back to first meaningful text lines
+    const items =
+      agent.items.length > 0
+        ? agent.items
+        : agent.text
+            .split('\n')
+            .map((l) => l.replace(/^\s*[-•*\d.]+\s*/, '').trim())
+            .filter((l) => l.length > 15);
+    for (const item of items.slice(0, 5)) {
+      list.push({
+        id: `sug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        agentId: agent.agentId,
+        type,
+        description: item,
+        originalText: '',   // unanchored — "Get Fix" will fill this in
+        suggestedText: '',
+        status: 'pending',
+      });
+    }
+  }
+
   return list;
 }
