@@ -304,3 +304,70 @@ export async function runReviewSwarm(
 
   return { ...review, agentResults };
 }
+
+// ── Suggestion types & parser ─────────────────────────────────────────────
+
+export type SuggestionType =
+  | 'grammar'
+  | 'vocabulary'
+  | 'style'
+  | 'originality'
+  | 'statistics'
+  | 'general';
+
+export interface Suggestion {
+  id: string;
+  agentId: string;
+  type: SuggestionType;
+  /** Human-readable label from the agent (e.g. "Grammar & Language"). */
+  description: string;
+  /** The exact text that appears in the document (to anchor the highlight). */
+  originalText: string;
+  /** Proposed replacement. Empty string means the fix hasn't been generated yet. */
+  suggestedText: string;
+  status: 'pending' | 'accepted' | 'skipped' | 'fixing';
+}
+
+const SUGGESTION_TYPE_MAP: Record<string, SuggestionType> = {
+  grammar: 'grammar',
+  vocabulary: 'vocabulary',
+  originality: 'originality',
+  statistics: 'statistics',
+  orchestrator: 'general',
+};
+
+/**
+ * Scan completed agent outputs for arrow-pair suggestions:
+ *   "original text" → "replacement text"
+ * Works with ASCII and curly/typographic quotes.
+ */
+export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[] {
+  const list: Suggestion[] = [];
+  // Matches: "A" → "B" or "A" -> "B" with ASCII or curly/German quotes
+  const arrowRe =
+    /["""„]([^"""„\n]{2,120})["""„]\s*(?:→|->)\s*["""„]([^"""„\n]{2,300})["""„]/g;
+
+  for (const agent of agentResults) {
+    if (agent.status === 'error' || !agent.text) continue;
+    const type: SuggestionType = SUGGESTION_TYPE_MAP[agent.agentId] ?? 'style';
+    arrowRe.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = arrowRe.exec(agent.text)) !== null) {
+      const original  = match[1]!.trim();
+      const suggested = match[2]!.trim();
+      if (original === suggested || original.length === 0) continue;
+      // De-duplicate within the same agent
+      if (list.some((s) => s.agentId === agent.agentId && s.originalText === original)) continue;
+      list.push({
+        id: `sug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        agentId: agent.agentId,
+        type,
+        description: agent.label,
+        originalText: original,
+        suggestedText: suggested,
+        status: 'pending',
+      });
+    }
+  }
+  return list;
+}
