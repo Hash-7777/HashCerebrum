@@ -1,65 +1,125 @@
-/* HashCerebrum design tokens — clinical palette with depth.
-   Deep navy + saturated teal accent + indigo highlight + bone-white.
-   Everything color-related funnels through these custom properties so
-   a theme swap is one file. */
+/* ============================================================
+   HashCerebrum — Atelier theme
+   Sophisticated research instrument aesthetic
+   ============================================================ */
 
 :root {
-  /* Surfaces — layered from deepest (canvas) to highest (overlay) */
-  --hc-bg:            #060a12;
-  --hc-bg-canvas:     #050810;
-  --hc-bg-rail:       #0a121c;
-  --hc-bg-elev:       #111a26;
-  --hc-bg-elev-2:     #16212f;
-  --hc-bg-glass:      rgba(20, 30, 44, 0.62);
-  --hc-bg-glass-strong: rgba(14, 22, 34, 0.84);
+  /* ── Layered ink palette (Obsidian — default) ─────────────
+     The ink scale is SURFACE colors, not text.
+     Text colors are --text-1 through --text-5.            */
+  --ink-0: #0a0a0c;     /* sidebars */
+  --ink-1: #0f1014;     /* status bars, rails */
+  --ink-2: #16181e;     /* chat surface */
+  --ink-3: #1f2128;     /* cards on page */
+  --ink-4: #2a2d36;     /* hovered cards */
+  --ink-5: #3e424c;     /* keylines, chips */
 
-  /* Borders */
-  --hc-border:        rgba(255, 255, 255, 0.08);
-  --hc-border-strong: rgba(255, 255, 255, 0.16);
-  --hc-border-accent: rgba(61, 209, 191, 0.32);
-  --hc-border-warn:   rgba(245, 191, 110, 0.32);
+  --line-soft:   rgba(255, 255, 255, 0.07);
+  --line:        rgba(255, 255, 255, 0.13);
+  --line-strong: rgba(255, 255, 255, 0.22);
 
-  /* Type — contrast bumped so the UI doesn't read pale */
-  --hc-fg:            #f1f6fc;
-  --hc-fg-strong:     #ffffff;
-  --hc-fg-muted:      #9caabd;
-  --hc-fg-dim:        #65728a;
+  /* ── Text scale ─────────────────────────────────────────── */
+  --text-1: #f5f5f7;
+  --text-2: #c8cad0;
+  --text-3: #8c8f97;
+  --text-4: #5d6069;
+  --text-5: #3e4047;
 
-  /* Accents — saturated, distinct, calibrated for dark surfaces */
-  --hc-accent:        #3dd1bf;   /* primary surgical teal */
-  --hc-accent-strong: #6ef3e1;   /* hover / glow peak */
-  --hc-accent-soft:   rgba(61, 209, 191, 0.16);
-  --hc-secondary:     #8b9eff;   /* indigo for system + structure */
+  /* ── Accent — sage mint ──────────────────────────────────── */
+  --accent:      #82e0c2;
+  --accent-soft: rgba(130, 224, 194, 0.14);
+  --accent-line: rgba(130, 224, 194, 0.28);
+  --accent-glow: rgba(130, 224, 194, 0.22);
+  --accent-ink:  #0c1c17;
+
+  /* ── Warm secondary — amber/copper ─────────────────────── */
+  --warm:      #e8b26a;
+  --warm-soft: rgba(232, 178, 106, 0.13);
+  --warm-line: rgba(232, 178, 106, 0.32);
+
+  /* ── Specialist accents ──────────────────────────────────── */
+  --spec-lit:    #5cd1e8;
+  --spec-dent:   #c89366;
+  --spec-health: #b58fd1;
+  --spec-policy: #e8b26a;
+  --spec-bio:    #82e0c2;
+
+  --danger: #e87a7a;
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --f-display: "Source Serif 4", "Source Serif Pro", "Newsreader", Georgia, serif;
+  --f-sans:    "Source Sans 3", "Source Sans Pro", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --f-mono:    "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Geometry — sharp, architectural ────────────────────── */
+  --r-sm:  3px;
+  --r:     4px;
+  --r-lg:  6px;
+  --r-xl:  8px;
+  --r-2xl: 10px;
+
+  /* ── Elevation ───────────────────────────────────────────── */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow:      0 4px 14px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-lg:   0 18px 48px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  --shadow-glow: 0 0 0 1px var(--accent-line), 0 0 32px var(--accent-glow);
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --ease:     cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ══════════════════════════════════════════════════════════
+     Backwards-compatible aliases — all existing --hc-* CSS
+     continues to work without modifications.
+     ══════════════════════════════════════════════════════════ */
+  --hc-bg:              var(--ink-2);
+  --hc-bg-canvas:       var(--ink-0);
+  --hc-bg-rail:         var(--ink-1);
+  --hc-bg-elev:         var(--ink-3);
+  --hc-bg-elev-2:       var(--ink-4);
+  --hc-bg-glass:        rgba(22, 24, 30, 0.62);
+  --hc-bg-glass-strong: rgba(15, 16, 20, 0.84);
+
+  --hc-border:        var(--line);
+  --hc-border-strong: var(--line-strong);
+  --hc-border-accent: var(--accent-line);
+  --hc-border-warn:   var(--warm-line);
+
+  --hc-fg:       var(--text-1);
+  --hc-fg-strong: var(--text-1);
+  --hc-fg-muted:  var(--text-3);
+  --hc-fg-dim:    var(--text-4);
+
+  --hc-accent:        var(--accent);
+  --hc-accent-strong: var(--accent);
+  --hc-accent-soft:   var(--accent-soft);
+  --hc-secondary:     #8b9eff;
   --hc-secondary-soft: rgba(139, 158, 255, 0.18);
-  --hc-warn:          #f5bf6e;
-  --hc-danger:        #ff7a8a;
-  --hc-info:          #6db4ff;
-  --hc-success:       #5cd0a6;
+  --hc-warn:    var(--warm);
+  --hc-danger:  var(--danger);
+  --hc-success: #5cd0a6;
+  --hc-info:    #6db4ff;
 
-  /* Signature gradients — used sparingly on primary controls + brand */
   --hc-grad-primary:
-    linear-gradient(135deg, #3dd1bf 0%, #5fb3a8 38%, #8b9eff 100%);
+    linear-gradient(135deg, var(--accent) 0%, #5fb3a8 38%, #8b9eff 100%);
   --hc-grad-primary-hover:
-    linear-gradient(135deg, #6ef3e1 0%, #3dd1bf 42%, #a8b8ff 100%);
+    linear-gradient(135deg, color-mix(in oklab, var(--accent) 85%, white) 0%, var(--accent) 42%, #a8b8ff 100%);
   --hc-grad-rim:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
 
-  /* Region halo overlays — applied on top of mesh emissives */
-  --hc-glow-teal:     0 0 24px rgba(61, 209, 191, 0.45);
-  --hc-glow-indigo:   0 0 24px rgba(139, 158, 255, 0.45);
+  --hc-glow-teal:   0 0 24px var(--accent-glow);
+  --hc-glow-indigo: 0 0 24px rgba(139, 158, 255, 0.45);
 
-  /* Typography */
-  --hc-font-sans:  "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --hc-font-serif: "Iowan Old Style", "Source Serif Pro", "Georgia", serif;
-  --hc-font-mono:  "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --hc-font-sans:  var(--f-sans);
+  --hc-font-serif: var(--f-display);
+  --hc-font-mono:  var(--f-mono);
 
-  /* Radii */
-  --hc-radius-sm: 6px;
-  --hc-radius:    10px;
-  --hc-radius-lg: 14px;
+  --hc-radius-sm:   var(--r-sm);
+  --hc-radius:      var(--r);
+  --hc-radius-lg:   var(--r-xl);
   --hc-radius-pill: 999px;
 
-  /* Spacing scale */
+  /* Spacing scale retained for the few places that reference it */
   --hc-space-1: 4px;
   --hc-space-2: 8px;
   --hc-space-3: 12px;
@@ -69,14 +129,107 @@
   --hc-space-8: 32px;
   --hc-space-10: 40px;
 
-  /* Shadows — depth ladder. Inner glow on glass surfaces. */
-  --hc-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --hc-shadow-2: 0 8px 28px rgba(0, 0, 0, 0.55);
-  --hc-shadow-3: 0 20px 60px rgba(0, 0, 0, 0.65);
-  --hc-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --hc-shadow-focus: 0 0 0 2px rgba(61, 209, 191, 0.4);
+  --hc-shadow-1:      var(--shadow-sm);
+  --hc-shadow-2:      var(--shadow);
+  --hc-shadow-3:      var(--shadow-lg);
+  --hc-shadow-inset:  inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --hc-shadow-focus:  var(--shadow-glow);
 
-  /* Motion */
-  --hc-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --hc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --hc-ease:     var(--ease);
+  --hc-ease-out: var(--ease-out);
+
+  /* Generic surface/border aliases used before the token system was finalized */
+  --surface-1: var(--ink-2);
+  --surface-2: var(--ink-3);
+  --surface-3: var(--ink-4);
+  --border:    var(--line);
+  --font-mono: var(--f-mono);
+}
+
+/* ── Theme variants ────────────────────────────────────────── */
+
+[data-theme="aurora"] {
+  --ink-0: #06070d;
+  --ink-1: #0a0c16;
+  --ink-2: #10131f;
+  --ink-3: #161a29;
+  --ink-4: #1c2236;
+  --ink-5: #262e48;
+  --accent:      #a8b5ff;
+  --accent-soft: rgba(168, 181, 255, 0.14);
+  --accent-line: rgba(168, 181, 255, 0.3);
+  --accent-glow: rgba(168, 181, 255, 0.24);
+  --warm:      #f3a4c4;
+  --warm-soft: rgba(243, 164, 196, 0.12);
+  --warm-line: rgba(243, 164, 196, 0.32);
+}
+
+[data-theme="petrol"] {
+  --ink-0: #06090a;
+  --ink-1: #0a0f12;
+  --ink-2: #11181b;
+  --ink-3: #1a2428;
+  --ink-4: #243135;
+  --ink-5: #38484e;
+  --line-soft:   rgba(180, 220, 230, 0.06);
+  --line:        rgba(180, 220, 230, 0.13);
+  --line-strong: rgba(180, 220, 230, 0.22);
+  --text-1: #eef3f4;
+}
+
+[data-theme="sandstone"] {
+  --ink-0: #0d0b08;
+  --ink-1: #14110d;
+  --ink-2: #1c1814;
+  --ink-3: #28231d;
+  --ink-4: #342e26;
+  --ink-5: #4a4137;
+  --line-soft:   rgba(255, 240, 220, 0.06);
+  --line:        rgba(255, 240, 220, 0.13);
+  --line-strong: rgba(255, 240, 220, 0.22);
+  --text-1: #f6efe4;
+  --text-2: #d4cbbe;
+  --text-3: #8e8475;
+  --text-4: #5e5648;
+  --text-5: #3f3a31;
+}
+
+[data-theme="forest"] {
+  --ink-0: #07090a;
+  --ink-1: #0b110d;
+  --ink-2: #131a14;
+  --ink-3: #1c241e;
+  --ink-4: #283228;
+  --ink-5: #3b463c;
+  --line-soft:   rgba(220, 240, 220, 0.06);
+  --line:        rgba(220, 240, 220, 0.13);
+  --line-strong: rgba(220, 240, 220, 0.22);
+  --text-1: #f0f4ef;
+}
+
+[data-theme="parchment"] {
+  --ink-0: #efe9dc;
+  --ink-1: #f4efe4;
+  --ink-2: #ede5d2;
+  --ink-3: #e6dcc4;
+  --ink-4: #ddd0b5;
+  --ink-5: #c8b896;
+  --line-soft:   rgba(40, 28, 12, 0.06);
+  --line:        rgba(40, 28, 12, 0.1);
+  --line-strong: rgba(40, 28, 12, 0.2);
+  --text-1: #1c1810;
+  --text-2: #3c352a;
+  --text-3: #6b6354;
+  --text-4: #8a8275;
+  --text-5: #a8a092;
+  --accent:      #2a6f5b;
+  --accent-soft: rgba(42, 111, 91, 0.12);
+  --accent-line: rgba(42, 111, 91, 0.28);
+  --accent-glow: rgba(42, 111, 91, 0.18);
+  --accent-ink:  #ffffff;
+  --warm:      #a85a32;
+  --warm-soft: rgba(168, 90, 50, 0.1);
+  --warm-line: rgba(168, 90, 50, 0.3);
+  --shadow:    0 4px 14px rgba(60, 40, 20, 0.08), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --shadow-lg: 0 18px 48px rgba(60, 40, 20, 0.12), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
 }
