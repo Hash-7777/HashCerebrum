@@ -198,8 +198,8 @@
 .brain-workspace {
   display: grid;
   grid-template-columns: minmax(390px, 1fr) minmax(300px, 360px);
-  gap: 14px;
-  padding: 14px;
+  gap: 0;
+  padding: 0;
   min-width: 0;
 }
 .brain-workspace .eyebrow {

@@ -11,6 +11,8 @@
        grows to fit every panel rather than scrolling on its own. */
     min-height: 780px;
     overflow-y: visible;
+    border-left: none;
+    border-top: 1px solid var(--line);
   }
 }
 

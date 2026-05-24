@@ -221,11 +221,11 @@ export const Transcript = memo(function Transcript({
                 {isAi ? (
                   <span className="ai-mark logo-mask" style={maskStyle} aria-hidden="true" />
                 ) : (
-                  <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-                    <circle cx="18" cy="18" r="17.5" fill="var(--ink-3)" stroke="var(--line-strong)" strokeWidth="1" />
-                    <g stroke="var(--text-2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none">
-                      <circle cx="18" cy="15" r="4.2" />
-                      <path d="M9.5 29.5 Q12.2 22.6 18 22.6 Q23.8 22.6 26.5 29.5" />
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+                    <circle cx="14" cy="14" r="13.5" fill="var(--ink-3)" stroke="var(--line-strong)" strokeWidth="1" />
+                    <g stroke="var(--text-2)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none">
+                      <circle cx="14" cy="11.5" r="3.3" />
+                      <path d="M7 23 Q9.4 17.5 14 17.5 Q18.6 17.5 21 23" />
                     </g>
                   </svg>
                 )}
