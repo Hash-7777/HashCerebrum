@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
+import { useThemeStore, applyTheme } from '@core/store/themeStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
@@ -36,12 +37,17 @@ function activeDevTool(): string | null {
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  const theme = useThemeStore((s) => s.theme);
   const refreshModels = useModelCatalogStore((s) => s.refreshAll);
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
   const hydrateChats = useChatHistoryStore((s) => s.hydrate);
   const hydrateProjects = useProjectStore((s) => s.hydrate);
   const hydrateRag = useRagStore((s) => s.hydrate);
   const hydrateAgentModels = useAgentModelStore((s) => s.hydrate);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     void refreshModels();

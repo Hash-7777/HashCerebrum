@@ -236,8 +236,8 @@
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius);
   background:
-    linear-gradient(rgba(61, 209, 191, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(139, 158, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--accent) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--hc-secondary) 3%, transparent) 1px, transparent 1px),
     radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.034), rgba(0, 0, 0, 0) 64%),
     var(--hc-bg-canvas);
   background-size: 36px 36px, 36px 36px, auto, auto;
@@ -406,7 +406,7 @@
   background: var(--hc-accent);
 }
 .memory-graph-swatch[data-kind='evidence'] {
-  background: linear-gradient(135deg, #3dd1bf, #f5b971);
+  background: linear-gradient(135deg, var(--accent), var(--warm));
 }
 .memory-graph-swatch[data-kind='answer'] {
   background: var(--hc-secondary);
@@ -451,7 +451,7 @@
   display: grid;
   gap: 8px;
   padding: 11px;
-  border: 1px solid rgba(61, 209, 191, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: var(--hc-radius);
   background: rgba(3, 7, 12, 0.72);
   color: var(--hc-fg-muted);
@@ -477,9 +477,9 @@
 .memory-graph-arranger header strong {
   flex: none;
   padding: 2px 7px;
-  border: 1px solid rgba(61, 209, 191, 0.24);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   border-radius: var(--hc-radius-pill);
-  background: rgba(61, 209, 191, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--hc-accent-strong);
   font: 9px var(--hc-font-mono);
   letter-spacing: 0.08em;
@@ -586,9 +586,9 @@
 .memory-graph-detail-topic {
   margin: 0;
   padding: 5px 7px;
-  border: 1px solid rgba(61, 209, 191, 0.16);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
   border-radius: var(--hc-radius-sm);
-  background: rgba(61, 209, 191, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
   color: var(--hc-accent-strong);
   font-size: 11px;
   line-height: 1.35;

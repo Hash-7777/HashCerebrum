@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { APP_NAME, APP_VERSION } from '@config/constants';
+import { useThemeStore, THEMES } from '@core/store/themeStore';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
 import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -36,6 +37,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const availableModels = modelGroups.flatMap((group) => group.models);
   const totalProjects = useProjectStore((s) => s.projects.length);
   const totalRuns = useResearchRunStore((s) => s.runs.length);
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -173,6 +176,26 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <span>{totalRuns}</span>
           </li>
         </ul>
+      </section>
+
+      <section className="settings-theme" aria-label="Appearance">
+        <header>
+          <strong>Appearance</strong>
+          <span>{THEMES.find((t) => t.id === theme)?.label}</span>
+        </header>
+        <div className="settings-theme-swatches">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="settings-theme-swatch"
+              data-active={theme === t.id}
+              title={t.label}
+              onClick={() => setTheme(t.id)}
+              style={{ '--swatch-color': t.swatch } as React.CSSProperties}
+            />
+          ))}
+        </div>
       </section>
 
       <div className="settings-model-tools">

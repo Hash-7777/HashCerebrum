@@ -27,10 +27,10 @@
   user-select: none;
 }
 .execution-trace.expanded .execution-trace-header { border-bottom-color: var(--hc-border); }
-.execution-trace-header:hover { background: rgba(61, 209, 191, 0.045); }
+.execution-trace-header:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .execution-trace-header:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(61, 209, 191, 0.42);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 .execution-trace-dot {
@@ -43,7 +43,7 @@
 }
 .execution-trace-dot[data-state="running"] {
   background: var(--hc-accent);
-  box-shadow: 0 0 7px rgba(61, 209, 191, 0.72);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 72%, transparent);
   animation: trace-dot-blink 1s ease-in-out infinite;
 }
 .execution-trace-dot[data-state="done"] { background: var(--hc-success); }
@@ -82,7 +82,7 @@
   background: transparent;
   cursor: pointer;
 }
-.execution-trace-clear:hover { background: rgba(61, 209, 191, 0.10); }
+.execution-trace-clear:hover { background: var(--accent-soft); }
 .execution-trace-header > svg {
   flex: 0 0 auto;
   color: var(--hc-fg-dim);
@@ -111,7 +111,7 @@
 }
 .execution-trace-entry .trace-time {
   flex: 0 0 auto;
-  color: rgba(61, 209, 191, 0.52);
+  color: color-mix(in srgb, var(--accent) 52%, transparent);
 }
 .execution-trace-entry .trace-agent {
   flex: 0 0 98px;

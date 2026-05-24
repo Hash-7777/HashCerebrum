@@ -232,4 +232,7 @@
   --warm-line: rgba(168, 90, 50, 0.3);
   --shadow:    0 4px 14px rgba(60, 40, 20, 0.08), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   --shadow-lg: 0 18px 48px rgba(60, 40, 20, 0.12), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --hc-bg-glass:        rgba(237, 229, 210, 0.72);
+  --hc-bg-glass-strong: rgba(244, 239, 228, 0.92);
+  color-scheme: light;
 }

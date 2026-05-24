@@ -416,3 +416,48 @@
   font-size: 10.5px;
   line-height: 1.35;
 }
+
+/* ── Theme picker ─────────────────────────────────────────── */
+
+.settings-theme {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius);
+  background: rgba(11, 17, 26, 0.55);
+}
+.settings-theme header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-theme header strong { font-size: 12px; color: var(--hc-fg); }
+.settings-theme header span {
+  font: 11px var(--hc-font-mono);
+  color: var(--hc-fg-muted);
+}
+.settings-theme-swatches {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.settings-theme-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-lg);
+  border: 2px solid transparent;
+  background: var(--swatch-color, var(--ink-2));
+  cursor: pointer;
+  transition: border-color 0.14s, transform 0.14s, box-shadow 0.14s;
+  flex-shrink: 0;
+}
+.settings-theme-swatch:hover {
+  transform: scale(1.1);
+  border-color: var(--line-strong);
+}
+.settings-theme-swatch[data-active='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-line);
+}

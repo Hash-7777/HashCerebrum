@@ -14,9 +14,9 @@
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius);
   background:
-    radial-gradient(520px 360px at 50% 45%, rgba(61, 209, 191, 0.14), transparent 68%),
-    radial-gradient(420px 280px at 18% 88%, rgba(139, 158, 255, 0.08), transparent 70%),
-    rgba(4, 8, 14, 0.92);
+    radial-gradient(520px 360px at 50% 45%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 68%),
+    radial-gradient(420px 280px at 18% 88%, color-mix(in srgb, var(--hc-secondary) 8%, transparent), transparent 70%),
+    var(--ink-0);
   box-shadow: var(--hc-shadow-2), var(--hc-shadow-inset);
 }
 .brain-model-panel .brain-stage {
@@ -100,8 +100,8 @@
   white-space: nowrap;
 }
 .agent-panel-metrics span[data-tone="active"] {
-  border-color: rgba(61, 209, 191, 0.34);
-  background: rgba(61, 209, 191, 0.10);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: var(--accent-soft);
   color: var(--hc-accent-strong);
 }
 .agent-panel-metrics span[data-tone="error"] {
@@ -131,12 +131,12 @@
   background: rgba(3, 7, 12, 0.34);
 }
 .agent-panel li[data-kind="boss"] {
-  background: linear-gradient(90deg, rgba(61, 209, 191, 0.10), rgba(139, 158, 255, 0.045));
-  border-color: rgba(61, 209, 191, 0.18);
+  background: linear-gradient(90deg, var(--accent-soft), color-mix(in srgb, var(--hc-secondary) 5%, transparent));
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .agent-panel li[data-state="running"] {
-  background: rgba(95, 179, 168, 0.12);
-  border-color: rgba(95, 179, 168, 0.3);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .agent-panel li[data-state="error"] {
   background: rgba(255, 107, 107, 0.09);
