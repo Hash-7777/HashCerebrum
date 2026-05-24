@@ -4,10 +4,8 @@ import { Icon, type IconName } from '@ui/icons';
 
 const MODE_ICONS: Record<ModeId, IconName> = {
   brain: 'brain',
-  resources: 'book',
   memory: 'database',
-  review: 'shield',
-  protocol: 'flask',
+  peer_review: 'shield',
 };
 
 export function ModeRail() {

@@ -5,7 +5,6 @@ import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
-import { useResourcesStore } from '@core/store/resourcesStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { Icon } from '@ui/icons';
@@ -35,7 +34,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const refreshProviderModels = useModelCatalogStore((s) => s.refreshProvider);
   const removeProviderModels = useModelCatalogStore((s) => s.removeProvider);
   const availableModels = modelGroups.flatMap((group) => group.models);
-  const totalResources = useResourcesStore((s) => s.resources.length);
   const totalProjects = useProjectStore((s) => s.projects.length);
   const totalRuns = useResearchRunStore((s) => s.runs.length);
 
@@ -165,10 +163,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <li>
             <span>Models</span>
             <span>{availableModels.length}</span>
-          </li>
-          <li>
-            <span>Resources</span>
-            <span>{totalResources}</span>
           </li>
           <li>
             <span>Projects</span>

@@ -31,28 +31,16 @@ export const MODES = defineModes([
     description: '3D anatomical brain — regions light per active agent + topic',
   },
   {
-    id: 'resources',
-    label: 'Resources',
-    shortcut: '⌘2',
-    description: 'Saved papers, collections, tags, notes, export',
-  },
-  {
     id: 'memory',
     label: 'Memory',
-    shortcut: '⌘3',
+    shortcut: '⌘2',
     description: "The active project's saved research memory — evidence and answers",
   },
   {
-    id: 'review',
-    label: 'Review',
-    shortcut: '⌘4',
-    description: 'Structured quality assessment — RoB 2, ROBINS-I, QUADAS-2',
-  },
-  {
-    id: 'protocol',
-    label: 'Protocol',
-    shortcut: '⌘5',
-    description: 'Study design and PICO-driven protocol drafting',
+    id: 'peer_review',
+    label: 'Peer Review',
+    shortcut: '⌘3',
+    description: 'AI-driven peer review of generated research papers — score, critique, and publication guidance',
   },
 ]);
 

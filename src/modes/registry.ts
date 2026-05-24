@@ -5,10 +5,8 @@ type ModeComponent = LazyExoticComponent<ComponentType>;
 
 const MODE_COMPONENTS: Record<ModeId, ModeComponent> = {
   brain: lazy(() => import('@features/brain')),
-  resources: lazy(() => import('@features/resources')),
   memory: lazy(() => import('@features/memory')),
-  review: lazy(() => import('@features/review')),
-  protocol: lazy(() => import('@features/protocol')),
+  peer_review: lazy(() => import('@features/peer_review')),
 };
 
 export function getModeComponent(mode: ModeId): ModeComponent {

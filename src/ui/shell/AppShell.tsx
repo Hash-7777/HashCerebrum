@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
-import { useResourcesStore } from '@core/store/resourcesStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
@@ -38,7 +37,6 @@ export function AppShell() {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
   const refreshModels = useModelCatalogStore((s) => s.refreshAll);
-  const hydrateResources = useResourcesStore((s) => s.hydrate);
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
   const hydrateChats = useChatHistoryStore((s) => s.hydrate);
   const hydrateProjects = useProjectStore((s) => s.hydrate);
@@ -47,7 +45,6 @@ export function AppShell() {
 
   useEffect(() => {
     void refreshModels();
-    void hydrateResources();
     void hydrateResearchRuns();
     void hydrateRag();
     void hydrateAgentModels();
@@ -62,7 +59,6 @@ export function AppShell() {
     hydrateChats,
     hydrateProjects,
     hydrateRag,
-    hydrateResources,
     hydrateResearchRuns,
     refreshModels,
   ]);
