@@ -8,7 +8,7 @@ export const APP_VERSION = '0.1.0';
 // Raising these requires updating the tuple literal AND the readme.
 // Unbounded module growth is locked out at compile time here.
 export const MAX_MODES = 5 as const;
-export const MAX_AGENTS = 6 as const;
+export const MAX_AGENTS = 8 as const;
 
 // Keychain key names. Used by platform/tauri/keychain.ts on both sides.
 export const KEY = {

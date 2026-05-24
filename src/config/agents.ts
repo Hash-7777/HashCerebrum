@@ -1,5 +1,5 @@
-// Agent roster — a six-slot tuple: one boss plus five topic specialists.
-// TypeScript enforces the cap (a seventh entry is a compile error). The
+// Agent roster — an eight-slot tuple: one boss plus seven topic specialists.
+// TypeScript enforces the cap (a ninth entry is a compile error). The
 // boss is the single agent the user talks to; it routes each message and
 // delegates research to the relevant specialists, then synthesizes.
 
@@ -11,7 +11,9 @@ export type AgentId =
   | 'trials'
   | 'literature'
   | 'dentistry'
-  | 'public_health';
+  | 'public_health'
+  | 'drug_interactions'
+  | 'data_scientist';
 
 // Maps to anatomical regions in modes/brain/regions.ts. Each agent claims
 // one base region for its glow. Topic detection adds accents.
@@ -112,6 +114,28 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     topicHint: 'epidemiology, prevention, vaccines, screening, population health, outbreaks',
     tools: SPECIALIST_TOOLS,
     regionBinding: 'occipital', // wide-field overview
+  },
+  {
+    id: 'drug_interactions',
+    label: 'Drug interactions',
+    kind: 'specialist',
+    specialty:
+      'Drug-drug interactions, contraindications, adverse drug events, and pharmacokinetic conflicts sourced from FDA labels and peer-reviewed safety literature.',
+    topicHint:
+      'drug interactions, contraindications, adverse drug reactions, drug combinations, polypharmacy, toxicology, FDA drug events',
+    tools: ['rag_search', 'openfda_query', 'rxnorm_lookup', 'pubmed_search', 'europepmc_fetch'],
+    regionBinding: 'amygdala', // threat and alarm processing
+  },
+  {
+    id: 'data_scientist',
+    label: 'Statistics & data',
+    kind: 'specialist',
+    specialty:
+      'Published statistical analyses, effect sizes, confidence intervals, sample sizes, and quantitative figures from clinical and epidemiological literature.',
+    topicHint:
+      'statistics, data analysis, effect sizes, confidence intervals, p-values, sample size, hazard ratios, meta-analysis, figures, tables, quantitative results',
+    tools: SPECIALIST_TOOLS,
+    regionBinding: 'thalamus', // data relay and integration
   },
 ];
 
