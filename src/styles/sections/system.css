@@ -7,12 +7,15 @@
     min-height: 460px;
   }
   .brain-side {
-    /* One-column layout: the whole workspace scrolls, so the side column
-       grows to fit every panel rather than scrolling on its own. */
-    min-height: 780px;
-    overflow-y: visible;
+    /* One-column layout: grows to natural height; workspace container scrolls. */
+    min-height: 600px;
+    height: auto;
+    overflow: visible;
     border-left: none;
     border-top: 1px solid var(--line);
+  }
+  .brain-model-panel {
+    height: clamp(200px, 40vw, 300px);
   }
 }
 

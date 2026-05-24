@@ -3,11 +3,11 @@
 .brain-side {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 14px 12px;
+  /* Panel itself does NOT scroll — only inner widgets scroll */
+  overflow: hidden;
+  padding: 10px 10px 12px;
   background: var(--ink-0);
   border-left: 1px solid var(--line);
 }
@@ -20,7 +20,7 @@
 
 .brain-model-panel {
   position: relative;
-  flex: none;
+  flex-shrink: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
@@ -29,8 +29,8 @@
     radial-gradient(circle at 70% 80%, rgba(232, 178, 106, 0.14), transparent 50%),
     linear-gradient(180deg, var(--ink-3), var(--ink-2));
   box-shadow: var(--shadow-lg);
-  aspect-ratio: 1 / 1;
-  min-height: 160px;
+  /* Fixed compact height — no aspect-ratio so the panel height is predictable */
+  height: clamp(150px, 22vh, 190px);
 }
 .brain-model-panel .brain-stage { height: 100%; }
 .brain-model-panel .brain-stage::after { opacity: 0.28; }
@@ -58,11 +58,12 @@
 
 .source-panel {
   flex: 1;
-  min-height: 280px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  overflow: hidden;
 }
 
 /* ── Agent swarm table ────────────────────────────────────── */
@@ -81,8 +82,9 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 12px 14px 8px;
+  padding: 8px 12px 6px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .swarm-label {
   font-family: var(--f-mono);
@@ -107,8 +109,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .progress-track {
   flex: 1;
@@ -142,24 +145,26 @@
 
 .swarm-row {
   display: grid;
-  grid-template-columns: 14px 1fr auto auto;
-  gap: 8px;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 7px;
   align-items: center;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
 }
 .swarm-row:last-child { border-bottom: none; }
 
 .swarm-header-row {
-  grid-template-columns: 14px 1fr auto auto;
-  padding: 5px 12px;
+  grid-template-columns: 12px 1fr auto auto;
+  padding: 4px 10px;
   font-family: var(--f-mono);
-  font-size: 8.5px;
+  font-size: 8px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-4);
   background: rgba(255, 255, 255, 0.018);
   border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 .swarm-header-row > span:first-child { visibility: hidden; }
 .swarm-header-row > .num { text-align: right; }
@@ -243,13 +248,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 5px 10px;
   border-top: 1px solid var(--line);
   font-family: var(--f-mono);
-  font-size: 9.5px;
+  font-size: 8.5px;
   color: var(--text-3);
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 .swarm-foot .dots-fill {
   flex: 1;
@@ -263,7 +269,7 @@
   flex-shrink: 0;
   border: 1px solid var(--line);
   background: var(--ink-1);
-  padding: 12px 14px;
+  padding: 9px 11px;
   display: flex;
   flex-direction: column;
   gap: 0;

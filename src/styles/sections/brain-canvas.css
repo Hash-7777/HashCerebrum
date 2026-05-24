@@ -197,7 +197,7 @@
 
 .brain-workspace {
   display: grid;
-  grid-template-columns: minmax(390px, 1fr) minmax(300px, 360px);
+  grid-template-columns: minmax(390px, 1fr) minmax(248px, 278px);
   gap: 0;
   padding: 0;
   min-width: 0;
