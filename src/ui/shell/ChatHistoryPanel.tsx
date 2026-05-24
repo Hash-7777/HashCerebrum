@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
+import { useModeStore } from '@core/store/modeStore';
 import { Icon } from '@ui/icons';
 
 function groupLabel(createdAt: string | undefined): 'today' | 'week' | 'earlier' {
@@ -24,6 +25,8 @@ export function ChatHistoryPanel() {
   const deleteChat = useChatHistoryStore((s) => s.deleteChat);
   const renameChat = useChatHistoryStore((s) => s.renameChat);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
+
+  const setMode = useModeStore((s) => s.setMode);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -82,7 +85,12 @@ export function ChatHistoryPanel() {
                 <div
                   key={chat.id}
                   className={`chat-item${chat.id === activeChatId ? ' active' : ''}`}
-                  onClick={() => { if (editingId !== chat.id) selectChat(chat.id); }}
+                  onClick={() => {
+                    if (editingId !== chat.id) {
+                      selectChat(chat.id);
+                      setMode('brain');
+                    }
+                  }}
                 >
                   <div className="chat-line" />
                   <div className="chat-body">

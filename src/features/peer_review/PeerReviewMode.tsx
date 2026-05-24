@@ -70,15 +70,8 @@ export default function PeerReviewMode() {
           <Icon name="document" size={40} />
           <p>No papers yet</p>
           <p className="peer-review-empty-hint">
-            Import a PDF or use the <strong>Review</strong> button on any Brain research result.
+            Use <strong>Import PDF</strong> above, or click <strong>Review</strong> on any Brain research result.
           </p>
-          <button
-            type="button"
-            className="peer-review-import-btn"
-            onClick={() => fileRef.current?.click()}
-          >
-            <Icon name="plus" size={14} /> Import PDF
-          </button>
         </div>
       ) : (
         <div className="peer-review-grid">

@@ -87,6 +87,7 @@ function isPdfBinary(text: string): boolean {
 }
 
 function DocumentPane({ paper }: { paper: ReviewedPaper }) {
+  // HTML manuscript preview (Brain-generated papers) — most reliable path
   if (paper.htmlContent) {
     return (
       <iframe
@@ -98,30 +99,35 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
-  // For uploaded PDFs the extracted text is binary garbage — show a nice card.
-  if (paper.source === 'upload' && isPdfBinary(paper.text)) {
+  // Uploaded PDF with a blob URL — use <object> so WKWebView renders it natively
+  if (paper.blobUrl && isPdfBinary(paper.text)) {
     return (
-      <div className="review-upload-placeholder">
-        <Icon name="document" size={40} />
-        <strong>{paper.title}</strong>
-        <p>
-          PDF preview is unavailable in this environment. The AI review was run on
-          the best-effort extracted text.
-        </p>
-        {paper.blobUrl && (
-          <a
-            href={paper.blobUrl}
-            download={paper.filename}
-            className="review-upload-download"
-          >
-            <Icon name="download" size={13} /> Download original PDF
-          </a>
-        )}
+      <div className="review-pdf-frame-wrap">
+        <object
+          data={paper.blobUrl}
+          type="application/pdf"
+          className="review-pdf-frame"
+          aria-label={paper.title}
+        >
+          {/* Fallback if the browser cannot render inline */}
+          <div className="review-upload-placeholder">
+            <Icon name="document" size={40} />
+            <strong>{paper.title}</strong>
+            <p>Inline PDF rendering is unavailable. The AI review ran on extracted text.</p>
+            <a
+              href={paper.blobUrl}
+              download={paper.filename}
+              className="review-upload-download"
+            >
+              <Icon name="download" size={13} /> Download original PDF
+            </a>
+          </div>
+        </object>
       </div>
     );
   }
 
-  // Readable extracted text — format it nicely
+  // Plain-text extracted content — render as readable pre
   return (
     <div className="review-pdf-text">
       <pre>{paper.text.slice(0, 40_000)}</pre>
@@ -173,7 +179,10 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       if ((error as Error)?.name === 'AbortError') return;
       const detail = error instanceof Error ? error.message : String(error);
       setReviewError(paper.id, detail);
-      useToastStore.getState().show('Peer review failed', 'error');
+      useToastStore.getState().show(`Peer review failed: ${detail}`, 'error');
+    } finally {
+      // Safety net: always clear the streaming flag so the spinner never freezes
+      setReviewStreaming(paper.id, false);
     }
   };
 

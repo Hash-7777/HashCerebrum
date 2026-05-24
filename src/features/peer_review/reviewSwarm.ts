@@ -3,8 +3,27 @@
 // parsed into the full PaperReview shape.
 
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
+import { useAgentStore } from '@core/store/agentStore';
 import type { AgentReviewResult, PaperReview } from '@core/store/peerReviewStore';
 import { parseReviewResponse } from './reviewEngine';
+
+/** Per-agent hard timeout (ms). If an agent takes longer it is marked as failed. */
+const AGENT_TIMEOUT_MS = 55_000;
+
+/** Race a promise against a timeout rejection. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms),
+    ),
+  ]);
+}
+
+function trace(phase: string, detail: string) {
+  // Cast to satisfy AgentId | 'system' — peer-review uses 'system' sentinel
+  useAgentStore.getState().push({ agentId: 'system', phase, detail });
+}
 
 const MAX_CHARS = 16_000;
 
@@ -208,8 +227,11 @@ export async function runReviewSwarm(
 ): Promise<PaperReview> {
   const msg = userMsg(paperText);
 
-  const tasks = REVIEW_SWARM_AGENTS.map(async (def) => {
+  trace('start', `[Peer Review] swarm started — ${REVIEW_SWARM_AGENTS.length} agents`);
+
+  const agentTask = async (def: ReviewAgentDef) => {
     onPatch(def.agentId, { status: 'running', text: '', items: [] });
+    trace('start', `[Peer Review] ${def.label} running`);
     let accumulated = '';
     try {
       const res = await streamWithModelChain(
@@ -233,16 +255,38 @@ export async function runReviewSwarm(
       const finalText = res.content || accumulated;
       const parsed = bullets(finalText);
       onPatch(def.agentId, { status: 'done', text: finalText, items: parsed });
+      trace('done', `[Peer Review] ${def.label} — ${parsed.length} items`);
       return { agentId: def.agentId, text: finalText, modelUsed: res.modelUsed ?? model, error: undefined };
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') throw err;
-      const msg2 = err instanceof Error ? err.message : String(err);
-      onPatch(def.agentId, { status: 'error', error: msg2 });
-      return { agentId: def.agentId, text: accumulated, modelUsed: model, error: msg2 };
+      const errMsg = err instanceof Error ? err.message : String(err);
+      onPatch(def.agentId, { status: 'error', error: errMsg });
+      trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
+      return { agentId: def.agentId, text: accumulated, modelUsed: model, error: errMsg };
     }
-  });
+  };
+
+  const tasks = REVIEW_SWARM_AGENTS.map((def) =>
+    withTimeout(agentTask(def), AGENT_TIMEOUT_MS, def.label).catch((err) => {
+      if ((err as Error)?.name === 'AbortError') throw err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      onPatch(def.agentId, { status: 'error', error: errMsg });
+      trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
+      return { agentId: def.agentId, text: '', modelUsed: model, error: errMsg };
+    }),
+  );
 
   const results = await Promise.all(tasks);
+
+  // If every single agent failed, surface an error rather than an empty review
+  const allFailed = results.every((r) => r.error);
+  if (allFailed) {
+    const firstErr = results[0]?.error ?? 'All review agents failed';
+    trace('error', `[Peer Review] all agents failed: ${firstErr}`);
+    throw new Error(`Peer review failed: ${firstErr}`);
+  }
+
+  trace('done', '[Peer Review] swarm complete — building report');
 
   // Build PaperReview from orchestrator
   const orch = results.find((r) => r.agentId === 'orchestrator');
