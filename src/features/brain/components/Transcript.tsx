@@ -215,8 +215,17 @@ export const Transcript = memo(function Transcript({
             (!!message.manuscript || (message.citations?.length ?? 0) > 0);
           const who = isAi ? (message.modelLabel ?? modelLabel) : isUser ? 'Researcher' : 'Workspace';
           const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
+          // System messages → compact welcome banner, not a chat bubble
+          if (isSystem) {
+            return (
+              <div key={message.id} className="chat-welcome-banner">
+                {message.content}
+              </div>
+            );
+          }
+
           return (
-            <div key={message.id} className={`msg ${isAi ? 'ai' : isUser ? 'user' : 'system'}`} data-error={!!message.error || undefined}>
+            <div key={message.id} className={`msg ${isAi ? 'ai' : 'user'}`} data-error={!!message.error || undefined}>
               <div className="avatar">
                 {isAi ? (
                   <span className="ai-mark logo-mask" style={maskStyle} aria-hidden="true" />
