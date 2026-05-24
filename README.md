@@ -44,12 +44,11 @@ reaches a provider host directly.
   into a strict, validated manuscript structure and typeset to PDF by an
   embedded Typst engine, with cited-only Vancouver references and a choice of
   journal styles. jsPDF is the offline fallback.
-- **Inferential statistics engine** — attach a CSV/TSV dataset and the app
-  computes the statistics itself, in code: descriptive summaries, t-tests,
-  ANOVA, Mann–Whitney, correlation, chi-square and Fisher's exact tests,
-  odds/risk ratios, Mantel–Haenszel subgroup analysis with a forest plot, and
-  Kaplan–Meier, log-rank, and Cox proportional-hazards survival analysis. The
-  language model narrates the results; it never fabricates a number.
+- **AI peer review with document editor** — upload any research paper or send a
+  Brain-generated manuscript to the Peer Review mode. A 5-agent swarm scores,
+  critiques, and highlights inline issues in a live contenteditable editor.
+  Suggestions show a before/after diff with Accept, Skip, and Get Fix buttons;
+  every accepted change is undoable.
 - **Per-project memory** — every research run's evidence and answer is saved
   into a per-project knowledge store and visualized as a brain-shaped memory
   diagram of linked findings.
@@ -61,13 +60,11 @@ reaches a provider host directly.
 | Mode | Shortcut | What it does |
 | --- | --- | --- |
 | **Brain** | ⌘1 | The research workspace: chat with the boss agent beside a live 3D anatomical brain whose regions light per active agent and detected topic. |
-| **Resources** | ⌘2 | Saved papers and collections with tags, notes, search, and Markdown / BibTeX / CSL-JSON export. |
-| **Memory** | ⌘3 | The active project's saved research memory — searchable evidence and answers, viewable as a list or a brain-shaped relatedness diagram. |
-| **Review** | ⌘4 | Structured study-quality assessment — RoB 2, ROBINS-I, QUADAS-2 checklists and a GRADE certainty-of-evidence tab, persisted per project. |
-| **Protocol** | ⌘5 | Study-design drafting — a PICO form that generates a structured research-protocol outline. |
+| **Memory** | ⌘2 | The active project's saved research memory — searchable evidence and answers, viewable as a list or a brain-shaped relatedness diagram. |
+| **Peer Review** | ⌘3 | 5-agent AI critique of a research paper: score 1–10, summary, strengths/weaknesses, and a live document editor with colour-coded inline highlights, per-suggestion Accept/Skip/Get Fix flow, and PDF report export. |
 
 The mode registry is capped at five entries at compile time
-(`src/config/modes.ts`) and all five are now in use.
+(`src/config/modes.ts`); three are currently active.
 
 ## The agent swarm
 
@@ -155,8 +152,9 @@ src/
   config/            compile-time caps — modes, agents, constants
   core/              stores, EventBus, LLM provider registry, tools
   features/
-    brain/           3D brain canvas, agent swarm, manuscript + stats engine
+    brain/           3D brain canvas, agent swarm, manuscript engine
     memory/          per-project RAG memory + brain-shaped diagram
+    peer_review/     5-agent peer-review swarm, document editor, report export
     resources/       saved-paper library
   platform/          Tauri / browser platform abstraction
 src-tauri/           Rust backend — commands, guard, cache, audit, Typst

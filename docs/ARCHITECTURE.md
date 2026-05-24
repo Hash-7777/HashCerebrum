@@ -5,7 +5,7 @@
 ```
 src/ui/                  React shell — never calls Tauri directly
    ↓
-src/modes/               Per-mode views (Brain, Research, ...)
+src/features/            Per-mode views (brain/, memory/, peer_review/, ...)
    ↓
 src/features/brain/swarm Boss routing, specialist runs, manuscript drafting
    ↓
@@ -41,6 +41,9 @@ into `platform/`) is a code review rejection.
 2. `runSwarm` asks the boss to route the turn with `planResearch`.
 3. `BrainMode` callbacks emit `agent:activity`; `brainStore` maps activity to
    `region:light` for the bound region plus a subtle thalamus relay.
+   *(Note: `region:light` EventBus emission is currently de-wired — the 3D brain
+   lights on Memory-diagram click only. Re-wiring is tracked as A1 in the
+   improvement plan.)*
 4. `runSpecialist(agentById('literature'), ...)` calls the LLM via
    `ProviderRegistry`.
 5. LLM tool calls execute through `ToolRegistry`.
