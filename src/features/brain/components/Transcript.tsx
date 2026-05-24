@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import logoMark from '@/assets/logo-mark.png';
 
 const MESSAGE_CAP = 80;
 import type { EvidenceItem } from '@platform/index';
@@ -175,7 +176,7 @@ export const Transcript = memo(function Transcript({
 
   return (
     <>
-      <div className="transcript" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
+      <div className="transcript chat-scroll" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
         {capped && (
           <button
             type="button"
@@ -188,100 +189,104 @@ export const Transcript = memo(function Transcript({
         {visibleMessages.map((message, index) => {
           const actualIndex = baseIndex + index;
           const title = titleFor(message, actualIndex);
-          // A finished research result — a structured manuscript or any
-          // answer with retrieved citations — is collapsed to a compact card
-          // instead of dumping the whole paper into the chat. The card opens
-          // the document preview.
+          const isAi = message.role === 'assistant';
+          const isUser = message.role === 'user';
+          const isSystem = message.role === 'system';
           const isDocument =
-            message.role === 'assistant' &&
+            isAi &&
             !message.isStreaming &&
             (!!message.manuscript || (message.citations?.length ?? 0) > 0);
+          const who = isAi ? (message.modelLabel ?? modelLabel) : isUser ? 'Researcher' : 'Workspace';
+          const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
           return (
-            <article key={message.id} className="chat-message" data-role={message.role} data-error={!!message.error}>
-              <header>
-                <span className="chat-role">
-                  {message.role === 'user' ? (
-                    <>
-                      <Icon name="agent" size={12} /> You
-                    </>
-                  ) : message.role === 'system' ? (
-                    <>
-                      <Icon name="brain" size={12} /> Workspace
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="brain" size={12} /> {message.modelLabel ?? modelLabel}
-                    </>
-                  )}
-                </span>
-                {message.failoverNote && <span className="chat-failover">{message.failoverNote}</span>}
-              </header>
-              {isDocument ? (
-                <DocumentArtifactCard
-                  title={title}
-                  typeLabel={message.manuscript ? 'Research manuscript' : 'Research result'}
-                  referenceCount={message.citations?.length ?? 0}
-                  onOpen={() => void openPdfPreview(message, actualIndex)}
-                  onReview={() => void sendToReview(message, actualIndex)}
-                />
-              ) : (
-                <p>
-                  {message.content}
-                  {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
-                </p>
-              )}
-              {message.citations && message.citations.length > 0 && !isDocument && (
-                <div className="inline-citations">
-                  {message.citations.slice(0, 6).map((item, index) => (
-                    <a key={evidenceKey(item, index)} href={item.url ?? undefined} target="_blank" rel="noreferrer">
-                      <Icon name="quote" size={10} /> [{index + 1}] {item.source}
-                    </a>
-                  ))}
+            <div key={message.id} className={`msg ${isAi ? 'ai' : isUser ? 'user' : 'system'}`} data-error={!!message.error || undefined}>
+              <div className="avatar">
+                {isAi ? (
+                  <span className="ai-mark logo-mask" style={maskStyle} aria-hidden="true" />
+                ) : (
+                  <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+                    <circle cx="18" cy="18" r="17.5" fill="var(--ink-3)" stroke="var(--line-strong)" strokeWidth="1" />
+                    <g stroke="var(--text-2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" fill="none">
+                      <circle cx="18" cy="15" r="4.2" />
+                      <path d="M9.5 29.5 Q12.2 22.6 18 22.6 Q23.8 22.6 26.5 29.5" />
+                    </g>
+                  </svg>
+                )}
+              </div>
+              <div className="msg-content">
+                <div className="msg-head">
+                  <span className="who">{who}</span>
+                  {message.failoverNote && <span className="chat-failover">{message.failoverNote}</span>}
                 </div>
-              )}
-              {message.role !== 'system' && !message.isStreaming && (
-                <footer className="chat-message-actions">
-                  <button type="button" onClick={() => void copyMessage(message)} className="chat-action">
-                    <Icon name={copiedId === message.id ? 'check' : 'copy'} size={12} />
-                    {copiedId === message.id ? 'Copied' : 'Copy'}
-                  </button>
-                  {message.role === 'user' && onEdit && (
-                    <button type="button" onClick={() => onEdit(message.id)} className="chat-action">
-                      <Icon name="edit" size={12} /> Edit
-                    </button>
+                <div className="msg-body">
+                  {isDocument ? (
+                    <DocumentArtifactCard
+                      title={title}
+                      typeLabel={message.manuscript ? 'Research manuscript' : 'Research result'}
+                      referenceCount={message.citations?.length ?? 0}
+                      onOpen={() => void openPdfPreview(message, actualIndex)}
+                      onReview={() => void sendToReview(message, actualIndex)}
+                    />
+                  ) : isUser ? (
+                    <div className="user-text">
+                      {message.content}
+                      {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
+                    </div>
+                  ) : (
+                    <p>
+                      {message.content}
+                      {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
+                    </p>
                   )}
-                  {message.role === 'assistant' && !message.critiqueOf && onRegenerate && (
-                    <button type="button" onClick={() => onRegenerate(message.id)} className="chat-action">
-                      <Icon name="refresh" size={12} /> Regenerate
-                    </button>
+                  {message.citations && message.citations.length > 0 && !isDocument && (
+                    <div className="inline-citations">
+                      {message.citations.slice(0, 6).map((item, i) => (
+                        <a key={evidenceKey(item, i)} href={item.url ?? undefined} target="_blank" rel="noreferrer">
+                          <Icon name="quote" size={10} /> [{i + 1}] {item.source}
+                        </a>
+                      ))}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => void openPdfPreview(message, actualIndex)}
-                    className="chat-action"
-                  >
-                    <Icon name="eye" size={12} /> PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openMarkdownPreview(message, actualIndex)}
-                    className="chat-action"
-                  >
-                    <Icon name="document" size={12} /> MD
-                  </button>
-                  {message.role === 'assistant' && !message.critiqueOf && (message.manuscript || (message.citations?.length ?? 0) > 0) && (
-                    <button type="button" onClick={() => void sendToReview(message, actualIndex)} className="chat-action">
-                      <Icon name="shield" size={12} /> Review
-                    </button>
+                  {!isSystem && !message.isStreaming && (
+                    <div className="actions-rail">
+                      <button type="button" onClick={() => void copyMessage(message)} className="action">
+                        <Icon name={copiedId === message.id ? 'check' : 'copy'} size={13} />
+                        {copiedId === message.id ? 'Copied' : 'Copy'}
+                      </button>
+                      {isUser && onEdit && (
+                        <button type="button" onClick={() => onEdit(message.id)} className="action">
+                          <Icon name="edit" size={13} /> Edit
+                        </button>
+                      )}
+                      <button type="button" onClick={() => void openPdfPreview(message, actualIndex)} className="action">
+                        <Icon name="eye" size={13} /> PDF
+                      </button>
+                      <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
+                        <Icon name="document" size={13} /> MD
+                      </button>
+                      {isAi && !message.critiqueOf && onRegenerate && (
+                        <>
+                          <div className="action-divider" />
+                          <button type="button" onClick={() => onRegenerate(message.id)} className="action regen">
+                            <Icon name="refresh" size={13} /> Regenerate
+                          </button>
+                        </>
+                      )}
+                      {isAi && !message.critiqueOf && (message.manuscript || (message.citations?.length ?? 0) > 0) && (
+                        <button type="button" onClick={() => void sendToReview(message, actualIndex)} className="action">
+                          <Icon name="shield" size={13} /> Review
+                        </button>
+                      )}
+                      {isAi && !message.critiqueOf && onCritique && (
+                        <button type="button" onClick={() => onCritique(message.id)} className="action critique">
+                          <Icon name="shield" size={13} /> Critique
+                        </button>
+                      )}
+                    </div>
                   )}
-                  {message.role === 'assistant' && !message.critiqueOf && onCritique && (
-                    <button type="button" onClick={() => onCritique(message.id)} className="chat-action">
-                      <Icon name="shield" size={12} /> Critique
-                    </button>
-                  )}
-                </footer>
-              )}
-            </article>
+                </div>
+              </div>
+            </div>
           );
         })}
       </div>

@@ -534,11 +534,18 @@ export function BrainMode() {
   return (
     <div className="mode brain-mode brain-workspace">
       <section className="research-chat" aria-label="Brain research chat">
-        <header className="workspace-toolbar">
-          <h1>The Main Brain</h1>
-          <p className="workspace-hint">
-            Tip — for the most reliable research papers, set a large model as the Boss in Settings → Agent models.
-          </p>
+        <header className="chat-header">
+          <div className="chat-header-row">
+            <h1 className="cerebrum-title"><em>The</em> Cerebrum</h1>
+            <div className="chat-meta">
+              <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
+              {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
+            </div>
+          </div>
+          <div className="lede">
+            <span className="tip">Tip</span>
+            <span>For the most reliable research papers, set a large model as the Boss in Settings → Agent models.</span>
+          </div>
         </header>
 
         <FeatureBoundary name="Transcript">

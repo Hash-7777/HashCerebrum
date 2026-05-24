@@ -1,6 +1,3 @@
-// Top of the left rail — switch, create, rename, and delete projects.
-// A project scopes its saved chats (and, from Phase 28b, its RAG store).
-
 import { useState, type FormEvent } from 'react';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
@@ -19,25 +16,21 @@ export function ProjectSelector() {
 
   const [mode, setMode] = useState<EditMode>('idle');
   const [draft, setDraft] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const active = projects.find((p) => p.id === activeProjectId) ?? null;
   const canDelete = projects.length > 1;
 
-  const startCreate = () => {
-    setDraft('');
-    setMode('create');
-  };
+  const chatCount = useChatHistoryStore((s) =>
+    s.chats.filter((c) => c.projectId === activeProjectId).length,
+  );
+  const ragCount = useRagStore((s) =>
+    activeProjectId ? s.chunksForProject(activeProjectId).length : 0,
+  );
 
-  const startRename = () => {
-    if (!active) return;
-    setDraft(active.name);
-    setMode('rename');
-  };
-
-  const cancel = () => {
-    setMode('idle');
-    setDraft('');
-  };
+  const startCreate = () => { setDraft(''); setMode('create'); setPickerOpen(false); };
+  const startRename = () => { if (!active) return; setDraft(active.name); setMode('rename'); setPickerOpen(false); };
+  const cancel = () => { setMode('idle'); setDraft(''); };
 
   const submitDraft = (event: FormEvent) => {
     event.preventDefault();
@@ -52,82 +45,84 @@ export function ProjectSelector() {
   const handleDelete = () => {
     if (!active || !canDelete) return;
     const ok = window.confirm(
-      `Delete project "${active.name}"? Its saved chats and research memory will be removed. This cannot be undone.`,
+      `Delete project "${active.name}"? Its saved chats and research memory will be removed.`,
     );
     if (!ok) return;
-    // Cascade: drop the project's chats and RAG memory first, then the
-    // project itself.
     useChatHistoryStore.getState().deleteChatsForProject(active.id);
     useRagStore.getState().clearProject(active.id);
     deleteProject(active.id);
   };
 
-  return (
-    <div className="project-rail" aria-label="Project">
-      <header className="project-rail-head">
-        <span>Project</span>
-      </header>
-      {mode === 'idle' ? (
-        <div className="project-rail-row">
-          <select
-            className="project-rail-select"
-            value={activeProjectId ?? ''}
-            onChange={(event) => selectProject(event.target.value)}
-            aria-label="Active project"
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="project-rail-btn"
-            onClick={startCreate}
-            title="New project"
-            aria-label="New project"
-          >
-            <Icon name="plus" size={13} />
-          </button>
-          <button
-            type="button"
-            className="project-rail-btn"
-            onClick={startRename}
-            disabled={!active}
-            title="Rename project"
-            aria-label="Rename project"
-          >
-            <Icon name="document" size={13} />
-          </button>
-          <button
-            type="button"
-            className="project-rail-btn project-rail-btn-danger"
-            onClick={handleDelete}
-            disabled={!canDelete}
-            title={canDelete ? 'Delete project' : 'The last project cannot be deleted'}
-            aria-label="Delete project"
-          >
-            <Icon name="close" size={13} />
-          </button>
-        </div>
-      ) : (
-        <form className="project-rail-form" onSubmit={submitDraft}>
+  if (mode !== 'idle') {
+    return (
+      <div className="proj">
+        <form className="proj-edit-form" onSubmit={submitDraft}>
           <input
-            className="project-rail-input"
+            className="proj-edit-input"
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') cancel();
-            }}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}
             placeholder={mode === 'create' ? 'New project name' : 'Rename project'}
             maxLength={60}
             autoFocus
           />
-          <button type="submit" className="project-rail-btn" aria-label="Save project name">
+          <button type="submit" className="icon-btn compact" aria-label="Save">
             <Icon name="check" size={13} />
           </button>
+          <button type="button" className="icon-btn compact" onClick={cancel} aria-label="Cancel">
+            <Icon name="close" size={13} />
+          </button>
         </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="proj">
+      <button
+        className="proj-picker"
+        type="button"
+        onClick={() => setPickerOpen((v) => !v)}
+        aria-label="Switch project"
+      >
+        <div className="proj-row">
+          <div className="proj-label-mini">Project</div>
+          <span className="proj-stats-inline">{chatCount} · {ragCount}</span>
+        </div>
+        <div className="proj-name">
+          <span className="proj-title">{active?.name ?? 'No project'}</span>
+          <Icon name="chevDown" size={13} />
+        </div>
+        <div className="proj-domain">Research workspace</div>
+      </button>
+
+      {pickerOpen && (
+        <div className="proj-dropdown">
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              className={`proj-option${project.id === activeProjectId ? ' active' : ''}`}
+              onClick={() => { selectProject(project.id); setPickerOpen(false); }}
+            >
+              {project.name}
+            </button>
+          ))}
+          <div className="proj-dropdown-sep" />
+          <button type="button" className="proj-option proj-option-action" onClick={startCreate}>
+            <Icon name="plus" size={12} /> New project
+          </button>
+          {active && (
+            <button type="button" className="proj-option proj-option-action" onClick={startRename}>
+              <Icon name="edit" size={12} /> Rename
+            </button>
+          )}
+          {canDelete && (
+            <button type="button" className="proj-option proj-option-danger" onClick={handleDelete}>
+              <Icon name="close" size={12} /> Delete
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

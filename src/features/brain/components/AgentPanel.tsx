@@ -1,11 +1,6 @@
-// Live swarm panel — the boss and the five topic specialists with their
-// per-run state. Replaces the old static medical-source list: this window
-// reflects the agents the boss actually assigned and how each is doing.
-
 import { memo } from 'react';
 import { agentById, AGENTS, type AgentId } from '@config/agents';
 import { regionById } from '../data/regions';
-import { Icon, type IconName } from '@ui/icons';
 
 export type AgentRunState = 'idle' | 'running' | 'done' | 'error';
 
@@ -17,22 +12,14 @@ export interface AgentStatus {
   detail?: string;
 }
 
-const STATE_ICON: Record<AgentRunState, IconName> = {
-  idle: 'pulse',
-  running: 'spinner',
-  done: 'check',
-  error: 'alert',
-};
-
 function fallbackDetail(agent: AgentStatus): string {
   if (agent.detail) return agent.detail;
-  if (agent.state === 'running') return agent.kind === 'boss' ? 'routing and synthesizing' : 'fetching source evidence';
-  if (agent.state === 'done') return agent.kind === 'boss' ? 'synthesis complete' : 'evidence stored';
-  if (agent.state === 'error') return 'needs attention';
-  return agent.kind === 'boss' ? 'ready to route' : 'standing by';
+  if (agent.state === 'running') return agent.kind === 'boss' ? 'routing' : 'fetching';
+  if (agent.state === 'done') return agent.kind === 'boss' ? 'synthesis done' : 'evidence stored';
+  if (agent.state === 'error') return 'error';
+  return '—';
 }
 
-// Every agent starts idle. The boss + specialists are listed boss-first.
 export const initialAgentStatuses = (): AgentStatus[] =>
   AGENTS.map((agent) => ({
     agentId: agent.id,
@@ -41,47 +28,64 @@ export const initialAgentStatuses = (): AgentStatus[] =>
     state: 'idle' as AgentRunState,
   }));
 
+function AgentMark({ state }: { state: AgentRunState }) {
+  return <span className={`ag-mark ${state}`} aria-hidden="true" />;
+}
+
 export const AgentPanel = memo(function AgentPanel({ statuses }: { statuses: AgentStatus[] }) {
-  const activeCount = statuses.filter((status) => status.state === 'running').length;
-  const doneCount = statuses.filter((status) => status.state === 'done').length;
-  const errorCount = statuses.filter((status) => status.state === 'error').length;
+  const activeCount = statuses.filter((s) => s.state === 'running').length;
+  const doneCount = statuses.filter((s) => s.state === 'done').length;
+  const idleCount = statuses.filter((s) => s.state === 'idle').length;
+  const total = statuses.length;
+  const progress = total > 0 ? ((activeCount + doneCount) / total) * 100 : 0;
 
   return (
-    <section className="agent-panel" aria-label="Agent swarm status">
-      <header>
-        <div className="agent-panel-title">
-          <h3>
-            <Icon name="agent" size={12} /> Agent swarm
-          </h3>
-          <p>Boss routing with five specialist source agents.</p>
+    <div className="swarm" aria-label="Agent swarm status">
+      <div className="swarm-head">
+        <div className="swarm-label">Agent swarm</div>
+        <div className="swarm-counts">
+          <span><b>{activeCount}</b> active</span>
+          <span><b>{doneCount}</b> done</span>
+          <span><b>{idleCount}</b> idle</span>
         </div>
-        <div className="agent-panel-metrics" aria-label="Agent run counters">
-          <span data-tone={activeCount > 0 ? 'active' : 'idle'}>{activeCount} active</span>
-          <span>{doneCount} done</span>
-          {errorCount > 0 && <span data-tone="error">{errorCount} error</span>}
+      </div>
+
+      <div className="progress">
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>
-      </header>
-      <ul>
+        <span className="progress-num">{activeCount + doneCount}/{total}</span>
+      </div>
+
+      <div className="swarm-table">
+        <div className="swarm-row swarm-header-row">
+          <span />
+          <span>Agent</span>
+          <span className="num">Output</span>
+          <span className="num">Last</span>
+        </div>
         {statuses.map((agent) => {
           const definition = agentById(agent.agentId);
-          const color = regionById(definition.regionBinding).emissive;
+          const region = regionById(definition.regionBinding);
           return (
-            <li key={agent.agentId} data-state={agent.state} data-kind={agent.kind}>
-              <span className="agent-swatch" style={{ background: color }} aria-hidden="true" />
-              <div className="agent-row">
-                <span className="agent-row-head">
-                  <strong>{agent.label}</strong>
-                  <span className="agent-role">{agent.kind === 'boss' ? 'Boss' : 'Specialist'}</span>
-                  <span className="agent-state-icon" data-state={agent.state} aria-hidden="true">
-                    <Icon name={STATE_ICON[agent.state]} size={12} />
-                  </span>
-                </span>
-                <span className="agent-row-detail">{fallbackDetail(agent)}</span>
+            <div key={agent.agentId} className={`swarm-row ${agent.state}`}>
+              <AgentMark state={agent.state} />
+              <div className="ag-info">
+                <div className="ag-name">{agent.label}</div>
+                <div className="ag-domain" style={{ color: region.emissive }}>{agent.kind === 'boss' ? 'Orchestrator' : 'Specialist'}</div>
               </div>
-            </li>
+              <div className="ag-output">{fallbackDetail(agent)}</div>
+              <div className="ag-note">{agent.state}</div>
+            </div>
           );
         })}
-      </ul>
-    </section>
+      </div>
+
+      <div className="swarm-foot">
+        <span>Last orchestration</span>
+        <span className="dots-fill" />
+        <span>—</span>
+      </div>
+    </div>
   );
 });

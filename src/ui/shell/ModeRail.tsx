@@ -13,21 +13,23 @@ export function ModeRail() {
   const setMode = useModeStore((s) => s.setMode);
 
   return (
-    <nav className="mode-rail" aria-label="Mode navigation">
-      {MODES.map((m) => (
+    <nav className="modes" aria-label="Mode navigation">
+      <div className="modes-label">Modules</div>
+      {MODES.map((m, i) => (
         <button
           key={m.id}
           type="button"
-          className="mode-rail-btn"
-          data-active={mode === m.id}
+          className={`mode${mode === m.id ? ' active' : ''}`}
           onClick={() => setMode(m.id)}
           title={`${m.description} (${m.shortcut})`}
         >
-          <span className="mode-rail-icon" aria-hidden="true">
-            <Icon name={MODE_ICONS[m.id as ModeId] ?? 'brain'} size={16} />
-          </span>
-          <span className="mode-rail-label">{m.label}</span>
-          <span className="mode-rail-shortcut">{m.shortcut}</span>
+          <div className="mode-mark" aria-hidden="true">
+            <Icon name={MODE_ICONS[m.id as ModeId] ?? 'brain'} size={14} />
+          </div>
+          <div className="mode-content">
+            <div className="mode-label">{m.label}</div>
+          </div>
+          <div className="hotkey">⌘{i + 1}</div>
         </button>
       ))}
     </nav>

@@ -1,9 +1,6 @@
 import { useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 
-// The composer no longer carries a model picker — every agent's model is
-// resolved per-agent (auto-assigned, overridable in Settings → Agent models).
-
 export function Composer({
   query,
   setQuery,
@@ -38,7 +35,7 @@ export function Composer({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 42), 164)}px`;
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 48), 180)}px`;
   }, [query]);
 
   const attachDataset = (event: ChangeEvent<HTMLInputElement>) => {
@@ -48,18 +45,15 @@ export function Composer({
   };
 
   return (
-    <form className="research-composer" onSubmit={onSubmit}>
-      {editing && (
-        <div className="composer-editing">
-          <span>
-            <Icon name="edit" size={12} /> Editing earlier prompt
-          </span>
-          <button type="button" onClick={onCancelEdit}>
-            Cancel
-          </button>
-        </div>
-      )}
-      <div className="composer-controls">
+    <div className="composer-wrap">
+      <form className="composer" onSubmit={onSubmit}>
+        {editing && (
+          <div className="composer-editing">
+            <span><Icon name="edit" size={12} /> Editing earlier prompt</span>
+            <button type="button" onClick={onCancelEdit}>Cancel</button>
+          </div>
+        )}
+
         <input
           ref={fileRef}
           type="file"
@@ -67,58 +61,65 @@ export function Composer({
           className="composer-file-input"
           onChange={attachDataset}
         />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="composer-settings"
-          aria-label="Attach CSV, TSV, or Excel dataset"
-        >
-          <Icon name="database" size={13} /> Dataset
-        </button>
-        <button type="button" onClick={onOpenSettings} className="composer-settings" aria-label="Open settings">
-          <Icon name="settings" size={13} /> Settings
-        </button>
-      </div>
-      {datasetLabel && (
-        <div className="composer-dataset">
-          <span>
-            <Icon name="database" size={12} /> {datasetLabel}
-          </span>
-          {datasetDetail && <small>{datasetDetail}</small>}
-          <button type="button" onClick={onClearDataset} aria-label="Remove attached dataset">
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-      )}
-      <div className="composer-input-row">
+
+        {datasetLabel && (
+          <div className="composer-dataset">
+            <span><Icon name="database" size={12} /> {datasetLabel}</span>
+            {datasetDetail && <small>{datasetDetail}</small>}
+            <button type="button" onClick={onClearDataset} aria-label="Remove dataset">
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
+          className="composer-input"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Message HashCerebrum"
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Ask the Brain. Cite papers, run specialists, draft a literature review…"
           rows={1}
-          onKeyDown={(event) => {
-            // Enter sends; Shift+Enter inserts a newline. isComposing guards
-            // IME input (CJK and similar) so a mid-composition Enter does not
-            // submit a half-typed message.
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              if (canSubmit && !isRunning) onSubmit(event as unknown as FormEvent);
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (canSubmit && !isRunning) onSubmit(e as unknown as FormEvent);
             }
           }}
         />
-        <span className="composer-hint" aria-hidden="true">Enter to send · Shift+Enter for newline</span>
-        <button
-          type="submit"
-          disabled={isRunning || !canSubmit}
-          className="composer-send"
-          data-running={isRunning ? 'true' : 'false'}
-          aria-label={isRunning ? 'Running' : editing ? 'Save edit' : 'Send'}
-        >
-          <Icon name={isRunning ? 'spinner' : 'send'} size={13} />
-          <span>{isRunning ? 'Running' : editing ? 'Save' : 'Send'}</span>
-        </button>
-      </div>
-    </form>
+
+        <div className="composer-toolbar">
+          <div className="tools-left">
+            <button
+              type="button"
+              className="dataset-chip"
+              onClick={() => fileRef.current?.click()}
+              title="Attach dataset"
+            >
+              <Icon name="database" size={13} />
+              Dataset
+              <Icon name="chevDown" size={12} />
+            </button>
+            <button type="button" className="icon-btn" title="Search">
+              <Icon name="search" size={15} />
+            </button>
+          </div>
+          <div className="tools-right">
+            <button type="button" className="btn ghost sm" onClick={onOpenSettings}>
+              <Icon name="settings" size={13} /> Settings
+            </button>
+            <button
+              type="submit"
+              className="send-btn"
+              disabled={isRunning || !canSubmit}
+              data-running={isRunning ? 'true' : 'false'}
+              aria-label={isRunning ? 'Running' : editing ? 'Save edit' : 'Send'}
+            >
+              {isRunning ? 'Running' : editing ? 'Save' : 'Send'}
+              <Icon name={isRunning ? 'spinner' : 'send'} size={14} />
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }

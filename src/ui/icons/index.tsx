@@ -34,7 +34,9 @@ export type IconName =
   | 'refresh'
   | 'download'
   | 'graph'
-  | 'list';
+  | 'list'
+  | 'chevDown'
+  | 'activity';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -220,6 +222,16 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
       <circle cx="4.6" cy="6" r="1.3" />
       <circle cx="4.6" cy="12" r="1.3" />
       <circle cx="4.6" cy="18" r="1.3" />
+    </svg>
+  ),
+  chevDown: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  ),
+  activity: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   ),
 };
