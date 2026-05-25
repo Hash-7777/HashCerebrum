@@ -83,6 +83,23 @@ fn truncate(text: &str, max: usize) -> String {
     }
 }
 
+/// Header-name allowlist. The renderer is only permitted to forward
+/// headers that are necessary for LLM provider authentication and
+/// request routing. Any other name is rejected before the request
+/// is sent so the backend cannot be used to inject arbitrary headers.
+///
+/// Accepted (case-insensitive):
+///   content-type, authorization, x-api-key, http-referer, x-title,
+///   and any name prefixed with "anthropic-" or "openai-".
+fn is_allowed_header(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "content-type" | "authorization" | "x-api-key" | "http-referer" | "x-title"
+    ) || lower.starts_with("anthropic-")
+        || lower.starts_with("openai-")
+}
+
 /// Authenticated GET for provider model-list endpoints.
 ///
 /// Failure modes:
@@ -109,6 +126,11 @@ pub async fn llm_http_get(
         .get(parsed.clone())
         .timeout(Duration::from_secs(30));
     for (name, value) in &headers {
+        if !is_allowed_header(name) {
+            return Err(AppError::InvalidInput(format!(
+                "header '{name}' is not on the allowlist"
+            )));
+        }
         request = request.header(name, value);
     }
 
@@ -167,6 +189,11 @@ pub async fn llm_http_post(
         .body(body)
         .timeout(Duration::from_secs(120));
     for (name, value) in &headers {
+        if !is_allowed_header(name) {
+            return Err(AppError::InvalidInput(format!(
+                "header '{name}' is not on the allowlist"
+            )));
+        }
         request = request.header(name, value);
     }
 
@@ -241,6 +268,11 @@ pub async fn llm_chat_stream(
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
     for (name, value) in &headers {
+        if !is_allowed_header(name) {
+            return Err(AppError::InvalidInput(format!(
+                "header '{name}' is not on the allowlist"
+            )));
+        }
         request = request.header(name, value);
     }
 
@@ -249,6 +281,8 @@ pub async fn llm_chat_stream(
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
+    let _ = redacted.set_username("");
+    let _ = redacted.set_password(None);
 
     if !status.is_success() {
         let text = response.text().await.unwrap_or_default();
