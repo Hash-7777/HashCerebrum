@@ -70,12 +70,47 @@ function DocumentArtifactCard({
   );
 }
 
+const READY_PROMPTS = [
+  'Summarize the latest RCTs on GLP-1 receptor agonists in obesity and type 2 diabetes',
+  'What is the current evidence on statin therapy for primary cardiovascular prevention?',
+  'Review meta-analyses on antibiotic stewardship strategies in ICU patients',
+  'Analyze anticoagulation risk-benefit in atrial fibrillation among elderly patients',
+  'Compare SGLT-2 inhibitors in heart failure with reduced vs preserved ejection fraction',
+  'What do recent Cochrane reviews conclude on antidepressant efficacy vs placebo?',
+];
+
+function EmptyState({ onSelect }: { onSelect: (prompt: string) => void }) {
+  const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
+  return (
+    <div className="brain-empty-state">
+      <div className="brain-empty-brand">
+        <span className="brain-empty-logo-mark" style={maskStyle} aria-hidden="true" />
+        <h2 className="brain-empty-title">HashCerebrum</h2>
+        <p className="brain-empty-sub">Medical AI research swarm</p>
+      </div>
+      <div className="brain-empty-prompts">
+        {READY_PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            className="brain-prompt-chip"
+            onClick={() => onSelect(prompt)}
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const Transcript = memo(function Transcript({
   messages,
   modelLabel,
   onCritique,
   onRegenerate,
   onEdit,
+  onPromptSelect,
 }: {
   messages: ChatMessage[];
   modelLabel: string;
@@ -83,6 +118,7 @@ export const Transcript = memo(function Transcript({
   onCritique?: (messageId: string) => void;
   onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
+  onPromptSelect?: (prompt: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -93,6 +129,7 @@ export const Transcript = memo(function Transcript({
   // interrupted by an incoming answer.
   const pinnedRef = useRef(true);
 
+  const hasUserMessage = messages.some((m) => m.role === 'user');
   const capped = !showAll && messages.length > MESSAGE_CAP;
   const visibleMessages = capped ? messages.slice(messages.length - MESSAGE_CAP) : messages;
   const baseIndex = capped ? messages.length - MESSAGE_CAP : 0;
@@ -206,6 +243,9 @@ export const Transcript = memo(function Transcript({
   return (
     <>
       <div className="transcript chat-scroll" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
+        {!hasUserMessage && onPromptSelect && (
+          <EmptyState onSelect={onPromptSelect} />
+        )}
         {capped && (
           <button
             type="button"
@@ -227,14 +267,8 @@ export const Transcript = memo(function Transcript({
             (!!message.manuscript || (message.citations?.length ?? 0) > 0);
           const who = isAi ? (message.modelLabel ?? modelLabel) : isUser ? 'Researcher' : 'Workspace';
           const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
-          // System messages → compact welcome banner, not a chat bubble
-          if (isSystem) {
-            return (
-              <div key={message.id} className="chat-welcome-banner">
-                {message.content}
-              </div>
-            );
-          }
+          // System messages: show empty state before first user turn, hide after.
+          if (isSystem) return null;
 
           return (
             <div key={message.id} className={`msg ${isAi ? 'ai' : 'user'}`} data-error={!!message.error || undefined}>

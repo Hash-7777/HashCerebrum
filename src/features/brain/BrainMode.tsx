@@ -543,6 +543,7 @@ export function BrainMode() {
             onCritique={runCritique}
             onRegenerate={regenerateMessage}
             onEdit={editMessage}
+            onPromptSelect={(prompt) => { if (!isRunning) void runTurn(prompt, messages, true); }}
           />
         </FeatureBoundary>
 

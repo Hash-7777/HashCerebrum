@@ -165,21 +165,85 @@
 }
 .transcript-load-more:hover { color: var(--text-1); border-color: var(--accent-line); }
 
-/* ── Welcome banner (system message) ─────────────────────── */
+/* ── Empty state (new chat — logo + prompt chips) ─────────── */
 
-.chat-welcome-banner {
-  padding: 7px 13px;
-  border-radius: 6px;
-  background: rgba(130, 224, 194, 0.05);
-  border: 1px solid var(--accent-line);
-  color: var(--text-4);
-  font-size: 11.5px;
+.brain-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  padding: 32px 16px 48px;
+  min-height: 0;
+}
+
+.brain-empty-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.brain-empty-logo-mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  background-color: var(--accent);
+  opacity: 0.82;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.brain-empty-title {
+  margin: 0;
+  font-family: "Newsreader", "Source Serif 4", Georgia, serif;
+  font-size: clamp(22px, 2.4vw, 32px);
+  font-weight: 400;
+  letter-spacing: -0.016em;
+  color: var(--text-1);
+  font-variation-settings: "opsz" 72;
+}
+
+.brain-empty-sub {
+  margin: 0;
   font-family: var(--f-display);
+  font-size: 12px;
   font-style: italic;
+  color: var(--text-4);
+  letter-spacing: 0.02em;
   font-variation-settings: "opsz" 12;
-  line-height: 1.5;
-  text-align: center;
-  align-self: stretch;
+}
+
+.brain-empty-prompts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 580px;
+}
+
+.brain-prompt-chip {
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--ink-3);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: var(--f-body);
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.brain-prompt-chip:hover {
+  border-color: var(--accent-line);
+  background: var(--ink-4);
+  color: var(--text-1);
 }
 
 /* ── Message layout ───────────────────────────────────────── */
