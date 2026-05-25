@@ -24,8 +24,8 @@ import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
-const SECTION_TOKENS = 5200;
-const MAX_SECTION_PASSES = 3;
+const SECTION_TOKENS = 5800;
+const MAX_SECTION_PASSES = 4;
 const MAX_QA_REPAIR_SECTIONS = 4;
 const TRUSTED_EVIDENCE_SOURCES = new Set<EvidenceItem['source']>([
   'pubmed',
@@ -37,6 +37,12 @@ const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 'rxnorm
 
 const SECTION_SYSTEM = `You are The Cerebrum, the final biomedical manuscript compiler for HashCerebrum. The full manuscript is being assembled one section at a time. You are writing EXACTLY ONE SECTION — the section named in the prompt and nothing else.
 
+DEPTH REQUIREMENT — this is the most important instruction:
+- Write to the UPPER end of the target word range. A thorough, substantive, and deeply developed section is the primary goal.
+- Every point must be fully elaborated: state the finding, explain its mechanism or significance, place it in clinical context, note its limitations, and connect it to the broader question. Never write a brief statement when a full paragraph of explanation is appropriate.
+- A section that merely lists findings will be rejected. Develop each theme across multiple complete sentences and multiple paragraphs.
+- If the evidence is genuinely thin for this section, write a complete and transparent evidence-gap analysis — explain what is missing, why it matters, and what the absence implies — rather than producing a short section.
+
 CRITICAL FORMATTING RULES — deviations corrupt the manuscript pipeline:
 - Begin your reply with the first word of the section body. No preamble, no heading, no title, no number.
 - Write ONLY the content for the requested section. Never write content for any other section.
@@ -47,8 +53,7 @@ CRITICAL FORMATTING RULES — deviations corrupt the manuscript pipeline:
 - Do not cite sources not assigned in the approved ledger.
 - Do not create a References or Bibliography section; references are app-owned.
 - Do not invent study findings, PMIDs, DOIs, authors, years, p-values, confidence intervals, odds ratios, hazard ratios, pooled effects, or meta-analysis results.
-- Report numeric statistics only when they appear in the extracted numeric support or the uploaded dataset statistics block.
-- If evidence is thin, write a complete and transparent limitation-aware prose section — do not fill gaps from memory or training data.`;
+- Report numeric statistics only when they appear in the extracted numeric support or the uploaded dataset statistics block.`;
 
 const STOPWORDS = new Set([
   'about',
@@ -507,18 +512,25 @@ export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedger
 }
 
 function titleTopic(question: string): string {
-  const topic = question
-    .replace(/^\s*(make|write|draft|create|generate|produce)\s+(a\s+)?(full\s+)?(professional\s+)?(publishable\s+)?(research\s+)?paper\s+(about|on|for)\s+/i, '')
-    .replace(/^\s*(make|write|draft|create|generate|produce)\s+/i, '')
+  return question
+    .replace(/^\s*(make|write|draft|create|generate|produce|compose|prepare)\s+(a\s+|an\s+|me\s+a\s+|me\s+an\s+)?(full\s+|complete\s+|comprehensive\s+|detailed\s+)?(professional\s+|publishable\s+)?(research\s+)?(paper|manuscript|article|report)\s+(about|on|for|titled?|called|named)\s+/i, '')
+    .replace(/^\s*(make|write|draft|create|generate|produce|compose|prepare)\s+(a\s+|an\s+|me\s+a\s+|me\s+an\s+)?/i, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return topic || question.trim() || 'the requested biomedical question';
 }
 
 function blueprintTitle(question: string): string {
   const topic = titleTopic(question);
-  const cleaned = topic.charAt(0).toUpperCase() + topic.slice(1);
-  return `Evidence Review of ${cleaned}`;
+  if (!topic) return 'Evidence Review of the Requested Biomedical Question';
+  // Strip leading article ("a", "an", "the") that survived question parsing.
+  const cleaned = topic.replace(/^(a|an|the)\s+/i, '').trim();
+  const titled = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  // When the topic is already a proper study or manuscript title (contains
+  // study-design terminology), use it directly rather than prepending a label.
+  if (/\b(study|trial|analysis|review|survey|cohort|cross[-\s]?sectional|randomized|randomised|assessment|evaluation|investigation|report|examination)\b/i.test(titled)) {
+    return titled;
+  }
+  return `Evidence Review: ${titled}`;
 }
 
 function claimIdsForSection(section: SectionSpec, ledger: ClaimLedgerEntry[]): string[] {
@@ -534,9 +546,9 @@ function claimIdsForSection(section: SectionSpec, ledger: ClaimLedgerEntry[]): s
   return ledger.filter((entry) => entry.evidenceStrength !== 'context').slice(0, 8).map((entry) => entry.id);
 }
 
-export function buildPaperBlueprint(question: string, ledger: ClaimLedgerEntry[]): PaperBlueprint {
+export function buildPaperBlueprint(question: string, ledger: ClaimLedgerEntry[], overrideTitle?: string): PaperBlueprint {
   return {
-    title: blueprintTitle(question),
+    title: overrideTitle ?? blueprintTitle(question),
     abstractIntent:
       'Structured evidence-review abstract summarizing the automated search, source-backed findings, evidence strength, limitations, and clinical/research implications without unsupported statistics.',
     sections: SECTION_PLAN.map((section) => {
@@ -847,7 +859,7 @@ ${opts.datasetBlock}
 Previously drafted sections for continuity:
 ${opts.priorDigest}
 ${current}
-Write the ${opts.section.heading} section now. Start immediately with the first sentence — no heading, no number, no title. Every factual sentence must be traceable to the claim ledger or extraction rows. If no effect sizes are extracted, do not invent them and state that quantitative statistics are limited to source-yield/evidence-strength counts.`;
+Write the ${opts.section.heading} section now. Start immediately with the first sentence — no heading, no number, no title. Write to the UPPER end of the target range (${opts.section.targetWords}); a thorough section is better than a brief one. Every factual sentence must be traceable to the claim ledger or extraction rows. Develop every point fully across multiple sentences — do not reduce findings to brief statements. If no effect sizes are extracted, state clearly that quantitative statistics are limited to source-yield and evidence-strength counts, then compensate with rich contextual discussion.`;
   const reply = await callModel(opts.model, SECTION_SYSTEM, userPrompt, SECTION_TOKENS);
 
   // Reject replies that look like the model wrote a complete document instead of
@@ -1135,11 +1147,30 @@ export async function runPaperPipeline(opts: {
   dataset?: UploadedDatasetSummary | null;
   onStage?: (stage: string) => void;
 }): Promise<Manuscript> {
+  // Generate a focused academic title before building the blueprint so the
+  // manuscript title is a proper journal-style heading rather than a generic prefix.
+  opts.onStage?.('Title');
+  let overrideTitle: string | undefined;
+  try {
+    const reply = await callModel(
+      opts.bossModel,
+      'You write concise, formal academic manuscript titles for peer-reviewed journals. Reply with the title only — no quotation marks, no extra text, no explanation.',
+      `Write a manuscript title for a ${opts.dataset ? 'original-dataset' : 'evidence-review'} biomedical manuscript addressing: ${opts.question}`,
+      150,
+    );
+    const candidate = reply.split('\n')[0]?.replace(/^[#\s"']+|[#\s"']+$/g, '').trim() ?? '';
+    if (candidate.length >= 10 && candidate.length <= 200 && !/\b(write|draft|generate|manuscript topic|section to write)\b/i.test(candidate)) {
+      overrideTitle = candidate;
+    }
+  } catch {
+    /* keep the blueprintTitle fallback */
+  }
+
   opts.onStage?.('Extracting');
   const evidenceExtractions = extractEvidenceFromRecords(opts.evidence);
   opts.onStage?.('Building claims');
   const claimLedger = buildClaimLedger(evidenceExtractions);
-  const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger);
+  const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger, overrideTitle);
   return compileManuscriptFromLedger({
     question: opts.question,
     bossModel: opts.bossModel,

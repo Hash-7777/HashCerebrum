@@ -40,71 +40,71 @@ export const SECTION_PLAN: SectionSpec[] = [
   {
     heading: 'Introduction',
     instruction:
-      'Establish the clinical problem, its scope and importance, what is already known, and the aim of this evidence review.',
-    targetWords: '500-750 words across 4-6 substantial paragraphs',
-    minWords: 420,
+      'Open with the global burden and epidemiology of the condition — prevalence, incidence, mortality, morbidity, and economic or public-health impact — citing all statistics from the retrieved records. Establish the clinical significance of the problem and why it demands investigation. Narrate the existing evidence landscape: what is known, what remains contested, and what gaps persist in the literature. Explain the rationale for the specific study design and how it addresses the identified gap. Develop the conceptual framework or theoretical basis for the relationships under investigation. Define the target population and the specific clinical or research context. Close with the explicit objectives of this manuscript and a brief outline of the sections that follow. Develop every point fully — do not write brief statements; each paragraph should elaborate, explain, and provide context.',
+    targetWords: '800–1100 words across 6–8 substantial paragraphs',
+    minWords: 700,
   },
   {
     heading: 'Methods',
     instruction:
-      'Describe how the evidence was assembled: an automated multi-source search across biomedical databases (PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, OpenFDA), the kinds of records retrieved, and how findings were selected and synthesised. Be transparent that this is an automated search, not a hand-curated systematic review.',
-    targetWords: '450-650 words across 3-5 paragraphs',
-    minWords: 360,
+      'Describe the automated multi-source evidence assembly: databases queried (PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, OpenFDA, RxNorm), the specialist agents used, and the search strategy including keywords and boolean logic. State the date of search and any language or date restrictions. Specify eligibility criteria: study designs included and excluded, populations, exposures or interventions, and outcome definitions. Explain the de-duplication and relevance-ranking process. For manuscripts that include an original uploaded dataset, describe its provenance — filename, row count, variable types — and the statistical analysis pipeline applied, including descriptive and inferential methods. Explain how evidence was synthesised: narrative synthesis with evidence-strength classification (strong = RCT/systematic review, moderate = cohort/registry, weak = cross-sectional/case report, context = regulatory/drug-terminology). State explicitly that this is an automated search and extraction, not a formal hand-curated PRISMA-compliant systematic review.',
+    targetWords: '600–800 words across 4–6 paragraphs',
+    minWords: 500,
   },
   {
     heading: 'Evidence Base and Search Yield',
     instruction:
-      'Describe the retrieved evidence base, source mix, record types, date spread where available, and the highest-value records for the research question. Cite every factual claim with its [S#] source marker.',
-    targetWords: '500-750 words across 4-6 paragraphs',
-    minWords: 420,
+      'Open with the total number of records retrieved from each database, specifying the primary contributors to the evidence base. Describe the temporal spread of evidence — the earliest and most recent records, decade distribution — and what that implies about the maturity of the field. Characterise the study design mix: randomised trials, cohort studies, cross-sectional surveys, systematic reviews, case-control studies, and registry analyses, with counts where derivable. Identify the highest-quality, most directly relevant studies and describe each one — its design, population, primary question, and why it is centrally relevant — in a full prose paragraph per study or group. Note the geographic distribution of evidence where apparent. Comment on the evidence hierarchy with evidence-strength counts. Identify any obvious gaps in evidence coverage — populations understudied, comparators missing, outcomes not reported. Cite every factual claim.',
+    targetWords: '650–900 words across 5–7 paragraphs',
+    minWords: 550,
   },
   {
     heading: 'Mechanistic and Pharmacologic Evidence',
     instruction:
-      'Explain the mechanistic and pharmacologic evidence relevant to the question. For drug-interaction topics, separate pharmacokinetic mechanisms, pharmacodynamic mechanisms, transporter/enzyme considerations, and biological plausibility. Cite every factual claim with its [S#] source marker.',
-    targetWords: '650-900 words across 5-7 paragraphs',
-    minWords: 540,
+      'Explain the underlying biological and mechanistic evidence in depth. For pharmacologic questions, separate pharmacokinetic considerations (absorption, distribution, metabolism, excretion, enzyme and transporter involvement, drug-drug interaction potential) from pharmacodynamic mechanisms (receptor binding, downstream pathways, dose-response relationships). Discuss the biological plausibility of the observed or hypothesized relationships and how the mechanism translates into clinical outcomes. Address inter-individual variability sources: genetic polymorphisms, renal or hepatic function, age-related changes, comorbidities, and polypharmacy. For non-pharmacologic topics, explain the physiological pathways, cellular mechanisms, or epidemiological exposure-outcome mechanisms relevant to the question. Where the evidence base contains contradictory mechanistic findings, address them explicitly and explain possible sources of discordance. Develop each mechanistic point across multiple sentences — do not write brief bullet-equivalent clauses. Cite all mechanistic claims.',
+    targetWords: '800–1050 words across 6–8 paragraphs',
+    minWords: 680,
   },
   {
     heading: 'Clinical Evidence and Safety Outcomes',
     instruction:
-      'Synthesize the clinical evidence and safety outcomes. Distinguish direct evidence from indirect evidence, registry signals from trial results, and outcome evidence from mechanistic inference. Cite every factual claim with its [S#] source marker.',
-    targetWords: '700-950 words across 5-8 paragraphs',
-    minWords: 580,
+      'Present the clinical evidence systematically, beginning with the strongest study designs (meta-analyses, RCTs) and progressing through cohort, cross-sectional, and case-series evidence. For each major study or group of studies, state: the population studied, the exposure or intervention, the comparator, the primary outcome, the magnitude and direction of the effect (including effect sizes, confidence intervals, and p-values exactly as extracted from retrieved text), and the internal validity concerns. Distinguish direct evidence from the question population from indirect or extrapolated evidence. Synthesise patterns across studies — do the findings converge or diverge, and why? Address safety outcomes explicitly: adverse events, serious harms, contraindications, dose-effect relationships, and signals from pharmacovigilance records. If retrieved records contain contradictory findings, explain the possible sources of heterogeneity — population differences, dose variation, follow-up length, outcome definition. Address subgroup differences where evidence supports this — sex, age, comorbidity burden. Conclude with an overall narrative assessment of the clinical evidence strength for the primary and secondary questions. Cite every factual claim.',
+    targetWords: '900–1200 words across 7–10 paragraphs',
+    minWords: 750,
   },
   {
     heading: 'Trial and Registry Evidence',
     instruction:
-      'Summarize clinical-trial and registry evidence without using markdown tables. Write prose grouped by trial purpose, population, intervention/exposure, and relevance to the research question. If evidence is indirect or incomplete, say so explicitly. Cite every factual claim with its [S#] source marker.',
-    targetWords: '550-800 words across 4-6 paragraphs',
-    minWords: 450,
+      'Summarise registered clinical trials and registry studies in prose — no markdown tables. Group entries by trial phase, intervention type, target population, or clinical indication. For each relevant trial or registry dataset, describe in complete sentences: the registered or reported population, primary and secondary endpoints, intervention and comparator arms, sample size and recruitment status, and the NCT number or registry identifier where available. Identify trials that are ongoing and will deliver pivotal evidence, trials completed but unpublished, and trials terminated early — and for each explain the clinical significance. Where registry datasets inform prevalence, utilisation patterns, or safety signals, describe those findings with the same precision. Highlight trials whose results, when available, will most change clinical practice. If the trial landscape is sparse, indirect, or mismatched to the primary question, explain that explicitly and say what is missing. Cite all trial information from retrieved records only.',
+    targetWords: '620–860 words across 5–7 paragraphs',
+    minWords: 520,
   },
   {
     heading: 'Discussion',
     instruction:
-      'Interpret the evidence in depth: mechanisms, the consistency and strength of the findings, conflicting or weak results, and the clinical and research implications.',
-    targetWords: '800-1100 words across 6-9 paragraphs',
-    minWords: 680,
+      'Begin by restating the principal findings of this evidence review in two to three sentences. Then interpret each major finding in the context of biological plausibility and prior literature — do not just list findings but explain what they mean and why they matter. Discuss the consistency of findings across studies: where evidence converges, explain why and how strongly; where evidence diverges, explore the sources of heterogeneity — population differences, methodological variation, confounding, time-period effects. Address the magnitude and clinical significance of observed effects — distinguish statistical significance from clinical relevance and patient-meaningful outcomes. Compare the findings with current clinical guidelines and standard-of-care practice: do the retrieved data support, challenge, or refine existing recommendations? Discuss the implications for clinical practice in different patient populations and settings, naming specific patient groups most affected and the trade-offs involved. Identify the remaining unanswered questions and propose specific future research directions — what study design, population, outcome measure, and follow-up duration would best fill each gap. Discuss global applicability and any population-specific or healthcare-system-specific considerations. Close with a measured interpretive synthesis: what can confidently be concluded from the assembled evidence, and what cannot. Develop every argument across multiple sentences per point — this section must be deeply analytical.',
+    targetWords: '1000–1350 words across 7–10 paragraphs',
+    minWords: 850,
   },
   {
     heading: 'Limitations',
     instruction:
-      'State the limitations of this automated evidence review honestly — search coverage, reliance on abstracts and snippets, absence of formal risk-of-bias appraisal, and any gaps in the retrieved evidence.',
-    targetWords: '350-550 words across 3-5 paragraphs',
-    minWords: 280,
+      'State clearly that this is an automated evidence review, not a hand-curated systematic review with formal PRISMA methodology, and explain what this means for the reliability of the conclusions. Acknowledge that retrieved snippets and abstracts — not full texts — formed the primary evidence base, and that effect estimates and statistics may differ from full primary-text analyses. Discuss database coverage gaps: non-English literature, conference abstracts, grey literature, preprints, and unpublished studies not indexed in the queried databases. Address the absence of formal risk-of-bias appraisal (Cochrane RoB, GRADE) and what this means for interpreting the evidence-strength classification. If the topic has sparse direct evidence, state how much of the synthesis relies on indirect, extrapolated, or context-only records. Note any heterogeneity among retrieved studies in design, population, outcome definition, and follow-up duration that limits synthesis. Discuss limitations specific to the study design or the clinical context — for cross-sectional studies: recall bias, selection bias, inability to establish temporality; for drug-interaction topics: limited real-world data; for registry studies: confounding by indication. Develop each limitation with enough explanation that a reader can judge its severity.',
+    targetWords: '400–580 words across 3–5 paragraphs',
+    minWords: 340,
   },
   {
     heading: 'Conclusion',
     instruction:
-      'Summarise the key takeaways and what further research is needed. Keep it to one or two focused paragraphs.',
-    targetWords: '250-400 words across 2-3 paragraphs',
-    minWords: 200,
+      'Restate the core finding of this evidence review in two to three focused sentences — without over-claiming certainty not supported by the retrieved evidence. Translate the evidence into a concrete practical take-home message for clinicians, researchers, or policy-makers: what should change in practice, what should be monitored, or what decision is now better-informed. Identify the highest-priority research gap and state specifically what study design, population, intervention, and outcome would best fill it. Note what additional evidence is needed before the conclusions can be strengthened beyond the current level of certainty. Close with a sentence on the overall reliability and applicability of the current evidence base and the contribution of this review.',
+    targetWords: '350–500 words across 3–4 paragraphs',
+    minWords: 280,
   },
   {
     heading: 'Declarations',
     instruction:
       'Write one short paragraph: this manuscript is an automated evidence-review draft generated from public biomedical databases; no specific funding or conflicts of interest apply; it is intended for expert review and is not medical advice.',
-    targetWords: '100-180 words in one paragraph',
+    targetWords: '100–180 words in one paragraph',
     minWords: 80,
   },
 ];
