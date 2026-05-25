@@ -188,6 +188,18 @@ fn flush_table(output: &mut Vec<String>, table: &mut Vec<String>) {
     table.clear();
 }
 
+/// Returns true for standalone markdown horizontal rules: ---, ***, ___, or
+/// any line composed entirely of those characters (plus optional spaces).
+fn is_horizontal_rule(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 3 {
+        return false;
+    }
+    let first = trimmed.chars().next().unwrap_or(' ');
+    matches!(first, '-' | '*' | '_')
+        && trimmed.chars().all(|c| c == first || c == ' ')
+}
+
 fn clean_body_text(value: &str) -> String {
     let normalized = value.replace("\r\n", "\n");
     let mut output = Vec::new();
@@ -195,6 +207,12 @@ fn clean_body_text(value: &str) -> String {
 
     for raw in normalized.lines() {
         let line = raw.trim();
+        // Drop standalone markdown horizontal rules so they do not appear as
+        // literal dashes in the Typst PDF.
+        if is_horizontal_rule(line) {
+            flush_table(&mut output, &mut table);
+            continue;
+        }
         let is_table_row = line.contains('|') && table_cells(line).len() > 1;
         if is_table_row || (!table.is_empty() && is_table_separator(line)) {
             table.push(line.to_owned());
@@ -206,7 +224,22 @@ fn clean_body_text(value: &str) -> String {
     }
 
     flush_table(&mut output, &mut table);
-    soften_long_tokens(&collapse_ws(&output.join(" ")))
+    // Also collapse any residual sequences of 3+ dashes that slipped through
+    // (e.g. table cells that were all dashes).
+    let joined = output.join(" ");
+    let cleaned = joined
+        .split_whitespace()
+        .map(|token| {
+            if token.chars().all(|c| c == '-') && token.len() >= 3 {
+                ""
+            } else {
+                token
+            }
+        })
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    soften_long_tokens(&cleaned)
 }
 
 /// One body paragraph as a Typst string in markup context.

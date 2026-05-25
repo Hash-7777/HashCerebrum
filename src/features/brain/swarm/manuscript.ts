@@ -202,6 +202,12 @@ export function removeMarkdownTables(text: string): string {
 
   for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
     const line = raw.trim();
+    // Strip standalone markdown horizontal rules (---, ***, ___, or longer variants)
+    // and lines that are purely dashes/underscores (often output as section dividers)
+    if (/^[-*_]{3,}\s*$/.test(line)) {
+      flushTable();
+      continue;
+    }
     const isTableRow = line.includes('|') && tableCells(line).length > 1;
     if (isTableRow || (table.length > 0 && isTableSeparator(line))) {
       table.push(line);
@@ -214,7 +220,7 @@ export function removeMarkdownTables(text: string): string {
   return output
     .join('\n')
     .replace(/[ \t]*\|[ \t]*/g, '; ')
-    .replace(/-{4,}/g, ' ')
+    .replace(/-{3,}/g, ' ')
     .replace(/\s+([;,.])/g, '$1');
 }
 
