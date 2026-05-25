@@ -237,6 +237,18 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
+  // Render the actual PDF blob (uploaded files) — no sandbox so the native
+  // PDF plugin can render faithfully, matching macOS Preview appearance.
+  if (paper.blobUrl) {
+    return (
+      <iframe
+        src={paper.blobUrl}
+        title={paper.title}
+        className="review-pdf-frame"
+      />
+    );
+  }
+
   if (paper.htmlContent) {
     return (
       <iframe

@@ -1,12 +1,12 @@
 .settings-popover-layer {
   position: absolute;
   inset: 0;
-  z-index: 19;
+  z-index: 60;
 }
 
 .settings-panel {
   position: absolute;
-  z-index: 20;
+  z-index: 61;
   inset: 14px 14px 14px auto;
   width: min(460px, calc(100% - 28px));
   display: flex;
@@ -155,7 +155,7 @@
 .audit-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 80;
   display: grid;
   place-items: center;
   padding: 32px;
