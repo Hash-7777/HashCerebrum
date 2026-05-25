@@ -92,11 +92,20 @@ typst-assets = { version = "0.14", features = ["fonts"] }
 security-framework = "2"
 
 [profile.release]
-strip     = true
-opt-level = 3
-lto       = true
-codegen-units = 1
-panic     = "abort"
+strip         = true
+opt-level     = 3
+# thin LTO: near-identical output quality, 3-5x faster link step than fat LTO.
+# codegen-units = 4 lets rustc parallelise code-gen; the linker still sees all
+# units via thin LTO so cross-crate inlining still happens.
+lto           = "thin"
+codegen-units = 4
+panic         = "abort"
 
 [profile.dev]
 incremental = true
+# Line-tables-only debug info: enough for panics and basic profiling,
+# significantly faster to generate and link than the default level 2.
+debug = 1
+# Skip dSYM packaging after every link (macOS-only benefit but harmless
+# on other platforms). Saves 30-60 s per dev build.
+split-debuginfo = "unpacked"
