@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
 import { useThemeStore, applyTheme } from '@core/store/themeStore';
@@ -15,6 +15,7 @@ import { TitleBar } from './TitleBar';
 import { LeftRail } from './LeftRail';
 import { ExecutionTrace } from './ExecutionTrace';
 import { Toast } from './Toast';
+import { SettingsPanel } from '@features/brain/components/SettingsPanel';
 
 const RegionBindingEditor = lazy(() =>
   import('@features/brain/components/RegionBindingEditor').then((module) => ({
@@ -37,6 +38,7 @@ function activeDevTool(): string | null {
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const theme = useThemeStore((s) => s.theme);
   const refreshModels = useModelCatalogStore((s) => s.refreshAll);
   const hydrateResearchRuns = useResearchRunStore((s) => s.hydrate);
@@ -88,6 +90,27 @@ export function AppShell() {
     };
   }, []);
 
+  // Global settings: listen for the hc:open-settings event dispatched by
+  // the TitleBar button and the per-mode Settings button in the Composer.
+  // ⌘, also toggles the panel from anywhere in the app.
+  useEffect(() => {
+    const onOpen = () => setSettingsOpen(true);
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault();
+        setSettingsOpen((v) => !v);
+      } else if (event.key === 'Escape' && settingsOpen) {
+        setSettingsOpen(false);
+      }
+    };
+    window.addEventListener('hc:open-settings', onOpen);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('hc:open-settings', onOpen);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [settingsOpen]);
+
   // Cmd/Ctrl+1..5 jumps modes. The shortcut shown on each rail button
   // reflects this binding (⌘1, ⌘2, …).
   useEffect(() => {
@@ -134,6 +157,16 @@ export function AppShell() {
       </div>
       <ExecutionTrace />
       <Toast />
+      {settingsOpen && (
+        <div
+          className="settings-popover-layer"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSettingsOpen(false);
+          }}
+        >
+          <SettingsPanel onClose={() => setSettingsOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }

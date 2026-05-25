@@ -183,6 +183,10 @@ export const browserPlatform: Platform = {
       }
     },
   },
+  app: {
+    relaunch: async () => { window.location.reload(); },
+  },
+
   env: {
     isTauri: false,
     platform: 'browser',

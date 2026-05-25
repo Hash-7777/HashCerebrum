@@ -132,6 +132,11 @@ export interface Platform {
     ): Promise<void>;
   };
 
+  // App lifecycle
+  app: {
+    relaunch(): Promise<void>;
+  };
+
   // Environment
   env: {
     isTauri: boolean;

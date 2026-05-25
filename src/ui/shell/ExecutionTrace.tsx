@@ -46,9 +46,15 @@ export function ExecutionTrace() {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
+    const onToggle = () => setExpanded((v) => !v);
+    window.addEventListener('hc:toggle-trace', onToggle);
+    // Legacy event — keep so any existing callers still work (opens only)
     const onExpand = () => setExpanded(true);
     window.addEventListener('hc:expand-trace', onExpand);
-    return () => window.removeEventListener('hc:expand-trace', onExpand);
+    return () => {
+      window.removeEventListener('hc:toggle-trace', onToggle);
+      window.removeEventListener('hc:expand-trace', onExpand);
+    };
   }, []);
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);

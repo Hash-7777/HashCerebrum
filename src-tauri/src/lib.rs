@@ -43,6 +43,12 @@ use commands::{
     pdf::{pdf_extract_text, pdf_extract_text_bytes},
 };
 
+/// Restart the application. Invoked from the titlebar restart button.
+#[tauri::command]
+fn app_relaunch(app: tauri::AppHandle) {
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Structured logging — RUST_LOG env controls verbosity.
@@ -92,6 +98,7 @@ pub fn run() {
             cache_stats,
             cache_clear,
             cache_clear_expired,
+            app_relaunch,
         ])
         .build(tauri::generate_context!())
     {

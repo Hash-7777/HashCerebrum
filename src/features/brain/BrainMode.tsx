@@ -26,7 +26,6 @@ import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { EvidenceList } from './components/EvidenceList';
-import { SettingsPanel } from './components/SettingsPanel';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
@@ -46,7 +45,6 @@ const WELCOME_MESSAGE: ChatMessage = {
 export function BrainMode() {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = useMemo(() => modelGroups.flatMap((group) => group.models), [modelGroups]);
   const [query, setQuery] = useState('');
@@ -90,26 +88,6 @@ export function BrainMode() {
   const toggleRegion = useCallback((region: RegionId | null) => {
     setSelectedRegion((current) => (current === region ? null : region));
   }, []);
-
-  // Cmd+, / Ctrl+, opens settings — matches HashCortx muscle memory.
-  // Also listens for the toolbar button's custom event.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
-        event.preventDefault();
-        setSettingsOpen((open) => !open);
-      } else if (event.key === 'Escape' && settingsOpen) {
-        setSettingsOpen(false);
-      }
-    };
-    const onOpenSettings = () => setSettingsOpen(true);
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('hc:open-settings', onOpenSettings);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('hc:open-settings', onOpenSettings);
-    };
-  }, [settingsOpen]);
 
   const updateAgentStatus = (agentId: AgentId, update: Partial<AgentStatus>) => {
     setAgentStatuses((current) =>
@@ -584,7 +562,7 @@ export function BrainMode() {
               setQuery('');
             }}
             onSubmit={submit}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => window.dispatchEvent(new CustomEvent('hc:open-settings'))}
           />
         </FeatureBoundary>
       </section>
@@ -616,18 +594,6 @@ export function BrainMode() {
         </div>
       </section>
 
-      {settingsOpen && (
-        <div
-          className="settings-popover-layer"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSettingsOpen(false);
-          }}
-        >
-          <FeatureBoundary name="Settings">
-            <SettingsPanel onClose={() => setSettingsOpen(false)} />
-          </FeatureBoundary>
-        </div>
-      )}
     </div>
   );
 }

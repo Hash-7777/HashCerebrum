@@ -191,6 +191,10 @@ export const tauriPlatform: Platform = {
     },
   },
 
+  app: {
+    relaunch: () => invoke<void>('app_relaunch'),
+  },
+
   env: {
     isTauri: true,
     platform: detectPlatform(),
