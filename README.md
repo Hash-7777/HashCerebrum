@@ -2,7 +2,7 @@
 
 <img width="200" height="200" alt="Sketches" style="border-radius: 500px;" src="https://github.com/user-attachments/assets/1d7fabb4-b697-4ca1-8a2c-b4ceac2aa7ae">
 
-
+<div align="center">
 
 # HashCerebrum
 
@@ -20,6 +20,7 @@ Ask a clinical question. A boss agent routes it to topic specialists, each agent
 </div>
 
 ---
+<img width="600" height="425" alt="Screenshot 2026-05-25 at 9 55 39 AM" src="https://github.com/user-attachments/assets/fb51d7aa-df65-4d18-bdac-e4d5cc9754be" />
 
 ## What makes this different
 
