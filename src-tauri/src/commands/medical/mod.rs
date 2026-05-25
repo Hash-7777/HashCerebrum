@@ -139,7 +139,9 @@ pub async fn fetch_json(
 
     // Check cache first
     if let Some(cached) = cache::get(&cache_key)? {
-        tracing::debug!(url = %url, "cache hit");
+        let mut log_url = url.clone();
+        log_url.set_query(None);
+        tracing::debug!(url = %log_url, "cache hit");
         return Ok(serde_json::from_slice(&cached)?);
     }
 
