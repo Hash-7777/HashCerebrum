@@ -77,6 +77,9 @@ PUBLICATION READINESS:
 
 const GRAMMAR_PROMPT = `You are a professional biomedical copyeditor. Analyse the manuscript for spelling, grammar, and language quality.
 
+For every issue that can be corrected directly, quote the exact manuscript text and use this form:
+"exact text from manuscript" → "replacement text"
+
 Identify issues under these headings — be specific, quote the problematic text:
 
 SPELLING ERRORS:
@@ -110,10 +113,16 @@ VAGUE OR BOILERPLATE SECTIONS:
 ATTRIBUTION GAPS:
 - [claim that implies prior work but cites nothing]
 
+For any unsupported or repetitive passage that should be rewritten, quote the exact manuscript text. If a safe replacement is possible, use:
+"exact text from manuscript" → "replacement text"
+
 ORIGINALITY ASSESSMENT:
 [paragraph summarising overall originality and completeness of evidence support]`;
 
 const VOCABULARY_PROMPT = `You are a scientific writing specialist improving vocabulary and terminology in a research manuscript.
+
+For every wording change that can be made directly, quote the exact manuscript text and use this form:
+"exact text from manuscript" → "replacement text"
 
 Produce these sections:
 
@@ -153,6 +162,9 @@ STATISTICAL INTERPRETATION:
 
 DATA PRESENTATION:
 [Quality of tables, figures, and numeric reporting]
+
+For any statistical sentence that should be revised, quote the exact manuscript text. If a safe replacement is possible, use:
+"exact text from manuscript" → "replacement text"
 
 STATISTICS SCORE: <integer 1-10>
 [One sentence overall verdict]`;
@@ -345,7 +357,7 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
   const list: Suggestion[] = [];
   // Matches: "A" → "B" or "A" -> "B" with ASCII or curly/German quotes
   const arrowRe =
-    /["""„]([^"""„\n]{2,120})["""„]\s*(?:→|->)\s*["""„]([^"""„\n]{2,300})["""„]/g;
+    /["“”„]([^"“”„\n]{2,240})["“”„]\s*(?:→|->)\s*["“”„]([^"“”„\n]{2,500})["“”„]/g;
 
   // Pass 1 — extract explicit arrow-pair fixes ("original" → "replacement")
   for (const agent of agentResults) {

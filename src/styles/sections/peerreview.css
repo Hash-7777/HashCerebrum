@@ -331,6 +331,44 @@
   line-height: 1.6;
 }
 
+.review-document-preview {
+  flex: 1;
+  overflow: auto;
+  padding: 32px;
+  background: #dfe5ec;
+}
+
+.review-document-page {
+  max-width: 760px;
+  min-height: calc(100% - 12px);
+  margin: 0 auto;
+  padding: 54px 64px 72px;
+  background: #fff;
+  color: #18202e;
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+  font-family: "New York", "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+  font-size: 15.5px;
+  line-height: 1.72;
+}
+
+.review-document-page p {
+  margin: 0 0 15px;
+}
+
+.review-document-page h2,
+.review-document-page h3 {
+  color: #0f1e33;
+  margin: 28px 0 10px;
+  line-height: 1.3;
+}
+
+.review-document-page ul,
+.review-document-page ol {
+  margin: 0 0 15px;
+  padding-left: 28px;
+}
+
 /* Critique sidebar — 1/3 width */
 .review-sidebar {
   flex: 1;
@@ -370,29 +408,63 @@
 
 .review-score-ring {
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 3px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--ink-2));
 }
 
 .review-score-ring[data-tier='mid'] {
-  border-color: var(--warm);
   background: color-mix(in srgb, var(--warm) 8%, transparent);
 }
 
 .review-score-ring[data-tier='low'] {
-  border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
+.review-score-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.review-score-track,
+.review-score-progress {
+  fill: none;
+  stroke-width: 4.5;
+}
+
+.review-score-track {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.review-score-progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.review-score-ring[data-tier='mid'] .review-score-progress { stroke: var(--warm); }
+.review-score-ring[data-tier='low'] .review-score-progress { stroke: var(--danger); }
+
+.review-score-value {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .review-score-number {
-  font-size: 1.1rem;
+  font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
   color: var(--text-1);
@@ -401,10 +473,11 @@
 }
 
 .review-score-denom {
-  font-size: 0.6rem;
+  font-size: 0.62rem;
   color: var(--text-3);
-  line-height: 1;
+  line-height: 1.15;
   font-family: var(--f-mono);
+  margin-top: 2px;
 }
 
 .review-sidebar-empty {
@@ -564,6 +637,7 @@
   border-radius: var(--r-xl);
   overflow: hidden;
   background: var(--ink-2);
+  flex: 0 0 auto;
 }
 .review-swarm-label {
   display: flex;
@@ -674,7 +748,13 @@
   padding: 4px 12px 10px 30px;
   background: rgba(255, 255, 255, 0.018);
   user-select: text;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+.review-agent-section-body::-webkit-scrollbar { width: 5px; }
+.review-agent-section-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.review-agent-section-body::-webkit-scrollbar-track { background: transparent; }
 .review-agent-section-body ul {
   margin: 0;
   padding-left: 1rem;
@@ -793,11 +873,28 @@
 .doc-editor-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
   padding: 7px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--ink-2);
   flex-shrink: 0;
+}
+
+.doc-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  border-right: 1px solid var(--line);
+}
+
+.doc-toolbar-group--wide {
+  min-width: 190px;
+}
+
+.doc-toolbar-group:last-of-type {
+  border-right: none;
 }
 
 .doc-editor-label {
@@ -818,13 +915,33 @@
   color: var(--text-4);
   letter-spacing: 0.06em;
   white-space: nowrap;
+  margin-left: auto;
+}
+
+.doc-toolbar-select {
+  height: 27px;
+  min-width: 104px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--ink-1);
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  padding: 0 8px;
+}
+
+.doc-toolbar-select--size {
+  min-width: 78px;
 }
 
 .doc-toolbar-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 4px 9px;
+  min-width: 28px;
+  height: 27px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: transparent;
@@ -834,6 +951,21 @@
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
   flex-shrink: 0;
+}
+
+.doc-toolbar-btn--icon {
+  width: 28px;
+  padding: 0;
+  font-size: 11px;
+}
+
+.doc-toolbar-u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.doc-toolbar-s {
+  text-decoration: line-through;
 }
 .doc-toolbar-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.05);
@@ -855,15 +987,49 @@
 .doc-editor {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
-  font-family: var(--f-display);
-  font-size: 13.5px;
-  line-height: 1.75;
-  color: var(--text-1);
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 48px 64px 72px;
+  background: #ffffff;
+  font-family: "New York", "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+  font-size: 15.5px;
+  line-height: 1.72;
+  color: #18202e;
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
   caret-color: var(--accent);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+}
+
+.doc-editor-wrap {
+  padding-bottom: 0;
+}
+
+.doc-editor h2,
+.doc-editor h3 {
+  color: #0f1e33;
+  line-height: 1.3;
+  margin: 28px 0 10px;
+}
+
+.doc-editor p,
+.doc-editor div {
+  margin: 0 0 14px;
+}
+
+.doc-editor ul,
+.doc-editor ol {
+  margin: 0 0 15px;
+  padding-left: 28px;
+}
+
+.doc-editor blockquote {
+  margin: 0 0 15px;
+  padding: 10px 18px;
+  border-left: 3px solid #82e0c2;
+  background: #f5fdfb;
+  color: #334155;
 }
 
 .doc-editor::-webkit-scrollbar { width: 6px; }

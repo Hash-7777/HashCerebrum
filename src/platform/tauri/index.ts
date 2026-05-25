@@ -127,6 +127,11 @@ export const tauriPlatform: Platform = {
 
   pdf: {
     extractText: (path) => invoke<string>('pdf_extract_text', { path }),
+    extractTextBytes: (filename, bytes) =>
+      invoke<string>('pdf_extract_text_bytes', {
+        filename,
+        bytes: Array.from(bytes),
+      }),
   },
 
   manuscript: {

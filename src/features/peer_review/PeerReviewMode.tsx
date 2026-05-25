@@ -24,8 +24,9 @@ export default function PeerReviewMode() {
       }
       try {
         await addUpload(file);
-      } catch {
-        useToastStore.getState().show(`Failed to import ${file.name}`, 'error');
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : `Failed to import ${file.name}`;
+        useToastStore.getState().show(detail, 'error');
       }
     }
   };

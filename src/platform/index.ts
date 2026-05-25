@@ -74,6 +74,7 @@ export interface Platform {
   // PDF extraction
   pdf: {
     extractText(path: string): Promise<string>;
+    extractTextBytes(filename: string, bytes: Uint8Array): Promise<string>;
   };
 
   // Manuscript typesetting — a structured manuscript rendered to a PDF by

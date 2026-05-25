@@ -12,6 +12,18 @@ use std::path::PathBuf;
 
 const MAX_PDF_BYTES: u64 = 50 * 1024 * 1024; // 50 MB
 
+fn extract_text_from_document(doc: Document) -> String {
+    let pages = doc.get_pages();
+    let mut out = String::new();
+    for (page_num, _) in pages {
+        if let Ok(text) = doc.extract_text(&[page_num]) {
+            out.push_str(&text);
+            out.push_str("\n\n");
+        }
+    }
+    out
+}
+
 #[tauri::command]
 pub async fn pdf_extract_text(path: String) -> AppResult<String> {
     check(Action::Fs { path: &path })?;
@@ -29,15 +41,7 @@ pub async fn pdf_extract_text(path: String) -> AppResult<String> {
     // with the synchronous lopdf parser on a large file.
     let extracted = tokio::task::spawn_blocking(move || -> Result<String, lopdf::Error> {
         let doc = Document::load(&path)?;
-        let pages = doc.get_pages();
-        let mut out = String::new();
-        for (page_num, _) in pages {
-            if let Ok(text) = doc.extract_text(&[page_num]) {
-                out.push_str(&text);
-                out.push_str("\n\n");
-            }
-        }
-        Ok(out)
+        Ok(extract_text_from_document(doc))
     })
     .await
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
@@ -48,6 +52,32 @@ pub async fn pdf_extract_text(path: String) -> AppResult<String> {
         &path_str,
         "extract",
         &serde_json::json!({ "bytes": meta.len() }),
+    );
+
+    Ok(extracted)
+}
+
+#[tauri::command]
+pub async fn pdf_extract_text_bytes(filename: String, bytes: Vec<u8>) -> AppResult<String> {
+    if bytes.len() as u64 > MAX_PDF_BYTES {
+        return Err(AppError::InvalidInput("pdf exceeds 50 MB limit".into()));
+    }
+
+    let byte_len = bytes.len();
+    let fingerprint = crate::crypto::sha256_hex(&bytes);
+    let extracted = tokio::task::spawn_blocking(move || -> Result<String, lopdf::Error> {
+        let doc = Document::load_mem(&bytes)?;
+        Ok(extract_text_from_document(doc))
+    })
+    .await
+    .map_err(|e| AppError::Pdf(format!("join: {e}")))?
+    .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
+
+    let _ = crate::audit::store::append(
+        "upload",
+        &filename,
+        "extract_pdf_text",
+        &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint }),
     );
 
     Ok(extracted)

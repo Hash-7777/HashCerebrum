@@ -40,7 +40,7 @@ use commands::{
         semantic_scholar::semantic_scholar_search,
     },
     net::net_get,
-    pdf::pdf_extract_text,
+    pdf::{pdf_extract_text, pdf_extract_text_bytes},
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -88,6 +88,7 @@ pub fn run() {
             rxnorm_lookup,
             semantic_scholar_search,
             pdf_extract_text,
+            pdf_extract_text_bytes,
             render_manuscript_pdf,
             cache_stats,
             cache_clear,

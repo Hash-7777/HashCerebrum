@@ -27,6 +27,22 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function currentDocumentText(paper: ReviewedPaper): string {
+  return paper.editedText ?? paper.text;
+}
+
+function textToPreviewHtml(text: string): string {
+  const blocks = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length === 0) return '<p></p>';
+  return blocks
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
 function buildHighlightedHtml(text: string, suggestions: Suggestion[]): string {
   type Span = { start: number; end: number; sid: string; type: SuggestionType };
   const spans: Span[] = [];
@@ -66,14 +82,78 @@ function buildHighlightedHtml(text: string, suggestions: Suggestion[]): string {
   return html;
 }
 
+function firstTextNodeContaining(root: HTMLElement, needle: string): Text | null {
+  if (!needle) return null;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if ((node.textContent ?? '').includes(needle)) return node as Text;
+    node = walker.nextNode();
+  }
+  return null;
+}
+
+function replaceFirstPlainText(root: HTMLElement, needle: string, replacement: string, className: string): boolean {
+  const node = firstTextNodeContaining(root, needle);
+  if (!node) return false;
+  const text = node.textContent ?? '';
+  const index = text.indexOf(needle);
+  if (index < 0) return false;
+  const before = document.createTextNode(text.slice(0, index));
+  const after = document.createTextNode(text.slice(index + needle.length));
+  const span = document.createElement('span');
+  span.className = className;
+  span.textContent = replacement;
+  node.replaceWith(before, span, after);
+  return true;
+}
+
+function markFirstPlainText(
+  root: HTMLElement,
+  needle: string,
+  sid: string,
+  type: SuggestionType,
+): boolean {
+  const node = firstTextNodeContaining(root, needle);
+  if (!node) return false;
+  const text = node.textContent ?? '';
+  const index = text.indexOf(needle);
+  if (index < 0) return false;
+  const before = document.createTextNode(text.slice(0, index));
+  const after = document.createTextNode(text.slice(index + needle.length));
+  const mark = document.createElement('mark');
+  mark.className = `doc-mark doc-mark--${type}`;
+  mark.dataset.sid = sid;
+  mark.textContent = needle;
+  node.replaceWith(before, mark, after);
+  return true;
+}
+
 // ── Review panel sub-components ───────────────────────────────────────────
 
 function ScoreRing({ score }: { score: number }) {
   const tier = score >= 8 ? 'high' : score >= 5 ? 'mid' : 'low';
+  const safeScore = Math.max(1, Math.min(10, score));
+  const radius = 19;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - safeScore / 10);
   return (
     <div className="review-score-ring" data-tier={tier}>
-      <span className="review-score-number">{score}</span>
-      <span className="review-score-denom">/10</span>
+      <svg className="review-score-svg" viewBox="0 0 44 44" aria-hidden="true">
+        <circle className="review-score-track" cx="22" cy="22" r={radius} />
+        <circle
+          className="review-score-progress"
+          cx="22"
+          cy="22"
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+        />
+      </svg>
+      <span className="review-score-value">
+        <span className="review-score-number">{safeScore}</span>
+        <span className="review-score-denom">/10</span>
+      </span>
     </div>
   );
 }
@@ -90,7 +170,7 @@ function AgentSection({
   def: { label: string; iconName: string };
 }) {
   const [open, setOpen] = useState(false);
-  const hasContent = agent.text.length > 0;
+  const hasContent = agent.items.length > 0 || agent.text.trim().length > 0 || Boolean(agent.error);
 
   return (
     <div className={`review-agent-section review-agent-section--${agent.status}`}>
@@ -141,11 +221,21 @@ function AgentSection({
 
 // ── Document preview (read-only, non-editor mode) ─────────────────────────
 
-function isPdfBinary(text: string): boolean {
-  return text.trimStart().startsWith('%PDF-');
-}
-
 function DocumentPane({ paper }: { paper: ReviewedPaper }) {
+  if (paper.editedHtml) {
+    return (
+      <div className="review-document-preview">
+        <article
+          className="review-document-page"
+          // Editor output is produced by this component. Paste is forced to
+          // plain text, so stored markup is limited to toolbar formatting,
+          // marks, and accepted-fix spans.
+          dangerouslySetInnerHTML={{ __html: paper.editedHtml }}
+        />
+      </div>
+    );
+  }
+
   if (paper.htmlContent) {
     return (
       <iframe
@@ -157,21 +247,12 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
-  if (paper.blobUrl && isPdfBinary(paper.text)) {
-    // object-src 'none' in the app CSP blocks <object> entirely.
-    // frame-src explicitly allows blob: so <iframe src={blobUrl}> is the correct path.
-    return (
-      <iframe
-        src={paper.blobUrl}
-        title={paper.title}
-        className="review-pdf-frame"
-      />
-    );
-  }
-
   return (
-    <div className="review-pdf-text">
-      <pre>{paper.text.slice(0, 40_000)}</pre>
+    <div className="review-document-preview">
+      <article
+        className="review-document-page"
+        dangerouslySetInnerHTML={{ __html: textToPreviewHtml(currentDocumentText(paper).slice(0, 120_000)) }}
+      />
     </div>
   );
 }
@@ -293,6 +374,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const setReviewError     = usePeerReviewStore((s) => s.setReviewError);
   const setReviewAgents    = usePeerReviewStore((s) => s.setReviewAgents);
   const patchReviewAgent   = usePeerReviewStore((s) => s.patchReviewAgent);
+  const setDocumentDraft   = usePeerReviewStore((s) => s.setDocumentDraft);
 
   const abortRef      = useRef<AbortController | null>(null);
   const editorRef     = useRef<HTMLDivElement | null>(null);
@@ -304,22 +386,30 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeSugId, setActiveSugId] = useState<string | null>(null);
   const [showEditor,  setShowEditor]  = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   const liveAgents: AgentReviewResult[] =
     paper.reviewAgents ??
     paper.review?.agentResults ??
     initialSwarmAgents();
 
+  const persistEditor = () => {
+    if (!editorRef.current) return;
+    setDocumentDraft(paper.id, editorRef.current.innerText, editorRef.current.innerHTML);
+  };
+
   // ── Editor init ────────────────────────────────────────────────────────
   // Build the highlighted HTML when the editor first opens.
   // Uses captured ref values so we don't re-run on suggestion state changes.
   useEffect(() => {
     if (!showEditor || !editorRef.current) return;
-    editorRef.current.innerHTML = buildHighlightedHtml(
-      enterDataRef.current.text,
-      enterDataRef.current.sugs,
-    );
+    editorRef.current.innerHTML = paper.editedHtml ??
+      buildHighlightedHtml(
+        enterDataRef.current.text,
+        enterDataRef.current.sugs,
+      );
     historyRef.current = [];
+    setHistoryVersion((v) => v + 1);
   }, [showEditor]);
 
   // Sync active-mark highlight when the user hovers a suggestion card
@@ -344,6 +434,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       html: editorRef.current.innerHTML,
       sugs: suggestions.slice(),
     });
+    setHistoryVersion((v) => v + 1);
   };
 
   const undoEdit = () => {
@@ -351,6 +442,26 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
     const prev = historyRef.current.pop()!;
     editorRef.current.innerHTML = prev.html;
     setSuggestions(prev.sugs);
+    setHistoryVersion((v) => v + 1);
+    persistEditor();
+  };
+
+  const runEditorCommand = (command: string, value?: string) => {
+    if (!editorRef.current) return;
+    saveHistory();
+    editorRef.current.focus();
+    document.execCommand(command, false, value);
+    persistEditor();
+  };
+
+  const copyEditorText = async () => {
+    if (!editorRef.current) return;
+    try {
+      await navigator.clipboard.writeText(editorRef.current.innerText);
+      useToastStore.getState().show('Document text copied', 'info');
+    } catch {
+      useToastStore.getState().show('Copy failed', 'error');
+    }
   };
 
   // ── Suggestion actions ─────────────────────────────────────────────────
@@ -358,6 +469,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const acceptSuggestion = (s: Suggestion) => {
     if (!editorRef.current) return;
     const mark = editorRef.current.querySelector<HTMLElement>(`mark[data-sid="${s.id}"]`);
+    let applied = false;
     if (mark) {
       // Anchored suggestion: replace the <mark> in-place
       saveHistory();
@@ -365,18 +477,20 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       span.className = 'doc-fix-accepted';
       span.textContent = s.suggestedText;
       mark.replaceWith(span);
+      applied = true;
     } else if (s.originalText && s.suggestedText) {
-      // No mark exists (unanchored that was fixed): find the first occurrence
-      // of the escaped original in innerHTML and replace it
-      const escaped = escapeHtml(s.originalText);
-      if (editorRef.current.innerHTML.includes(escaped)) {
-        saveHistory();
-        editorRef.current.innerHTML = editorRef.current.innerHTML.replace(
-          escaped,
-          `<span class="doc-fix-accepted">${escapeHtml(s.suggestedText)}</span>`,
-        );
+      saveHistory();
+      applied = replaceFirstPlainText(editorRef.current, s.originalText, s.suggestedText, 'doc-fix-accepted');
+      if (!applied) {
+        historyRef.current.pop();
+        setHistoryVersion((v) => v + 1);
       }
     }
+    if (!applied) {
+      useToastStore.getState().show('Could not locate that passage in the editable document', 'error');
+      return;
+    }
+    persistEditor();
     setSuggestions((prev) =>
       prev.map((x) => (x.id === s.id ? { ...x, status: 'accepted' } : x)),
     );
@@ -389,6 +503,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       saveHistory();
       mark.replaceWith(document.createTextNode(mark.textContent ?? ''));
     }
+    persistEditor();
     setSuggestions((prev) =>
       prev.map((x) => (x.id === s.id ? { ...x, status: 'skipped' } : x)),
     );
@@ -399,7 +514,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       prev.map((x) => (x.id === s.id ? { ...x, status: 'fixing' } : x)),
     );
     try {
-      const rawText   = editorRef.current?.innerText ?? paper.text;
+      const rawText   = editorRef.current?.innerText ?? currentDocumentText(paper);
       const isAnchored = s.originalText.length > 0;
       const idx       = isAnchored ? rawText.indexOf(s.originalText) : -1;
       const ctxStart  = Math.max(0, (idx < 0 ? 0 : idx) - 300);
@@ -438,13 +553,8 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       // For a newly-anchored suggestion: inject a live <mark> into the editor
       // so the user can see exactly what will change before clicking Accept.
       if (!isAnchored && newOriginal && editorRef.current) {
-        const escaped = escapeHtml(newOriginal);
-        if (editorRef.current.innerHTML.includes(escaped)) {
-          editorRef.current.innerHTML = editorRef.current.innerHTML.replace(
-            escaped,
-            `<mark class="doc-mark doc-mark--${escapeHtml(s.type)}" data-sid="${escapeHtml(s.id)}">${escaped}</mark>`,
-          );
-        }
+        markFirstPlainText(editorRef.current, newOriginal, s.id, s.type);
+        persistEditor();
       }
 
       setSuggestions((prev) =>
@@ -466,7 +576,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const enterEditor = () => {
     const agentResults = paper.review?.agentResults ?? paper.reviewAgents ?? [];
     const parsed       = parseSuggestions(agentResults);
-    enterDataRef.current = { text: paper.text, sugs: parsed };
+    enterDataRef.current = { text: currentDocumentText(paper), sugs: parsed };
     setSuggestions(parsed);
     setShowEditor(true);
   };
@@ -489,7 +599,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
     try {
       const review = await runReviewSwarm(
         model,
-        paper.text,
+        currentDocumentText(paper),
         (agentId, patch) => patchReviewAgent(paper.id, agentId, patch),
         controller.signal,
       );
@@ -526,7 +636,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const anyRunning   = liveAgents.some((a) => a.status === 'running');
   const allDone      = liveAgents.every((a) => a.status === 'done' || a.status === 'error');
   const pendingCount = suggestions.filter((s) => s.status === 'pending').length;
-  const canUndo      = historyRef.current.length > 0;
+  const canUndo      = historyVersion >= 0 && historyRef.current.length > 0;
 
   return (
     <div className="review-window" role="dialog" aria-label="Peer review" aria-modal="true">
@@ -550,10 +660,74 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
             <div className="doc-editor-wrap">
               {/* Toolbar */}
               <div className="doc-editor-toolbar">
-                <span className="doc-editor-label">
-                  <Icon name="edit" size={11} />
-                  Editing document
-                </span>
+                <div className="doc-toolbar-group doc-toolbar-group--wide">
+                  <select
+                    className="doc-toolbar-select"
+                    defaultValue="P"
+                    title="Paragraph style"
+                    aria-label="Paragraph style"
+                    onChange={(e) => runEditorCommand('formatBlock', e.currentTarget.value)}
+                  >
+                    <option value="P">Paragraph</option>
+                    <option value="H2">Heading</option>
+                    <option value="H3">Subheading</option>
+                    <option value="BLOCKQUOTE">Quote</option>
+                  </select>
+                  <select
+                    className="doc-toolbar-select doc-toolbar-select--size"
+                    defaultValue="3"
+                    title="Text size"
+                    aria-label="Text size"
+                    onChange={(e) => runEditorCommand('fontSize', e.currentTarget.value)}
+                  >
+                    <option value="2">Small</option>
+                    <option value="3">Normal</option>
+                    <option value="4">Large</option>
+                    <option value="5">Title</option>
+                  </select>
+                </div>
+                <div className="doc-toolbar-group">
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('bold')} title="Bold" aria-label="Bold">
+                    <strong>B</strong>
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('italic')} title="Italic" aria-label="Italic">
+                    <em>I</em>
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('underline')} title="Underline" aria-label="Underline">
+                    <span className="doc-toolbar-u">U</span>
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('strikeThrough')} title="Strikethrough" aria-label="Strikethrough">
+                    <span className="doc-toolbar-s">S</span>
+                  </button>
+                </div>
+                <div className="doc-toolbar-group">
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('insertUnorderedList')} title="Bulleted list" aria-label="Bulleted list">
+                    <Icon name="list" size={13} />
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('insertOrderedList')} title="Numbered list" aria-label="Numbered list">
+                    1.
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('outdent')} title="Outdent" aria-label="Outdent">
+                    <Icon name="minus" size={13} />
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('indent')} title="Indent" aria-label="Indent">
+                    <Icon name="plus" size={13} />
+                  </button>
+                </div>
+                <div className="doc-toolbar-group">
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('justifyLeft')} title="Align left" aria-label="Align left">
+                    L
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('justifyCenter')} title="Align center" aria-label="Align center">
+                    C
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('justifyRight')} title="Align right" aria-label="Align right">
+                    R
+                  </button>
+                  <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('removeFormat')} title="Clear formatting" aria-label="Clear formatting">
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
                 {pendingCount > 0 && (
                   <span className="doc-editor-count">
                     {pendingCount} remaining
@@ -565,9 +739,18 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                   onClick={undoEdit}
                   disabled={!canUndo}
                   title="Undo last accepted or skipped change"
+                  aria-label="Undo"
                 >
                   <Icon name="refresh" size={11} />
-                  Undo
+                </button>
+                <button
+                  type="button"
+                  className="doc-toolbar-btn"
+                  onClick={() => void copyEditorText()}
+                  title="Copy document text"
+                  aria-label="Copy document text"
+                >
+                  <Icon name="copy" size={11} />
                 </button>
                 <button
                   type="button"
@@ -585,14 +768,17 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                 className="doc-editor"
                 contentEditable
                 suppressContentEditableWarning
-                spellCheck={false}
+                spellCheck
+                onInput={persistEditor}
                 onPaste={(e) => {
                   // Strip rich-text markup — insert plain text only to prevent
                   // injected DOM elements (img, script, etc.) from landing in the
                   // editor and being preserved in the undo-history snapshots.
                   e.preventDefault();
+                  saveHistory();
                   const plain = e.clipboardData?.getData('text/plain') ?? '';
                   document.execCommand('insertText', false, plain);
+                  persistEditor();
                 }}
                 aria-label="Document editor"
                 aria-multiline="true"

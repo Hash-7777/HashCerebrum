@@ -3,6 +3,7 @@
 // and are re-supplied each session.
 
 import { create } from 'zustand';
+import { platform } from '@platform/index';
 
 export interface AgentReviewResult {
   agentId: string;
@@ -36,6 +37,10 @@ export interface ReviewedPaper {
   source: 'upload' | 'manuscript';
   // Full text forwarded to the review engine
   text: string;
+  /** Latest user-edited plain text. Falls back to `text` before editing. */
+  editedText?: string;
+  /** Latest user-edited rich HTML from the document editor toolbar. */
+  editedHtml?: string;
   // Object URL for the PDF viewer — valid for the current session only
   blobUrl?: string;
   /** Pre-built HTML for the in-app preview iframe (srcDoc).  Tauri's WKWebView
@@ -61,6 +66,7 @@ interface PeerReviewStore {
   setReviewError: (id: string, error: string) => void;
   setReviewAgents: (id: string, agents: AgentReviewResult[]) => void;
   patchReviewAgent: (id: string, agentId: string, patch: Partial<AgentReviewResult>) => void;
+  setDocumentDraft: (id: string, text: string, html: string) => void;
   removePaper: (id: string) => void;
 }
 
@@ -68,13 +74,16 @@ function uid(): string {
   return `pr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
+async function readFileBytes(file: File): Promise<Uint8Array> {
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+function normalizeExtractedPdfText(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
 }
 
 export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
@@ -84,26 +93,30 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
   addUpload: async (file) => {
     const id = uid();
     const blobUrl = URL.createObjectURL(file);
-    // Read text for review engine (best-effort — PDFs will be garbled, but
-    // the user can also paste text; for now we store raw bytes as text and
-    // the review engine handles what it gets).
-    let text = '';
     try {
-      text = await readFileAsText(file);
-    } catch {
-      text = `[Binary file: ${file.name}]`;
+      const bytes = await readFileBytes(file);
+      const extracted = normalizeExtractedPdfText(
+        await platform().pdf.extractTextBytes(file.name, bytes),
+      );
+      if (extracted.replace(/\s+/g, '').length < 80) {
+        throw new Error('No readable text was extracted. The PDF may be scanned or image-only.');
+      }
+      const paper: ReviewedPaper = {
+        id,
+        title: file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '),
+        filename: file.name,
+        addedAt: new Date().toISOString(),
+        source: 'upload',
+        text: extracted,
+        blobUrl,
+      };
+      set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
+      return id;
+    } catch (err) {
+      URL.revokeObjectURL(blobUrl);
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`${file.name}: ${detail}`);
     }
-    const paper: ReviewedPaper = {
-      id,
-      title: file.name.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '),
-      filename: file.name,
-      addedAt: new Date().toISOString(),
-      source: 'upload',
-      text,
-      blobUrl,
-    };
-    set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
-    return id;
   },
 
   addManuscript: (title, text, pdfBlob, htmlContent) => {
@@ -161,6 +174,11 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
         );
         return { ...p, reviewAgents: agents };
       }),
+    })),
+
+  setDocumentDraft: (id, text, html) =>
+    set((s) => ({
+      papers: s.papers.map((p) => (p.id === id ? { ...p, editedText: text, editedHtml: html } : p)),
     })),
 
   removePaper: (id) =>
