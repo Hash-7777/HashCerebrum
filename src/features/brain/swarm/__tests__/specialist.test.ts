@@ -78,6 +78,7 @@ function callbacks() {
     onToolCall: vi.fn(),
     onToolResult: vi.fn(),
     onAnswerToken: vi.fn(),
+    onManuscriptSection: vi.fn(),
   };
 }
 
@@ -122,20 +123,22 @@ describe('runSwarm', () => {
 
   it('drafts a structured manuscript for a paper request even when the model is unavailable', async () => {
     llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
+    const cb = callbacks();
 
     const result = await runSwarm({
       question: 'make a full research paper about NSAIDs and warfarin',
       conversation: [],
       modelFor: () => 'openrouter:test-model',
-      callbacks: callbacks(),
+      callbacks: cb,
     });
 
     expect(result.kind).toBe('research');
     expect(result.specialists.map((specialist) => specialist.agentId)).toEqual([
       'literature',
-      'pharmacology',
       'trials',
-      'public_health',
+      'data_scientist',
+      'pharmacology',
+      'drug_interactions',
     ]);
     expect(result.evidence.length).toBeGreaterThan(0);
     // A paper request always yields a structured manuscript — even with the
@@ -154,6 +157,13 @@ describe('runSwarm', () => {
       'Declarations',
     ]);
     expect(result.manuscript?.sections[0]?.body.join(' ')).toContain('could not be drafted');
+    expect(result.manuscript?.publication?.evidenceExtractions?.length).toBeGreaterThan(0);
+    expect(result.manuscript?.publication?.claimLedger?.length).toBeGreaterThan(0);
+    expect(result.manuscript?.publication?.statistics.computedAnalyses).toContain('claim_ledger');
+    expect(cb.onManuscriptSection).toHaveBeenCalledWith('Searching');
+    expect(cb.onManuscriptSection).toHaveBeenCalledWith('Extracting');
+    expect(cb.onManuscriptSection).toHaveBeenCalledWith('Building claims');
+    expect(cb.onManuscriptSection).toHaveBeenCalledWith('Drafting');
     expect(result.answer).toContain('INTRODUCTION');
   });
 

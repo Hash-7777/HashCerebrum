@@ -60,6 +60,61 @@ export interface ManuscriptTable {
   rows: string[][];
 }
 
+export type EvidenceStrength = 'strong' | 'moderate' | 'weak' | 'context';
+
+export interface ExtractedEffectValue {
+  label: string;
+  value: string;
+  sourceText: string;
+}
+
+export interface EvidenceExtraction {
+  id: string;
+  sourceMarker: string;
+  evidenceIndex: number;
+  source: EvidenceItem['source'];
+  title: string;
+  year: string | null;
+  identifiers: Record<string, string>;
+  studyDesign: string;
+  population: string;
+  exposureOrIntervention: string;
+  comparator: string;
+  outcomes: string[];
+  sampleSize: string | null;
+  effectValues: ExtractedEffectValue[];
+  limitations: string[];
+  keyFinding: string;
+  trusted: boolean;
+}
+
+export interface ClaimLedgerEntry {
+  id: string;
+  claim: string;
+  supportingSources: string[];
+  sectionTarget: string;
+  evidenceStrength: EvidenceStrength;
+  contradictionNotes: string[];
+  numericSupport: string[];
+}
+
+export interface PaperBlueprintSection {
+  heading: string;
+  intent: string;
+  requiredClaimIds: string[];
+  requiredSourceMarkers: string[];
+  targetWords: string;
+  minWords: number;
+}
+
+export interface PaperBlueprint {
+  title: string;
+  abstractIntent: string;
+  sections: PaperBlueprintSection[];
+  requiredTables: string[];
+  requiredFigures: string[];
+}
+
 export interface StatisticsPayload {
   mode: 'evidence_review' | 'original_dataset';
   totalRecords: number;
@@ -68,6 +123,10 @@ export interface StatisticsPayload {
   yearRange: { min: number | null; max: number | null };
   computedAnalyses: string[];
   safeguards: string[];
+  trustedRecordCount?: number;
+  contextRecordCount?: number;
+  evidenceStrengthCounts?: Record<EvidenceStrength, number>;
+  extractedNumericStatisticCount?: number;
   dataset?: UploadedDatasetSummary;
 }
 
@@ -211,6 +270,14 @@ export interface ComplianceItem {
   detail: string;
 }
 
+export interface PaperPackageQa {
+  stage: 'export_ready' | 'blocked';
+  exportReady: boolean;
+  blockers: ValidationIssue[];
+  warnings: ValidationIssue[];
+  summary: string[];
+}
+
 export interface PublicationArtifact {
   schemaVersion: 'hc.manuscript.v2';
   generatedAt: string;
@@ -221,6 +288,10 @@ export interface PublicationArtifact {
   figures: ManuscriptFigure[];
   tables: ManuscriptTable[];
   statistics: StatisticsPayload;
+  evidenceExtractions?: EvidenceExtraction[];
+  claimLedger?: ClaimLedgerEntry[];
+  paperBlueprint?: PaperBlueprint;
+  paperQa?: PaperPackageQa;
   validation: ManuscriptValidation;
   compliance: ComplianceItem[];
   exportPackage: {

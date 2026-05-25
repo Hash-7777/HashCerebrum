@@ -12,10 +12,15 @@ import type {
   CitationMapEntry,
   ComplianceItem,
   CslReference,
+  ClaimLedgerEntry,
+  EvidenceExtraction,
+  EvidenceStrength,
   ManuscriptFigure,
   ManuscriptStandard,
   ManuscriptTable,
   ManuscriptValidation,
+  PaperBlueprint,
+  PaperPackageQa,
   PublicationArtifact,
   StatisticsPayload,
   UploadedDatasetSummary,
@@ -384,7 +389,75 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
   };
 }
 
-function buildTables(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary): ManuscriptTable[] {
+function evidenceExtractionTable(extractions: EvidenceExtraction[]): ManuscriptTable {
+  return {
+    id: 'table-evidence-extraction',
+    title: 'Structured evidence extraction',
+    caption:
+      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet.',
+    columns: ['Source', 'Design', 'Population', 'Exposure/intervention', 'Outcomes', 'Numeric support', 'Key finding'],
+    rows: extractions.map((item) => [
+      `${item.sourceMarker} ${SOURCE_LABELS[item.source]}`,
+      item.studyDesign,
+      item.population,
+      item.exposureOrIntervention,
+      item.outcomes.join('; ') || 'not reported in retrieved record',
+      [
+        item.sampleSize ? `sample ${item.sampleSize}` : '',
+        ...item.effectValues.map((effect) => `${effect.label} ${effect.value}`),
+      ].filter(Boolean).join('; ') || 'none extracted',
+      item.keyFinding,
+    ]),
+  };
+}
+
+function claimLedgerTable(ledger: ClaimLedgerEntry[]): ManuscriptTable {
+  return {
+    id: 'table-claim-ledger',
+    title: 'Claim ledger',
+    caption:
+      'Section-level claim ledger used to compile the manuscript. The drafting model may use only these source-backed claims and source markers.',
+    columns: ['Claim', 'Section', 'Evidence strength', 'Sources', 'Numeric support', 'Contradictions or limits'],
+    rows: ledger.map((entry) => [
+      entry.claim,
+      entry.sectionTarget,
+      entry.evidenceStrength,
+      entry.supportingSources.join(', '),
+      entry.numericSupport.join('; ') || 'none extracted',
+      entry.contradictionNotes.join('; ') || 'none recorded',
+    ]),
+  };
+}
+
+function extractedNumericStatisticsTable(extractions: EvidenceExtraction[]): ManuscriptTable | null {
+  const rows = extractions.flatMap((item) =>
+    item.effectValues.map((effect) => [
+      item.sourceMarker,
+      effect.label,
+      effect.value,
+      item.sampleSize ?? 'not reported',
+      effect.sourceText,
+    ]),
+  );
+  if (rows.length === 0) return null;
+  return {
+    id: 'table-extracted-numeric-statistics',
+    title: 'Extracted numeric statistics',
+    caption:
+      'Numeric statistics copied from retrieved source text by the extraction layer. No pooled estimates or new p-values are generated in evidence-review mode.',
+    columns: ['Source', 'Statistic', 'Value', 'Sample size', 'Trace text'],
+    rows,
+  };
+}
+
+function buildTables(
+  evidence: EvidenceItem[],
+  dataset?: UploadedDatasetSummary,
+  pipeline?: {
+    evidenceExtractions?: EvidenceExtraction[];
+    claimLedger?: ClaimLedgerEntry[];
+  },
+): ManuscriptTable[] {
   const counts = sourceCounts(evidence);
   const rows = Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
@@ -403,22 +476,59 @@ function buildTables(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary)
       rows,
     },
   ];
+  if (pipeline?.evidenceExtractions?.length) {
+    tables.push(evidenceExtractionTable(pipeline.evidenceExtractions));
+    const numericTable = extractedNumericStatisticsTable(pipeline.evidenceExtractions);
+    if (numericTable) tables.push(numericTable);
+  }
+  if (pipeline?.claimLedger?.length) tables.push(claimLedgerTable(pipeline.claimLedger));
   if (dataset) tables.push(datasetTable(dataset));
   if (dataset?.inferential?.generated) tables.push(inferentialTable(dataset.inferential));
   return tables;
+}
+
+function evidenceStrengthCounts(ledger?: ClaimLedgerEntry[]): Record<EvidenceStrength, number> | undefined {
+  if (!ledger?.length) return undefined;
+  const counts: Record<EvidenceStrength, number> = {
+    strong: 0,
+    moderate: 0,
+    weak: 0,
+    context: 0,
+  };
+  for (const entry of ledger) counts[entry.evidenceStrength] += 1;
+  return counts;
+}
+
+function extractedNumericStatisticCount(extractions?: EvidenceExtraction[]): number | undefined {
+  if (!extractions?.length) return undefined;
+  return extractions.reduce((sum, item) => sum + item.effectValues.length + (item.sampleSize ? 1 : 0), 0);
 }
 
 function statisticsPayload(
   evidence: EvidenceItem[],
   references: CanonicalReference[],
   dataset?: UploadedDatasetSummary,
+  pipeline?: {
+    evidenceExtractions?: EvidenceExtraction[];
+    claimLedger?: ClaimLedgerEntry[];
+  },
 ): StatisticsPayload {
   const years = evidenceYears(evidence);
   const inferential = dataset?.inferential;
+  const strengthCounts = evidenceStrengthCounts(pipeline?.claimLedger);
+  const numericCount = extractedNumericStatisticCount(pipeline?.evidenceExtractions);
+  const trustedRecordCount = pipeline?.evidenceExtractions?.filter((item) => item.trusted).length;
+  const contextRecordCount =
+    pipeline?.evidenceExtractions && trustedRecordCount !== undefined
+      ? pipeline.evidenceExtractions.length - trustedRecordCount
+      : undefined;
 
   const computedAnalyses = dataset
     ? ['dataset_sha256', 'descriptive_statistics', 'table_one_preview', 'source_counts', 'citation_resolution']
     : ['source_counts', 'unique_record_count', 'citation_resolution', 'year_range'];
+  if (pipeline?.evidenceExtractions?.length) computedAnalyses.push('evidence_extraction', 'source_yield');
+  if (pipeline?.claimLedger?.length) computedAnalyses.push('claim_ledger', 'evidence_strength_counts');
+  if (numericCount && numericCount > 0) computedAnalyses.push('extracted_numeric_statistics');
   if (inferential?.generated) {
     for (const analysis of inferential.analyses) computedAnalyses.push(analysis.kind);
     if (inferential.subgroups) computedAnalyses.push('mantel_haenszel_subgroups');
@@ -435,7 +545,7 @@ function statisticsPayload(
       ]
     : [
         'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
-        'The language model may narrate retrieved evidence but may not invent numerical statistical results.',
+        'The language model may narrate retrieved evidence and extracted source statistics, but may not invent numerical statistical results or pooled estimates.',
       ];
 
   return {
@@ -449,6 +559,10 @@ function statisticsPayload(
     },
     computedAnalyses: [...new Set(computedAnalyses)],
     safeguards,
+    ...(trustedRecordCount !== undefined ? { trustedRecordCount } : {}),
+    ...(contextRecordCount !== undefined ? { contextRecordCount } : {}),
+    ...(strengthCounts ? { evidenceStrengthCounts: strengthCounts } : {}),
+    ...(numericCount !== undefined ? { extractedNumericStatisticCount: numericCount } : {}),
     ...(dataset ? { dataset } : {}),
   };
 }
@@ -457,7 +571,11 @@ function hasReferenceSection(section: ManuscriptSection): boolean {
   return /^(references|bibliography|works cited)$/i.test(section.heading.trim());
 }
 
-function evidenceText(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary): string {
+function evidenceText(
+  evidence: EvidenceItem[],
+  dataset?: UploadedDatasetSummary,
+  extractions?: EvidenceExtraction[],
+): string {
   const datasetText = dataset
     ? [
         dataset.filename,
@@ -490,9 +608,18 @@ function evidenceText(evidence: EvidenceItem[], dataset?: UploadedDatasetSummary
         inferential.survival?.reportText ?? '',
       ].join(' ')
     : '';
+  const extractionText = extractions
+    ? extractions
+        .flatMap((item) => [
+          item.sampleSize ?? '',
+          ...item.effectValues.flatMap((effect) => [effect.value, effect.sourceText]),
+          item.keyFinding,
+        ])
+        .join(' ')
+    : '';
   return evidence
     .map((record) => [record.title, record.snippet, record.year, record.identifiers?.doi, record.identifiers?.pmid].filter(Boolean).join(' '))
-    .concat([datasetText, inferentialText])
+    .concat([datasetText, inferentialText, extractionText])
     .join(' ')
     .toLowerCase();
 }
@@ -501,8 +628,9 @@ function unsupportedStatisticIssues(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
   dataset?: UploadedDatasetSummary,
+  extractions?: EvidenceExtraction[],
 ): ValidationIssue[] {
-  const supportedText = evidenceText(evidence, dataset);
+  const supportedText = evidenceText(evidence, dataset, extractions);
   const rx =
     /\b(?:p\s*[<=>]\s*0?\.\d+|(?:hazard ratio|odds ratio|risk ratio|relative risk|hr|or|rr)\s*(?:=|of|:)?\s*\d+(?:\.\d+)?|95%\s*ci\s*[:(]?\s*\d+(?:\.\d+)?\s*(?:-|–|to|,)\s*\d+(?:\.\d+)?)/gi;
   const issues: ValidationIssue[] = [];
@@ -582,6 +710,7 @@ function validateManuscript(
   evidence: EvidenceItem[],
   references: CanonicalReference[],
   dataset?: UploadedDatasetSummary,
+  extractions?: EvidenceExtraction[],
 ): ManuscriptValidation {
   const issues: ValidationIssue[] = [];
   const wordCounts: Record<string, number> = {};
@@ -653,7 +782,7 @@ function validateManuscript(
     }
   }
 
-  issues.push(...unsupportedStatisticIssues(manuscript, evidence, dataset));
+  issues.push(...unsupportedStatisticIssues(manuscript, evidence, dataset, extractions));
   issues.push(...claimConsistencyIssues(manuscript));
   issues.push(...promptLeakageIssues(manuscript));
 
@@ -713,6 +842,18 @@ function compliance(standard: ManuscriptStandard, validation: ManuscriptValidati
   ];
 }
 
+function validationWithPaperQa(validation: ManuscriptValidation, paperQa?: PaperPackageQa): ManuscriptValidation {
+  if (!paperQa) return validation;
+  const blockers = [...validation.blockers, ...paperQa.blockers];
+  const warnings = [...validation.warnings, ...paperQa.warnings];
+  return {
+    ...validation,
+    blockers,
+    warnings,
+    exportReady: blockers.length === 0,
+  };
+}
+
 export function buildPublicationArtifact(
   manuscript: Manuscript,
   evidence: EvidenceItem[],
@@ -720,11 +861,26 @@ export function buildPublicationArtifact(
     standard?: ManuscriptStandard;
     manuscriptType?: 'evidence_review' | 'original_research';
     dataset?: UploadedDatasetSummary;
+    evidenceExtractions?: EvidenceExtraction[];
+    claimLedger?: ClaimLedgerEntry[];
+    paperBlueprint?: PaperBlueprint;
+    paperQa?: PaperPackageQa;
   } = {},
 ): PublicationArtifact {
   const { references, citationMap } = canonicalReferences(manuscript, evidence);
-  const statistics = statisticsPayload(evidence, references, options.dataset);
-  const validation = validateManuscript(manuscript, evidence, references, options.dataset);
+  const pipeline: { evidenceExtractions?: EvidenceExtraction[]; claimLedger?: ClaimLedgerEntry[] } = {
+    ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),
+    ...(options.claimLedger ? { claimLedger: options.claimLedger } : {}),
+  };
+  const statistics = statisticsPayload(evidence, references, options.dataset, pipeline);
+  const baseValidation = validateManuscript(
+    manuscript,
+    evidence,
+    references,
+    options.dataset,
+    options.evidenceExtractions,
+  );
+  const validation = validationWithPaperQa(baseValidation, options.paperQa);
   const standard = options.standard ?? 'icmje_generic';
   return {
     schemaVersion: 'hc.manuscript.v2',
@@ -734,8 +890,12 @@ export function buildPublicationArtifact(
     references,
     citationMap,
     figures: buildFigures(evidence, references.length, options.dataset),
-    tables: buildTables(evidence, options.dataset),
+    tables: buildTables(evidence, options.dataset, pipeline),
     statistics,
+    ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),
+    ...(options.claimLedger ? { claimLedger: options.claimLedger } : {}),
+    ...(options.paperBlueprint ? { paperBlueprint: options.paperBlueprint } : {}),
+    ...(options.paperQa ? { paperQa: options.paperQa } : {}),
     validation,
     compliance: compliance(standard, validation, statistics),
     exportPackage: {

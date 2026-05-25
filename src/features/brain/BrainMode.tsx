@@ -309,18 +309,21 @@ export function BrainMode() {
       },
       onManuscriptSection: (heading) => {
         if (!isMounted.current) return;
-        // A paper is drafted section by section (no token stream) — show
-        // progress in the pending bubble and the boss status.
-        updateAgentStatus('boss', { state: 'running', detail: `drafting ${heading}` });
+        // A paper is compiled through automatic source, extraction, claim,
+        // draft, QA, and export-gate stages (no token stream).
+        const pipelineStages = new Set(['Searching', 'Extracting', 'Building claims', 'Drafting', 'QA repair', 'Export ready', 'blocked']);
+        const isPipelineStage = pipelineStages.has(heading);
+        const label = isPipelineStage ? `Paper pipeline - ${heading}` : `Drafting manuscript - ${heading}`;
+        updateAgentStatus('boss', { state: heading === 'blocked' ? 'error' : 'running', detail: label });
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: 'token',
-          detail: `drafting ${heading}`,
+          detail: label,
           light: { intensity: 0.88, ttlMs: 2300 },
         });
         setMessages((current) =>
           current.map((m) =>
-            m.id === assistantId ? { ...m, content: `Drafting manuscript — ${heading}…` } : m,
+            m.id === assistantId ? { ...m, content: `${label}...` } : m,
           ),
         );
       },

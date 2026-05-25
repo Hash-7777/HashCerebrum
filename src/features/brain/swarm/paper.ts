@@ -43,24 +43,41 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
       subQuery: `Summarize peer-reviewed evidence for this manuscript topic: ${question}`,
     },
     {
-      agentId: 'pharmacology',
-      subQuery: `Explain pharmacology, mechanisms, interactions, adverse effects, and drug-safety signals for: ${question}`,
-    },
-    {
       agentId: 'trials',
       subQuery: `Find clinical trials, large cohorts, and registered studies relevant to: ${question}`,
     },
     {
-      agentId: 'public_health',
-      subQuery: `Summarize epidemiology, population risk, clinical impact, and prevention guidance for: ${question}`,
+      agentId: 'data_scientist',
+      subQuery: `Extract sample sizes, effect estimates, confidence intervals, p-values, study-count statistics, and quantitative limitations for: ${question}`,
     },
   ];
 
+  if (/\b(drug|medication|medicine|dose|dosage|pharmacolog|pharmacokinetic|pharmacodynamic|toxicity|adverse|warfarin|nsaid|opioid|antibiotic|anticoagulant|statin|insulin)\b/i.test(question)) {
+    tasks.push({
+      agentId: 'pharmacology',
+      subQuery: `Explain pharmacology, mechanisms, adverse effects, and drug-safety signals for: ${question}`,
+    });
+  }
+
+  if (/\b(interaction|interactions|contraindicat|polypharmacy|co[-\s]?admin|combined with|warfarin.*nsaid|nsaid.*warfarin)\b/i.test(question)) {
+    tasks.push({
+      agentId: 'drug_interactions',
+      subQuery: `Find drug-drug interaction, contraindication, and adverse-event evidence relevant to: ${question}`,
+    });
+  }
+
   if (/\b(dental|dentistry|oral|periodontal|teeth|gum)\b/i.test(question)) {
-    tasks[1] = {
+    tasks.push({
       agentId: 'dentistry',
       subQuery: `Summarize dental and oral-health evidence relevant to: ${question}`,
-    };
+    });
+  }
+
+  if (/\b(epidemiolog|public health|population|prevention|vaccine|screening|incidence|prevalence|risk factor|burden|outbreak)\b/i.test(question)) {
+    tasks.push({
+      agentId: 'public_health',
+      subQuery: `Summarize epidemiology, population risk, clinical impact, and prevention guidance for: ${question}`,
+    });
   }
   return tasks;
 }

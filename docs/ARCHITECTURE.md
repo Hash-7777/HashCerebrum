@@ -55,6 +55,44 @@ into `platform/`) is a code review rejection.
 10. Tool-result callbacks keep emitting `agent:activity`, and source/topic hits
     emit `region:light` accents while the brain glow decays.
 
+## Data flow — Brain paper request
+
+Full paper requests no longer ask a model to write a manuscript directly from a
+prompt. `runSwarm` forces a source-led evidence-review path:
+
+1. `detectPaperRequest(question)` switches the turn into paper mode.
+2. `fallbackPaperTasks(question)` supplies the fixed paper roles:
+   Literature & evidence, Clinical trials, and Statistics & data. Topic-specific
+   agents such as Pharmacology, Drug interactions, Dentistry, and Public health
+   are added only when relevant.
+3. Specialists retrieve guarded records from PubMed/MEDLINE, Europe PMC,
+   ClinicalTrials.gov, OpenAlex, openFDA, and RxNorm. openFDA/RxNorm are context
+   sources for drug identity and safety, not primary clinical-effect evidence.
+4. `mergeEvidence()` de-duplicates and ranks records by source credibility,
+   identifiers, recency, and available snippet detail.
+5. `runPaperPipeline()` extracts structured evidence rows with source markers,
+   study design, population, exposure/intervention, comparator, outcomes,
+   sample size, effect values, limitations, and trust status.
+6. `buildClaimLedger()` converts extracted rows into section-targeted claims.
+   The ledger preserves every source marker and grades evidence strength.
+7. `buildPaperBlueprint()` maps required claims, source markers, tables, and
+   figures to the fixed manuscript section plan.
+8. `compileManuscriptFromLedger()` asks The Cerebrum to write each section from
+   approved ledger claims only. The model may use only approved `[S#]` markers
+   and may not invent statistics, trial outcomes, references, or pooled effects.
+9. `validatePaperPackage()` blocks export if sections are too thin, citations do
+   not resolve, the clinical-results section has no source-backed findings,
+   statistical claims are unsupported, inline citations and references disagree,
+   or the abstract overstates the body.
+10. `buildPublicationArtifact()` stores the manuscript, canonical Vancouver
+    references, evidence extraction table, claim ledger, source-yield statistics,
+    evidence-strength counts, extracted numeric-statistics table when present,
+    figures, compliance checks, and QA blockers/warnings.
+
+The paper path is intentionally conservative: missing effect sizes produce an
+honest warning and source-yield/evidence-strength statistics, not fabricated
+meta-analysis results.
+
 ## Per-mode hard cap
 
 The `MODES` constant in `src/config/modes.ts` is typed as a tuple of

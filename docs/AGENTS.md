@@ -1,7 +1,7 @@
 # Agents
 
-HashCerebrum runs a fixed swarm of six agents: one boss and five specialists.
-Adding a seventh is a compile-time error (`AGENTS` tuple in
+HashCerebrum runs a fixed swarm of eight agents: one boss and seven
+specialists. Adding a ninth is a compile-time error (`AGENTS` tuple in
 `src/config/agents.ts`).
 
 ## Roster
@@ -14,10 +14,11 @@ Adding a seventh is a compile-time error (`AGENTS` tuple in
 | Literature & evidence | Hippocampus | PubMed / Europe PMC / OpenAlex literature search |
 | Dentistry          | Temporal       | Oral health and dental treatment evidence |
 | Public health      | Occipital      | Epidemiology, prevention, vaccination, and population health |
+| Drug interactions  | Amygdala       | Drug-drug interactions, contraindications, adverse drug events |
+| Statistics & data  | Thalamus       | Effect sizes, confidence intervals, sample sizes, quantitative results |
 
-The Thalamus is unbound — it represents the orchestrator (the ToolLoop
-itself). When agent activity is emitted, the thalamus pulses subtly alongside
-the agent's bound region.
+The thalamus is now bound to the Statistics & data agent. Agent activity still
+emits through the same bus and may trigger additional topic accents.
 
 ## Lifecycle
 
@@ -38,6 +39,25 @@ BrainMode.runTurn(query)
   → callbacks.onSpecialistDone(agentId, recordCount) → agent:activity
 ```
 
+For full paper requests, `runSwarm` routes the retrieved records through the
+paper pipeline instead of asking a model to write a paper from a prompt:
+
+```
+runPaperPipeline
+  → extractEvidenceFromRecords
+  → buildClaimLedger
+  → buildPaperBlueprint
+  → compileManuscriptFromLedger
+  → validatePaperPackage
+  → buildPublicationArtifact
+```
+
+The paper pipeline is source-led. It stores an evidence extraction table, claim
+ledger, source-yield statistics, evidence-strength counts, extracted numeric
+statistics when traceable, and QA blockers/warnings in the manuscript artifact.
+PDF export is blocked when citations, sections, statistics, or source-backed
+findings fail validation.
+
 ## Adding tools to an agent
 
 1. Implement `Tool` in a new file under `src/core/tools/`.
@@ -55,4 +75,6 @@ Every agent prompt enforces three rules:
 2. **Evidence-hierarchy aware** — case report ≠ RCT.
 3. **Citation discipline** — every clinical assertion has a citation.
 
-The Critic agent's only job is auditing prior agents against these rules.
+For manuscript generation, The Cerebrum compiles from the approved claim ledger
+only. References remain app-owned and deterministic; models do not write the
+bibliography.

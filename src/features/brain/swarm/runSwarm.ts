@@ -9,9 +9,9 @@ import type { EvidenceItem } from '@platform/index';
 import { bossChat, planResearch, synthesize } from './boss';
 import { detectPaperRequest, fallbackPaperTasks, manuscriptStandardForQuestion } from './paper';
 import { manuscriptToReadableText } from './manuscript';
-import { draftManuscript } from './manuscriptWriter';
+import { runPaperPipeline } from './paperPipeline';
 import { runSpecialist } from './specialist';
-import type { SpecialistResult, SwarmOptions, SwarmResult } from './types';
+import type { SpecialistResult, SpecialistTask, SwarmOptions, SwarmResult } from './types';
 
 export function evidenceKey(record: EvidenceItem): string {
   return (
@@ -89,6 +89,17 @@ function sourceOnlyAnswer(question: string, evidence: EvidenceItem[], reason: st
   ].join('\n');
 }
 
+function mergePaperTasks(planned: SpecialistTask[], required: SpecialistTask[]): SpecialistTask[] {
+  const merged = [...required];
+  const seenAgents = new Set(required.map((task) => task.agentId));
+  for (const task of planned) {
+    if (seenAgents.has(task.agentId)) continue;
+    seenAgents.add(task.agentId);
+    merged.push(task);
+  }
+  return merged;
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const bossModel = modelFor('boss');
@@ -96,10 +107,12 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   callbacks.onBossPhase('routing');
   let plan = await planResearch(bossModel, question, conversation);
-  if (paperRequest && plan.mode === 'chat') {
-    plan = { mode: 'research', tasks: fallbackPaperTasks(question) };
-  } else if (paperRequest && plan.mode === 'research' && plan.tasks.length < 2) {
-    plan = { mode: 'research', tasks: fallbackPaperTasks(question) };
+  if (paperRequest) {
+    const requiredPaperTasks = fallbackPaperTasks(question);
+    plan = {
+      mode: 'research',
+      tasks: plan.mode === 'research' ? mergePaperTasks(plan.tasks, requiredPaperTasks) : requiredPaperTasks,
+    };
   }
 
   if (plan.mode === 'chat') {
@@ -109,6 +122,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   }
 
   callbacks.onBossPhase('delegating');
+  if (paperRequest) callbacks.onManuscriptSection?.('Searching');
   const specialists = await Promise.all(
     plan.tasks.map((task) =>
       runSpecialist(agentById(task.agentId), modelFor(task.agentId), task.subQuery, callbacks),
@@ -119,16 +133,16 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   callbacks.onBossPhase('synthesizing');
 
   // Full-paper requests are drafted section by section into a structured
-  // manuscript — reliable across models and rendered deterministically.
+  // manuscript from a source-backed evidence extraction and claim ledger.
   if (paperRequest) {
-    const manuscript = await draftManuscript({
+    const manuscript = await runPaperPipeline({
       question,
       bossModel,
       evidence: merged,
       specialists,
       standard: manuscriptStandardForQuestion(question),
       ...(dataset ? { dataset } : {}),
-      onSection: (heading) => callbacks.onManuscriptSection?.(heading),
+      onStage: (stage) => callbacks.onManuscriptSection?.(stage),
     });
     return {
       kind: 'research',

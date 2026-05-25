@@ -47,9 +47,10 @@ describe('paper request helpers', () => {
 
     expect(tasks.map((task) => task.agentId)).toEqual([
       'literature',
-      'pharmacology',
       'trials',
-      'public_health',
+      'data_scientist',
+      'pharmacology',
+      'drug_interactions',
     ]);
   });
 

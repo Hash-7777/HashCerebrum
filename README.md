@@ -40,10 +40,12 @@ reaches a provider host directly.
 - **Guarded medical sources** — PubMed, Europe PMC, OpenAlex,
   ClinicalTrials.gov, openFDA, RxNorm, and Semantic Scholar, fetched from Rust
   behind a host allowlist, a per-host rate limiter, and a SQLite response cache.
-- **Publication-grade papers** — research papers are drafted section by section
-  into a strict, validated manuscript structure and typeset to PDF by an
-  embedded Typst engine, with cited-only Vancouver references and a choice of
-  journal styles. jsPDF is the offline fallback.
+- **Evidence-review paper engine** — paper requests run through an automatic
+  source-led pipeline: trusted biomedical records are extracted into structured
+  evidence, converted into a claim ledger, compiled into a manuscript, QA
+  checked, and only exported when citations, statistics, references, and section
+  depth pass validation. Vancouver references remain app-owned and
+  deterministic. jsPDF is the offline fallback.
 - **AI peer review with document editor** — upload any research paper or send a
   Brain-generated manuscript to the Peer Review mode. A 5-agent swarm scores,
   critiques, and highlights inline issues in a live contenteditable editor.
@@ -68,7 +70,7 @@ The mode registry is capped at five entries at compile time
 
 ## The agent swarm
 
-A six-slot roster — one boss and five topic specialists — enforced as a
+An eight-slot roster — one boss and seven topic specialists — enforced as a
 fixed-length tuple at compile time (`src/config/agents.ts`).
 
 | Agent | Role |
@@ -79,9 +81,17 @@ fixed-length tuple at compile time (`src/config/agents.ts`).
 | **Literature & evidence** | Peer-reviewed literature, systematic reviews, evidence synthesis. |
 | **Dentistry** | Oral health, dental conditions, and dental-treatment evidence. |
 | **Public health** | Epidemiology, prevention, vaccination, population health. |
+| **Drug interactions** | Drug-drug interactions, contraindications, adverse drug events. |
+| **Statistics & data** | Sample sizes, effect sizes, confidence intervals, p-values, quantitative limits. |
 
 Each agent can be assigned its own model in Settings, and a provider failover
 chain keeps a run alive when a provider is rate-limited or out of credit.
+
+For paper requests, Brain mode forces the fixed evidence-review roles
+(Literature & evidence, Clinical trials, Statistics & data) and adds domain
+agents such as Pharmacology, Drug interactions, Dentistry, or Public health only
+when the topic calls for them. The final Cerebrum compiler writes from the
+approved claim ledger rather than from freeform specialist summaries.
 
 ## Architecture
 
