@@ -949,7 +949,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                       onClick={() => void exportPdf()}
                       disabled={exportBusy}
                     >
-                      <Icon name="download" size={13} />
+                      <Icon name="filePdf" size={13} />
                       {exportBusy ? 'Exporting…' : 'Export PDF Report'}
                     </button>
                     <button

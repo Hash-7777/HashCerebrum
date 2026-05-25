@@ -285,7 +285,7 @@ export const Transcript = memo(function Transcript({
                         </button>
                       )}
                       <button type="button" onClick={() => void openPdfPreview(message, actualIndex)} className="action">
-                        <Icon name="eye" size={13} /> PDF
+                        <Icon name="filePdf" size={13} /> PDF
                       </button>
                       <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
                         <Icon name="document" size={13} /> MD

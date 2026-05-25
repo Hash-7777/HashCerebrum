@@ -40,7 +40,7 @@ export function PaperCard({
       aria-label={paper.title}
     >
       <div className="paper-card-thumb" aria-hidden="true">
-        <Icon name="document" size={28} />
+        <Icon name="filePdf" size={28} />
         {paper.reviewStreaming && (
           <span className="paper-card-reviewing">
             <Icon name="spinner" size={14} />

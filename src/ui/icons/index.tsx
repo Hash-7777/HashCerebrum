@@ -36,7 +36,8 @@ export type IconName =
   | 'graph'
   | 'list'
   | 'chevDown'
-  | 'activity';
+  | 'activity'
+  | 'filePdf';
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -232,6 +233,21 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   activity: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  ),
+  // Document with folded corner + P D F letter strokes in the body
+  filePdf: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      <path d="M6 2h9l4 4v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" />
+      <path d="M15 2v4h4" />
+      {/* P */}
+      <path d="M8 12.5v4" />
+      <path d="M8 12.5h1.3a1 1 0 0 1 0 1.8H8" />
+      {/* D */}
+      <path d="M11.2 12.5v4" />
+      <path d="M11.2 12.5q2.5 0 2.5 2t-2.5 2" />
+      {/* F */}
+      <path d="M15.2 12.5v4M15.2 12.5h1.6M15.2 14.3h1.2" />
     </svg>
   ),
 };
