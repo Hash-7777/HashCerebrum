@@ -38,7 +38,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Paths — cross-platform data dirs (audit log, sqlite cache)
-dirs        = "5"
+dirs        = "6"
 shellexpand = "3"
 
 # HTTP — all external network goes through Rust, never the renderer
@@ -46,7 +46,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"
 tokio   = { version = "1", features = ["full"] }
 
 # SQLite — source cache, audit log, future RAG store
-rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.39", features = ["bundled", "chrono"] }
 
 # Async helpers
 async-trait = "0.1"
@@ -55,7 +55,7 @@ once_cell   = "1"
 dashmap     = "6"
 
 # Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
-sha2 = "0.10"
+sha2 = "0.11"
 hex  = "0.4"
 
 # Logging — structured, never prints secrets
@@ -63,7 +63,7 @@ tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Error handling
-thiserror = "1"
+thiserror = "2"
 anyhow    = "1"
 
 # URL parsing for net guard host allowlist
@@ -71,7 +71,7 @@ url = "2"
 
 # PDF text extraction — Librarian agent feeds extracted text back to
 # the model for citation grounding. lopdf is pure-Rust, no native deps.
-lopdf = "0.34"
+lopdf = "0.40"
 
 # Typst — embedded typesetting engine for journal-grade manuscript PDFs.
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
