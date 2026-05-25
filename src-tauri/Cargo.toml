@@ -39,7 +39,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Paths — cross-platform data dirs (audit log, sqlite cache)
-dirs        = "5"
+dirs        = "6"
 shellexpand = "3"
 
 # OS keychain — keyring crate for Linux/Windows; macOS uses
