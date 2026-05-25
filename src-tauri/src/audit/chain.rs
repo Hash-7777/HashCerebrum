@@ -108,6 +108,7 @@ mod tests {
         let payload = serde_json::json!({"query": "diabetes"});
         let entry = AuditEntry::new(1, "llm", "openai", "chat", &payload, GENESIS_HASH);
         let recomputed = AuditEntry::compute_entry_hash(
+            entry.seq,
             GENESIS_HASH,
             &entry.ts,
             &entry.category,
