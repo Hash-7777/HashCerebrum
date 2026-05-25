@@ -102,10 +102,20 @@ codegen-units = 4
 panic         = "abort"
 
 [profile.dev]
-incremental = true
+incremental      = true
+# opt-level 1: basic optimisations on your own code — almost as fast to
+# compile as 0, but avoids obvious slow paths at runtime.
+opt-level        = 1
 # Line-tables-only debug info: enough for panics and basic profiling,
 # significantly faster to generate and link than the default level 2.
-debug = 1
-# Skip dSYM packaging after every link (macOS-only benefit but harmless
-# on other platforms). Saves 30-60 s per dev build.
-split-debuginfo = "unpacked"
+debug            = 1
+# Skip dSYM packaging after every link (macOS). Saves 30-60 s per build.
+split-debuginfo  = "unpacked"
+
+# Compile all *external* crates with full optimisation even in dev builds.
+# They are compiled once and cached by Cargo's incremental engine; only
+# your own source re-compiles on each change. This pays for itself after
+# the first build: typst, rusqlite, reqwest etc. are fast at runtime and
+# never recompiled unless their version changes.
+[profile.dev.package."*"]
+opt-level = 3

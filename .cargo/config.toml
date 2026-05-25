@@ -1,20 +1,20 @@
 # =============================================================
 # Cargo workspace build configuration
-# Local-only — not a substitute for Cargo.toml profile settings.
+# Works out of the box — no extra tools required.
 # =============================================================
 
-# ── Optional compile cache ──────────────────────────────────
-# Install once with `cargo install sccache`, then uncomment.
+# ── Optional: sccache compile cache ─────────────────────────
 # Caches compiled crates across projects and clean-build passes.
-# Especially useful for heavy C/C++ deps (typst, rusqlite, ring).
+# Especially effective for heavy C/C++ deps (typst, rusqlite, ring).
+# To enable: `cargo install sccache` or `brew install sccache`
+# then uncomment the two lines below.
 #
 # [build]
 # rustc-wrapper = "sccache"
 
-# ── macOS ARM linker flags ───────────────────────────────────
-# The system linker on Apple Silicon is fast enough for dev builds
-# without lld. If you install LLVM via Homebrew (`brew install llvm`)
-# you can uncomment the faster lld path below.
+# ── Optional: faster linker on macOS ARM ─────────────────────
+# LLVM's lld is significantly faster than the system linker.
+# To enable: `brew install llvm` then uncomment below.
 #
 # [target.aarch64-apple-darwin]
 # rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld"]
