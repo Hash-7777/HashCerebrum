@@ -61,7 +61,7 @@ once_cell   = "1"
 dashmap     = "6"
 
 # Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
-sha2 = "0.10"
+sha2 = "0.11"
 hex  = "0.4"
 
 # Logging — structured, never prints secrets
