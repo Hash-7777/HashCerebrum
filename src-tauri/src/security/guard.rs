@@ -222,7 +222,18 @@ fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
 fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
     // Windows file_index is the NTFS MFT record number; volume_serial
     // identifies the volume. Together they uniquely identify a file.
-    a.file_index() == b.file_index() && a.volume_serial_number() == b.volume_serial_number()
+    // On ReFS, exFAT, or network shares these values may be None. We must
+    // NOT treat None == None as "same file" — that would make every two
+    // files appear identical and bypass the TOCTOU guard entirely.
+    match (
+        a.file_index(),
+        b.file_index(),
+        a.volume_serial_number(),
+        b.volume_serial_number(),
+    ) {
+        (Some(ai), Some(bi), Some(av), Some(bv)) => ai == bi && av == bv,
+        _ => false, // cannot confirm same file — fail safe
+    }
 }
 
 /// Reject files with multiple hardlinks. On Unix nlink > 1 means there are

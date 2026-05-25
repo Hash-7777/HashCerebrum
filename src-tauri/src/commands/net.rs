@@ -57,6 +57,10 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     }
     let mut redacted = parsed.clone();
     redacted.set_query(None);
+    // Strip URL userinfo (username:password@host) so credentials are never
+    // written to the audit log even if a caller embeds them in the URL.
+    let _ = redacted.set_username("");
+    let _ = redacted.set_password(None);
 
     let _ = audit::append(
         "net",

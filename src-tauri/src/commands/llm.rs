@@ -37,6 +37,19 @@ const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
 static STREAM_ABORTS: Lazy<DashMap<String, Arc<AtomicBool>>> = Lazy::new(DashMap::new);
 
+/// RAII guard that removes a stream's entry from STREAM_ABORTS when dropped,
+/// regardless of how llm_chat_stream exits — success, error, or cancellation
+/// by the Tauri runtime dropping the future mid-stream. Without this, a
+/// dropped future leaves the entry in the map permanently, permanently
+/// rejecting that stream ID on any future call.
+struct StreamGuard(String);
+
+impl Drop for StreamGuard {
+    fn drop(&mut self) {
+        STREAM_ABORTS.remove(&self.0);
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmHttpResponse {
     pub status: u16,
@@ -114,6 +127,8 @@ pub async fn llm_http_get(
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
+    let _ = redacted.set_username("");
+    let _ = redacted.set_password(None);
     let _ = audit::append(
         "llm",
         &provider,
@@ -170,6 +185,8 @@ pub async fn llm_http_post(
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
+    let _ = redacted.set_username("");
+    let _ = redacted.set_password(None);
     let _ = audit::append(
         "llm",
         &provider,
@@ -218,6 +235,9 @@ pub async fn llm_chat_stream(
         return Ok(());
     }
     STREAM_ABORTS.insert(stream_id.clone(), abort.clone());
+    // The guard ensures the entry is removed however this function exits —
+    // success, early return, error, or a future cancellation by the runtime.
+    let _guard = StreamGuard(stream_id.clone());
 
     let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
     for (name, value) in &headers {
@@ -245,8 +265,7 @@ pub async fn llm_chat_stream(
                 "bytes": text.len(),
             }),
         );
-        STREAM_ABORTS.remove(&stream_id);
-        return Ok(());
+        return Ok(()); // _guard drops here, removing the STREAM_ABORTS entry
     }
 
     // Buffer bytes (not strings) so a multi-byte UTF-8 char split across
@@ -306,7 +325,7 @@ pub async fn llm_chat_stream(
         }
     }
 
-    STREAM_ABORTS.remove(&stream_id);
+    // _guard drops at end of function, removing the STREAM_ABORTS entry.
 
     let _ = audit::append(
         "llm",

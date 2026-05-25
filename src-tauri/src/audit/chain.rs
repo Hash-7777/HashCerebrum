@@ -1,8 +1,11 @@
 //! Hash-chain primitives.
 //!
-//! Entry hash = SHA-256(prev_hash || timestamp || category || subject || data_hash)
+//! Entry hash = SHA-256(seq || prev_hash || timestamp || category || subject || action || data_hash)
 //! data_hash  = SHA-256(serialized payload) — keeps the chain small while
 //! still proving payload integrity via a second-stage hash.
+//!
+//! seq is included in the hash so that entries cannot be silently reordered
+//! or replayed without breaking chain verification.
 
 use crate::crypto::sha256_hex;
 use chrono::{DateTime, Utc};
@@ -36,7 +39,7 @@ impl AuditEntry {
         let ts = Utc::now();
         let data_hash = sha256_hex(payload.to_string().as_bytes());
         let entry_hash =
-            Self::compute_entry_hash(&prev_hash, &ts, &category, &subject, &action, &data_hash);
+            Self::compute_entry_hash(seq, &prev_hash, &ts, &category, &subject, &action, &data_hash);
         Self {
             seq,
             ts,
@@ -53,6 +56,7 @@ impl AuditEntry {
     /// `verify()` to check chain integrity without re-serializing the
     /// original payload.
     pub fn compute_entry_hash(
+        seq: u64,
         prev_hash: &str,
         ts: &DateTime<Utc>,
         category: &str,
@@ -60,7 +64,7 @@ impl AuditEntry {
         action: &str,
         data_hash: &str,
     ) -> String {
-        let to_hash = format!("{prev_hash}|{ts}|{category}|{subject}|{action}|{data_hash}");
+        let to_hash = format!("{seq}|{prev_hash}|{ts}|{category}|{subject}|{action}|{data_hash}");
         sha256_hex(to_hash.as_bytes())
     }
 }
@@ -87,6 +91,7 @@ mod tests {
         let payload = serde_json::json!({"query": "diabetes"});
         let entry = AuditEntry::new(1, "llm", "openai", "chat", &payload, GENESIS_HASH);
         let recomputed = AuditEntry::compute_entry_hash(
+            entry.seq,
             GENESIS_HASH,
             &entry.ts,
             &entry.category,

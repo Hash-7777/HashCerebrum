@@ -182,6 +182,7 @@ pub fn verify() -> AppResult<Option<u64>> {
     let mut prev = GENESIS_HASH.to_string();
     for e in &entries {
         let recomputed = AuditEntry::compute_entry_hash(
+            e.seq,
             &prev,
             &e.ts,
             &e.category,

@@ -346,6 +346,13 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
         return None;
     }
 
+    // SVG-2: Reject DOCTYPE declarations (XXE vector).
+    // SVG-3: Reject entity declarations (Billion Laughs DoS — a 512 KB
+    //        input with recursive entities can expand to multi-GB).
+    if lowered.contains("<!doctype") || lowered.contains("<!entity") {
+        return None;
+    }
+
     // Scan for disallowed tags, event handlers, and dangerous URLs.
     // We do a simple stateful scan over '<' delimited chunks.
     for chunk in trimmed.split('<').skip(1) {
@@ -355,13 +362,19 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
         let tag = &chunk[..tag_end];
         let tag_lower = tag.to_lowercase();
 
-        // Reject script and foreignObject outright
+        // Reject script and foreignObject outright.
         if tag_lower == "script" || tag_lower == "foreignobject" {
             return None;
         }
 
-        // Skip closing tags and comments
-        if tag.starts_with('/') || tag.starts_with('!') {
+        // SVG-2: Reject all !-prefixed markup (DOCTYPE, ENTITY, CDATA, comments).
+        // Previously these were skipped (continue), which let DOCTYPE through.
+        if tag.starts_with('!') {
+            return None;
+        }
+
+        // Skip closing tags (e.g. </path>).
+        if tag.starts_with('/') {
             continue;
         }
 
@@ -369,46 +382,44 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
             return None;
         }
 
-        // Check attributes in the remainder of the chunk (before '>')
-        if let Some(gt_pos) = chunk.find('>') {
-            let attr_section = &chunk[..gt_pos];
-            // Reject event handlers: on...= (case-insensitive)
-            if attr_section.to_lowercase().contains("on") && attr_section.chars().any(|c| c == '=')
-            {
-                // More precise: look for on[a-z]+\s*=
-                let attr_lower = attr_section.to_lowercase();
-                if attr_lower.contains("onload")
-                    || attr_lower.contains("onclick")
-                    || attr_lower.contains("onerror")
-                    || attr_lower.contains("onmouse")
-                    || attr_lower.contains("onkey")
-                    || attr_lower.contains("onfocus")
-                    || attr_lower.contains("onblur")
-                    || attr_lower.contains("onsubmit")
-                    || attr_lower.contains("onchange")
-                    || attr_lower.contains("ondblclick")
-                    || attr_lower.contains("oncontextmenu")
-                    || attr_lower.contains("ondrag")
-                    || attr_lower.contains("ondrop")
-                    || attr_lower.contains("onscroll")
-                    || attr_lower.contains("onwheel")
-                    || attr_lower.contains("ontouch")
-                    || attr_lower.contains("onpointer")
-                    || attr_lower.contains("onanimation")
-                    || attr_lower.contains("ontransition")
-                {
-                    return None;
-                }
-            }
+        // SVG-1: Check attributes across the ENTIRE chunk, not just up to the
+        // first '>'. A '>' inside a quoted attribute value (e.g. d="M10>20")
+        // would prematurely truncate the scan, allowing smuggled attributes
+        // like `javascript:` to slip through after the truncation point.
+        // Since we split on '<', the chunk ends at the next '<', so scanning
+        // the whole chunk does not bleed into text content of sibling elements.
+        let chunk_lower = chunk.to_lowercase();
 
-            // Reject dangerous href / xlink:href values
-            let attr_lower = attr_section.to_lowercase();
-            if attr_lower.contains("javascript:")
-                || attr_lower.contains("data:")
-                || attr_lower.contains("file:")
-            {
-                return None;
-            }
+        // Reject event handlers.
+        if chunk_lower.contains("onload")
+            || chunk_lower.contains("onclick")
+            || chunk_lower.contains("onerror")
+            || chunk_lower.contains("onmouse")
+            || chunk_lower.contains("onkey")
+            || chunk_lower.contains("onfocus")
+            || chunk_lower.contains("onblur")
+            || chunk_lower.contains("onsubmit")
+            || chunk_lower.contains("onchange")
+            || chunk_lower.contains("ondblclick")
+            || chunk_lower.contains("oncontextmenu")
+            || chunk_lower.contains("ondrag")
+            || chunk_lower.contains("ondrop")
+            || chunk_lower.contains("onscroll")
+            || chunk_lower.contains("onwheel")
+            || chunk_lower.contains("ontouch")
+            || chunk_lower.contains("onpointer")
+            || chunk_lower.contains("onanimation")
+            || chunk_lower.contains("ontransition")
+        {
+            return None;
+        }
+
+        // Reject dangerous href / xlink:href values.
+        if chunk_lower.contains("javascript:")
+            || chunk_lower.contains("data:")
+            || chunk_lower.contains("file:")
+        {
+            return None;
         }
     }
 

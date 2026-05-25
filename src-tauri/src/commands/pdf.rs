@@ -27,7 +27,11 @@ fn extract_text_from_document(doc: Document) -> String {
 #[tauri::command]
 pub async fn pdf_extract_text(path: String) -> AppResult<String> {
     check(Action::Fs { path: &path })?;
-    let path: PathBuf = path.into();
+    // Use the canonical path for all subsequent operations so that a symlink
+    // swap between the guard check and Document::load cannot redirect to a
+    // different file (TOCTOU). canonicalize() also confirms the file exists.
+    let path = std::fs::canonicalize(&path)
+        .map_err(|_| AppError::InvalidInput("pdf not found or inaccessible".into()))?;
     let path_str = path.to_string_lossy().to_string();
 
     // File must exist and be within size limits before parsing
