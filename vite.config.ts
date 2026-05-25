@@ -48,13 +48,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ['three'],
-          r3f: ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'],
-          react: ['react', 'react-dom'],
-          zustand: ['zustand'],
-          xlsx: ['xlsx'],
-          jspdf: ['jspdf'],
+        // Rollup 4 (Vite 8) requires manualChunks to be a function, not an object.
+      manualChunks(id: string) {
+          if (id.includes('/node_modules/@react-three/')) return 'r3f';
+          if (id.includes('/node_modules/three/')) return 'three';
+          if (id.includes('/node_modules/react-dom/') || id.includes('/node_modules/react/')) return 'react';
+          if (id.includes('/node_modules/zustand/')) return 'zustand';
+          if (id.includes('/node_modules/xlsx/')) return 'xlsx';
+          if (id.includes('/node_modules/jspdf/')) return 'jspdf';
         },
       },
     },
