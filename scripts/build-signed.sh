@@ -40,7 +40,6 @@ npx vite build
 
 echo "▶ tauri build (.dmg)"
 if $SIGN; then
-  TAURI_SIGNING_PRIVATE_KEY="" \
   APPLE_ID="$APPLE_ID" \
   APPLE_PASSWORD="$APPLE_PASSWORD" \
   APPLE_TEAM_ID="$APPLE_TEAM_ID" \
