@@ -35,16 +35,20 @@ const TRUSTED_EVIDENCE_SOURCES = new Set<EvidenceItem['source']>([
 ]);
 const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 'rxnorm']);
 
-const SECTION_SYSTEM = `You are The Cerebrum, the final biomedical manuscript compiler for HashCerebrum.
-- Write one serious journal-manuscript section in polished academic prose.
-- Use only the approved claim ledger and evidence extraction table supplied in the prompt.
+const SECTION_SYSTEM = `You are The Cerebrum, the final biomedical manuscript compiler for HashCerebrum. The full manuscript is being assembled one section at a time. You are writing EXACTLY ONE SECTION — the section named in the prompt and nothing else.
+
+CRITICAL FORMATTING RULES — deviations corrupt the manuscript pipeline:
+- Begin your reply with the first word of the section body. No preamble, no heading, no title, no number.
+- Write ONLY the content for the requested section. Never write content for any other section.
+- STRICTLY FORBIDDEN: numbered outlines (1. 2. 3.), section headers, sub-headings, a table of contents, a document title, or phrases like "Introduction:", "Methods:", "Discussion:".
+- STRICTLY FORBIDDEN: markdown tables, bullet lists (-, •, *), or numbered lists.
+- Use continuous academic prose paragraphs separated by blank lines only.
 - Every factual claim must cite one or more approved [S#] source markers.
-- Do not cite sources that are not assigned to the approved ledger.
+- Do not cite sources not assigned in the approved ledger.
 - Do not create a References or Bibliography section; references are app-owned.
 - Do not invent study findings, PMIDs, DOIs, authors, years, p-values, confidence intervals, odds ratios, hazard ratios, pooled effects, or meta-analysis results.
 - Report numeric statistics only when they appear in the extracted numeric support or the uploaded dataset statistics block.
-- If evidence is thin, write a complete and transparent limitation-aware section instead of filling gaps from memory.
-- Do not use markdown tables, bullet lists, numbered lists, or notes.`;
+- If evidence is thin, write a complete and transparent limitation-aware prose section — do not fill gaps from memory or training data.`;
 
 const STOPWORDS = new Set([
   'about',
@@ -112,6 +116,50 @@ const SECTION_KEYWORDS: Array<{ section: string; terms: RegExp[] }> = [
 
 function clean(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Returns true when a model has clearly written a complete document structure
+ * (numbered section outline, multiple markdown headings, or multi-section body)
+ * instead of a single prose section. Used to reject and fall back to the
+ * deterministic gap section rather than storing garbage.
+ */
+function looksLikeWholeDocument(text: string): boolean {
+  const normalized = text.replace(/\r\n/g, '\n');
+  // Two or more numbered top-level items at the start of lines
+  const numberedItems = (normalized.match(/^[1-9]+\.\s+/gm) ?? []).length;
+  if (numberedItems >= 2) return true;
+  // Three or more markdown headings → the model wrote a complete document
+  const markdownHeadings = (normalized.match(/^#{1,3}\s+\S/gm) ?? []).length;
+  if (markdownHeadings >= 3) return true;
+  // Combination of Introduction + Discussion/Conclusion + Methods/Results keywords
+  // as standalone headings (all-caps or Title Case alone on a line)
+  const standaloneHeadings = (normalized.match(/^(Introduction|Background|Methods?|Results?|Discussion|Conclusion|Abstract)\s*$/gmi) ?? []).length;
+  if (standaloneHeadings >= 3) return true;
+  return false;
+}
+
+/**
+ * Strip a whole-document reply down to what looks like the target section body.
+ * Returns null if we cannot extract meaningful content.
+ */
+function extractSectionFromDocument(text: string, heading: string): string | null {
+  const normalized = text.replace(/\r\n/g, '\n');
+  // Try to find the target section heading and extract its content
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(
+    `(?:^#{1,3}\\s*${escapedHeading}\\b[^\\n]*\\n|^${escapedHeading}\\s*\\n)([\\s\\S]+?)(?=\\n#{1,3}\\s+|\\n[A-Z][A-Za-z\\s]{3,30}\\n[-=]{3,}|$)`,
+    'im',
+  );
+  const match = normalized.match(rx);
+  if (match?.[1]) {
+    const body = match[1].trim();
+    if (body.split(/\s+/).length > 80) return body;
+  }
+  // Last resort: take everything after the first heading
+  const afterFirstHeading = normalized.replace(/^.*?\n(?:#{1,3}[^\n]+|[A-Z][^\n]{3,40})\n/m, '');
+  if (afterFirstHeading.split(/\s+/).length > 80) return afterFirstHeading.trim();
+  return null;
 }
 
 function marker(index: number): string {
@@ -772,13 +820,10 @@ async function draftLedgerSection(opts: {
   const claimsBlock = opts.claims.map(formatClaim).join('\n');
   const extractionBlock = relevantExtractions.map(formatExtraction).join('\n');
   const current = opts.currentBody?.length ? `\nCurrent draft to repair:\n${opts.currentBody.join('\n\n')}\n` : '';
-  const reply = await callModel(
-    opts.model,
-    SECTION_SYSTEM,
-    `Manuscript topic: ${opts.question}
+  const userPrompt = `Manuscript topic: ${opts.question}
 
 Pipeline stage: claim-led manuscript drafting.
-Section: ${opts.section.heading}
+Section to write now: ${opts.section.heading}
 Section intent: ${opts.section.intent}
 Target length: ${opts.section.targetWords}
 Minimum words: ${opts.section.minWords}
@@ -802,9 +847,22 @@ ${opts.datasetBlock}
 Previously drafted sections for continuity:
 ${opts.priorDigest}
 ${current}
-Write the complete ${opts.section.heading} section now. Use only approved source markers. Every factual sentence must be traceable to the claim ledger or extraction rows. If no effect sizes are extracted, do not invent them and state that quantitative statistics are limited to source-yield/evidence-strength counts.`,
-    SECTION_TOKENS,
-  );
+Write the ${opts.section.heading} section now. Start immediately with the first sentence — no heading, no number, no title. Every factual sentence must be traceable to the claim ledger or extraction rows. If no effect sizes are extracted, do not invent them and state that quantitative statistics are limited to source-yield/evidence-strength counts.`;
+  const reply = await callModel(opts.model, SECTION_SYSTEM, userPrompt, SECTION_TOKENS);
+
+  // Reject replies that look like the model wrote a complete document instead of
+  // one section — salvage what we can or fall back to a gap section.
+  if (looksLikeWholeDocument(reply)) {
+    const salvaged = extractSectionFromDocument(reply, opts.section.heading);
+    if (salvaged) {
+      return sectionBodyFromReply(opts.section.heading, salvaged);
+    }
+    // Cannot salvage — return a gap section body directly
+    return [
+      `The language model produced a complete-document structure instead of the requested ${opts.section.heading.toLowerCase()} section. A targeted evidence summary is provided in place of synthesised prose. The claim ledger and extraction table should be reviewed directly before publication ${[...sourceMarkers].slice(0, 3).join(' ')}.`,
+    ];
+  }
+
   return sectionBodyFromReply(opts.section.heading, reply);
 }
 
