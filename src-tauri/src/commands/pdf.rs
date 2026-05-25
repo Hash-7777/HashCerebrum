@@ -27,6 +27,13 @@ pub async fn pdf_extract_text_bytes(filename: String, bytes: Vec<u8>) -> AppResu
     if bytes.len() as u64 > MAX_PDF_BYTES {
         return Err(AppError::InvalidInput("pdf exceeds 50 MB limit".into()));
     }
+    // Validate magic bytes before invoking the parser — rejects non-PDF blobs
+    // (e.g. a renamed .exe) without risking a parser panic on malformed data.
+    if bytes.len() < 4 || &bytes[0..4] != b"%PDF" {
+        return Err(AppError::InvalidInput(
+            "not a valid PDF (missing %PDF header)".into(),
+        ));
+    }
 
     let byte_len = bytes.len();
     let fingerprint = crate::crypto::sha256_hex(&bytes);
