@@ -4,6 +4,7 @@
 // Generalises the former single-model research path into one swarm worker.
 
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
+import { isHardProviderError } from '@core/llm/failover';
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
 import { formatEvidenceItem } from './evidenceFormat';
 import type { AgentDef } from '@config/agents';
@@ -222,7 +223,15 @@ export async function runSpecialist(
     // A specialist failure is contained — the swarm continues with the rest.
     const detail = error instanceof Error ? error.message : String(error);
     const reason = planningError instanceof Error ? `${planningError.message}; ${detail}` : detail;
-    callbacks.onSpecialistError(agent.id, detail);
+    // Hard provider errors (HTTP 400, tool-call not supported, model not found)
+    // are infrastructure noise — show a clean message in the UI rather than the
+    // raw HTTP error string, while preserving the full detail for the swarm log.
+    const displayMsg = isHardProviderError(error)
+      ? 'No compatible model available'
+      : detail.length > 90
+        ? `${detail.slice(0, 87)}…`
+        : detail;
+    callbacks.onSpecialistError(agent.id, displayMsg);
     return { agentId: agent.id, label: agent.label, subQuery, findings: '', evidence, toolCalls, error: reason };
   }
 }
