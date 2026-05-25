@@ -96,7 +96,6 @@ export const browserPlatform: Platform = {
     rxnorm: async () => mocked('rxnorm', 'Mock RxNorm concept result'),
   },
   pdf: {
-    extractText: async () => '',
     extractTextBytes: async () => {
       throw new Error('PDF text extraction requires the desktop app');
     },

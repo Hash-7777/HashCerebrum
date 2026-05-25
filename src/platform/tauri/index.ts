@@ -126,12 +126,10 @@ export const tauriPlatform: Platform = {
   },
 
   pdf: {
-    extractText: (path) => invoke<string>('pdf_extract_text', { path }),
+    // Pass bytes as-is — Tauri v2 IPC serialises Uint8Array efficiently;
+    // Array.from() would create a redundant number[] copy (~2× memory).
     extractTextBytes: (filename, bytes) =>
-      invoke<string>('pdf_extract_text_bytes', {
-        filename,
-        bytes: Array.from(bytes),
-      }),
+      invoke<string>('pdf_extract_text_bytes', { filename, bytes }),
   },
 
   manuscript: {

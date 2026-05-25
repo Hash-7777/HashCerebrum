@@ -71,9 +71,8 @@ export interface Platform {
     rxnorm(drug: string): Promise<MedicalSourceResult>;
   };
 
-  // PDF extraction
+  // PDF extraction (bytes-based only — path-based command removed)
   pdf: {
-    extractText(path: string): Promise<string>;
     extractTextBytes(filename: string, bytes: Uint8Array): Promise<string>;
   };
 
