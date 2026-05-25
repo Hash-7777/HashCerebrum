@@ -23,8 +23,7 @@ attacks on dependencies.
    run through Rust, behind the same guard, rate limiter, and audit path.
    The renderer's CSP declares no external `connect-src` host at all.
 2. **Every privileged action passes `security::guard::check`.**
-   Categories: `Net`, `Keychain`, `Fs`, `Llm`. Denials and approvals
-   are both audited.
+   Categories: `Net`, `Fs`, `Llm`. Denials and approvals are both audited.
 3. **Audit log is hash-chained.** Each entry hashes the previous entry's
    hash. `audit_log_verify` walks the chain and returns the first broken
    sequence number, or `null` if intact.
@@ -35,8 +34,8 @@ attacks on dependencies.
    the response cache. A key is read only at the moment a provider call is
    made, then passed to the Rust proxy inside request headers — which are
    never logged. Trade-off: this avoids an OS-keychain unlock prompt on
-   every launch, at the cost of at-rest encryption. An opt-in OS-keychain
-   path remains implemented in `commands/keychain.rs`.
+   every launch, at the cost of at-rest encryption. This is a documented
+   accepted trade-off; the OS-keychain IPC path has been removed.
 5. **CSP is strict.** No external `script-src`, no `'unsafe-inline'` on
    scripts, and no broad `'unsafe-eval'`. The only script relaxation is
    `'wasm-unsafe-eval'`, which permits WebAssembly compilation needed by
