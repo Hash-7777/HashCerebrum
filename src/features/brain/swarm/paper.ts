@@ -9,7 +9,19 @@ export interface PaperRequest {
   label: string;
 }
 
-const PAPER_RX = /\b(full\s+)?(research\s+paper|manuscript|journal\s+article|publishable|publication|write\s+a\s+paper|draft\s+a\s+paper)\b/i;
+const PAPER_RX = new RegExp(
+  '\\b(' +
+    // Explicit doc-type keywords
+    'research\\s+paper|manuscript|journal\\s+article|publishable|publication|' +
+    // Action verbs + "a/the" + doc type
+    '(?:write|draft|create|make|produce|generate|develop|compose|prepare)\\s+(?:a\\s+|the\\s+|me\\s+a\\s+|an\\s+)?' +
+    '(?:full\\s+|complete\\s+|comprehensive\\s+|detailed\\s+)?' +
+    '(?:research\\s+)?(?:paper|manuscript|article|report|study|publication|review|thesis|dissertation|' +
+    'cross[-\\s]?sectional\\s+study|cohort\\s+study|observational\\s+study|clinical\\s+study|' +
+    'systematic\\s+review|narrative\\s+review|case\\s+report|case\\s+series|survey)' +
+  ')',
+  'i',
+);
 
 export function detectPaperRequest(question: string): PaperRequest | null {
   if (!PAPER_RX.test(question)) return null;

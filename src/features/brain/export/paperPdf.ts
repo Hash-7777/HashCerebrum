@@ -86,6 +86,11 @@ export function parseBlocks(markdown: string): PaperPdfBlock[] {
       continue;
     }
     flushTable();
+    // Horizontal rule (--- / *** / ___) — skip, PDF doesn't render <hr>.
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flush();
+      continue;
+    }
     const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       flush();
@@ -120,10 +125,39 @@ export function parseBlocks(markdown: string): PaperPdfBlock[] {
   return blocks;
 }
 
-// Drop emphasis markers we do not render inline, and neutralize raw table
-// delimiters from old exports before they can stretch PDF text.
-function plain(text: string): string {
+// Convert common LaTeX inline math spans to readable Unicode for PDF output.
+function latexToUnicode(text: string): string {
+  const greek: Record<string, string> = {
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε',
+    zeta: 'ζ', eta: 'η', theta: 'θ', lambda: 'λ', mu: 'μ',
+    nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ',
+    phi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Alpha: 'Α', Beta: 'Β', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ',
+    Lambda: 'Λ', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
+  };
+  const sub = '₀₁₂₃₄₅₆₇₈₉';
+  const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
   return text
+    .replace(/\$\\([A-Za-z]+)_(\d)\$/g, (_, name: string, n: string) =>
+      (greek[name] ?? name) + (sub[Number(n)] ?? n))
+    .replace(/\$\\([A-Za-z]+)\$/g, (_, name: string) => greek[name] ?? name)
+    .replace(/\$(\w)\^(\d)\$/g, (_, base: string, n: string) =>
+      base + (sup[Number(n)] ?? n))
+    .replace(/\$\\pm\$/g, '±')
+    .replace(/\$\\geq?\$/g, '≥')
+    .replace(/\$\\leq?\$/g, '≤')
+    .replace(/\$\\times\$/g, '×')
+    .replace(/\$\\neq?\$/g, '≠')
+    .replace(/\$\\approx\$/g, '≈')
+    .replace(/\$\\infty\$/g, '∞')
+    .replace(/\$([^$]{1,80})\$/g, (_, inner: string) =>
+      inner.replace(/\\[a-zA-Z]+/g, '').replace(/[{}^_]/g, ''));
+}
+
+// Drop emphasis markers we do not render inline, neutralize raw table
+// delimiters, and convert LaTeX spans to Unicode for clean PDF text.
+function plain(text: string): string {
+  return latexToUnicode(text)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/[ \t]*\|[ \t]*/g, '; ')

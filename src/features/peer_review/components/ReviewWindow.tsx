@@ -237,18 +237,8 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
-  // Render the actual PDF blob (uploaded files) — no sandbox so the native
-  // PDF plugin can render faithfully, matching macOS Preview appearance.
-  if (paper.blobUrl) {
-    return (
-      <iframe
-        src={paper.blobUrl}
-        title={paper.title}
-        className="review-pdf-frame"
-      />
-    );
-  }
-
+  // Brain-generated manuscripts carry both htmlContent and a blobUrl. WKWebView
+  // cannot render PDF blobs inline, so always prefer the HTML route when available.
   if (paper.htmlContent) {
     return (
       <iframe
@@ -256,6 +246,18 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
         title={paper.title}
         className="review-pdf-frame"
         sandbox=""
+      />
+    );
+  }
+
+  // Uploaded user PDFs have only a blobUrl (no htmlContent). Render natively
+  // without sandbox so the macOS PDF plugin can display them faithfully.
+  if (paper.blobUrl) {
+    return (
+      <iframe
+        src={paper.blobUrl}
+        title={paper.title}
+        className="review-pdf-frame"
       />
     );
   }

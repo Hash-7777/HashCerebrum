@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { downloadBlob } from '../export/messageExport';
+import { useToastStore } from '@core/store/toastStore';
 
 const STORAGE_KEY = 'hc.documentPreview.rect.v1';
 const MIN_W = 380;
@@ -218,7 +219,7 @@ export function DocumentPreviewWindow({
               <Icon name={copied ? 'check' : 'copy'} size={13} />
               {copied ? 'Copied' : 'Copy'}
             </button>
-            <button type="button" onClick={() => downloadBlob(document.filename, document.blob)} title="Download">
+            <button type="button" onClick={() => { downloadBlob(document.filename, document.blob); useToastStore.getState().show(`Downloaded: ${document.filename}`, 'info'); }} title="Download">
               <Icon name="download" size={13} />
               Download
             </button>

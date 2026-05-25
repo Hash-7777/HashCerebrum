@@ -207,15 +207,42 @@ export async function runSpecialist(
       toolCalls += await runDirectSourceSweep(agent, subQuery, evidence, messages, callbacks);
     }
 
-    // Findings summary — non-streamed, since specialists run in parallel.
-    messages.push({
-      role: 'user',
-      content:
-        evidence.length > 0
-          ? 'Write a concise findings summary for your specialty using only the retrieved records above. State what the evidence shows and note any gaps.'
-          : 'No records were retrieved. State plainly that the databases returned no strong evidence for your part of the question. Do not answer from memory.',
-    });
-    const final = await completeWithModelChain(model, { messages, temperature: 0.2, maxTokens: 1300 });
+    // Findings summary — use a compact context to avoid overflowing the model's
+    // context window. The tool-loop history can be very long; rebuild a minimal
+    // prompt from the collected evidence rather than forwarding all messages.
+    const evidenceSummary =
+      evidence.length > 0
+        ? evidence
+            .slice(0, 14)
+            .map((rec, i) => `[${i + 1}] ${rec.title} (${rec.source}${rec.year ? `, ${rec.year}` : ''})`)
+            .join('\n')
+        : 'No records retrieved.';
+    const summaryMessages: LlmMessage[] = [
+      { role: 'system', content: systemPrompt(agent) },
+      {
+        role: 'user',
+        content:
+          evidence.length > 0
+            ? `Research task: ${subQuery}\n\nEvidence retrieved (${evidence.length} record${evidence.length === 1 ? '' : 's'}):\n${evidenceSummary}\n\nWrite a concise findings summary for your specialty using only the retrieved records above. State what the evidence shows and note any gaps.`
+            : `Research task: ${subQuery}\n\nNo records were retrieved. State plainly that the databases returned no strong evidence for your part of the question. Do not answer from memory.`,
+      },
+    ];
+    let final: { content: string };
+    try {
+      final = await completeWithModelChain(model, { messages: summaryMessages, temperature: 0.2, maxTokens: 1300 });
+    } catch (summaryError) {
+      // If the planning loop also failed the model is fully unavailable — re-throw
+      // so the outer catch records the error in the specialist result. Only provide
+      // a deterministic fallback when planning succeeded but the summary call fails
+      // (typically a context-overflow on a model with a small window).
+      if (planningError) throw summaryError;
+      final = {
+        content:
+          evidence.length > 0
+            ? `Retrieved ${evidence.length} record(s):\n${evidenceSummary}\n\nFull LLM synthesis unavailable; records are available for the boss to synthesize.`
+            : 'No records were retrieved for this specialty.',
+      };
+    }
 
     callbacks.onSpecialistDone(agent.id, evidence.length);
     return { agentId: agent.id, label: agent.label, subQuery, findings: final.content, evidence, toolCalls };

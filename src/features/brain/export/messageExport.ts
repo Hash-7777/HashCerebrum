@@ -39,8 +39,42 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Convert common LaTeX inline math to readable Unicode before rendering.
+function latexToUnicode(text: string): string {
+  const greek: Record<string, string> = {
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε',
+    zeta: 'ζ', eta: 'η', theta: 'θ', lambda: 'λ', mu: 'μ',
+    nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ',
+    phi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Alpha: 'Α', Beta: 'Β', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ',
+    Lambda: 'Λ', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
+  };
+  const sub = '₀₁₂₃₄₅₆₇₈₉';
+  const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  return text
+    // Greek with subscript: $\beta_2$ → β₂
+    .replace(/\$\\([A-Za-z]+)_(\d)\$/g, (_, name: string, n: string) =>
+      (greek[name] ?? name) + (sub[Number(n)] ?? n))
+    // Greek alone: $\beta$ → β
+    .replace(/\$\\([A-Za-z]+)\$/g, (_, name: string) => greek[name] ?? name)
+    // Superscript: $x^2$ → x²
+    .replace(/\$(\w)\^(\d)\$/g, (_, base: string, n: string) =>
+      base + (sup[Number(n)] ?? n))
+    // Common operators
+    .replace(/\$\\pm\$/g, '±')
+    .replace(/\$\\geq?\$/g, '≥')
+    .replace(/\$\\leq?\$/g, '≤')
+    .replace(/\$\\times\$/g, '×')
+    .replace(/\$\\neq?\$/g, '≠')
+    .replace(/\$\\approx\$/g, '≈')
+    .replace(/\$\\infty\$/g, '∞')
+    // Strip remaining $...$ spans we can't render — show inner text without backslashes
+    .replace(/\$([^$]{1,80})\$/g, (_, inner: string) =>
+      inner.replace(/\\[a-zA-Z]+/g, '').replace(/[{}^_]/g, ''));
+}
+
 function inlineMarkdown(value: string): string {
-  return escapeHtml(value)
+  return escapeHtml(latexToUnicode(value))
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>');
 }
@@ -67,6 +101,13 @@ export function markdownToHtml(markdown: string): string {
     if (!trimmed) {
       flushParagraph();
       closeList();
+      continue;
+    }
+    // Horizontal rule: ---, ***, or ___
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushParagraph();
+      closeList();
+      html.push('<hr>');
       continue;
     }
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
