@@ -166,8 +166,12 @@ export const useBrainStore = create<BrainStore>((set) => ({
 }));
 
 // Wire the EventBus to the store.
-bus.on('agent:activity', lightAgentActivity);
-
-bus.on('region:light', (e) => {
+const offAgentActivity = bus.on('agent:activity', lightAgentActivity);
+const offRegionLight = bus.on('region:light', (e) => {
   useBrainStore.getState().setRegion(e.region, e.source, e.intensity, e.ttlMs);
 });
+
+// Clean up on Vite HMR so duplicate handlers don't accumulate across hot reloads.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => { offAgentActivity(); offRegionLight(); });
+}

@@ -12,12 +12,15 @@ const AGENT_TIMEOUT_MS = 55_000;
 
 /** Race a promise against a timeout rejection. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms),
-    ),
-  ]);
+  // Store the timer ID so we can clear it when the real promise wins first.
+  // Without clearTimeout the timer fires 55 s later on every resolved review
+  // and calls reject() on an already-settled promise — a silent no-op, but
+  // it leaks one timer per agent per review session.
+  let timerId: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    timerId = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timerId));
 }
 
 function trace(phase: string, detail: string) {

@@ -30,6 +30,11 @@ export const useAgentStore = create<AgentStore>((set) => ({
   clear: () => set({ activity: [] }),
 }));
 
-bus.on('agent:activity', (e) => {
+const offAgentActivity = bus.on('agent:activity', (e) => {
   useAgentStore.getState().push({ agentId: e.agentId, phase: e.phase, ...(e.detail !== undefined ? { detail: e.detail } : {}) });
 });
+
+// Clean up on Vite HMR so duplicate handlers don't accumulate across hot reloads.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => { offAgentActivity(); });
+}

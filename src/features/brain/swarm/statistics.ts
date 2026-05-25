@@ -158,7 +158,9 @@ async function sha256Buffer(buffer: ArrayBuffer): Promise<string> {
 async function parseXlsx(buffer: ArrayBuffer): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
   const XLSX = await import('xlsx');
   const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]!];
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error('Excel workbook has no sheets.');
+  const sheet = workbook.Sheets[sheetName];
   if (!sheet) throw new Error('Excel workbook has no readable sheets.');
   const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
   if (json.length === 0) throw new Error('Excel sheet is empty.');

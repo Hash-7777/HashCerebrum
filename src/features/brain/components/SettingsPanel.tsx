@@ -74,6 +74,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       }),
     ).then((entries) => {
       if (!cancelled) setKeyStatus(Object.fromEntries(entries) as Partial<Record<LlmProviderId, boolean>>);
+    }).catch(() => {
+      // Keychain read failure is non-fatal — settings panel renders without key indicators.
     });
     return () => {
       cancelled = true;
