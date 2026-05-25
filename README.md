@@ -1,184 +1,256 @@
 <div align="center">
 
+<img src="public/icons/icon.png" width="96" alt="HashCerebrum app icon" />
+
 # HashCerebrum
 
-**A privacy-first desktop medical-research agent — built around a 3D anatomical brain.**
+### AI medical research agent with a live 3D anatomical brain
 
-Ask a clinical question; a boss agent routes it, a swarm of medical specialists
-fetches source-grounded evidence from guarded biomedical databases, and the app
-synthesizes a fully cited answer — or a typeset, publication-grade research paper.
+Ask a clinical question. A boss agent routes it to topic specialists, each agent fetches source-grounded evidence from real biomedical databases, and the app either answers with inline citations or produces a complete, typeset, publication-grade research paper — all without the model inventing a single fact it cannot prove.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-3dd1bf)](LICENSE)
-[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Rust](https://img.shields.io/badge/Rust-backend-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-macOS-111?logo=apple&logoColor=white)](#getting-started)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3dd1bf?style=flat-square)](LICENSE)
+[![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
+[![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Rust backend](https://img.shields.io/badge/Rust-backend-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Platform: macOS](https://img.shields.io/badge/macOS-desktop-111?style=flat-square&logo=apple&logoColor=white)](#getting-started)
 
 </div>
 
 ---
 
-## Overview
+## What makes this different
 
-HashCerebrum is a Tauri v2 desktop application for source-grounded clinical
-literature work. Every external request — medical databases and LLM providers —
-is mediated; nothing the user reads is invented without a traceable source. The
-workspace is a real-time 3D anatomical brain whose regions light up as agents
-and topics become active.
+Most AI research tools either hallucinate citations or just wrap a chat model. HashCerebrum is built around a different constraint: **the model is not allowed to write a claim it cannot source**.
 
-The app is offline-capable by design: the embedded typesetting engine, the
-response cache, and the audit log all run locally, and the renderer never
-reaches a provider host directly.
+Every research turn follows a strict pipeline:
 
-## Highlights
+1. Seven medical databases are queried in parallel — PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar
+2. Retrieved records are extracted into a structured evidence table with study design, population, outcomes, and effect values
+3. A claim ledger maps each finding to a source marker and grades its evidence strength
+4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive
+5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list
 
-- **Boss-swarm research** — one boss agent routes each message: plain questions
-  get a fast chat reply, research questions are delegated to topic specialists
-  that fetch guarded evidence and return a citation-backed synthesis.
-- **Guarded medical sources** — PubMed, Europe PMC, OpenAlex,
-  ClinicalTrials.gov, openFDA, RxNorm, and Semantic Scholar, fetched from Rust
-  behind a host allowlist, a per-host rate limiter, and a SQLite response cache.
-- **Evidence-review paper engine** — paper requests run through an automatic
-  source-led pipeline: trusted biomedical records are extracted into structured
-  evidence, converted into a claim ledger, compiled into a manuscript, QA
-  checked, and only exported when citations, statistics, references, and section
-  depth pass validation. Vancouver references remain app-owned and
-  deterministic. jsPDF is the offline fallback.
-- **AI peer review with document editor** — upload any research paper or send a
-  Brain-generated manuscript to the Peer Review mode. A 5-agent swarm scores,
-  critiques, and highlights inline issues in a live contenteditable editor.
-  Suggestions show a before/after diff with Accept, Skip, and Get Fix buttons;
-  every accepted change is undoable.
-- **Per-project memory** — every research run's evidence and answer is saved
-  into a per-project knowledge store and visualized as a brain-shaped memory
-  diagram of linked findings.
-- **Hash-chained audit log** — an append-only SQLite log of mediated actions,
-  verifiable from Settings.
+The result is a paper where every sentence has a chain of custody back to a real publication.
 
-## Modes
+---
 
-| Mode | Shortcut | What it does |
-| --- | --- | --- |
-| **Brain** | ⌘1 | The research workspace: chat with the boss agent beside a live 3D anatomical brain whose regions light per active agent and detected topic. |
-| **Memory** | ⌘2 | The active project's saved research memory — searchable evidence and answers, viewable as a list or a brain-shaped relatedness diagram. |
-| **Peer Review** | ⌘3 | 5-agent AI critique of a research paper: score 1–10, summary, strengths/weaknesses, and a live document editor with colour-coded inline highlights, per-suggestion Accept/Skip/Get Fix flow, and PDF report export. |
+## The 3D workspace
 
-The mode registry is capped at five entries at compile time
-(`src/config/modes.ts`); three are currently active.
+The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Science Museum). Each of the eight agents is bound to a specific brain region. As the swarm works, the corresponding regions pulse with a base glow blended against topic-detection accent colours — so you can watch the brain *think*.
 
-## The agent swarm
+| Agent | Brain region | Domain |
+|---|---|---|
+| Boss (The Cerebrum) | Frontal lobe | Routes questions, delegates, synthesizes |
+| Literature & Evidence | Hippocampus | PubMed · Europe PMC · OpenAlex · Semantic Scholar |
+| Clinical Trials | Parietal lobe | ClinicalTrials.gov — cohorts, designs, outcomes |
+| Statistics & Data | Thalamus | Effect sizes · CIs · sample sizes · p-values |
+| Pharmacology | Basal ganglia | RxNorm · openFDA — drugs, dosing, adverse effects |
+| Drug Interactions | Amygdala | Drug-drug interactions · contraindications |
+| Public Health | Occipital lobe | Epidemiology · prevention · vaccination |
+| Dentistry | Temporal lobe | Oral health · dental treatment evidence |
 
-An eight-slot roster — one boss and seven topic specialists — enforced as a
-fixed-length tuple at compile time (`src/config/agents.ts`).
+The roster and the region map are compile-time constants — the type system rejects a ninth agent.
 
-| Agent | Role |
-| --- | --- |
-| **Boss** | Routes every message, delegates research, and synthesizes one cited answer. |
-| **Pharmacology** | Drugs, dosing, interactions, adverse effects, drug safety. |
-| **Clinical trials** | Registered trials, study cohorts, and trial outcomes. |
-| **Literature & evidence** | Peer-reviewed literature, systematic reviews, evidence synthesis. |
-| **Dentistry** | Oral health, dental conditions, and dental-treatment evidence. |
-| **Public health** | Epidemiology, prevention, vaccination, population health. |
-| **Drug interactions** | Drug-drug interactions, contraindications, adverse drug events. |
-| **Statistics & data** | Sample sizes, effect sizes, confidence intervals, p-values, quantitative limits. |
+---
 
-Each agent can be assigned its own model in Settings, and a provider failover
-chain keeps a run alive when a provider is rate-limited or out of credit.
+## Four modes
 
-For paper requests, Brain mode forces the fixed evidence-review roles
-(Literature & evidence, Clinical trials, Statistics & data) and adds domain
-agents such as Pharmacology, Drug interactions, Dentistry, or Public health only
-when the topic calls for them. The final Cerebrum compiler writes from the
-approved claim ledger rather than from freeform specialist summaries.
+| Mode | Key | Description |
+|---|---|---|
+| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain |
+| **Resources** | `⌘2` | Saved paper library |
+| **Memory** | `⌘3` | Per-project knowledge store — evidence, answers, and a brain-shaped relatedness diagram |
+| **Peer Review** | `⌘4` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor |
 
-## Architecture
+The mode registry is a typed tuple capped at five entries (`src/config/modes.ts`) — adding a sixth is a compile error.
+
+---
+
+## Peer review and document editing
+
+Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm of five specialist agents runs in parallel:
+
+- **Orchestrator** — overall score 1–10, strengths, weaknesses, methodology, statistics, conclusions, publish-readiness
+- **Grammar** — spelling, clarity, academic style
+- **Originality** — repetition, unsupported claims, attribution gaps
+- **Vocabulary** — overused words, precision improvements, informal-to-academic replacements
+- **Statistics** — methods, reporting completeness, sample-size/power, interpretation
+
+After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable.
+
+---
+
+## Security architecture
+
+The renderer never makes an outbound HTTP request. Every call — medical databases and LLM providers alike — is a Tauri IPC call into Rust. Rust then runs the request through a layered guard:
 
 ```
-React renderer  ──IPC──▶  Rust backend  ──guard──▶  medical sources
-   (UI, 3D brain,            (host allowlist,         (PubMed, Europe PMC,
-    agents, stats)            rate limiter,            OpenAlex, ctgov,
-                              SQLite cache,            openFDA, RxNorm)
-                              audit log, Typst)
+Renderer  ─IPC─▶  security::guard::check()
+                    ├── denylist  (cloud-metadata, RFC1918, link-local IPv6)
+                    ├── allowlist (ALLOWED_HOSTS — 18 approved hosts)
+                    ├── rate limiter (per-host token bucket)
+                    └── audit log (hash-chained, SQLite, verifiable)
+                  ─────▶  reqwest  ─────▶  external host
 ```
 
-- The renderer never calls a medical-source host directly — every such request
-  is a Rust command behind the audited guard.
-- PDF typesetting runs in-process in Rust via an embedded Typst engine; no
-  sidecar binary and no network access are involved.
-- All UI state lives in Zustand stores and a typed EventBus — no globals.
+| Guarantee | Implementation |
+|---|---|
+| No renderer-to-internet HTTP | CSP `connect-src 'self'`; all external calls are Tauri commands |
+| SSRF protection | RFC1918 + cloud-metadata denylist checked before allowlist |
+| LLM header injection prevention | Rust-side allowlist — only `content-type`, `authorization`, `x-api-key`, `http-referer`, `x-title`, `anthropic-*`, `openai-*` |
+| Tamper-evident audit trail | SHA-256 hash chain; each entry commits `seq \| prev_hash \| ts \| category \| subject \| action \| data_hash` |
+| API keys never logged | Headers are forwarded to reqwest, never written to the audit log or cache |
+| Path traversal + TOCTOU | `symlink_metadata → canonicalize → same_file` check; hardlinks rejected |
+| PDF magic-byte validation | `%PDF` header check before `lopdf` parser is invoked |
+
+The audit log is readable and verifiable from Settings → Audit log.
+
+---
+
+## Tech stack
 
 | Layer | Technology |
-| --- | --- |
-| Desktop shell | Tauri v2 |
-| Backend | Rust — tokio, reqwest, rusqlite, embedded Typst (`typst` / `typst-pdf`) |
-| Frontend | Vite 6, React 18, TypeScript (strict mode) |
-| 3D | React Three Fiber, three.js, drei, postprocessing |
-| State | Zustand stores, typed EventBus |
-| PDF | Embedded Typst engine (primary), jsPDF (fallback) |
+|---|---|
+| Desktop shell | Tauri v2 (Rust + WebKit) |
+| Rust backend | tokio · reqwest (rustls) · rusqlite · lopdf · typst-as-lib · typst-pdf |
+| Frontend | Vite 8 · React 18 · TypeScript 5 (strict + `noUncheckedIndexedAccess`) |
+| 3D | React Three Fiber · three.js r184 · drei · @react-three/postprocessing |
+| State | Zustand 5 · typed EventBus |
+| PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF (fallback) |
+| Testing | Vitest (170 tests) |
+
+The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
+
+---
 
 ## Getting started
 
-Requires **Node ≥ 20** and the **Rust toolchain** (for the desktop build).
+**Prerequisites:** Node ≥ 20 and the [Rust toolchain](https://rustup.rs).
 
 ```sh
+# Install dependencies
 npm install
 
-npm run dev           # desktop dev app (Tauri, hot reload)
-npm run dev:web       # browser-only Vite with a mock platform
-npm run build         # production macOS .app
-npm run build:dmg     # macOS .dmg
-npm run build:web     # frontend bundle only (typecheck + Vite build)
+# Desktop development (hot reload — Tauri + Vite)
+npm run dev
 
-npm test              # Vitest
-npm run typecheck     # tsc — app + node project configs
+# Browser-only development (no Rust required — mock platform)
+npm run dev:web
+
+# Production build
+npm run build          # macOS .app
+npm run build:dmg      # macOS .dmg
+
+# Checks
+npm test               # Vitest — 170 unit tests
+npm run typecheck      # tsc strict — app + node configs
 ```
 
-Tauri dev runs a local Vite server for hot reload; packaged `.app` builds load
-compiled files from `dist` and use no localhost.
+### Adding an LLM provider
 
-### Provider keys
+Open **Settings** (gear icon), find the provider row, paste your API key, and click Save. Supported providers:
 
-Provider API keys are entered in Settings and stored in renderer `localStorage`
-as a single JSON bundle. Tauri's WebKit data directory is keyed by the bundle
-identifier, so keys survive every rebuild and signed update without an OS
-keychain prompt. Keys are never written to the repository, the audit log, or the
-source cache.
+`OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `Ollama (local)`
 
-### 3D model
+Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundle identifier. They are never committed, never written to the audit log, and never stored in the response cache.
 
-The bundled anatomical brain GLB lives under `public/models/brain/` (CC0-1.0).
-To swap it, drop a new GLB at the path declared in
-`src/features/brain/data/region-map.json`, run `npm run validate:brain-model`
-to confirm the mesh node names, and rebind regions — no code change required.
-In a web dev build only, `http://localhost:1420/?dev=bindings` opens the region
-binding editor.
+### Running a research turn
 
-## Project structure
+1. Open **Brain** mode (`⌘1`)
+2. Ask a clinical question — "What is the evidence for metformin in PCOS?"
+3. Watch the boss route the question; specialists fetch evidence; the brain lights up
+4. For a full paper, start with "write a paper on..." — the paper pipeline runs automatically
+
+---
+
+## Codebase map
 
 ```
 src/
-  config/            compile-time caps — modes, agents, constants
-  core/              stores, EventBus, LLM provider registry, tools
+  config/          compile-time caps — modes (≤5), agents (≤8), constants
+  core/
+    bus/           typed EventBus
+    llm/           provider registry, model catalog, streaming
+    store/         Zustand stores — brain, agents, projects, runs, memory
+    tools/         ToolRegistry — medical, stat, memory tools
   features/
-    brain/           3D brain canvas, agent swarm, manuscript engine
-    memory/          per-project RAG memory + brain-shaped diagram
-    peer_review/     5-agent peer-review swarm, document editor, report export
-    resources/       saved-paper library
-  platform/          Tauri / browser platform abstraction
-src-tauri/           Rust backend — commands, guard, cache, audit, Typst
+    brain/         3D canvas, swarm runner, paper pipeline, manuscript editor
+    memory/        per-project RAG store + TF-IDF postings + brain diagram
+    peer_review/   review swarm, document editor, report PDF export
+    resources/     saved-paper library
+  platform/
+    tauri/         Tauri IPC bindings (the ONLY caller of invoke())
+    browser/       mock implementation for browser dev
+  ui/              shell, icons, shared components
+
+src-tauri/
+  src/
+    commands/      IPC surface — llm, medical, pdf, audit, cache, keychain
+    security/      guard, denylist, policy, allowlist
+    audit/         hash-chain + SQLite store + verify
+    cache/         SQLite response cache
+    ratelimit/     per-host token bucket
+    crypto/        SHA-256 helpers
 ```
+
+---
+
+## How the paper pipeline prevents hallucination
+
+```
+User prompt
+    │
+    ▼
+detectPaperRequest()  ──no──▶  normal chat answer
+    │ yes
+    ▼
+Parallel evidence fetch  (PubMed · PMC · OpenAlex · ClinicalTrials · openFDA · RxNorm)
+    │
+    ▼
+extractEvidenceFromRecords()  →  structured rows: [design, population, exposure,
+                                  comparator, outcomes, n, effect, limitations, trust]
+    │
+    ▼
+buildClaimLedger()  →  section-targeted claims with [S#] source markers
+    │                   and evidence-strength grades (RCT > cohort > case report)
+    ▼
+buildPaperBlueprint()  →  section plan with required claims, figures, tables
+    │
+    ▼
+compileManuscriptFromLedger()  →  model writes ONLY from approved [S#] entries
+    │                              no invented statistics, no hallucinated trials
+    ▼
+validatePaperPackage()  →  BLOCKS export if:
+    │                       · sections below word minimum
+    │                       · inline citations disagree with reference list
+    │                       · clinical results section has no source-backed findings
+    │                       · statistical claims are unsupported
+    │                       · abstract overstates the body
+    ▼
+buildPublicationArtifact()  →  manuscript + Vancouver references + evidence table
+                                + claim ledger + source-yield stats + QA blockers
+    │
+    ▼
+Typst PDF render  (embedded, offline, no fonts downloaded)
+```
+
+Missing effect sizes produce an honest warning and source-yield/evidence-strength statistics — not fabricated meta-analysis results.
+
+---
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Security](docs/SECURITY.md)
-- [Agents](docs/AGENTS.md)
-- [Licenses](docs/LICENSES.md)
+| Document | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layer diagram, data-flow walkthrough, guardrails |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, invariants, SSRF denylist, logging hygiene |
+| [docs/AGENTS.md](docs/AGENTS.md) | Full agent roster, lifecycle, system-prompt discipline |
+| [docs/LICENSES.md](docs/LICENSES.md) | Third-party asset and dependency licenses |
+
+---
 
 ## License
 
-Released under the [MIT License](LICENSE) — © 2026 Seif Hashish.
-Bundled third-party assets keep their own licenses; see
-[docs/LICENSES.md](docs/LICENSES.md).
+[MIT](LICENSE) — © 2026 Seif Hashish.  
+Bundled third-party assets retain their own licenses — see [docs/LICENSES.md](docs/LICENSES.md).
