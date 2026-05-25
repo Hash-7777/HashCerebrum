@@ -200,6 +200,13 @@
   grid-template-columns: minmax(390px, 1fr) minmax(248px, 278px);
   gap: 0;
   padding: 0;
+  align-items: stretch;
+  align-content: stretch;
+  justify-items: stretch;
+  border: 0;
+  text-align: initial;
+  color: var(--text-1);
+  transition: none;
   min-width: 0;
   /* Override cursor: pointer inherited from .mode rail-button class */
   cursor: default;

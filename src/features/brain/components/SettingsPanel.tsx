@@ -273,12 +273,16 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       <div className="provider-key-list">
         {PROVIDER_DEFS.filter((group) => !!group.keyName).map((group) => {
           const status = modelStatuses[group.provider];
+          const hasSavedKey = keyStatus[group.provider] === true;
+          const providerError = keyErrors[group.provider] || (hasSavedKey ? status?.error : '');
           const statusLabel = keyStatus[group.provider]
             ? status?.state === 'connected'
               ? `${status.modelCount} models`
               : status?.state === 'checking'
                 ? 'checking'
-                : 'fetch failed'
+                : status?.state === 'unavailable'
+                  ? 'no models'
+                  : 'fetch failed'
             : 'no key';
           return (
           <section key={group.provider} className="provider-key-row">
@@ -316,7 +320,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 Remove
               </button>
             </div>
-            {keyErrors[group.provider] && <p className="provider-key-error">{keyErrors[group.provider]}</p>}
+            {providerError && <p className="provider-key-error">{providerError}</p>}
           </section>
           );
         })}

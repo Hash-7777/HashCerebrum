@@ -53,12 +53,13 @@ function clusterColor(index: number): string {
   return CLUSTER_COLORS[index % CLUSTER_COLORS.length]!;
 }
 
-function clusterAnchor(cluster: MemoryGraphCluster, positions: Map<string, NodePosition>) {
+function clusterVisual(cluster: MemoryGraphCluster, positions: Map<string, NodePosition>) {
   const points = cluster.nodeIds.map((id) => positions.get(id)).filter(Boolean) as NodePosition[];
   if (points.length === 0) return null;
   const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
   const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
-  return { x, y };
+  const minY = Math.min(...points.map((point) => point.y));
+  return { x, y, minY };
 }
 
 export function MemoryGraphView({
@@ -136,15 +137,18 @@ export function MemoryGraphView({
     (box: GraphBounds) => {
       if (size.w === 0 || size.h === 0) return;
       const pad = Math.min(96, Math.max(44, Math.min(size.w, size.h) * 0.09));
+      const topPad = Math.min(132, Math.max(72, pad + 28));
       const boxW = Math.max(box.maxX - box.minX, 1);
       const boxH = Math.max(box.maxY - box.minY, 1);
+      const usableW = Math.max(1, size.w - pad * 2);
+      const usableH = Math.max(1, size.h - topPad - pad);
       const scale = Math.min(
-        Math.max(Math.min((size.w - pad * 2) / boxW, (size.h - pad * 2) / boxH), MIN_SCALE),
+        Math.max(Math.min(usableW / boxW, usableH / boxH), MIN_SCALE),
         1.7,
       );
       setTransform({
         x: size.w / 2 - ((box.minX + box.maxX) / 2) * scale,
-        y: size.h / 2 - ((box.minY + box.maxY) / 2) * scale,
+        y: topPad + usableH / 2 - ((box.minY + box.maxY) / 2) * scale,
         scale,
       });
     },
@@ -286,8 +290,8 @@ export function MemoryGraphView({
   const activeNeighbors = activeId ? (neighbors.get(activeId) ?? new Set<string>()) : null;
   const selected = selectedId ? nodeById.get(selectedId) : undefined;
   const clusterAnchors = graph.clusters
-    .map((cluster, index) => ({ cluster, index, visual: clusterAnchor(cluster, positions) }))
-    .filter((item): item is { cluster: MemoryGraphCluster; index: number; visual: NonNullable<ReturnType<typeof clusterAnchor>> } =>
+    .map((cluster, index) => ({ cluster, index, visual: clusterVisual(cluster, positions) }))
+    .filter((item): item is { cluster: MemoryGraphCluster; index: number; visual: NonNullable<ReturnType<typeof clusterVisual>> } =>
       item.visual !== null,
     );
 
@@ -325,6 +329,8 @@ export function MemoryGraphView({
               active ||
               transform.scale >= CLUSTER_LABEL_SCALE ||
               anchorClusterIds.has(cluster.id);
+            const labelY = Math.min(visual.minY - visual.y - 22 / transform.scale, -42 / transform.scale);
+            const metaY = labelY + 17 / transform.scale;
             return (
               <g
                 key={cluster.id}
@@ -338,18 +344,22 @@ export function MemoryGraphView({
                   <>
                     <text
                       className="memory-graph-cluster-label"
-                      y={-36 / transform.scale}
-                      fontSize={12 / transform.scale}
+                      y={labelY}
+                      fontSize={11.5 / transform.scale}
                     >
-                      {truncate(cluster.label, 42)}
+                      {truncate(cluster.label, 38)}
                     </text>
                     <text
                       className="memory-graph-cluster-meta"
-                      y={-20 / transform.scale}
+                      y={metaY}
                       fontSize={9.5 / transform.scale}
                     >
-                      {cluster.nodeIds.length} capsules · {cluster.chunkCount} memories
-                      {cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''}
+                      {truncate(
+                        `${cluster.nodeIds.length} capsules · ${cluster.chunkCount} memories${
+                          cluster.terms.length > 0 ? ` · ${cluster.terms.slice(0, 3).join(' / ')}` : ''
+                        }`,
+                        74,
+                      )}
                     </text>
                   </>
                 ) : null}
@@ -440,7 +450,7 @@ export function MemoryGraphView({
           data-active={selectedClusterId === null}
           onClick={() => setSelectedClusterId(null)}
         >
-          All topics
+          <span className="memory-graph-topic-label">All topics</span>
         </button>
         {graph.clusters.slice(0, 8).map((cluster, index) => (
           <button
@@ -452,8 +462,8 @@ export function MemoryGraphView({
             title={`${cluster.chunkCount} memories · ${cluster.terms.join(', ')}`}
           >
             <span className="memory-graph-topic-dot" />
-            {truncate(cluster.label, 28)}
-            <span>{cluster.chunkCount}</span>
+            <span className="memory-graph-topic-label">{truncate(cluster.label, 32)}</span>
+            <span className="memory-graph-topic-count">{cluster.chunkCount}</span>
           </button>
         ))}
       </div>
