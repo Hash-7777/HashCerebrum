@@ -43,7 +43,9 @@ export default defineConfig({
 
   build: {
     target: process.env['TAURI_ENV_PLATFORM'] === 'windows' ? 'chrome105' : 'safari13',
-    minify: !process.env['TAURI_ENV_DEBUG'] ? 'esbuild' : false,
+    // Vite 8 uses Rolldown + OXC (Rust-based). Passing true uses OXC minification;
+    // 'esbuild' is no longer bundled and requires a separate install.
+    minify: !process.env['TAURI_ENV_DEBUG'],
     sourcemap: !!process.env['TAURI_ENV_DEBUG'],
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

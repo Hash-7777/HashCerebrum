@@ -61,7 +61,5 @@
     "vitest": "^4.1.7"
   },
   "license": "MIT",
-  "overrides": {
-    "esbuild": "^0.25.0"
-  }
+  "overrides": {}
 }
