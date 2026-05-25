@@ -72,18 +72,32 @@ export function parseReviewResponse(raw: string, modelUsed: string): PaperReview
   const score = parseScore(raw);
   const summary = parseSection(raw, 'SUMMARY', 'STRENGTHS');
   const strengthsBlock = parseSection(raw, 'STRENGTHS', 'WEAKNESSES');
-  const weaknessesBlock = parseSection(raw, 'WEAKNESSES', 'METHODOLOGY');
-  const methodology = parseSection(raw, 'METHODOLOGY', 'STATISTICS');
-  const statistics = parseSection(raw, 'STATISTICS', 'CONCLUSIONS');
-  const conclusions = parseSection(raw, 'CONCLUSIONS', 'PUBLICATION READINESS');
+  // Handle both old format (WEAKNESSES → METHODOLOGY) and new format (WEAKNESSES → REPORTING CHECKLIST GAPS or METHODOLOGY)
+  const weaknessesBlock = parseSection(raw, 'WEAKNESSES', 'REPORTING CHECKLIST GAPS') ||
+    parseSection(raw, 'WEAKNESSES', 'METHODOLOGY');
+  // New fields — gracefully absent in old reviews
+  const checklistBlock  = parseSection(raw, 'REPORTING CHECKLIST GAPS', 'METHODOLOGY');
+  const methodology     = parseSection(raw, 'METHODOLOGY', 'GRADE CERTAINTY') ||
+    parseSection(raw, 'METHODOLOGY', 'STATISTICS');
+  const gradeCertainty  = parseSection(raw, 'GRADE CERTAINTY', 'STATISTICS');
+  const statistics      = parseSection(raw, 'STATISTICS', 'CONCLUSIONS');
+  const conclusions     = parseSection(raw, 'CONCLUSIONS', 'PUBLICATION READINESS');
   const publishReadiness = parseSection(raw, 'PUBLICATION READINESS', null);
+
+  // Merge checklist gaps and grade certainty into methodology for display in the
+  // existing UI fields (backward-compatible — no store shape change needed).
+  const fullMethodology = [
+    methodology,
+    checklistBlock ? `Reporting checklist gaps:\n${checklistBlock}` : '',
+    gradeCertainty ? `GRADE evidence certainty: ${gradeCertainty}` : '',
+  ].filter(Boolean).join('\n\n');
 
   return {
     score,
     summary: summary || raw.slice(0, 300),
     strengths: parseBullets(strengthsBlock),
     weaknesses: parseBullets(weaknessesBlock),
-    methodology,
+    methodology: fullMethodology || methodology,
     statistics,
     conclusions,
     publishReadiness,
