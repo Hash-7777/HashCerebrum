@@ -89,13 +89,14 @@ fn truncate(text: &str, max: usize) -> String {
 /// is sent so the backend cannot be used to inject arbitrary headers.
 ///
 /// Accepted (case-insensitive):
-///   content-type, authorization, x-api-key, x-goog-api-key, http-referer,
-///   x-title, and any name prefixed with "anthropic-" or "openai-".
+///   accept, content-type, authorization, x-api-key, x-goog-api-key,
+///   http-referer, x-title, and any name prefixed with "anthropic-" or "openai-".
 fn is_allowed_header(name: &str) -> bool {
     let lower = name.to_lowercase();
     matches!(
         lower.as_str(),
-        "content-type"
+        "accept"
+            | "content-type"
             | "authorization"
             | "x-api-key"
             | "x-goog-api-key"
