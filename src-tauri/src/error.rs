@@ -18,6 +18,9 @@ pub enum AppError {
     #[error("network error: {0}")]
     Network(String),
 
+    #[error("keychain error: {0}")]
+    Keychain(String),
+
     #[error("audit log error: {0}")]
     Audit(String),
 

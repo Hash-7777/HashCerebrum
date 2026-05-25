@@ -31,6 +31,7 @@ mod security;
 use commands::{
     audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
     cache::{cache_clear, cache_clear_expired, cache_stats},
+    keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
@@ -71,6 +72,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            keychain_store,
+            keychain_retrieve,
+            keychain_delete,
             audit_log_read,
             audit_log_read_page,
             audit_log_count,

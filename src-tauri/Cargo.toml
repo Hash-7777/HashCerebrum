@@ -41,6 +41,11 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs        = "5"
 shellexpand = "3"
 
+# OS keychain — keyring crate for Linux/Windows; macOS uses
+# security-framework directly (see target block) to avoid
+# binary-bound ACLs that lose keys after each rebuild.
+keyring = "3"
+
 # HTTP — all external network goes through Rust, never the renderer
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
 tokio   = { version = "1", features = ["full"] }
@@ -80,6 +85,10 @@ lopdf = "0.34"
 typst-as-lib = "0.15"
 typst-pdf    = "0.14"
 typst-assets = { version = "0.14", features = ["fonts"] }
+
+# macOS: direct keychain access (avoid binary-bound ACL)
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2"
 
 [profile.release]
 strip         = true
