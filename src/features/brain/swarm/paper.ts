@@ -91,9 +91,9 @@ Depth requirements:
 
 Hard rules:
 - Use only the retrieved records and specialist findings supplied below.
-- Cite every factual claim inline with its [#] marker.
+- Cite every factual claim inline with its [S#] source marker.
 - Never invent authors, PMIDs, DOIs, years, statistics, trial outcomes, or guidelines.
-- Do NOT write a References or Bibliography section — the application appends the canonical numbered reference list automatically. Inline [#] citation is all that is required.
+- Do NOT write a References or Bibliography section — the application appends the canonical numbered reference list automatically. Inline [S#] citation is all that is required.
 - If the evidence is insufficient for a publishable conclusion, say so plainly.
 - This is a manuscript draft for expert review, not medical advice and not a guaranteed publishable paper.`;
 }

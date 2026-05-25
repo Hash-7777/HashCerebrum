@@ -70,6 +70,51 @@ describe('publication artifact contract', () => {
     expect(normalized.sections[0]?.body.join(' ')).not.toContain('[S1]');
   });
 
+  it('normalizes legacy bare source markers into canonical references', () => {
+    const artifact = buildPublicationArtifact(
+      {
+        ...manuscript,
+        abstract: {
+          ...manuscript.abstract,
+          background: 'The legacy draft used a bare source marker [1].',
+        },
+        sections: [
+          {
+            heading: 'Introduction',
+            body: ['The legacy draft cited duplicate records with bare markers [1] [2].'],
+          },
+          {
+            heading: 'Declarations',
+            body: ['Automated evidence-review draft for expert review.'],
+          },
+        ],
+      },
+      evidence,
+    );
+
+    expect(artifact.references).toHaveLength(1);
+    expect(artifact.citationMap.S1?.displayMarker).toBe('[1]');
+    const normalized = normalizeManuscriptForPublication(
+      {
+        ...manuscript,
+        sections: [
+          {
+            heading: 'Introduction',
+            body: ['The legacy draft cited duplicate records with bare markers [1] [2].'],
+          },
+          {
+            heading: 'Declarations',
+            body: ['Automated evidence-review draft for expert review.'],
+          },
+        ],
+      },
+      artifact,
+      { includeSupplementalSection: false },
+    );
+    expect(normalized.sections[0]?.body.join(' ')).toContain('[1] [1]');
+    expect(normalized.sections[0]?.body.join(' ')).not.toContain('[2]');
+  });
+
   it('blocks publication export when required section depth is not met', () => {
     const artifact = buildPublicationArtifact(manuscript, evidence);
 

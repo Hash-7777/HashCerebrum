@@ -38,6 +38,8 @@ const SECTION_CITATION_EXEMPT = new Set([
   'Figures, Tables, and Statistical Safeguards',
 ]);
 
+const SOURCE_CITATION_RX = /\[(?:S)?(\d+)\]/g;
+
 function escXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -106,7 +108,7 @@ function textFromManuscript(manuscript: Manuscript): string {
 
 export function citedSourceNumbers(manuscript: Manuscript): number[] {
   const seen = new Set<number>();
-  for (const match of textFromManuscript(manuscript).matchAll(/\[S(\d+)\]/g)) {
+  for (const match of textFromManuscript(manuscript).matchAll(SOURCE_CITATION_RX)) {
     const value = Number(match[1]);
     if (Number.isFinite(value) && value > 0) seen.add(value);
   }
@@ -633,7 +635,7 @@ function validateManuscript(
         message: `${section.heading} is ${count} words; required minimum is ${spec.minWords}.`,
       });
     }
-    if (!SECTION_CITATION_EXEMPT.has(section.heading) && !/\[S\d+\]/.test(section.body.join(' '))) {
+    if (!SECTION_CITATION_EXEMPT.has(section.heading) && !/\[(?:S)?\d+\]/.test(section.body.join(' '))) {
       issues.push({
         severity: 'blocker',
         code: 'section-missing-citation',
@@ -748,7 +750,7 @@ export function buildPublicationArtifact(
 }
 
 function replaceCitations(value: string, citationMap: Record<string, CitationMapEntry>): string {
-  return value.replace(/\[S(\d+)\]/g, (full, n: string) => citationMap[`S${n}`]?.displayMarker ?? full);
+  return value.replace(SOURCE_CITATION_RX, (full, n: string) => citationMap[`S${n}`]?.displayMarker ?? full);
 }
 
 function exportText(value: string): string {
