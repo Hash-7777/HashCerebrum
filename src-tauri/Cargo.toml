@@ -52,7 +52,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"
 tokio   = { version = "1", features = ["full"] }
 
 # SQLite — source cache, audit log, future RAG store
-rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.39", features = ["bundled", "chrono"] }
 
 # Async helpers
 async-trait = "0.1"
