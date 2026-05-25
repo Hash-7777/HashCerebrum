@@ -37,7 +37,9 @@ export default defineConfig({
     watch: { ignored: ['**/src-tauri/**'] },
   },
 
-  envPrefix: ['VITE_', 'TAURI_ENV_*'],
+  // Expose only the single TAURI_ENV_DEBUG flag — not the entire TAURI_ENV_*
+  // namespace, which would leak any accidental TAURI_ENV_* CI vars into the bundle.
+  envPrefix: ['VITE_', 'TAURI_ENV_DEBUG'],
 
   build: {
     target: process.env['TAURI_ENV_PLATFORM'] === 'windows' ? 'chrome105' : 'safari13',
