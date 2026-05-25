@@ -196,8 +196,7 @@ fn is_horizontal_rule(line: &str) -> bool {
         return false;
     }
     let first = trimmed.chars().next().unwrap_or(' ');
-    matches!(first, '-' | '*' | '_')
-        && trimmed.chars().all(|c| c == first || c == ' ')
+    matches!(first, '-' | '*' | '_') && trimmed.chars().all(|c| c == first || c == ' ')
 }
 
 fn clean_body_text(value: &str) -> String {
