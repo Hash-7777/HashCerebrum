@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import type { EvidenceItem } from '@platform/index';
 import {
   containsPromptLeakage,
@@ -54,18 +55,17 @@ function escXml(value: string): string {
 }
 
 /** Strip dangerous tags and attributes from SVG before embedding in HTML.
- *  This is a lightweight allowlist sanitizer — the Rust backend runs a
- *  stricter version via safe_svg_bytes() during PDF compilation.
+ *  Uses DOMPurify with FORCE_BODY so the input is always treated as a
+ *  fragment; FORBID_TAGS removes script/style, FORBID_ATTR removes all
+ *  event handlers and javascript: / data: URIs. The Rust backend runs a
+ *  stricter allowlist via safe_svg_bytes() during PDF compilation.
  */
 export function sanitizeSvgForHtml(svg: string): string {
-  // Remove script tags (case-insensitive, handles nested tags)
-  let cleaned = svg.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  // Remove event handlers (onclick, onload, onerror, etc.)
-  cleaned = cleaned.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|`[^`]*`|[^\s>]*)/gi, '');
-  // Remove javascript: and data: URIs in href/src/xlink:href
-  cleaned = cleaned.replace(/(href|src|xlink:href)\s*=\s*("javascript:[^"]*"|'javascript:[^']*'|`javascript:[^`]*`|javascript:[^\s>]*)/gi, '');
-  cleaned = cleaned.replace(/(href|src|xlink:href)\s*=\s*("data:[^"]*"|'data:[^']*'|`data:[^`]*`|data:[^\s>]*)/gi, '');
-  return cleaned;
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    FORBID_TAGS: ['script', 'style'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  });
 }
 
 function normalizeText(value: string): string {

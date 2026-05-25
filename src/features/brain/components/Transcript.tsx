@@ -2,6 +2,18 @@ import { memo, useEffect, useRef, useState } from 'react';
 import logoMark from '@/assets/logo-mark.png';
 
 const MESSAGE_CAP = 80;
+
+// Only allow http / https URLs in evidence anchors — blocks javascript: and
+// data: URIs that a compromised biomedical API could return.
+function isSafeUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 import type { EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { useToastStore } from '@core/store/toastStore';
@@ -267,7 +279,7 @@ export const Transcript = memo(function Transcript({
                   {message.citations && message.citations.length > 0 && !isDocument && (
                     <div className="inline-citations">
                       {message.citations.slice(0, 6).map((item, i) => (
-                        <a key={evidenceKey(item, i)} href={item.url ?? undefined} target="_blank" rel="noreferrer">
+                        <a key={evidenceKey(item, i)} href={isSafeUrl(item.url) ? item.url : undefined} target="_blank" rel="noreferrer">
                           <Icon name="quote" size={10} /> [{i + 1}] {item.source}
                         </a>
                       ))}

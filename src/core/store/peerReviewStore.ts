@@ -71,7 +71,7 @@ interface PeerReviewStore {
 }
 
 function uid(): string {
-  return `pr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `pr-${crypto.randomUUID()}`;
 }
 
 async function readFileBytes(file: File): Promise<Uint8Array> {

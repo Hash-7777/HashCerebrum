@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { usePeerReviewStore, type AgentReviewResult, type ReviewedPaper } from '@core/store/peerReviewStore';
 import { agentModelFor } from '@core/store/agentModelStore';
 import { useToastStore } from '@core/store/toastStore';
@@ -230,7 +231,7 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
           // Editor output is produced by this component. Paste is forced to
           // plain text, so stored markup is limited to toolbar formatting,
           // marks, and accepted-fix spans.
-          dangerouslySetInnerHTML={{ __html: paper.editedHtml }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(paper.editedHtml) }}
         />
       </div>
     );
@@ -403,11 +404,13 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   // Uses captured ref values so we don't re-run on suggestion state changes.
   useEffect(() => {
     if (!showEditor || !editorRef.current) return;
-    editorRef.current.innerHTML = paper.editedHtml ??
-      buildHighlightedHtml(
-        enterDataRef.current.text,
-        enterDataRef.current.sugs,
-      );
+    editorRef.current.innerHTML = DOMPurify.sanitize(
+      paper.editedHtml ??
+        buildHighlightedHtml(
+          enterDataRef.current.text,
+          enterDataRef.current.sugs,
+        ),
+    );
     historyRef.current = [];
     setHistoryVersion((v) => v + 1);
   }, [showEditor]);

@@ -400,7 +400,7 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
       if (original === suggested || original.length === 0) continue;
       if (list.some((s) => s.agentId === agent.agentId && s.originalText === original)) continue;
       list.push({
-        id: `sug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `sug-${crypto.randomUUID()}`,
         agentId: agent.agentId,
         type,
         description: agent.label,
@@ -430,7 +430,7 @@ export function parseSuggestions(agentResults: AgentReviewResult[]): Suggestion[
             .filter((l) => l.length > 15);
     for (const item of items.slice(0, 5)) {
       list.push({
-        id: `sug-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `sug-${crypto.randomUUID()}`,
         agentId: agent.agentId,
         type,
         description: item,
