@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="public/icons/icon.png" width="96" alt="HashCerebrum app icon" />
+<img width="200" height="200" alt="Sketches" style="border-radius: 500px;" src="https://github.com/user-attachments/assets/1d7fabb4-b697-4ca1-8a2c-b4ceac2aa7ae">
+
+
 
 # HashCerebrum
 
