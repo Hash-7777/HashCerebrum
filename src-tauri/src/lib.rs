@@ -31,7 +31,6 @@ mod security;
 use commands::{
     audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
     cache::{cache_clear, cache_clear_expired, cache_stats},
-    keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
@@ -40,7 +39,7 @@ use commands::{
         semantic_scholar::semantic_scholar_search,
     },
     net::net_get,
-    pdf::{pdf_extract_text, pdf_extract_text_bytes},
+    pdf::pdf_extract_text_bytes,
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -61,7 +60,6 @@ pub fn run() {
 
     match tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
@@ -73,9 +71,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            keychain_store,
-            keychain_retrieve,
-            keychain_delete,
             audit_log_read,
             audit_log_read_page,
             audit_log_count,
@@ -92,7 +87,6 @@ pub fn run() {
             openfda_query,
             rxnorm_lookup,
             semantic_scholar_search,
-            pdf_extract_text,
             pdf_extract_text_bytes,
             render_manuscript_pdf,
             cache_stats,

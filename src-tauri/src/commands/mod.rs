@@ -9,7 +9,6 @@
 
 pub mod audit;
 pub mod cache;
-pub mod keychain;
 pub mod llm;
 pub mod manuscript;
 pub mod medical;
