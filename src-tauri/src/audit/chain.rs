@@ -38,8 +38,9 @@ impl AuditEntry {
         let prev_hash = prev_hash.into();
         let ts = Utc::now();
         let data_hash = sha256_hex(payload.to_string().as_bytes());
-        let entry_hash =
-            Self::compute_entry_hash(seq, &prev_hash, &ts, &category, &subject, &action, &data_hash);
+        let entry_hash = Self::compute_entry_hash(
+            seq, &prev_hash, &ts, &category, &subject, &action, &data_hash,
+        );
         Self {
             seq,
             ts,
