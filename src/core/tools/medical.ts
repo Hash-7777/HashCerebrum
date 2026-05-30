@@ -7,7 +7,7 @@ const sourceQuerySchema = {
   required: ['query'],
   properties: {
     query: { type: 'string', minLength: 1 },
-    maxResults: { type: 'integer', minimum: 1, maximum: 25 },
+    maxResults: { type: 'integer', minimum: 1, maximum: 40 },
   },
 };
 
@@ -22,7 +22,7 @@ const openFdaSchema = {
       default: 'drug/event',
     },
     query: { type: 'string', minLength: 1 },
-    maxResults: { type: 'integer', minimum: 1, maximum: 25 },
+    maxResults: { type: 'integer', minimum: 1, maximum: 40 },
   },
 };
 
@@ -42,7 +42,9 @@ function cleanQuery(args: unknown): MedicalSourceQuery {
   const parsedMax = Number(raw.maxResults);
   return {
     query,
-    maxResults: Number.isFinite(parsedMax) ? Math.min(25, Math.max(1, Math.round(parsedMax))) : 8,
+    // Deeper default pull so a single specialist sweep returns a substantial,
+    // citable evidence base rather than a thin top-handful.
+    maxResults: Number.isFinite(parsedMax) ? Math.min(40, Math.max(1, Math.round(parsedMax))) : 15,
   };
 }
 

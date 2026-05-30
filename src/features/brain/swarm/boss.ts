@@ -124,8 +124,12 @@ export async function synthesize(
   paperRequest?: PaperRequest | null,
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
+  // Cap the block so a deep retrieval sweep cannot overflow the synthesis
+  // model's context window. mergedEvidence is already sorted best-first
+  // (PubMed-favoured, recency- and identifier-weighted), so the top slice is
+  // the strongest evidence; the [S#] markers stay aligned with that order.
   const evidenceBlock =
-    formatEvidenceList(mergedEvidence, { markerPrefix: 'S' });
+    formatEvidenceList(mergedEvidence, { markerPrefix: 'S', maxItems: 50 });
   const specialistBlock = specialists
     .map((specialist) => {
       const body = specialist.error

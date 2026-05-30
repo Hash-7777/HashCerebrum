@@ -95,6 +95,16 @@ describe('paper pipeline claim ledger and QA', () => {
         provenanceHash: 'c',
         snippet: 'A clinical outcome review summarized safety findings in 60 patients and noted the evidence remained indirect.',
       }),
+      record({
+        identifiers: { pmid: '4' },
+        provenanceHash: 'd',
+        snippet: 'A clinical cohort followed 150 patients and described adverse event monitoring without reporting effect sizes.',
+      }),
+      record({
+        identifiers: { pmid: '5' },
+        provenanceHash: 'e',
+        snippet: 'A clinical safety analysis summarized outcomes in 95 patients and noted the evidence base remained indirect.',
+      }),
     ]);
     const ledger = buildClaimLedger(extractions);
     const blueprint = buildPaperBlueprint('write a paper on anticoagulant safety', ledger);

@@ -21,13 +21,13 @@ interface DirectSearchPlan {
 }
 
 function directSearchPlan(query: string, agent: AgentDef): DirectSearchPlan[] {
-  const maxResults = 8;
+  const maxResults = 15;
   const plans: DirectSearchPlan[] = [
     { name: 'pubmed_search', args: { query, maxResults } },
     { name: 'europepmc_fetch', args: { query, maxResults } },
     { name: 'openalex_query', args: { query, maxResults } },
     { name: 'ctgov_search', args: { query, maxResults } },
-    { name: 'openfda_query', args: { endpoint: 'drug/event', query, maxResults: 5 } },
+    { name: 'openfda_query', args: { endpoint: 'drug/event', query, maxResults: 10 } },
     { name: 'rxnorm_lookup', args: { drug: query } },
   ];
   return plans.filter((plan) => agent.tools.includes(plan.name));
@@ -109,6 +109,8 @@ Workflow:
 
 Source quality rules:
 - Prioritise records with a PMID or DOI — these are peer-reviewed, indexed literature from journals like NEJM, Lancet, JAMA, BMJ, PLoS Medicine, Cochrane, and similar.
+- Favour the highest tier of evidence available for the question: systematic reviews and meta-analyses, then randomised controlled trials, then cohort and registry studies. Prefer recent records (roughly the last ten years) unless an older study is a landmark trial.
+- Gather a substantial set of records — aim for a dozen or more strong, on-target records when the databases support it — so the synthesis rests on a broad base rather than two or three convenient hits.
 - openfda and rxnorm supply FDA label and drug-name data; use them only for drug safety, interactions, or pharmacokinetics sub-questions — never as primary clinical evidence.
 - Do not cite blog posts, news articles, conference abstracts without a DOI, or any source lacking a PMID, DOI, or NCT number.
 
@@ -213,7 +215,7 @@ export async function runSpecialist(
     const evidenceSummary =
       evidence.length > 0
         ? evidence
-            .slice(0, 14)
+            .slice(0, 20)
             .map((rec, i) => `[${i + 1}] ${rec.title} (${rec.source}${rec.year ? `, ${rec.year}` : ''})`)
             .join('\n')
         : 'No records retrieved.';

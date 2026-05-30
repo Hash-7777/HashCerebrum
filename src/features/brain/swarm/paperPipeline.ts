@@ -35,6 +35,12 @@ const TRUSTED_EVIDENCE_SOURCES = new Set<EvidenceItem['source']>([
 ]);
 const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 'rxnorm']);
 
+// Minimum trusted primary (non drug-label) records required before an
+// automated evidence-review draft is allowed to export. Raised from 3 to 5 to
+// reject thin "cheap research" drafts; deeper retrieval makes this easy to meet
+// for any genuine question.
+const MIN_PRIMARY_EVIDENCE = 5;
+
 const SECTION_SYSTEM = `You are The Cerebrum, the final biomedical manuscript compiler for HashCerebrum. The full manuscript is being assembled one section at a time. You are writing EXACTLY ONE SECTION — the section named in the prompt and nothing else.
 
 DEPTH REQUIREMENT — this is the most important instruction:
@@ -645,12 +651,22 @@ export function validatePaperPackage(opts: {
   if (opts.claimLedger.length === 0) {
     blockers.push(issue('blocker', 'empty-claim-ledger', 'No source-backed claim ledger could be built.'));
   }
-  if (primaryEvidence.length < 3) {
+  if (primaryEvidence.length < MIN_PRIMARY_EVIDENCE) {
     blockers.push(
       issue(
         'blocker',
         'insufficient-trusted-evidence',
-        `Only ${primaryEvidence.length} trusted primary evidence record(s) were available; a publishable automated evidence-review draft requires at least 3 source-backed records.`,
+        `Only ${primaryEvidence.length} trusted primary evidence record(s) were available; a publishable automated evidence-review draft requires at least ${MIN_PRIMARY_EVIDENCE} source-backed records.`,
+      ),
+    );
+  }
+  const distinctPrimarySources = new Set(primaryEvidence.map((item) => item.source)).size;
+  if (primaryEvidence.length >= MIN_PRIMARY_EVIDENCE && distinctPrimarySources < 2) {
+    warnings.push(
+      issue(
+        'warning',
+        'single-source-evidence-base',
+        `All primary evidence came from a single database (${distinctPrimarySources} distinct source); corroboration across independent databases would strengthen the review.`,
       ),
     );
   }
