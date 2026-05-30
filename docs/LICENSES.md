@@ -43,6 +43,14 @@ The SIL OFL permits use in applications without restriction. No attribution is l
 
 If the app is ever shipped for fully offline use (no network access), the font files must be vendored under `public/fonts/` and a copy of the OFL placed alongside them.
 
+### `public/fonts/DejaVuSerif.ttf`, `public/fonts/DejaVuSerif-Bold.ttf`
+
+- **Title:** DejaVu Serif (regular + bold)
+- **Source:** DejaVu Fonts project, distributed via the `dejavu-fonts-ttf` npm package (v2.37.3).
+- **License:** Bitstream Vera Fonts Copyright + Arev Fonts Copyright (permissive; allows redistribution and embedding). Full text vendored at [`public/fonts/LICENSE.txt`](../public/fonts/LICENSE.txt).
+- **Usage:** Embedded into jsPDF at export time (`src/features/brain/export/paperPdf.ts`) so downloaded research-paper PDFs can render Greek letters and math/relation/arrow glyphs that the built-in WinAnsi "times" font cannot draw. Lazily fetched from `/fonts/` on first export; not part of the JS bundle. The font is vendored (not fetched from a CDN) so PDF export works fully offline.
+- **Audit date:** 2026-05-31.
+
 ## Static assets
 
 ### `public/noise.svg`

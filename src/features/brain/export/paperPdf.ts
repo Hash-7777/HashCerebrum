@@ -311,9 +311,65 @@ const ACCENT_R = 130;
 const ACCENT_G = 224;
 const ACCENT_B = 194;
 
+// Embedded Unicode serif (DejaVu Serif, Bitstream Vera licence). Covers Latin,
+// Greek, and the common math/relation/arrow glyphs the built-in WinAnsi
+// "times" font cannot draw. Lazily fetched from /public on first export and
+// cached as base64 for the lifetime of the page.
+const EMBED_FONT = 'DejaVuSerif';
+const FONT_FILES = {
+  normal: { vfs: 'DejaVuSerif.ttf', url: '/fonts/DejaVuSerif.ttf' },
+  bold: { vfs: 'DejaVuSerif-Bold.ttf', url: '/fonts/DejaVuSerif-Bold.ttf' },
+} as const;
+const fontBase64Cache = new Map<string, string>();
+
+async function fetchFontBase64(url: string): Promise<string> {
+  const cached = fontBase64Cache.get(url);
+  if (cached) return cached;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`font fetch failed (${res.status})`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  const base64 = btoa(binary);
+  fontBase64Cache.set(url, base64);
+  return base64;
+}
+
+// Register the embedded Unicode font on the document. Returns true on success;
+// on any failure (asset missing, fetch blocked) the caller stays on the
+// built-in font and the WinAnsi sanitizer handles non-Latin-1 characters.
+async function embedUnicodeFont(doc: {
+  addFileToVFS: (name: string, data: string) => void;
+  addFont: (file: string, family: string, style: string) => void;
+}): Promise<boolean> {
+  try {
+    const [normal, bold] = await Promise.all([
+      fetchFontBase64(FONT_FILES.normal.url),
+      fetchFontBase64(FONT_FILES.bold.url),
+    ]);
+    doc.addFileToVFS(FONT_FILES.normal.vfs, normal);
+    doc.addFont(FONT_FILES.normal.vfs, EMBED_FONT, 'normal');
+    doc.addFileToVFS(FONT_FILES.bold.vfs, bold);
+    doc.addFont(FONT_FILES.bold.vfs, EMBED_FONT, 'bold');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
+
+  // Embed the Unicode serif if available; otherwise fall back to the built-in
+  // "times" font and let the WinAnsi sanitizer transliterate. setPdfFontHasUnicode
+  // tells plain()/winAnsiSafe() whether the active font can draw Greek + math.
+  const unicodeFontReady = await embedUnicodeFont(doc);
+  setPdfFontHasUnicode(unicodeFontReady);
+  const FONT = unicodeFontReady ? EMBED_FONT : 'times';
 
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -341,7 +397,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
 
   // ---- Title block -------------------------------------------------------
   const documentTitle = plain(input.manuscript?.title ?? input.title) || 'HashCerebrum Research Manuscript';
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(22);
   doc.setTextColor(12, 22, 37);
   for (const line of splitPdfTextToSize(doc, documentTitle, contentW)) {
@@ -351,7 +407,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   }
 
   y += 5;
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(9);
   doc.setTextColor(135, 155, 180);
   const meta = winAnsiSafe(`HashCerebrum${input.modelLabel ? ` · ${input.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`);
@@ -368,7 +424,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     const size = level === 1 ? 15 : level === 2 ? 12.5 : 11;
     y += level === 3 ? 13 : 20;
     ensureSpace(size + 12);
-    doc.setFont('times', 'bold');
+    doc.setFont(FONT, 'bold');
     doc.setFontSize(size);
     doc.setTextColor(12, 22, 37);
     for (const line of splitPdfTextToSize(doc, plain(text), contentW)) {
@@ -402,14 +458,14 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     const label = text.match(/^\*\*([^*]+?)\*\*:?\s*([\s\S]*)$/);
     if (label) {
       const labelText = `${label[1]!.trim()}:  `;
-      doc.setFont('times', 'bold');
+      doc.setFont(FONT, 'bold');
       const labelW = doc.getTextWidth(labelText);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT, 'normal');
       const restLines = splitPdfTextToSize(doc, plain(label[2] ?? ''), Math.max(40, width - labelW));
       ensureSpace(BODY_LEADING);
-      doc.setFont('times', 'bold');
+      doc.setFont(FONT, 'bold');
       doc.text(labelText, x, y);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT, 'normal');
       restLines.forEach((line, i) => {
         if (i > 0) {
           y += BODY_LEADING;
@@ -421,7 +477,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
       return;
     }
 
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT, 'normal');
     const cleaned = plain(text);
     const unsafeForJustify = /[|]/.test(text) || /-{4,}/.test(text) || /;\s*\w+:/i.test(cleaned);
     const lines = splitPdfTextToSize(doc, cleaned, width);
@@ -446,7 +502,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     const indent = 16;
     const x = marginX + indent;
     const width = contentW - indent;
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT, 'normal');
     doc.setFontSize(BODY_SIZE);
     doc.setTextColor(31, 41, 55);
     const lines = splitPdfTextToSize(doc, plain(text), width);
@@ -518,7 +574,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
         : input.citations.map((_, i) => i + 1);
 
     heading('References', 2);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT, 'normal');
     doc.setFontSize(9);
     doc.setTextColor(60, 80, 100);
     cited.forEach((number, listIndex) => {
@@ -533,11 +589,11 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
           // Draw the [n] marker in accent colour
           const markerStr = `[${listIndex + 1}]`;
           doc.setTextColor(ACCENT_R, ACCENT_G, ACCENT_B);
-          doc.setFont('times', 'bold');
+          doc.setFont(FONT, 'bold');
           doc.text(markerStr, marginX, y);
           const markerW = doc.getTextWidth(markerStr) + 4;
           doc.setTextColor(60, 80, 100);
-          doc.setFont('times', 'normal');
+          doc.setFont(FONT, 'normal');
           // Strip the leading marker from the line jsPDF already has
           const bodyLine = line.replace(/^\[\d+\]\s*/, '');
           doc.text(bodyLine, marginX + markerW, y);
@@ -554,7 +610,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT, 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(140, 146, 158);
     doc.text(`${page} / ${pages}`, pageW / 2, pageH - 34, { align: 'center' });
