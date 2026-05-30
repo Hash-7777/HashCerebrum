@@ -33,7 +33,10 @@ const TRUSTED_EVIDENCE_SOURCES = new Set<EvidenceItem['source']>([
   'ctgov',
   'openalex',
 ]);
-const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 'rxnorm']);
+// Drug-label / drug-terminology sources. They inform specialist context but
+// are not peer-reviewed literature, so they are never counted as primary
+// evidence and never appear as numbered citations in a synthesized answer.
+export const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 'rxnorm']);
 
 // Minimum trusted primary (non drug-label) records required before an
 // automated evidence-review draft is allowed to export. Raised from 3 to 5 to

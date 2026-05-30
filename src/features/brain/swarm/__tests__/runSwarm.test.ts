@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { evidenceScore, mergeEvidence } from '../runSwarm';
+import { evidenceScore, isNonCitableProceeding, mergeEvidence } from '../runSwarm';
 import type { SpecialistResult } from '../types';
 
 function makeRecord(partial: Partial<EvidenceItem> & { source: EvidenceItem['source'] }): EvidenceItem {
@@ -67,5 +67,26 @@ describe('mergeEvidence', () => {
     const s2 = makeSpecialist([makeRecord({ source: 'ctgov', year: 2020, identifiers: { pmid: '2' } })]);
     const merged = mergeEvidence([s1, s2]);
     expect(merged).toHaveLength(2);
+  });
+
+  it('drops conference-proceeding and abstract-collection records', () => {
+    const titled = (title: string) => makeRecord({ source: 'europepmc', title });
+    expect(isNonCitableProceeding(titled('ESICM LIVES 2024. Barcelona, Spain.'))).toBe(true);
+    expect(isNonCitableProceeding(titled('UEG Week 2025 Moderated Posters'))).toBe(true);
+    expect(isNonCitableProceeding(titled('E-Posters'))).toBe(true);
+    expect(isNonCitableProceeding(titled('Book of Posters'))).toBe(true);
+    expect(
+      isNonCitableProceeding(titled('Abstracts from the 2020 Annual Meeting of the Society of General Internal Medicine')),
+    ).toBe(true);
+    // A real study title is kept.
+    expect(
+      isNonCitableProceeding(titled('Antimicrobial stewardship interventions in adults with hospital-acquired pneumonia')),
+    ).toBe(false);
+
+    const real = makeRecord({ source: 'pubmed', title: 'Bleeding risk in anticoagulated patients', identifiers: { pmid: '1' } });
+    const poster = makeRecord({ source: 'europepmc', title: 'UEG Week 2024 Poster Presentations', identifiers: { pmid: '2' } });
+    const merged = mergeEvidence([makeSpecialist([real, poster])]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.title).toBe('Bleeding risk in anticoagulated patients');
   });
 });

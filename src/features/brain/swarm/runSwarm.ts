@@ -10,7 +10,7 @@ import { appraisePriorWork, bossChat, planResearch, synthesize } from './boss';
 import { detectPaperRequest, fallbackPaperTasks, isPriorWorkReviewRequest, manuscriptStandardForQuestion } from './paper';
 import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
-import { runPaperPipeline } from './paperPipeline';
+import { CONTEXT_ONLY_SOURCES, runPaperPipeline } from './paperPipeline';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SpecialistTask, SwarmOptions, SwarmResult } from './types';
 
@@ -53,14 +53,27 @@ export function evidenceScore(record: EvidenceItem): number {
   return score;
 }
 
+// Conference-proceeding and abstract-collection records (poster books, oral
+// presentation lists, society-meeting abstract supplements). They are not
+// individual peer-reviewed studies and must never be cited as primary
+// evidence, so they are dropped from the merged set entirely.
+const PROCEEDING_TITLE_RX =
+  /(\be-?posters?\b|\bposter (presentation|collection|session)|book of posters|\boral presentations?\b|moderated posters|abstracts? (from|of) the|proceedings of the|\bannual meeting\b|congress of the|\bueg week\b|\blives\s+\d{4}\b)/i;
+
+export function isNonCitableProceeding(record: EvidenceItem): boolean {
+  return PROCEEDING_TITLE_RX.test(record.title ?? '');
+}
+
 // Merge every specialist's evidence into one de-duplicated set the boss
 // can cite with a single [#] numbering. Records are ranked by quality
 // so high-credibility evidence survives context-window truncation.
+// Conference-proceeding noise is filtered out before ranking.
 export function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
   const seen = new Set<string>();
   const merged: EvidenceItem[] = [];
   for (const specialist of specialists) {
     for (const record of specialist.evidence) {
+      if (isNonCitableProceeding(record)) continue;
       const key = evidenceKey(record);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -181,15 +194,22 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     };
   }
 
+  // For a freeform research answer, cite only peer-reviewed literature: drop
+  // drug-label / drug-terminology sources (OpenFDA, RxNorm) from the citable
+  // set so they never become numbered references. Their content still reaches
+  // the boss through the specialist findings, just not as a citation. The
+  // structured manuscript pipeline above keeps them as documented context.
+  const citableEvidence = merged.filter((record) => !CONTEXT_ONLY_SOURCES.has(record.source));
+
   let synth;
   try {
-    synth = await synthesize(bossModel, question, specialists, merged, callbacks.onAnswerToken, undefined, signal);
+    synth = await synthesize(bossModel, question, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {
       kind: 'research',
-      answer: sourceOnlyAnswer(question, merged, detail),
-      evidence: merged,
+      answer: sourceOnlyAnswer(question, citableEvidence, detail),
+      evidence: citableEvidence,
       specialists,
       modelUsed: bossModel,
     };
@@ -198,7 +218,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   return {
     kind: 'research',
     answer: synth.content,
-    evidence: merged,
+    evidence: citableEvidence,
     specialists,
     modelUsed: synth.modelUsed,
   };

@@ -115,7 +115,12 @@ describe('runSwarm', () => {
     });
 
     expect(result.kind).toBe('research');
-    expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
+    // The freeform path cites peer-reviewed literature only: drug-label sources
+    // (OpenFDA, RxNorm) are dropped from the citable evidence/reference set.
+    const citableSources = Object.values(SOURCE_BY_TOOL).filter((s) => s !== 'openfda' && s !== 'rxnorm');
+    expect(result.evidence).toHaveLength(citableSources.length);
+    expect(result.evidence.some((record) => record.source === 'openfda')).toBe(false);
+    expect(result.evidence.some((record) => record.source === 'rxnorm')).toBe(false);
     expect(result.answer).toContain('Source agents retrieved');
     expect(result.answer).toContain('boss synthesis unavailable');
     expect(result.specialists[0]?.error).toContain('planner unavailable');
