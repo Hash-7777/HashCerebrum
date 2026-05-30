@@ -6,8 +6,9 @@
 
 import { agentById } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
-import { bossChat, planResearch, synthesize } from './boss';
-import { detectPaperRequest, fallbackPaperTasks, manuscriptStandardForQuestion } from './paper';
+import { appraisePriorWork, bossChat, planResearch, synthesize } from './boss';
+import { detectPaperRequest, fallbackPaperTasks, isPriorWorkReviewRequest, manuscriptStandardForQuestion } from './paper';
+import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
 import { runPaperPipeline } from './paperPipeline';
 import { runSpecialist } from './specialist';
@@ -102,9 +103,33 @@ function mergePaperTasks(planned: SpecialistTask[], required: SpecialistTask[]):
   return merged;
 }
 
+// The most recent assistant turn with enough body to be the "paper" or
+// "answer" a follow-up review request is referring to.
+function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null {
+  for (let i = conversation.length - 1; i >= 0; i -= 1) {
+    const msg = conversation[i];
+    if (msg?.role === 'assistant' && msg.content.trim().length >= 400) return msg.content;
+  }
+  return null;
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const bossModel = modelFor('boss');
+
+  // A follow-up that asks the team to appraise its own previous output ("rate
+  // that paper", "review this draft") is answered by reviewing that document
+  // directly — never by launching a fresh research swarm, which is what caused
+  // the boss to rate unrelated retrieved literature instead of the user's paper.
+  if (isPriorWorkReviewRequest(question)) {
+    const priorWork = mostRecentSubstantialAnswer(conversation);
+    if (priorWork) {
+      callbacks.onBossPhase('answering');
+      const appraisal = await appraisePriorWork(bossModel, priorWork, question, callbacks.onAnswerToken, signal);
+      return { kind: 'chat', answer: appraisal.content, evidence: [], specialists: [], modelUsed: appraisal.modelUsed };
+    }
+  }
+
   const paperRequest = detectPaperRequest(question);
 
   callbacks.onBossPhase('routing');

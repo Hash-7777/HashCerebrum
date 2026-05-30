@@ -23,6 +23,20 @@ const PAPER_RX = new RegExp(
   'i',
 );
 
+// A follow-up that asks the team to appraise its own previous output — "rate
+// that paper", "review this draft", "how would you grade it" — rather than to
+// research something new. Requires both an appraisal verb and a back-reference
+// to prior work, so a fresh request like "write a systematic review of X" or
+// "review the evidence on statins" is NOT captured here.
+const REVIEW_VERB_RX =
+  /\b(rate|review|critique|appraise|assess|grade|evaluat\w*|judge|score|fact[-\s]?check|peer[-\s]?review)\b/i;
+const BACK_REFERENCE_RX =
+  /\b(it|this|that|these|those|above|previous|prior|the\s+(paper|draft|manuscript|article|document|review|answer|response|text|write[-\s]?up)|your\s+(last|previous|answer|response|paper|draft))\b/i;
+
+export function isPriorWorkReviewRequest(question: string): boolean {
+  return REVIEW_VERB_RX.test(question) && BACK_REFERENCE_RX.test(question);
+}
+
 export function detectPaperRequest(question: string): PaperRequest | null {
   if (!PAPER_RX.test(question)) return null;
   if (/\b(systematic\s+review|meta[-\s]?analysis|prisma)\b/i.test(question)) {

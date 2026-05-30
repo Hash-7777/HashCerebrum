@@ -4,6 +4,7 @@ import {
   buildSourceGroundedPaperFallback,
   detectPaperRequest,
   fallbackPaperTasks,
+  isPriorWorkReviewRequest,
   manuscriptStandardForQuestion,
 } from '../paper';
 
@@ -52,6 +53,18 @@ describe('paper request helpers', () => {
       'pharmacology',
       'drug_interactions',
     ]);
+  });
+
+  it('recognises a follow-up that appraises prior work, not a fresh research request', () => {
+    // Appraisal verb + back-reference to the prior output.
+    expect(isPriorWorkReviewRequest('rate that paper')).toBe(true);
+    expect(isPriorWorkReviewRequest('review this draft')).toBe(true);
+    expect(isPriorWorkReviewRequest('how would you grade it?')).toBe(true);
+    expect(isPriorWorkReviewRequest('critique the manuscript above')).toBe(true);
+    // Fresh research / writing requests must NOT be captured (no back-reference).
+    expect(isPriorWorkReviewRequest('write a systematic review of statins')).toBe(false);
+    expect(isPriorWorkReviewRequest('review the evidence on GLP-1 agonists')).toBe(false);
+    expect(isPriorWorkReviewRequest('make a paper about sepsis')).toBe(false);
   });
 
   it('keeps synthesis-failure fallbacks structured like a paper', () => {

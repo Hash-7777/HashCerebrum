@@ -91,6 +91,41 @@ or
   return { mode: 'research', tasks: [{ agentId: 'literature', subQuery: question }] };
 }
 
+// Critical appraisal of a document the team already produced — used when the
+// user follows up on a generated paper with "rate it", "review that draft",
+// etc. Reviews ONLY the supplied text: no fresh literature retrieval, so the
+// boss can never drift into rating unrelated papers it just searched for.
+export async function appraisePriorWork(
+  model: string,
+  priorWork: string,
+  question: string,
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<{ content: string; modelUsed: string }> {
+  const messages: LlmMessage[] = [
+    {
+      role: 'system',
+      content: `You are the Boss of HashCerebrum performing a critical appraisal of a document THIS TEAM ALREADY PRODUCED, shown below.
+
+Hard rules:
+- Appraise ONLY the document below — the one the user is referring to. Do NOT search for or introduce new papers, studies, PMIDs, statistics, or literature, and never rate unrelated papers.
+- Do not invent facts. Judge the document on its own contents.
+
+Cover, with specific reference to parts of the document:
+- Scientific rigour and methodology.
+- Whether the citations and reported numbers are internally consistent and actually support the claims (flag any citation that is not backed up, any number that appears unsupported, and any over-claiming).
+- Strength and appropriateness of the evidence cited (study designs, recency, relevance).
+- Structure, clarity, and balance.
+- Concrete strengths and concrete weaknesses.
+
+End with an overall rating out of 10 and a one-line verdict on publication readiness. This is an internal quality appraisal, not medical advice.`,
+    },
+    { role: 'user', content: `My request: ${question}\n\n--- DOCUMENT TO APPRAISE ---\n${priorWork}` },
+  ];
+  const res = await streamWithModelChain(model, { messages, temperature: 0.2, maxTokens: 1800 }, { onToken, signal });
+  return { content: res.content, modelUsed: res.modelUsed };
+}
+
 // Plain-chat answer — streamed.
 export async function bossChat(
   model: string,
