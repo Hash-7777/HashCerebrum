@@ -131,8 +131,16 @@ pub fn evidence(
     }
 }
 
+// Exponential backoff between retry attempts: ~300ms, ~600ms. Keeps a
+// transient upstream blip from instantly failing a specialist's source sweep
+// without stalling the swarm for long.
+async fn backoff_delay(attempt: u32) {
+    let millis = 300u64 * (1u64 << (attempt.saturating_sub(1)).min(4));
+    tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
+}
+
 pub async fn fetch_json(
-    mut url: Url,
+    url: Url,
     cache_ttl_seconds: Option<i64>,
 ) -> AppResult<serde_json::Value> {
     let cache_key = sha256_hex(url.as_str().as_bytes());
@@ -145,14 +153,42 @@ pub async fn fetch_json(
         return Ok(serde_json::from_slice(&cached)?);
     }
 
-    let response = net_get(url.to_string()).await?;
-    if !(200..300).contains(&response.status) {
-        url.set_query(None);
-        return Err(AppError::Network(format!(
-            "upstream returned HTTP {} for {}",
-            response.status, url
-        )));
-    }
+    // Public biomedical endpoints (Europe PMC's EBI host especially) return
+    // intermittent 503s and occasionally drop the connection mid-request.
+    // These GETs are idempotent reads, so retry transient failures a few times
+    // with exponential backoff before surfacing the error to the agent panel.
+    // Retry lives here (not in net_get) so non-idempotent calls such as LLM
+    // requests are never silently replayed.
+    const MAX_ATTEMPTS: u32 = 3;
+    let response = {
+        let mut attempt = 0u32;
+        loop {
+            attempt += 1;
+            match net_get(url.to_string()).await {
+                Ok(resp) if (200..300).contains(&resp.status) => break resp,
+                Ok(resp) => {
+                    let transient = resp.status == 429 || (500..600).contains(&resp.status);
+                    if transient && attempt < MAX_ATTEMPTS {
+                        backoff_delay(attempt).await;
+                        continue;
+                    }
+                    let mut log_url = url.clone();
+                    log_url.set_query(None);
+                    return Err(AppError::Network(format!(
+                        "upstream returned HTTP {} for {}",
+                        resp.status, log_url
+                    )));
+                }
+                Err(e) => {
+                    if attempt < MAX_ATTEMPTS && matches!(e, AppError::Network(_)) {
+                        backoff_delay(attempt).await;
+                        continue;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    };
 
     // Write to cache if TTL is specified
     if let Some(ttl) = cache_ttl_seconds {
