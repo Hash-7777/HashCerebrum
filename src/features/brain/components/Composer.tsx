@@ -36,6 +36,14 @@ export function Composer({
     if (!textarea) return;
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 48), 180)}px`;
+    // When the box is filled programmatically (a ready-prompt chip or an
+    // edit-message action) rather than by typing, focus it and drop the
+    // cursor at the end so the user can refine the text before sending.
+    if (query && document.activeElement !== textarea) {
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+    }
   }, [query]);
 
   const attachDataset = (event: ChangeEvent<HTMLInputElement>) => {
