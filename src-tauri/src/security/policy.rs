@@ -47,9 +47,12 @@ const ALLOWED_HOSTS: &[&str] = &[
     "api.deepseek.com",
     "api.mistral.ai",
     "integrate.api.nvidia.com",
-    // Ollama (local)
+    // Ollama (local). "::1" is the IPv6 loopback: on a dual-stack host
+    // "localhost" can resolve to ::1, and url::Host renders it without
+    // brackets, so it must be allowlisted alongside the IPv4 loopback.
     "localhost",
     "127.0.0.1",
+    "::1",
 ];
 
 const ALLOWED_KEYCHAIN_KEYS: &[&str] = &[
