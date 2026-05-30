@@ -25,10 +25,12 @@ export function evidenceKey(record: EvidenceItem): string {
 
 // Rank sources by clinical credibility so the most trustworthy records
 // reach the synthesis model first (context-window limits may truncate
-// the tail).
+// the tail). PubMed is favored: as the primary peer-reviewed biomedical
+// index it carries the highest base weight so its records lead the merged
+// set and are the last to be dropped under truncation.
 const SOURCE_SCORE: Record<EvidenceItem['source'], number> = {
+  pubmed: 12,
   ctgov: 6,
-  pubmed: 6,
   europepmc: 5,
   openalex: 4,
   openfda: 3,
