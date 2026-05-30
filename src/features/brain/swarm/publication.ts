@@ -910,7 +910,15 @@ export function buildPublicationArtifact(
 }
 
 function replaceCitations(value: string, citationMap: Record<string, CitationMapEntry>): string {
-  return value.replace(SOURCE_CITATION_RX, (full, n: string) => citationMap[`S${n}`]?.displayMarker ?? full);
+  // Any marker that does not resolve to a canonical reference (e.g. the model
+  // hallucinated "[S43]" when only 20 records exist) is dropped rather than
+  // left raw in the rendered text — a citation a reader cannot follow is worse
+  // than none. The validator separately blocks such markers from passing QA.
+  return value
+    .replace(SOURCE_CITATION_RX, (_full, n: string) => citationMap[`S${n}`]?.displayMarker ?? '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
 }
 
 function exportText(value: string): string {

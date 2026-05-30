@@ -125,7 +125,7 @@ export async function synthesize(
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
   const evidenceBlock =
-    formatEvidenceList(mergedEvidence);
+    formatEvidenceList(mergedEvidence, { markerPrefix: 'S' });
   const specialistBlock = specialists
     .map((specialist) => {
       const body = specialist.error
@@ -144,7 +144,7 @@ export async function synthesize(
 
 Hard rules:
 - Use only the retrieved records and specialist findings below. Never add a fact, statistic, drug effect, dose, or citation that is not supported there.
-- Cite every factual claim with the [#] marker of the record it came from.
+- Cite every factual claim with the exact [S#] marker of the record it came from (e.g. [S3]). Use the marker exactly as it appears in the retrieved records list — never invent a marker number that is not in that list.
 - Never invent a PMID, DOI, author, year, or title.
 - If the evidence is thin or the specialists found little, say so plainly.
 - This is research triage, not medical advice.`,
@@ -159,7 +159,7 @@ ${evidenceBlock}
 Specialist findings:
 ${specialistBlock}
 
-Write the full, in-depth manuscript draft now. Use the required Markdown structure exactly, develop every section into substantial paragraphs, and cite factual claims inline with [#] markers. Do not write a References section — inline [#] citation is enough.`
+Write the full, in-depth manuscript draft now. Use the required Markdown structure exactly, develop every section into substantial paragraphs, and cite factual claims inline with [S#] markers (exactly as shown in the retrieved records). Do not write a References section — inline [S#] citation is enough.`
         : `Question: ${question}
 
 Retrieved records:
@@ -168,7 +168,7 @@ ${evidenceBlock}
 Specialist findings:
 ${specialistBlock}
 
-Write the final, well-structured research answer now, citing [#] markers for every claim.`,
+Write the final, well-structured research answer now, citing [S#] markers (exactly as shown in the retrieved records) for every claim.`,
     },
   ];
   const res = await streamWithModelChain(

@@ -182,6 +182,11 @@ export function renumberCitations(
   const rewritten = content.replace(/\[S(\d+)\]/g, (full, raw: string) => {
     const original = Number(raw);
     if (!Number.isInteger(original) || original < 1) return full;
+    // Bulletproof guarantee: a marker that does not resolve to a real
+    // retrieved record is dropped entirely rather than rendered. This is
+    // what prevents a hallucinated "[S43]" from surviving into the body
+    // and the scrambled "1, 2, 43, 6, 5" numbering the user reported.
+    if (!citations[original - 1]) return '';
     let next = assigned.get(original);
     if (next === undefined) {
       next = order.length + 1;
@@ -190,11 +195,13 @@ export function renumberCitations(
     }
     return `[${next}]`;
   });
-  if (order.length === 0) return { content: rewritten, citations };
+  // Tidy whitespace left behind by any dropped markers.
+  const cleaned = rewritten.replace(/ {2,}/g, ' ').replace(/\s+([.,;:)])/g, '$1');
+  if (order.length === 0) return { content: cleaned, citations };
   const cited = order
     .map((original) => citations[original - 1])
     .filter((item): item is EvidenceItem => Boolean(item));
-  return { content: rewritten, citations: cited };
+  return { content: cleaned, citations: cited };
 }
 
 // Drop a leading level-1 markdown heading — the export already prints the
@@ -575,14 +582,17 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
     );
   }
 
+  // Renumber [S#] markers to sequential [1], [2], … in order of appearance
+  // and return only the cited records in that order, so the body markers and
+  // the rendered reference list line up exactly (matches the HTML path).
+  const renumbered = renumberCitations(dropLeadingTitleHeading(content), message.citations ?? []);
   const { buildPaperPdfBlob } = await import('./paperPdf');
   return assertPdfBlob(
     await buildPaperPdfBlob({
       title: message.title,
-      content,
+      content: renumbered.content,
       ...(message.modelLabel ? { modelLabel: message.modelLabel } : {}),
-      ...(message.citations ? { citations: message.citations } : {}),
-      ...(message.manuscript ? { manuscript: message.manuscript } : {}),
+      citations: renumbered.citations,
     }),
     'jsPDF message renderer',
   );

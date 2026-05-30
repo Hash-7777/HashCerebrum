@@ -68,6 +68,19 @@ describe('message export helpers', () => {
     expect(cited.map((item) => item.title)).toEqual(['Ninth source', 'Fourth source']);
   });
 
+  it('drops citation markers that do not resolve to a real retrieved record', () => {
+    const pool = [citations[0]!, citations[0]!]; // only 2 records exist
+    const { content, citations: cited } = renumberCitations(
+      'Real claim [S1]. Hallucinated claim [S43]. Another real claim [S2].',
+      pool,
+    );
+    // The phantom [S43] is removed; the surviving markers stay sequential and
+    // every one of them maps to a record in the returned citation list.
+    expect(content).toBe('Real claim [1]. Hallucinated claim. Another real claim [2].');
+    expect(content).not.toContain('43');
+    expect(cited).toHaveLength(2);
+  });
+
   it('strips model-generated reference sections before appending canonical export references', () => {
     const content = [
       '## Results',
