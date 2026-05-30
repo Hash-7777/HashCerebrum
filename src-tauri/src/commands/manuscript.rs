@@ -336,6 +336,60 @@ const SVG_ALLOWLIST: &[&str] = &[
     "style",
 ];
 
+// Decode numeric character references (&#106; and &#x6a;) so an obfuscated
+// scheme like "j&#97;vascript:" cannot slip past the dangerous-URL check.
+// Malformed references are left intact rather than dropped.
+fn decode_numeric_entities(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '&' && chars.peek() == Some(&'#') {
+            chars.next(); // consume '#'
+            let hex = matches!(chars.peek(), Some('x') | Some('X'));
+            if hex {
+                chars.next();
+            }
+            let mut digits = String::new();
+            while let Some(&d) = chars.peek() {
+                if (hex && d.is_ascii_hexdigit()) || (!hex && d.is_ascii_digit()) {
+                    digits.push(d);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if chars.peek() == Some(&';') {
+                chars.next();
+            }
+            let decoded = u32::from_str_radix(&digits, if hex { 16 } else { 10 })
+                .ok()
+                .and_then(char::from_u32);
+            match decoded {
+                Some(ch) => out.push(ch),
+                None => {
+                    out.push_str("&#");
+                    out.push_str(&digits);
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+// Normalize a tag chunk for dangerous-URL detection: decode numeric entities
+// and strip whitespace / control characters that a URL parser ignores inside a
+// scheme, so "java\tscript:" or "j&#x61;vascript:" cannot evade the literal
+// substring checks below.
+fn normalize_for_url_scan(chunk: &str) -> String {
+    decode_numeric_entities(chunk)
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_control())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
     let trimmed = value.trim();
     if trimmed.len() > 512 * 1024 {
@@ -414,10 +468,14 @@ fn safe_svg_bytes(value: &str) -> Option<Vec<u8>> {
             return None;
         }
 
-        // Reject dangerous href / xlink:href values.
-        if chunk_lower.contains("javascript:")
-            || chunk_lower.contains("data:")
-            || chunk_lower.contains("file:")
+        // Reject dangerous href / xlink:href values. Scan a normalized copy
+        // that has numeric entities decoded and whitespace/control characters
+        // stripped, so entity- or whitespace-obfuscated schemes are caught too.
+        let url_scan = normalize_for_url_scan(chunk);
+        if url_scan.contains("javascript:")
+            || url_scan.contains("vbscript:")
+            || url_scan.contains("data:")
+            || url_scan.contains("file:")
         {
             return None;
         }
@@ -633,6 +691,35 @@ mod tests {
         );
 
         assert!(source.contains('\u{200B}'));
+    }
+
+    #[test]
+    fn safe_svg_accepts_a_clean_figure() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/><text>n=42</text></svg>"#;
+        assert!(safe_svg_bytes(svg).is_some());
+    }
+
+    #[test]
+    fn safe_svg_rejects_script_and_obfuscated_schemes() {
+        // Plain script tag and namespaced script.
+        assert!(safe_svg_bytes(r#"<svg><script>alert(1)</script></svg>"#).is_none());
+        assert!(safe_svg_bytes(r#"<svg><svg:script>alert(1)</svg:script></svg>"#).is_none());
+        // Literal javascript: on an allowlisted <use> element (exercises the
+        // URL scan rather than the tag allowlist).
+        assert!(safe_svg_bytes(r##"<svg><use href="javascript:alert(1)"/></svg>"##).is_none());
+        // Entity-encoded "j&#97;vascript:" and hex "&#x6a;avascript:".
+        assert!(safe_svg_bytes(r##"<svg><use href="j&#97;vascript:alert(1)"/></svg>"##).is_none());
+        assert!(safe_svg_bytes(r##"<svg><use href="&#x6a;avascript:alert(1)"/></svg>"##).is_none());
+        // Whitespace-obfuscated scheme.
+        assert!(safe_svg_bytes("<svg><use href=\"java\tscript:alert(1)\"/></svg>").is_none());
+    }
+
+    #[test]
+    fn decode_numeric_entities_handles_decimal_and_hex() {
+        assert_eq!(decode_numeric_entities("j&#97;va"), "java");
+        assert_eq!(decode_numeric_entities("&#x6a;s"), "js");
+        // Malformed reference is left intact.
+        assert_eq!(decode_numeric_entities("&#;x"), "&#x");
     }
 }
 
