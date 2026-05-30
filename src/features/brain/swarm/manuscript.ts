@@ -120,15 +120,24 @@ function paragraphs(text: string): string[] {
 const PROMPT_LEAK_BLOCK_START =
   /^(manuscript topic|section to (?:write now|repair)|required section intent|required minimum|target length|retrieved records|specialist findings|uploaded dataset summary|sections already drafted|other drafted sections|current draft|hard rules|formatting rules|write the .* section now|rewrite the complete .* section)\b/i;
 
-const PROMPT_LEAK_PHRASES = [
+// Imperative system-prompt sentences that never legitimately appear in a
+// manuscript. Matched anywhere in a paragraph (not just at the start) so a
+// prompt fragment that leaks mid-paragraph is still caught.
+const PROMPT_LEAK_PHRASES_ANYWHERE = [
   'you are a biomedical research writer',
   'write only polished academic prose',
   'use only the retrieved records',
   'do not write a references or bibliography section',
   'do not invent p-values',
   'do not invent a statistic',
-  'allowed use:',
-  'computed inferential statistics',
+];
+
+// Label-like markers that can begin a leaked prompt block but could also open
+// a legitimate sentence — matched only at the start of a block to avoid false
+// positives. ("Allowed use:" was removed: it is ordinary drug-label / clinical
+// prose and was flagging valid manuscript text.)
+const PROMPT_LEAK_PHRASES_BLOCK_START = [
+  'computed inferential statistics:',
   'computed descriptive statistics:',
 ];
 
@@ -143,7 +152,8 @@ function isPromptLeakBlock(block: string): boolean {
   ) {
     return true;
   }
-  return PROMPT_LEAK_PHRASES.some((phrase) => lower.startsWith(phrase));
+  if (PROMPT_LEAK_PHRASES_ANYWHERE.some((phrase) => lower.includes(phrase))) return true;
+  return PROMPT_LEAK_PHRASES_BLOCK_START.some((phrase) => lower.startsWith(phrase));
 }
 
 export function stripPromptLeakage(text: string): string {

@@ -247,24 +247,31 @@ Allowed use: narrate the computed descriptive statistics only. Do not report p-v
 }
 
 export function datasetSummaryForPrompt(dataset: UploadedDatasetSummary): string {
-  const columns = dataset.columnSummaries
-    .map((column) => {
-      if (column.type === 'numeric') {
-        return `${column.name}: numeric, n=${column.nonMissing}, missing=${column.missing}, mean=${column.mean}, SD=${column.sd}, median=${column.median}, range=${column.min}-${column.max}`;
-      }
-      const levels = column.levels?.map((level) => `${level.value}=${level.count}`).join(', ') || 'no non-missing levels';
-      return `${column.name}: categorical, n=${column.nonMissing}, missing=${column.missing}, top levels: ${levels}`;
-    })
-    .join('\n');
-  const inferentialBlock = dataset.inferential
-    ? analysisPlanForPrompt(dataset.inferential)
-    : 'Computed inferential statistics: none. Allowed use: narrate the computed descriptive statistics only.';
-  return `Dataset: ${dataset.filename}
+  // A malformed or partially-parsed dataset must not throw and abort the whole
+  // manuscript pipeline; degrade to a safe placeholder the model is told not to
+  // embellish.
+  try {
+    const columns = (dataset.columnSummaries ?? [])
+      .map((column) => {
+        if (column.type === 'numeric') {
+          return `${column.name}: numeric, n=${column.nonMissing}, missing=${column.missing}, mean=${column.mean}, SD=${column.sd}, median=${column.median}, range=${column.min}-${column.max}`;
+        }
+        const levels = column.levels?.map((level) => `${level.value}=${level.count}`).join(', ') || 'no non-missing levels';
+        return `${column.name}: categorical, n=${column.nonMissing}, missing=${column.missing}, top levels: ${levels}`;
+      })
+      .join('\n');
+    const inferentialBlock = dataset.inferential
+      ? analysisPlanForPrompt(dataset.inferential)
+      : 'Computed inferential statistics: none. Allowed use: narrate the computed descriptive statistics only.';
+    return `Dataset: ${dataset.filename}
 SHA-256: ${dataset.sha256}
 Rows: ${dataset.rows}
-Columns: ${dataset.columns.join(', ')}
+Columns: ${(dataset.columns ?? []).join(', ')}
 Computed descriptive statistics:
 ${columns}
 
 ${inferentialBlock}`;
+  } catch {
+    return `Dataset: ${dataset?.filename ?? 'uploaded dataset'} (summary unavailable — the dataset could not be fully parsed). Narrate only the statistics explicitly provided elsewhere; do not invent dataset values.`;
+  }
 }

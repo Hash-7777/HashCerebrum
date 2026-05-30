@@ -60,4 +60,22 @@ The automated evidence review queried guarded biomedical sources and synthesized
     expect(body).not.toContain('Retrieved records');
     expect(containsPromptLeakage(body)).toBe(false);
   });
+
+  it('detects an imperative prompt phrase even mid-paragraph', () => {
+    // Leakage that does not start the paragraph used to slip past the
+    // startsWith() check; it is now caught anywhere in the block.
+    expect(
+      containsPromptLeakage(
+        'This section synthesizes the evidence. Do not invent p-values that are absent from the records.',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not flag legitimate clinical "Allowed use" prose as leakage', () => {
+    // "Allowed use:" is ordinary drug-label wording and must not trip the
+    // prompt-leak detector.
+    expect(
+      containsPromptLeakage('Allowed use: maintenance therapy in adults with moderate persistent asthma.'),
+    ).toBe(false);
+  });
 });

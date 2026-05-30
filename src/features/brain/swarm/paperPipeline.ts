@@ -1049,6 +1049,24 @@ function repairableSectionNames(issues: ValidationIssue[]): string[] {
   return [...new Set(names)].slice(0, MAX_QA_REPAIR_SECTIONS);
 }
 
+// Build the publication artifact without letting an exception abort assembly.
+// On failure the manuscript is still returned (its readable text renders in
+// chat); only the structured artifact — figures, canonical references — is
+// dropped. The outer pipeline and BrainMode catch any further failure.
+function safePublicationArtifact(
+  manuscript: Manuscript,
+  evidence: EvidenceItem[],
+  options: Parameters<typeof buildPublicationArtifact>[2],
+): ReturnType<typeof buildPublicationArtifact> | undefined {
+  try {
+    return buildPublicationArtifact(manuscript, evidence, options);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('publication artifact build failed; returning manuscript without it', error);
+    return undefined;
+  }
+}
+
 export async function compileManuscriptFromLedger(opts: {
   question: string;
   bossModel: string;
@@ -1091,16 +1109,17 @@ export async function compileManuscriptFromLedger(opts: {
     claimLedger: opts.claimLedger,
     paperBlueprint: opts.paperBlueprint,
   });
+  const firstArtifact = safePublicationArtifact(manuscript, opts.evidence, {
+    standard: opts.standard ?? 'icmje_generic',
+    ...(opts.dataset ? { dataset: opts.dataset } : {}),
+    evidenceExtractions: opts.evidenceExtractions,
+    claimLedger: opts.claimLedger,
+    paperBlueprint: opts.paperBlueprint,
+    paperQa: qa,
+  });
   manuscript = {
     ...manuscript,
-    publication: buildPublicationArtifact(manuscript, opts.evidence, {
-      standard: opts.standard ?? 'icmje_generic',
-      ...(opts.dataset ? { dataset: opts.dataset } : {}),
-      evidenceExtractions: opts.evidenceExtractions,
-      claimLedger: opts.claimLedger,
-      paperBlueprint: opts.paperBlueprint,
-      paperQa: qa,
-    }),
+    ...(firstArtifact ? { publication: firstArtifact } : {}),
   };
 
   const repairTargets = repairableSectionNames(manuscript.publication?.validation.blockers ?? []);
@@ -1140,16 +1159,17 @@ export async function compileManuscriptFromLedger(opts: {
       claimLedger: opts.claimLedger,
       paperBlueprint: opts.paperBlueprint,
     });
+    const repairedArtifact = safePublicationArtifact(manuscript, opts.evidence, {
+      standard: opts.standard ?? 'icmje_generic',
+      ...(opts.dataset ? { dataset: opts.dataset } : {}),
+      evidenceExtractions: opts.evidenceExtractions,
+      claimLedger: opts.claimLedger,
+      paperBlueprint: opts.paperBlueprint,
+      paperQa: qa,
+    });
     manuscript = {
       ...manuscript,
-      publication: buildPublicationArtifact(manuscript, opts.evidence, {
-        standard: opts.standard ?? 'icmje_generic',
-        ...(opts.dataset ? { dataset: opts.dataset } : {}),
-        evidenceExtractions: opts.evidenceExtractions,
-        claimLedger: opts.claimLedger,
-        paperBlueprint: opts.paperBlueprint,
-        paperQa: qa,
-      }),
+      ...(repairedArtifact ? { publication: repairedArtifact } : {}),
     };
   }
 

@@ -691,6 +691,17 @@ function promptLeakageIssues(manuscript: Manuscript): ValidationIssue[] {
       message: 'The title contains prompt or instruction text and must be regenerated.',
     });
   }
+  // Scan the abstract fields too — they are model-generated and just as prone
+  // to leaking system-prompt text as the body sections.
+  const abstractText = Object.values(manuscript.abstract).filter(Boolean).join('\n\n');
+  if (containsPromptLeakage(abstractText)) {
+    issues.push({
+      severity: 'blocker',
+      code: 'prompt-leakage',
+      section: 'Abstract',
+      message: 'The abstract contains prompt or instruction text and must be regenerated.',
+    });
+  }
   for (const section of manuscript.sections) {
     const text = section.body.join('\n\n');
     if (containsPromptLeakage(text)) {
@@ -916,6 +927,8 @@ function replaceCitations(value: string, citationMap: Record<string, CitationMap
   // than none. The validator separately blocks such markers from passing QA.
   return value
     .replace(SOURCE_CITATION_RX, (_full, n: string) => citationMap[`S${n}`]?.displayMarker ?? '')
+    // Separate adjacent citation markers ("[1][2]" -> "[1] [2]") for readability.
+    .replace(/\](\[)/g, '] $1')
     .replace(/ {2,}/g, ' ')
     .replace(/\s+([.,;:)])/g, '$1')
     .trim();
