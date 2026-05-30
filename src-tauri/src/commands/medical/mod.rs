@@ -139,10 +139,7 @@ async fn backoff_delay(attempt: u32) {
     tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
 }
 
-pub async fn fetch_json(
-    url: Url,
-    cache_ttl_seconds: Option<i64>,
-) -> AppResult<serde_json::Value> {
+pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<serde_json::Value> {
     let cache_key = sha256_hex(url.as_str().as_bytes());
 
     // Check cache first
