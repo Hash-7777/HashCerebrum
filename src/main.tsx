@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppShell } from '@ui/shell/AppShell';
+import { RootErrorBoundary } from '@ui/errors/RootErrorBoundary';
 import { setPlatform } from '@platform/index';
 import { tauriPlatform } from '@platform/tauri';
 import { browserPlatform } from '@platform/browser';
@@ -44,6 +45,8 @@ registerMemoryTools();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AppShell />
+    <RootErrorBoundary>
+      <AppShell />
+    </RootErrorBoundary>
   </React.StrictMode>,
 );

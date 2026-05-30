@@ -86,6 +86,59 @@
 .mode-error h2 { font-family: var(--hc-font-serif); margin: 0 0 var(--hc-space-2); }
 .mode-error p { color: var(--hc-danger); margin: 0; font-family: var(--hc-font-mono); font-size: 12px; }
 
+/* Top-level (shell) error boundary — full-window fallback when the chrome
+   itself crashes, with a reload escape hatch. */
+.root-boundary {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--hc-space-8);
+  background: var(--ink-0, #0a0e14);
+  z-index: 9999;
+}
+.root-boundary-card {
+  max-width: 520px;
+  text-align: center;
+  background: var(--ink-1, #11161f);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  padding: var(--hc-space-8);
+  box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.5));
+}
+.root-boundary-title {
+  font-family: var(--hc-font-serif);
+  font-size: 22px;
+  margin: 0 0 var(--hc-space-3);
+  color: var(--text-1, #f1f6fc);
+}
+.root-boundary-detail {
+  color: var(--hc-danger, #ff8080);
+  font-family: var(--hc-font-mono);
+  font-size: 12px;
+  margin: 0 0 var(--hc-space-5);
+  word-break: break-word;
+}
+.root-boundary-actions {
+  display: flex;
+  gap: var(--hc-space-3);
+  justify-content: center;
+  margin-bottom: var(--hc-space-4);
+}
+.root-boundary-actions button {
+  font-family: var(--hc-font-mono);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.18));
+  background: var(--ink-2, #161c27);
+  color: var(--text-1, #f1f6fc);
+  cursor: pointer;
+}
+.root-boundary-actions button:hover { border-color: var(--accent, #82e0c2); }
+.root-boundary-hint { font-family: var(--hc-font-mono); font-size: 10.5px; color: var(--text-4, #6b7a90); margin: 0; }
+
 /* Transient toast — bottom-centre confirmation (e.g. export complete) */
 .app-toast {
   position: fixed;
