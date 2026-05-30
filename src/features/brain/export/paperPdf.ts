@@ -154,18 +154,83 @@ function latexToUnicode(text: string): string {
       inner.replace(/\\[a-zA-Z]+/g, '').replace(/[{}^_]/g, ''));
 }
 
+// jsPDF's built-in "times" font can only draw the WinAnsi / Latin-1 character
+// set. Characters outside it — Greek letters, math relations, arrows,
+// sub/superscripts — render as broken glyphs ("weird fonts"). When a Unicode
+// font is embedded (see embedUnicodeFont) this flag is flipped to true and the
+// transliteration below is skipped because the embedded font can draw them.
+let pdfFontHasUnicode = false;
+
+export function setPdfFontHasUnicode(value: boolean): void {
+  pdfFontHasUnicode = value;
+}
+
+// Transliteration of common non-WinAnsi characters to safe ASCII. Latin-1
+// characters that the built-in font already supports (± × ÷ µ ° ¼ ½ ¾,
+// accented letters) are intentionally absent so they pass through unchanged.
+const UNICODE_TO_ASCII: Record<string, string> = {
+  α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', ε: 'epsilon', ζ: 'zeta',
+  η: 'eta', θ: 'theta', ι: 'iota', κ: 'kappa', λ: 'lambda', μ: 'mu', ν: 'nu',
+  ξ: 'xi', π: 'pi', ρ: 'rho', σ: 'sigma', ς: 'sigma', τ: 'tau', υ: 'upsilon',
+  φ: 'phi', χ: 'chi', ψ: 'psi', ω: 'omega',
+  Α: 'Alpha', Β: 'Beta', Γ: 'Gamma', Δ: 'Delta', Θ: 'Theta', Λ: 'Lambda',
+  Ξ: 'Xi', Π: 'Pi', Σ: 'Sigma', Φ: 'Phi', Ψ: 'Psi', Ω: 'Omega',
+  '≥': '>=', '≤': '<=', '≠': '!=', '≈': '~', '≅': '~=', '≡': '=', '∝': '~',
+  '∼': '~', '−': '-', '∞': 'inf', '√': 'sqrt', '∑': 'sum', '∏': 'prod',
+  '∫': 'integral', '∂': 'd', '∇': 'grad', '⋅': '*', '∙': '*',
+  '→': '->', '←': '<-', '↔': '<->', '⇒': '=>', '⇐': '<=', '⇔': '<=>',
+  '↑': 'up', '↓': 'down',
+  '′': "'", '″': '"', '‘': "'", '’': "'", '‚': "'", '“': '"', '”': '"',
+  '„': '"', '–': '-', '—': '-', '―': '-', '‐': '-', '‑': '-', '…': '...',
+  '•': '-', '™': '(TM)', '®': '(R)', '©': '(C)',
+  '⁰': '^0', '¹': '^1', '²': '^2', '³': '^3', '⁴': '^4', '⁵': '^5', '⁶': '^6',
+  '⁷': '^7', '⁸': '^8', '⁹': '^9', ⁿ: '^n', '⁺': '^+', '⁻': '^-',
+  '₀': '_0', '₁': '_1', '₂': '_2', '₃': '_3', '₄': '_4', '₅': '_5', '₆': '_6',
+  '₇': '_7', '₈': '_8', '₉': '_9',
+};
+
+// Make any string safe to draw with the active PDF font: strip zero-width
+// characters, normalize NBSP, and — unless a Unicode font is embedded —
+// transliterate every non-Latin-1 character to a readable ASCII equivalent,
+// decomposing accented forms and dropping anything otherwise unrenderable.
+export function winAnsiSafe(text: string): string {
+  const base = text.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\u00A0/g, ' ');
+  if (pdfFontHasUnicode) return base;
+  let out = '';
+  for (const ch of base) {
+    const mapped = UNICODE_TO_ASCII[ch];
+    if (mapped !== undefined) {
+      out += mapped;
+      continue;
+    }
+    if ((ch.codePointAt(0) ?? 0) <= 0xff) {
+      out += ch;
+      continue;
+    }
+    // Reach an ASCII/Latin-1 base via compatibility decomposition (ā → a);
+    // characters that still fall outside the set are silently dropped.
+    for (const piece of ch.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')) {
+      if ((piece.codePointAt(0) ?? 0) <= 0xff) out += piece;
+    }
+  }
+  return out;
+}
+
 // Drop emphasis markers we do not render inline, neutralize raw table
-// delimiters, and convert LaTeX spans to Unicode for clean PDF text.
+// delimiters, convert LaTeX spans to Unicode, and finally make the result
+// safe for the active PDF font.
 function plain(text: string): string {
-  return latexToUnicode(text)
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[ \t]*\|[ \t]*/g, '; ')
-    .replace(/-{4,}/g, ' ')
-    .replace(/\s+([;,.])/g, '$1')
-    .replace(/;\s*;/g, ';')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return winAnsiSafe(
+    latexToUnicode(text)
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[ \t]*\|[ \t]*/g, '; ')
+      .replace(/-{4,}/g, ' ')
+      .replace(/\s+([;,.])/g, '$1')
+      .replace(/;\s*;/g, ';')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 }
 
 // Loose comparison key so a leading heading that just repeats the title
@@ -289,7 +354,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   doc.setFont('times', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(135, 155, 180);
-  const meta = `HashCerebrum${input.modelLabel ? ` · ${input.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
+  const meta = winAnsiSafe(`HashCerebrum${input.modelLabel ? ` · ${input.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`);
   doc.text(meta.toUpperCase(), pageW / 2, y, { align: 'center' });
   y += 6;
 
@@ -459,7 +524,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     cited.forEach((number, listIndex) => {
       const record = input.citations![number - 1];
       if (!record) return;
-      const refText = formatReference(record, listIndex, markerStyle);
+      const refText = winAnsiSafe(formatReference(record, listIndex, markerStyle));
       const lines = splitPdfTextToSize(doc, refText, contentW - 22);
       // Accent-coloured bracket marker on first line
       lines.forEach((line, li) => {

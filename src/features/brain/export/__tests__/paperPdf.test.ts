@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBlocks, splitPdfTextToSize } from '../paperPdf';
+import { parseBlocks, splitPdfTextToSize, winAnsiSafe } from '../paperPdf';
 
 describe('paper PDF markdown parsing', () => {
   it('converts markdown tables into list blocks instead of raw pipe paragraphs', () => {
@@ -37,5 +37,23 @@ describe('paper PDF text wrapping', () => {
 
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.every((line) => doc.getTextWidth(line) <= 120)).toBe(true);
+  });
+});
+
+describe('paper PDF font safety', () => {
+  it('transliterates non-WinAnsi characters the built-in font cannot draw', () => {
+    const safe = winAnsiSafe('β-blocker reduced risk (HR ≤ 0.85, p ≠ 0.05) at 37° → improved');
+    // Greek, math relations, and arrows become readable ASCII; no codepoint
+    // above Latin-1 survives to render as a broken glyph.
+    expect(safe).toContain('beta-blocker');
+    expect(safe).toContain('<=');
+    expect(safe).toContain('!=');
+    expect(safe).toContain('->');
+    expect([...safe].every((ch) => (ch.codePointAt(0) ?? 0) <= 0xff)).toBe(true);
+  });
+
+  it('preserves Latin-1 characters the built-in font supports', () => {
+    // ± × ÷ µ ° and accented author names are valid WinAnsi — keep them intact.
+    expect(winAnsiSafe('5 µg ± 2, 3 × 4, café Förster')).toBe('5 µg ± 2, 3 × 4, café Förster');
   });
 });
