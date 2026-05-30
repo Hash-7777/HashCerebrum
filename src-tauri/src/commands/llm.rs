@@ -23,15 +23,30 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use url::Url;
 
-static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
-    reqwest::Client::builder()
+// Built lazily as an Option rather than .expect(): a TLS-backend init failure
+// returns a clean error to the caller instead of panicking and aborting the
+// process (the crate is built with panic = "abort").
+static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
+    match reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(600))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("HashCerebrum/0.1 (research-app)")
         .build()
-        .expect("reqwest client build")
+    {
+        Ok(client) => Some(client),
+        Err(e) => {
+            tracing::error!(error = %e, "LLM HTTP client build failed");
+            None
+        }
+    }
 });
+
+fn http_client() -> AppResult<&'static reqwest::Client> {
+    HTTP_CLIENT.as_ref().ok_or_else(|| {
+        AppError::Network("HTTP client unavailable: TLS backend failed to initialize".into())
+    })
+}
 
 const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
@@ -128,7 +143,7 @@ pub async fn llm_http_get(
     })?;
     crate::ratelimit::acquire(&host).await;
 
-    let mut request = HTTP_CLIENT
+    let mut request = http_client()?
         .get(parsed.clone())
         .timeout(Duration::from_secs(30));
     for (name, value) in &headers {
@@ -190,7 +205,7 @@ pub async fn llm_http_post(
     })?;
     crate::ratelimit::acquire(&host).await;
 
-    let mut request = HTTP_CLIENT
+    let mut request = http_client()?
         .post(parsed.clone())
         .body(body)
         .timeout(Duration::from_secs(120));
@@ -272,7 +287,7 @@ pub async fn llm_chat_stream(
     // success, early return, error, or a future cancellation by the runtime.
     let _guard = StreamGuard(stream_id.clone());
 
-    let mut request = HTTP_CLIENT.post(parsed.clone()).body(body);
+    let mut request = http_client()?.post(parsed.clone()).body(body);
     for (name, value) in &headers {
         if !is_allowed_header(name) {
             return Err(AppError::InvalidInput(format!(

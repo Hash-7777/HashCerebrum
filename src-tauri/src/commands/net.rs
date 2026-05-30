@@ -10,14 +10,29 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use url::Url;
 
-static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
-    reqwest::Client::builder()
+// Built lazily as an Option rather than .expect(): if the TLS backend fails to
+// initialize, network calls return a clean error instead of panicking and
+// aborting the whole process (the crate is built with panic = "abort").
+static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
+    match reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("HashCerebrum/0.1 (research-app)")
         .build()
-        .expect("reqwest client build")
+    {
+        Ok(client) => Some(client),
+        Err(e) => {
+            tracing::error!(error = %e, "HTTP client build failed");
+            None
+        }
+    }
 });
+
+fn http_client() -> AppResult<&'static reqwest::Client> {
+    HTTP_CLIENT.as_ref().ok_or_else(|| {
+        AppError::Network("HTTP client unavailable: TLS backend failed to initialize".into())
+    })
+}
 
 const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
@@ -42,7 +57,7 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     // off the 429 path even when the agent fans out queries in parallel.
     crate::ratelimit::acquire(host).await;
 
-    let resp = HTTP_CLIENT.get(&url).send().await?;
+    let resp = http_client()?.get(&url).send().await?;
     let status = resp.status().as_u16();
 
     // Defend against unbounded response bodies (DoS / OOM)

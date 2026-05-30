@@ -1,9 +1,12 @@
 use crate::audit::{chain::AuditEntry, store};
 use crate::error::AppResult;
 
+/// Renderer-facing read. Bounded to the most recent entries so a large audit
+/// log cannot OOM the process or balloon the IPC payload; older history is
+/// reachable through the paged command.
 #[tauri::command]
 pub async fn audit_log_read() -> AppResult<Vec<AuditEntry>> {
-    store::read_all()
+    store::read_recent(5_000)
 }
 
 #[tauri::command]

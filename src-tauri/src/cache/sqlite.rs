@@ -8,6 +8,11 @@ use tauri::{AppHandle, Manager};
 
 static DB: Mutex<Option<Connection>> = Mutex::new(None);
 
+/// Upper bound on cached rows. On each write, entries beyond the most recent
+/// MAX_CACHE_ROWS are evicted oldest-first so the cache file cannot grow without
+/// limit. Combined with purge_expired this keeps the cache bounded over time.
+const MAX_CACHE_ROWS: i64 = 2_000;
+
 fn cache_path(app: &AppHandle) -> AppResult<PathBuf> {
     let dir = app
         .path()
@@ -204,6 +209,17 @@ pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult
            ttl_seconds = excluded.ttl_seconds",
         params![key, host, payload, ttl_seconds],
     )?;
+    // Evict oldest rows beyond the cap (best-effort — a failed eviction must
+    // not fail the write). "LIMIT -1 OFFSET n" selects every row past the
+    // newest n for deletion.
+    if let Err(e) = conn.execute(
+        "DELETE FROM cache WHERE key IN (
+           SELECT key FROM cache ORDER BY fetched_at DESC LIMIT -1 OFFSET ?1
+         )",
+        params![MAX_CACHE_ROWS],
+    ) {
+        tracing::warn!(error = %e, "cache eviction failed");
+    }
     Ok(())
 }
 

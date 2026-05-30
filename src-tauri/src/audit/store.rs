@@ -75,13 +75,24 @@ pub(crate) fn append(
         .transaction()
         .map_err(|e| AppError::Audit(format!("transaction begin: {e}")))?;
 
-    let (prev_seq, prev_hash): (u64, String) = tx
-        .query_row(
-            "SELECT seq, entry_hash FROM audit ORDER BY seq DESC LIMIT 1",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .unwrap_or((0, GENESIS_HASH.to_string()));
+    // Distinguish a legitimately empty chain (start from genesis) from a real
+    // read error. Previously any error collapsed to (0, GENESIS), which would
+    // silently reset the tamper-evident chain if the table were corrupted —
+    // exactly the case the audit log exists to detect. A genuine read failure
+    // now propagates instead of being masked.
+    let (prev_seq, prev_hash): (u64, String) = match tx.query_row(
+        "SELECT seq, entry_hash FROM audit ORDER BY seq DESC LIMIT 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    ) {
+        Ok(row) => row,
+        Err(rusqlite::Error::QueryReturnedNoRows) => (0, GENESIS_HASH.to_string()),
+        Err(e) => {
+            return Err(AppError::Audit(format!(
+                "audit chain head read failed: {e}"
+            )))
+        }
+    };
 
     let entry = AuditEntry::new(prev_seq + 1, category, subject, action, payload, prev_hash);
     tx.execute(
@@ -158,6 +169,41 @@ pub fn read_page(offset: u64, limit: u64) -> AppResult<Vec<AuditEntry>> {
     )?;
     let rows = stmt
         .query_map(params![limit, offset], |r| {
+            let ts: String = r.get(1)?;
+            Ok(AuditEntry {
+                seq: r.get(0)?,
+                ts: chrono::DateTime::parse_from_rfc3339(&ts)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?
+                    .with_timezone(&chrono::Utc),
+                category: r.get(2)?,
+                subject: r.get(3)?,
+                action: r.get(4)?,
+                data_hash: r.get(5)?,
+                prev_hash: r.get(6)?,
+                entry_hash: r.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Most recent `limit` entries in ascending sequence order. Bounds the memory
+/// and IPC payload for the renderer-facing read so a very large audit log
+/// cannot OOM the process; full-history access goes through read_page / verify.
+pub fn read_recent(limit: u64) -> AppResult<Vec<AuditEntry>> {
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let conn = guard
+        .as_mut()
+        .ok_or(AppError::Audit("not initialized".into()))?;
+    let mut stmt = conn.prepare(
+        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash
+         FROM (SELECT * FROM audit ORDER BY seq DESC LIMIT ?1)
+         ORDER BY seq ASC",
+    )?;
+    let rows = stmt
+        .query_map([limit], |r| {
             let ts: String = r.get(1)?;
             Ok(AuditEntry {
                 seq: r.get(0)?,
