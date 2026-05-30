@@ -78,8 +78,9 @@
 
 .chat-meta {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   font-family: var(--f-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -87,7 +88,21 @@
   color: var(--text-3);
   white-space: nowrap;
 }
+.chat-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .chat-meta .dot-sep { color: var(--text-5); }
+.chat-meta-evidence {
+  color: var(--text-4);
+  letter-spacing: 0.12em;
+}
+.chat-meta-evidence b {
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 .lede {
   font-family: var(--f-display);

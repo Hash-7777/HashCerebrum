@@ -2,7 +2,8 @@
 
 .brain-side {
   display: grid;
-  grid-template-rows: minmax(280px, 1fr) auto;
+  /* Brain model on top, agent swarm fills the rest of the column */
+  grid-template-rows: minmax(240px, 1fr) minmax(200px, 1fr);
   gap: 10px;
   min-height: 0;
   /* Panel itself does NOT scroll — only inner widgets scroll */
@@ -20,7 +21,7 @@
 
 .brain-model-panel {
   position: relative;
-  min-height: clamp(280px, 40vh, 540px);
+  min-height: clamp(240px, 34vh, 480px);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--r-xl);
@@ -68,9 +69,9 @@
 /* ── Agent swarm table ────────────────────────────────────── */
 
 .swarm {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: min(44vh, 360px);
+  height: 100%;
   border: 1px solid var(--line);
   background: var(--ink-1);
   display: flex;
@@ -138,7 +139,7 @@
 }
 
 .swarm-table {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -150,7 +151,7 @@
   grid-template-columns: 10px 1fr auto;
   gap: 7px;
   align-items: center;
-  padding: 3px 10px;
+  padding: 7px 11px;
   border-bottom: 1px solid var(--line-soft);
   flex-shrink: 0;
 }
@@ -249,90 +250,3 @@
   height: 1px;
   background: repeating-linear-gradient(90deg, var(--text-5) 0, var(--text-5) 2px, transparent 2px, transparent 5px);
 }
-
-/* ── Evidence panel (compact) ─────────────────────────────── */
-
-.ev {
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  background: var(--ink-1);
-  padding: 9px 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.ev-top {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 9px;
-}
-.ev-top-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ev-label {
-  font-family: var(--f-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-1);
-  font-weight: 700;
-}
-.ev-sub {
-  font-family: var(--f-mono);
-  font-size: 9.5px;
-  color: var(--text-4);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ev-total-inline {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.ev-eq {
-  font-family: var(--f-display);
-  font-style: italic;
-  font-size: 14px;
-  color: var(--text-3);
-  font-variation-settings: "opsz" 14;
-}
-.ev-n {
-  font-family: var(--f-display);
-  font-size: 30px;
-  font-weight: 500;
-  color: var(--text-1);
-  letter-spacing: -0.025em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  font-variation-settings: "opsz" 60;
-}
-
-.ev-stack {
-  display: flex;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  overflow: hidden;
-  gap: 1px;
-  margin-bottom: 8px;
-}
-.ev-seg { background: var(--accent); min-width: 2px; }
-
-.ev-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  font-family: var(--f-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.ev-leg { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.ev-leg b { color: var(--text-1); font-weight: 700; font-variant-numeric: tabular-nums; }
-.ev-leg-mark { width: 7px; height: 7px; background: var(--accent); display: inline-block; flex-shrink: 0; }

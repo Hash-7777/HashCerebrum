@@ -3,8 +3,8 @@
 // cited answer; failover covers a rate-limited or dead-credit provider.
 //
 // The mode is split into small components (Composer, Transcript,
-// BrainCanvas, AgentPanel, EvidenceList, SettingsPanel) so a crash in one
-// stays contained by FeatureBoundary instead of taking the workspace down.
+// BrainCanvas, AgentPanel, SettingsPanel) so a crash in one stays
+// contained by FeatureBoundary instead of taking the workspace down.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentId, RegionId } from '@config/agents';
@@ -25,7 +25,6 @@ import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
-import { EvidenceList } from './components/EvidenceList';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
@@ -512,12 +511,6 @@ export function BrainMode() {
     }
   };
 
-  const focusEvidence = selectedRegion
-    ? evidence.filter(
-        (item) => SOURCE_DEFS.find((def) => def.id === item.source)?.region === selectedRegion,
-      )
-    : evidence;
-
   return (
     <div className="mode brain-mode brain-workspace">
       <section className="research-chat" aria-label="Brain research chat">
@@ -525,8 +518,15 @@ export function BrainMode() {
           <div className="chat-header-row">
             <h1 className="cerebrum-title"><em>The</em> Cerebrum</h1>
             <div className="chat-meta">
-              <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
-              {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
+              <span className="chat-meta-line">
+                <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
+                {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
+              </span>
+              {evidence.length > 0 && (
+                <span className="chat-meta-evidence">
+                  <b>{evidence.length}</b> EVIDENCE
+                </span>
+              )}
             </div>
           </div>
           <div className="lede">
@@ -588,9 +588,6 @@ export function BrainMode() {
         <div className="source-panel">
           <FeatureBoundary name="Agents">
             <AgentPanel statuses={agentStatuses} />
-          </FeatureBoundary>
-          <FeatureBoundary name="Evidence">
-            <EvidenceList items={focusEvidence} />
           </FeatureBoundary>
         </div>
       </section>
