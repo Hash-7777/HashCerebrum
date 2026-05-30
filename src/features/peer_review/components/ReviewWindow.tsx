@@ -457,7 +457,9 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const undoEdit = () => {
     if (!editorRef.current || historyRef.current.length === 0) return;
     const prev = historyRef.current.pop()!;
-    editorRef.current.innerHTML = prev.html;
+    // Defense-in-depth: sanitize on restore as well as on entry, so a snapshot
+    // can never reintroduce unsafe markup into the editor.
+    editorRef.current.innerHTML = DOMPurify.sanitize(prev.html);
     setSuggestions(prev.sugs);
     setHistoryVersion((v) => v + 1);
     persistEditor();

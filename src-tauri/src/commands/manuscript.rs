@@ -715,6 +715,20 @@ mod tests {
     }
 
     #[test]
+    fn esc_heading_strips_typst_markup_including_brackets_and_tilde() {
+        // # * _ ` $ < > @ \ were already stripped; [ ] ~ are Typst markup too
+        // and must not survive into an inline heading.
+        let cleaned = esc_heading("Risk [S1] of A~B and *bold* #x [bracket]");
+        assert!(!cleaned.contains('['));
+        assert!(!cleaned.contains(']'));
+        assert!(!cleaned.contains('~'));
+        assert!(!cleaned.contains('*'));
+        assert!(!cleaned.contains('#'));
+        assert!(cleaned.contains("Risk"));
+        assert!(cleaned.contains("bold"));
+    }
+
+    #[test]
     fn decode_numeric_entities_handles_decimal_and_hex() {
         assert_eq!(decode_numeric_entities("j&#97;va"), "java");
         assert_eq!(decode_numeric_entities("&#x6a;s"), "js");
@@ -728,7 +742,12 @@ mod tests {
 fn esc_heading(value: &str) -> String {
     value
         .chars()
-        .filter(|c| !matches!(c, '#' | '*' | '_' | '`' | '$' | '<' | '>' | '@' | '\\'))
+        .filter(|c| {
+            !matches!(
+                c,
+                '#' | '*' | '_' | '`' | '$' | '<' | '>' | '@' | '\\' | '[' | ']' | '~'
+            )
+        })
         .collect()
 }
 
