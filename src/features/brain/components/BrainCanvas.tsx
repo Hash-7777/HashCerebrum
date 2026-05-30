@@ -185,10 +185,12 @@ const BrainMesh = React.memo(function BrainMesh({
     material.needsUpdate = true;
     // Repaint on demand so the glow updates even in the performance frameloop.
     invalidate();
-    return () => {
-      material.dispose();
-    };
   }, [intensity, material, neutralColor, regionColor, invalidate]);
+
+  // Dispose the cloned material only when it is replaced (baseMaterial change)
+  // or on unmount — NOT on every intensity change, which previously freed a
+  // material the mesh was still rendering with.
+  useEffect(() => () => material.dispose(), [material]);
 
   const primaryRegion = primaryRegionForPart(meshPart.part);
 
