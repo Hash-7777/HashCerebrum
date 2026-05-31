@@ -23,6 +23,7 @@ import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
+import { citedEvidenceFor, medicalTopicLabel } from './memoryTopic';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -329,26 +330,31 @@ export function BrainMode() {
         runs.storeEvidence(runId, result.evidence);
         runs.storeSummary(runId, finalContent, result.modelUsed);
 
-        // Save this run into the active project's RAG memory: each retrieved
-        // record plus the synthesized answer become searchable chunks so a
-        // later question can draw on what this project already found.
-        if (activeProjectId) {
-          const evidenceChunks: NewRagChunk[] = result.evidence.map((item) => ({
+        // Save this run into the active project's memory — but only as a
+        // valuable, subject-organised finding, not a dump of everything:
+        //   • skip non-medical turns entirely (topic === null),
+        //   • keep only the evidence the answer actually cited (drop the
+        //     off-topic retrieval that was never used),
+        //   • file it under a clean medical topic, not the raw query string.
+        const memoryTopic = medicalTopicLabel(cleanQuery, finalContent);
+        const citableForMemory = citedEvidenceFor(finalContent, result.evidence);
+        if (activeProjectId && memoryTopic && citableForMemory.length > 0) {
+          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => ({
             kind: 'evidence',
             title: item.title,
             text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
             source: item.source,
             runId,
-            query: cleanQuery,
+            query: memoryTopic,
             ...(item.url ? { url: item.url } : {}),
           }));
           const answerChunk: NewRagChunk = {
             kind: 'answer',
-            title: cleanQuery,
+            title: memoryTopic,
             text: finalContent,
             source: 'answer',
             runId,
-            query: cleanQuery,
+            query: memoryTopic,
           };
           useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
         }
