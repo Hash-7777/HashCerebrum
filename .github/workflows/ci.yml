@@ -3,11 +3,33 @@ name: CI
 on:
   push:
     branches: [main]
+    # Skip CI for changes that cannot affect the build or tests, so a docs or
+    # asset-only commit never triggers a full Rust recompile.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+
+# Cancel an in-progress run when a newer commit lands on the same ref, so we
+# never keep paying for a build that a later push has already superseded.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  contents: read   # lock GITHUB_TOKEN to read-only; no write surface exposed
+  contents: read # lock GITHUB_TOKEN to read-only; no write surface exposed
 
 jobs:
   frontend:
@@ -30,18 +52,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # Cache the cargo registry and src-tauri/target across runs. A Tauri
+      # dependency tree is hundreds of crates; without this every job recompiled
+      # all of them from scratch, which was the bulk of the minutes this
+      # workflow consumed.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # Formatting needs no system libraries and no compilation — run it first
+      # so a formatting failure fails fast without paying for apt + a full build.
+      - run: cargo fmt -- --check
+        working-directory: ./src-tauri
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - run: cargo fmt -- --check
-        working-directory: ./src-tauri
       - run: cargo clippy -- -D warnings
         working-directory: ./src-tauri
       - run: cargo test --lib
         working-directory: ./src-tauri
-      - name: Audit Rust dependencies
-        run: |
-          cargo install cargo-audit
-          cargo audit
+      # Prebuilt cargo-audit binary instead of `cargo install cargo-audit`,
+      # which compiled the tool from source on every run.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
         working-directory: ./src-tauri
