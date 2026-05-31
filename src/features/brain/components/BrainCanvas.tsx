@@ -61,6 +61,18 @@ function glowCurve(value: number): number {
   return 1 - Math.pow(1 - clamped, 2.4);
 }
 
+// Probe for a usable WebGL context so we can show a graceful message instead of
+// letting the R3F <Canvas> throw when the environment has no GPU/WebGL.
+function webglAvailable(): boolean {
+  if (typeof window === 'undefined' || !('WebGLRenderingContext' in window)) return false;
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+  } catch {
+    return false;
+  }
+}
+
 function useBrainMeshParts(): BrainMeshPart[] {
   const gltf = useGLTF(BRAIN_MODEL.path);
 
@@ -358,6 +370,11 @@ const INITIAL_CAMERA: [number, number, number] = [0, 0.18, 5.6];
 function BrainCanvasInner(props: BrainCanvasProps) {
   const presence = useModelPresence();
   const [performanceMode, setPerformanceMode] = useState(readPerformancePreference);
+  const [webglOk] = useState(webglAvailable);
+  // Whether the canvas is on-screen. The brain mode stays mounted (to preserve
+  // chat state) but is display:none'd when another mode is active; while hidden
+  // we stop the render loop entirely instead of rendering at 60fps for nothing.
+  const [visible, setVisible] = useState(true);
   const cameraRef = useRef<THREE.Camera | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -398,6 +415,32 @@ function BrainCanvasInner(props: BrainCanvasProps) {
     }
   }, [performanceMode]);
 
+  // Track on-screen visibility. A display:none ancestor (the hidden mode host)
+  // makes the element report as not-intersecting, so this flips the frameloop
+  // off when the brain is not the active mode and back on when it returns.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => setVisible(entries.some((entry) => entry.isIntersecting)),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [presence.ready]);
+
+  if (!webglOk) {
+    return (
+      <div className="brain-empty" role="status">
+        <p className="brain-empty-title">3D rendering unavailable</p>
+        <p className="brain-empty-detail">
+          This environment does not support WebGL, so the anatomical brain cannot be displayed. The rest
+          of HashCerebrum works normally.
+        </p>
+      </div>
+    );
+  }
+
   if (presence.missing) {
     return (
       <div className="brain-empty" role="status">
@@ -424,7 +467,7 @@ function BrainCanvasInner(props: BrainCanvasProps) {
       <Canvas
         camera={{ position: INITIAL_CAMERA, fov: 32 }}
         dpr={canvasDpr}
-        frameloop={performanceMode ? 'demand' : 'always'}
+        frameloop={!visible ? 'never' : performanceMode ? 'demand' : 'always'}
         gl={glOptions}
         shadows={!performanceMode}
         onPointerMissed={() => props.onSelectRegion(null)}
