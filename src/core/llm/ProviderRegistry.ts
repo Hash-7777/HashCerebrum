@@ -1,9 +1,11 @@
 import { platform } from '@platform/index';
 import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from './modelCatalog';
 import {
+  cooldownProvider,
   findBestFailover,
   isBillingError,
   isHardProviderError,
+  isProviderOnCooldown,
   isRetriableError,
   shouldRetrySameProvider,
   type FailoverCandidate,
@@ -436,6 +438,22 @@ export async function streamWithModelChain(
 
   let failovers = 0;
   while (failovers <= MAX_FAILOVERS) {
+    // If the preferred model's provider is cooling down from a recent rate
+    // limit / credit failure, fail over immediately rather than re-hitting it.
+    if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
+      let warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      while (warm && isProviderOnCooldown(warm.provider)) {
+        tried.add(warm.value);
+        warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      }
+      if (warm) {
+        tried.add(current);
+        failovers++;
+        switchedTo.push(warm.value);
+        onProgress?.({ from: current, to: warm, attempt: failovers, reason: 'provider cooling down from a recent rate limit' });
+        current = warm.value;
+      }
+    }
     tried.add(current);
     let receivedAny = false;
     try {
@@ -462,6 +480,8 @@ export async function streamWithModelChain(
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      // Park a rate-limited / out-of-credits provider so later calls skip it.
+      cooldownProvider(parsed.provider, error);
       if (isBillingError(error)) {
         // A billing/credit failure is account-wide — abandon every model
         // from this provider so the chain escapes to a working one.
@@ -471,7 +491,11 @@ export async function streamWithModelChain(
           }
         }
       }
-      const next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      while (next && isProviderOnCooldown(next.provider)) {
+        tried.add(next.value);
+        next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      }
       if (!next) break;
       failovers++;
       switchedTo.push(next.value);
@@ -596,6 +620,22 @@ export async function completeWithModelChain(
 
   let failovers = 0;
   while (failovers <= MAX_FAILOVERS) {
+    // If the preferred model's provider is cooling down from a recent rate
+    // limit / credit failure, fail over immediately rather than re-hitting it.
+    if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
+      let warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      while (warm && isProviderOnCooldown(warm.provider)) {
+        tried.add(warm.value);
+        warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      }
+      if (warm) {
+        tried.add(current);
+        failovers++;
+        switchedTo.push(warm.value);
+        onProgress?.({ from: current, to: warm, attempt: failovers, reason: 'provider cooling down from a recent rate limit' });
+        current = warm.value;
+      }
+    }
     tried.add(current);
     try {
       const response = await completeWithModel(current, req);
@@ -614,6 +654,8 @@ export async function completeWithModelChain(
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
+      // Park a rate-limited / out-of-credits provider so later calls skip it.
+      cooldownProvider(parsed.provider, error);
       if (isBillingError(error)) {
         // A billing/credit failure is account-wide — abandon every model
         // from this provider so the chain escapes to a working one.
@@ -623,7 +665,11 @@ export async function completeWithModelChain(
           }
         }
       }
-      const next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      while (next && isProviderOnCooldown(next.provider)) {
+        tried.add(next.value);
+        next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      }
       if (!next) break;
       failovers++;
       switchedTo.push(next.value);

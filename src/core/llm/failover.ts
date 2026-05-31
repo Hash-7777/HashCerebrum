@@ -124,3 +124,33 @@ export function shouldRetrySameProvider(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return SAME_PROVIDER_RETRY.test(message) && !QUOTA.test(message);
 }
+
+// ── Provider cooldown ───────────────────────────────────────────────────────
+// A rate-limited or out-of-credits provider stays bad for a while. Without a
+// cooldown, a long run (e.g. a 10-section manuscript) re-tries the same dead
+// provider on every section, thrashing through the whole chain each time. We
+// park such a provider for a short window so subsequent calls skip it.
+const providerCooldownUntil = new Map<LlmProviderId, number>();
+const RATE_LIMIT = /\b(rate ?limit|quota|too many|capacity|overloaded|429|exceeded)\b/i;
+
+/** Mark a provider as cooling down based on the failure: long for billing
+ *  exhaustion (the account is dead), short for a transient rate limit. */
+export function cooldownProvider(provider: LlmProviderId, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const ms = BILLING_DEAD.test(message)
+    ? 5 * 60_000 // credits exhausted — skip for 5 minutes
+    : RATE_LIMIT.test(message)
+      ? 45_000 // rate limited — skip for 45 seconds
+      : 0;
+  if (ms > 0) providerCooldownUntil.set(provider, Date.now() + ms);
+}
+
+export function isProviderOnCooldown(provider: LlmProviderId): boolean {
+  const until = providerCooldownUntil.get(provider);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    providerCooldownUntil.delete(provider);
+    return false;
+  }
+  return true;
+}

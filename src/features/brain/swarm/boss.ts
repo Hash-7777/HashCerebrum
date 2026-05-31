@@ -70,6 +70,48 @@ function parsePlan(text: string): BossPlan | null {
   return null;
 }
 
+// Resolve a short / back-referential follow-up ("so which is safer?", "what
+// about in children?") into a self-contained biomedical query using the
+// conversation, so the specialists search the actual topic instead of the
+// literal pronoun-laden string. A self-contained question is returned
+// unchanged; any failure falls back to the original.
+const BACK_REF_FOLLOWUP_RX =
+  /\b(it|its|they|them|those|these|that|this|so|also|then|which|what about|how about|same|instead|alternative|either|both|former|latter)\b/i;
+
+export async function contextualizeQuestion(
+  model: string,
+  question: string,
+  conversation: LlmMessage[],
+): Promise<string> {
+  const hasPriorContext = conversation.some((m) => m.role === 'user');
+  if (!hasPriorContext) return question;
+  const wordCount = question.trim().split(/\s+/).filter(Boolean).length;
+  // A long, specific question with no back-reference is already standalone.
+  if (wordCount > 12 && !BACK_REF_FOLLOWUP_RX.test(question)) return question;
+  try {
+    const res = await completeWithModelChain(model, {
+      messages: [
+        {
+          role: 'system',
+          content:
+            "Rewrite the user's latest message into a SINGLE self-contained biomedical question for a literature search. Resolve every pronoun and reference using the conversation, and name the specific drugs, conditions, populations, or entities from context. Keep the user's intent. Reply with ONLY the rewritten question on one line — no preamble, no quotes.",
+        },
+        ...conversation.slice(-6),
+        { role: 'user', content: question },
+      ],
+      temperature: 0.1,
+      maxTokens: 120,
+    });
+    const rewritten = (res.content.split('\n').find((l) => l.trim()) ?? '')
+      .replace(/^["'\s]+|["'\s]+$/g, '')
+      .trim();
+    if (rewritten.length >= 8 && rewritten.length <= 300) return rewritten;
+  } catch {
+    /* model unavailable — fall back to the original question */
+  }
+  return question;
+}
+
 // Decide chat vs. research and, for research, which specialists handle what.
 export async function planResearch(
   model: string,

@@ -6,8 +6,14 @@
 
 import { agentById } from '@config/agents';
 import type { EvidenceItem } from '@platform/index';
-import { appraisePriorWork, bossChat, planResearch, synthesize } from './boss';
-import { detectPaperRequest, fallbackPaperTasks, isPriorWorkReviewRequest, manuscriptStandardForQuestion } from './paper';
+import { appraisePriorWork, bossChat, contextualizeQuestion, planResearch, synthesize } from './boss';
+import {
+  detectPaperRequest,
+  fallbackPaperTasks,
+  isMetaOrAppQuestion,
+  isPriorWorkReviewRequest,
+  manuscriptStandardForQuestion,
+} from './paper';
 import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
 import { CONTEXT_ONLY_SOURCES, runPaperPipeline } from './paperPipeline';
@@ -143,12 +149,27 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     }
   }
 
+  // Meta / app-introspection / prompt-injection questions are not biomedical
+  // research — answer them in plain chat (the boss explains or declines)
+  // instead of launching the research swarm, which turned them into refusals
+  // rendered as "Research result · N references" documents.
+  if (isMetaOrAppQuestion(question)) {
+    callbacks.onBossPhase('answering');
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
+  }
+
+  // Resolve a context-dependent follow-up ("so which is safer?") into a
+  // self-contained query so the specialists search the real topic, not the
+  // literal pronoun string. The paper-vs-answer decision stays on the user's
+  // original phrasing.
   const paperRequest = detectPaperRequest(question);
+  const researchQuestion = await contextualizeQuestion(bossModel, question, conversation);
 
   callbacks.onBossPhase('routing');
-  let plan = await planResearch(bossModel, question, conversation);
+  let plan = await planResearch(bossModel, researchQuestion, conversation);
   if (paperRequest) {
-    const requiredPaperTasks = fallbackPaperTasks(question);
+    const requiredPaperTasks = fallbackPaperTasks(researchQuestion);
     plan = {
       mode: 'research',
       tasks: plan.mode === 'research' ? mergePaperTasks(plan.tasks, requiredPaperTasks) : requiredPaperTasks,
@@ -176,11 +197,11 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // manuscript from a source-backed evidence extraction and claim ledger.
   if (paperRequest) {
     const manuscript = await runPaperPipeline({
-      question,
+      question: researchQuestion,
       bossModel,
       evidence: merged,
       specialists,
-      standard: manuscriptStandardForQuestion(question),
+      standard: manuscriptStandardForQuestion(researchQuestion),
       ...(dataset ? { dataset } : {}),
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
     });
@@ -203,12 +224,12 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   let synth;
   try {
-    synth = await synthesize(bossModel, question, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal);
+    synth = await synthesize(bossModel, researchQuestion, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {
       kind: 'research',
-      answer: sourceOnlyAnswer(question, citableEvidence, detail),
+      answer: sourceOnlyAnswer(researchQuestion, citableEvidence, detail),
       evidence: citableEvidence,
       specialists,
       modelUsed: bossModel,

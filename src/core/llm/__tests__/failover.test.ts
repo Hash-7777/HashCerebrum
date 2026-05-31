@@ -1,13 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cooldownProvider,
   findBestFailover,
   isBillingError,
   isHardProviderError,
+  isProviderOnCooldown,
   isRetriableError,
   shouldRetrySameProvider,
 } from '../failover';
 import type { ModelGroup } from '../modelCatalog';
 import type { LlmProviderId } from '../types';
+
+describe('provider cooldown', () => {
+  it('parks a rate-limited provider and clears a clean one', () => {
+    expect(isProviderOnCooldown('gemini')).toBe(false);
+    cooldownProvider('gemini', new Error('HTTP 429: You exceeded your current quota'));
+    expect(isProviderOnCooldown('gemini')).toBe(true);
+    // A non-retriable error does not trigger a cooldown.
+    cooldownProvider('groq', new Error('invalid_request_error: bad json'));
+    expect(isProviderOnCooldown('groq')).toBe(false);
+  });
+
+  it('parks an out-of-credits provider', () => {
+    cooldownProvider('openrouter', new Error('HTTP 402: Insufficient credits'));
+    expect(isProviderOnCooldown('openrouter')).toBe(true);
+  });
+});
 
 const groups: ModelGroup[] = [
   {
