@@ -6,11 +6,13 @@
 
 # HashCerebrum
 
-### AI medical research agent with a live 3D anatomical brain
+### A private, local-first agentic desktop app for medical research
 
-Ask a clinical question. A boss agent routes it to topic specialists, each agent fetches source-grounded evidence from real biomedical databases, and the app either answers with inline citations or produces a complete, typeset, publication-grade research paper — all without the model inventing a single fact it cannot prove.
+Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all**.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3dd1bf?style=flat-square)](LICENSE)
+[![Local-first](https://img.shields.io/badge/local--first-on--device-3dd1bf?style=flat-square)](#privacy--data-locality)
+[![No telemetry](https://img.shields.io/badge/telemetry-none-3dd1bf?style=flat-square)](#privacy--data-locality)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -22,19 +24,21 @@ Ask a clinical question. A boss agent routes it to topic specialists, each agent
 ---
 <img width="600" height="425" alt="Screenshot 2026-05-25 at 9 55 39 AM" src="https://github.com/user-attachments/assets/fb51d7aa-df65-4d18-bdac-e4d5cc9754be" />
 
-## What makes this different
+## Why HashCerebrum
 
-Most AI research tools either hallucinate citations or just wrap a chat model. HashCerebrum is built around a different constraint: **the model is not allowed to write a claim it cannot source**.
+In medicine, two things matter more than anything else: **where your data goes** and **whether you can trust the source**. HashCerebrum is built around both.
 
-Every research turn follows a strict pipeline:
+**Private by architecture.** Everything you do — projects, saved findings, the evidence cache, the audit log, your API keys — lives in local storage on your own machine. There is no backend to leak, no account to breach, no analytics SDK, no "anonymous usage data." The web layer is sandboxed and **physically cannot reach the internet**; only the Rust core can, and only to a fixed, audited allowlist of destinations. Point it at a local Ollama model and your questions never leave the device.
 
-1. Seven medical databases are queried in parallel — PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar
+**Sourced by construction.** The model is not allowed to write a claim it cannot prove. Every research turn follows a strict pipeline:
+
+1. Authoritative biomedical databases are queried in parallel — **PubMed/NLM, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar** (no scraped blogs, no synthetic corpora)
 2. Retrieved records are extracted into a structured evidence table with study design, population, outcomes, and effect values
 3. A claim ledger maps each finding to a source marker and grades its evidence strength
 4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive
 5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list
 
-The result is a paper where every sentence has a chain of custody back to a real publication.
+The result is an answer where **every sentence has a chain of custody back to a real publication** — and a clear record of exactly which databases were contacted to produce it.
 
 ---
 
@@ -81,6 +85,30 @@ Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm o
 - **Statistics** — methods, reporting completeness, sample-size/power, interpretation
 
 After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable.
+
+---
+
+## Privacy & data locality
+
+HashCerebrum is designed so that **your data stays yours**. It is a single-user desktop app with no server component.
+
+| What | Where it lives | Leaves your machine? |
+|---|---|---|
+| Projects, chat history, saved findings (memory) | Local app storage on your device | **Never** |
+| Retrieved-evidence cache, audit log | Local SQLite in the app data dir | **Never** |
+| Provider API keys | Renderer `localStorage`, isolated by the app's bundle identifier | **Never** committed, logged, or cached |
+| Generated papers / PDFs | Written to your Downloads folder | Only if you export them |
+| Your question + retrieved evidence | Sent **only** to the one LLM provider you configure | Yes — to that provider, unless you use a local model |
+
+**The web layer cannot reach the internet.** A strict Content-Security-Policy (`connect-src 'self'`) means the UI has no network capability at all. Every outbound request is made by the Rust core, and only to a **fixed allowlist** of destinations:
+
+- **Trusted medical data sources** — eutils/PubMed (NLM), Europe PMC (EBI), OpenAlex, ClinicalTrials.gov, openFDA, RxNorm (NLM), Semantic Scholar. These are public, authoritative biomedical databases; the app reads from them and sends no personal data.
+- **The single LLM provider you choose** — your prompt (question + retrieved evidence) goes to that provider under their terms. Nothing else does.
+- **Nowhere, if you go fully local** — configure **Ollama** as your model and the app makes **no external network calls whatsoever**: questions, evidence, and reasoning all stay on the device.
+
+**No telemetry, no accounts, no tracking.** There is no analytics SDK, no crash reporter, no "anonymous usage" beacon, no sign-up, and no cloud sync anywhere in the codebase. Every network call the app *can* make is enumerated in the host allowlist (`src-tauri/src/security/policy.rs`) and recorded in a tamper-evident audit log you can open from **Settings → Audit log**.
+
+> **Honest scope:** when you select a cloud LLM provider, the text of your prompt is transmitted to that provider and governed by their privacy policy — that is the one path off your device, and the app states it plainly. For zero egress, use a local Ollama model. HashCerebrum is a research aid, not a medical device, and does not provide clinical advice.
 
 ---
 
@@ -159,6 +187,8 @@ Open **Settings** (gear icon), find the provider row, paste your API key, and cl
 `OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `Ollama (local)`
 
 Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundle identifier. They are never committed, never written to the audit log, and never stored in the response cache.
+
+> **For maximum privacy, choose `Ollama (local)`.** Your prompts are then served by a model running on your own machine and the app makes no external LLM call at all. With any cloud provider, the prompt (question + retrieved evidence) is sent to that provider under their terms — see [Privacy & data locality](#privacy--data-locality).
 
 ### Running a research turn
 

@@ -15,6 +15,31 @@ HashCerebrum is a single-user local desktop app. The threats we defend against:
 Out of scope (today): physical access, kernel compromise, supply-chain
 attacks on dependencies.
 
+## Data locality & privacy
+
+HashCerebrum is a single-user, local-first app with no server component, so
+privacy is a property of the architecture rather than a policy:
+
+- **Everything is on-device.** Projects, chat history, saved findings (the RAG
+  memory store), the response cache, the audit log, and provider API keys are
+  all held in local storage (renderer `localStorage` and local SQLite in the
+  app data dir). Nothing is uploaded, and there is no account, cloud sync, or
+  remote backup.
+- **No telemetry.** There is no analytics, crash-reporting, or usage-tracking
+  code in the project. The host allowlist (`security::policy::ALLOWED_HOSTS`)
+  is the exhaustive list of destinations the app can contact; it contains no
+  analytics or first-party endpoint.
+- **Two egress classes, both auditable.** (1) Trusted public biomedical
+  databases (PubMed/NLM, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA,
+  RxNorm, Semantic Scholar) receive a search query and no personal data.
+  (2) The one LLM provider the user configures receives the prompt (question +
+  retrieved evidence). Every request is hash-chain audited.
+- **Offline-capable.** With a local Ollama model the app makes zero external
+  network calls; all reasoning stays on the device.
+- **Honest limit.** A cloud LLM provider receives the prompt text under its own
+  terms — the single path off-device. This is disclosed in `SECURITY.md` and
+  the README, and is avoidable by using Ollama.
+
 ## Invariants
 
 1. **All external HTTP originates in Rust.** The renderer never calls

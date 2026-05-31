@@ -9,6 +9,35 @@ full threat model, invariants, and SSRF/denylist design live in
 We take security seriously and appreciate responsible disclosure. Thank you for
 helping keep HashCerebrum and its users safe.
 
+## Data handling & privacy
+
+HashCerebrum is built for a field where data privacy and source trust are
+non-negotiable. The privacy posture is an architectural guarantee, not a policy
+promise:
+
+- **Local-first.** Projects, chat history, saved findings, the evidence cache,
+  the audit log, and your provider API keys all live in local storage on your
+  device. There is no backend, no account, no cloud sync, and no telemetry,
+  analytics, or crash-reporting SDK anywhere in the codebase.
+- **The renderer has no network capability.** A strict CSP (`connect-src
+  'self'`) means the web layer cannot make an outbound request. Only the Rust
+  core can, and only to a fixed host allowlist
+  (`src-tauri/src/security/policy.rs`).
+- **Egress is enumerable and audited.** The only destinations the app can reach
+  are (1) trusted public biomedical databases — PubMed/NLM, Europe PMC,
+  OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar — which
+  receive a query and no personal data; and (2) the single LLM provider you
+  configure, which receives your prompt (question + retrieved evidence) under
+  its own terms. Every request is recorded in a tamper-evident, hash-chained
+  audit log readable from **Settings → Audit log**.
+- **A fully-offline mode exists.** Configure a local **Ollama** model and the
+  app makes no external network calls at all — questions, evidence, and
+  reasoning never leave the device.
+
+**One honest caveat:** when you choose a cloud LLM provider, the text of your
+prompt is transmitted to that provider and is governed by their privacy policy.
+That is the only path off your device. For zero egress, use Ollama.
+
 ## Supported versions
 
 The project is pre-1.0 and ships from `main`. Only the latest released version
