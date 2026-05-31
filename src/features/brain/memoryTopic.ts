@@ -1,8 +1,13 @@
 // Helpers that decide what a research turn contributes to project memory, so
 // memory stays a valuable, subject-organised knowledge base rather than a dump
 // of every query and every retrieved record.
+//
+// The gate is NOT a medical classifier — the only medical lexicon in the app is
+// the brain-region MeSH subset (for 3D lighting), which knows neuro terms but
+// not "renal"/"hepatic"/drug names, so it would wrongly reject most findings.
+// Instead a finding is kept when it (a) is not a meta/app question and (b) the
+// answer actually cited retrieved evidence — both decided in BrainMode.
 
-import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 
 // Filler words stripped when deriving a memory topic label from a query.
@@ -28,12 +33,11 @@ export function citedEvidenceFor(content: string, evidence: EvidenceItem[]): Evi
   return order.map((n) => evidence[n - 1]).filter((e): e is EvidenceItem => Boolean(e));
 }
 
-// A clean medical topic label for project memory. Returns null when the turn is
-// not medical (so meta / off-topic / junk questions are never stored), otherwise
-// the subject's content words (drug/condition names) — e.g. "panadol cataflam
-// renal" — so memory is organised by subject, not by the raw query string.
-export function medicalTopicLabel(query: string, answer: string): string | null {
-  if (classify(`${query} ${answer}`).length === 0) return null;
+// A clean subject label for project memory — the query's content words (drug /
+// condition names) with filler stripped, e.g. "panadol cataflam renal" — so
+// memory is organised by subject rather than by the raw query string. Returns
+// null when nothing meaningful remains.
+export function memoryTopicLabel(query: string): string | null {
   const words = query
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')

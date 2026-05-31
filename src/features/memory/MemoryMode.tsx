@@ -6,9 +6,11 @@
 import { useMemo, useState } from 'react';
 import { lexicalSearch, useRagStore } from '@core/store/ragStore';
 import { useProjectStore } from '@core/store/projectStore';
+import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
 import { MemoryCard } from './components/MemoryCard';
 import { MemoryGraphView } from './graph/MemoryGraphView';
+import { keepMemoryChunk } from './pruneMemory';
 
 const SEARCH_RESULT_LIMIT = 200;
 
@@ -20,6 +22,7 @@ export function MemoryMode() {
   const chunks = useRagStore((s) => s.chunks);
   const removeChunk = useRagStore((s) => s.removeChunk);
   const clearProject = useRagStore((s) => s.clearProject);
+  const pruneProject = useRagStore((s) => s.pruneProject);
 
   const [search, setSearch] = useState('');
   // Graph is the default view — the topic map is the primary way to read memory.
@@ -82,6 +85,26 @@ export function MemoryMode() {
                 <Icon name="graph" size={13} /> Graph
               </button>
             </div>
+            <button
+              type="button"
+              className="memory-prune"
+              disabled={projectChunks.length === 0}
+              title="Remove non-medical and off-topic findings, keeping the rest"
+              onClick={() => {
+                if (!activeProjectId || projectChunks.length === 0) return;
+                const removed = pruneProject(activeProjectId, keepMemoryChunk);
+                useToastStore
+                  .getState()
+                  .show(
+                    removed > 0
+                      ? `Pruned ${removed} non-medical / off-topic ${removed === 1 ? 'finding' : 'findings'}`
+                      : 'Nothing to prune — memory is already clean',
+                    'info',
+                  );
+              }}
+            >
+              <Icon name="refresh" size={13} /> Prune
+            </button>
             <button
               type="button"
               className="memory-clear"

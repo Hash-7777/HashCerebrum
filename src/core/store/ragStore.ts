@@ -57,6 +57,10 @@ interface RagStore {
   chunksForProject: (projectId: string) => RagChunk[];
   removeChunk: (id: string) => void;
   clearProject: (projectId: string) => void;
+  // Remove this project's chunks for which `keep` returns false; returns the
+  // number removed. Used by the "prune" cleanup to drop non-medical / off-topic
+  // findings without touching the good ones.
+  pruneProject: (projectId: string, keep: (chunk: RagChunk) => boolean) => number;
 }
 
 // Evidence chunks are deduped per project so the same paper saved by
@@ -167,4 +171,15 @@ export const useRagStore = create<RagStore>((set, get) => ({
       persist(chunks);
       return { ...state, chunks };
     }),
+
+  pruneProject: (projectId, keep) => {
+    const before = get().chunks;
+    const chunks = before.filter((c) => c.projectId !== projectId || keep(c));
+    const removed = before.length - chunks.length;
+    if (removed > 0) {
+      persist(chunks);
+      set({ chunks });
+    }
+    return removed;
+  },
 }));

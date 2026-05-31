@@ -23,7 +23,8 @@ import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
-import { citedEvidenceFor, medicalTopicLabel } from './memoryTopic';
+import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
+import { isMetaOrAppQuestion } from './swarm/paper';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -332,13 +333,14 @@ export function BrainMode() {
 
         // Save this run into the active project's memory — but only as a
         // valuable, subject-organised finding, not a dump of everything:
-        //   • skip non-medical turns entirely (topic === null),
+        //   • skip meta / app-introspection turns,
         //   • keep only the evidence the answer actually cited (drop the
-        //     off-topic retrieval that was never used),
-        //   • file it under a clean medical topic, not the raw query string.
-        const memoryTopic = medicalTopicLabel(cleanQuery, finalContent);
+        //     off-topic retrieval that was never used, and skip turns that
+        //     cited nothing — refusals / no-evidence answers),
+        //   • file it under a clean subject topic, not the raw query string.
+        const memoryTopic = memoryTopicLabel(cleanQuery);
         const citableForMemory = citedEvidenceFor(finalContent, result.evidence);
-        if (activeProjectId && memoryTopic && citableForMemory.length > 0) {
+        if (activeProjectId && memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
           const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => ({
             kind: 'evidence',
             title: item.title,

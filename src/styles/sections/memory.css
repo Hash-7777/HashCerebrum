@@ -228,6 +228,33 @@
   cursor: not-allowed;
 }
 
+/* Prune: a non-destructive cleanup, so it reads in the accent colour rather
+   than the danger red of Delete all. */
+.memory-prune {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-elev);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--hc-ease), border-color var(--hc-ease), background var(--hc-ease);
+}
+.memory-prune:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.memory-prune:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* --- Graph view --- */
 .memory-graph {
   position: relative;
