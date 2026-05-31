@@ -60,8 +60,10 @@ consulted:
 - CGNAT / shared address space (100.64.0.0/10, RFC 6598)
 - Link-local IPv6 (`fe80:`) and ULA IPv6 (`fc00::/7`)
 
-`localhost` and `127.0.0.1` are NOT denylisted — they are allowed via
-`policy::ALLOWED_HOSTS`, and only on the Ollama port, for local models.
+`localhost`, `127.0.0.1`, and `::1` are NOT denylisted — they are allowed via
+`policy::ALLOWED_HOSTS`, and only on the Ollama port, for local models. `::1`
+(IPv6 loopback) is allowlisted because on a dual-stack host `localhost` can
+resolve to `::1`, which `url::Host` renders in bracketless form.
 
 Known limitation: the denylist matches host *strings*. An allowlisted
 domain whose DNS resolves to an internal address is not re-checked at the
@@ -76,6 +78,37 @@ academic API hosts the app talks to, but it is a deliberate, documented gap.
   `RUST_LOG` for debugging.
 - `AppError`'s `Display` impl is what crosses IPC. It must not leak
   paths or secret material.
+
+## Untrusted-content handling (model + tool output)
+
+The app treats both LLM output and fetched medical records as untrusted:
+
+- **SVG sanitisation.** Before the dangerous-URL scan, HTML entities are decoded
+  and whitespace stripped (`commands/manuscript.rs`), so an obfuscated
+  `java&#115;cript:` payload cannot slip past the scanner. Typst-bound headings
+  also strip markup metacharacters (`[ ] ~`) so model text cannot inject markup.
+- **Prompt-injection / meta-question routing.** Queries that try to extract the
+  system prompt, jailbreak, or introspect the app (`isMetaOrAppQuestion`,
+  `META_QUESTION_RX`) are routed to a plain chat answer — they never enter the
+  research/manuscript pipeline and are never persisted to project memory.
+- **Fabricated-evidence guards.** The manuscript compiler forbids inventing
+  primary studies, drops unresolved `[S#]` citations, and scans the abstract for
+  prompt leakage before an artifact is built.
+- **Editor paste hardening.** The Peer Review document editor strips pasted
+  rich text to `text/plain`, so injected DOM cannot land in undo snapshots.
+
+## Backend robustness invariants
+
+These are availability/integrity properties, not just hardening:
+
+- **Graceful HTTP client.** `http_client()` returns an `Option`; a TLS/builder
+  failure degrades to a clear error instead of panicking the command.
+- **Audit-chain corruption propagates.** A broken/forged chain surfaces as an
+  error from the read path rather than being silently skipped, so tampering is
+  visible rather than hidden.
+- **Bounded reads + cache eviction.** Audit reads are bounded (`read_recent`);
+  the response cache evicts oldest rows past `MAX_CACHE_ROWS` (2000) so a
+  long-running install cannot grow the SQLite cache without limit.
 
 ## Adding a new permission
 

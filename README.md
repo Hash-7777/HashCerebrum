@@ -10,7 +10,7 @@
 
 Ask a clinical question. A boss agent routes it to topic specialists, each agent fetches source-grounded evidence from real biomedical databases, and the app either answers with inline citations or produces a complete, typeset, publication-grade research paper — all without the model inventing a single fact it cannot prove.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-3dd1bf?style=flat-square)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3dd1bf?style=flat-square)](LICENSE)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -63,7 +63,7 @@ The roster and the region map are compile-time constants — the type system rej
 |---|---|---|
 | **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain |
 | **Resources** | `⌘2` | Saved paper library |
-| **Memory** | `⌘3` | Per-project knowledge store — evidence, answers, and a brain-shaped relatedness diagram |
+| **Memory** | `⌘3` | Per-project knowledge store — only cited medical findings, organised by subject, with a brain-shaped relatedness diagram and one-click **Prune** to drop off-topic / non-research entries |
 | **Peer Review** | `⌘4` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor |
 
 The mode registry is a typed tuple capped at five entries (`src/config/modes.ts`) — adding a sixth is a compile error.
@@ -90,8 +90,8 @@ The renderer never makes an outbound HTTP request. Every call — medical databa
 
 ```
 Renderer  ─IPC─▶  security::guard::check()
-                    ├── denylist  (cloud-metadata, RFC1918, link-local IPv6)
-                    ├── allowlist (ALLOWED_HOSTS — 18 approved hosts)
+                    ├── denylist  (cloud-metadata, RFC1918, link-local + ULA IPv6)
+                    ├── allowlist (ALLOWED_HOSTS — 20 approved hosts + loopback)
                     ├── rate limiter (per-host token bucket)
                     └── audit log (hash-chained, SQLite, verifiable)
                   ─────▶  reqwest  ─────▶  external host
@@ -120,8 +120,9 @@ The audit log is readable and verifiable from Settings → Audit log.
 | Frontend | Vite 8 · React 18 · TypeScript 5 (strict + `noUncheckedIndexedAccess`) |
 | 3D | React Three Fiber · three.js r184 · drei · @react-three/postprocessing |
 | State | Zustand 5 · typed EventBus |
-| PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF (fallback) |
-| Testing | Vitest (170 tests) |
+| PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF + embedded DejaVu Unicode font (fallback) |
+| PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
+| Testing | Vitest (204 tests) + `cargo test` (27 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -146,8 +147,9 @@ npm run build          # macOS .app
 npm run build:dmg      # macOS .dmg
 
 # Checks
-npm test               # Vitest — 170 unit tests
+npm test               # Vitest — 204 unit tests
 npm run typecheck      # tsc strict — app + node configs
+npm run build:web      # tsc over app + tests, then Vite build
 ```
 
 ### Adding an LLM provider
