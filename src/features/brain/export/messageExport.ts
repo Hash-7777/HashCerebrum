@@ -2,7 +2,6 @@ import { platform, type EvidenceItem } from '@platform/index';
 import type { ChatMessage } from '@core/store/chatHistoryStore';
 import { manuscriptToReadableText, type Manuscript } from '../swarm/manuscript';
 import {
-  assertPublicationReady,
   buildPublicationArtifact,
   normalizeManuscriptForPublication,
   publicationHtml,
@@ -551,7 +550,11 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
 
   if (message.manuscript) {
     const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
-    assertPublicationReady(artifact);
+    // A drafted manuscript always exports as a PDF. Publication-QA blockers
+    // (e.g. thin evidence, an uncited section) are quality signals surfaced in
+    // the pipeline, not a reason to deny the user the PDF they asked for — the
+    // document still typesets. Previously assertPublicationReady threw here,
+    // which silently downgraded a QA-flagged paper to an HTML download.
     const typstManuscript = normalizeManuscriptForPublication(message.manuscript, artifact, {
       includeSupplementalSection: false,
     });
