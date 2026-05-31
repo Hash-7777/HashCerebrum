@@ -1,4 +1,5 @@
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
+import { bus } from '@core/bus/EventBus';
 import type { EvidenceItem } from '@platform/index';
 import {
   parseAbstract,
@@ -824,14 +825,27 @@ function specialistRoleDigest(specialists: SpecialistResult[]): string {
 }
 
 async function callModel(model: string, system: string, user: string, maxTokens: number): Promise<string> {
-  const response = await completeWithModelChain(model, {
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    temperature: 0.22,
-    maxTokens,
-  });
+  const response = await completeWithModelChain(
+    model,
+    {
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 0.22,
+      maxTokens,
+    },
+    // Surface a silent boss-model failover in the trace so a mid-run provider
+    // outage (e.g. an OpenRouter "Provider returned error" 404) is visible
+    // rather than only changing the model label after the fact.
+    (progress) => {
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'tool_call',
+        detail: `model unavailable — switched to ${progress.to.shortLabel} (${progress.reason.slice(0, 80)})`,
+      });
+    },
+  );
   return response.content.trim();
 }
 
@@ -971,6 +985,13 @@ async function compileSections(opts: {
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      // Surface the failure in the trace instead of silently shipping a stub
+      // section — this is what made an incomplete paper look like a success.
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'error',
+        detail: `Section "${blueprintSection.heading}" draft failed: ${detail.slice(0, 120)}`,
+      });
       body = [
         `This section could not be drafted from the claim ledger because the language-model call failed: ${detail}. The available claim ledger should be reviewed directly before publication ${assignedMarkers.slice(0, 3).join(' ')}.`,
       ];
@@ -1197,8 +1218,18 @@ export async function runPaperPipeline(opts: {
       `Write a manuscript title for a ${opts.dataset ? 'original-dataset' : 'evidence-review'} biomedical manuscript addressing: ${opts.question}`,
       150,
     );
-    const candidate = reply.split('\n')[0]?.replace(/^[#\s"']+|[#\s"']+$/g, '').trim() ?? '';
-    if (candidate.length >= 10 && candidate.length <= 200 && !/\b(write|draft|generate|manuscript topic|section to write)\b/i.test(candidate)) {
+    const candidate = (reply.split('\n')[0] ?? '')
+      .replace(/^[#\s"']+|[#\s"']+$/g, '')
+      // Strip a leaked "Title:" label the model sometimes prepends, so the
+      // manuscript title is the heading itself, not the word "Title".
+      .replace(/^title\s*:\s*/i, '')
+      .trim();
+    if (
+      candidate.length >= 10 &&
+      candidate.length <= 200 &&
+      !/^title$/i.test(candidate) &&
+      !/\b(write|draft|generate|manuscript topic|section to write)\b/i.test(candidate)
+    ) {
       overrideTitle = candidate;
     }
   } catch {

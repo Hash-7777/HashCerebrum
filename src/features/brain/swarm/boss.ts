@@ -3,8 +3,13 @@
 // specialist sub-tasks, and synthesizes their findings into one cited
 // answer.
 
-import { completeWithModelChain, streamWithModelChain } from '@core/llm/ProviderRegistry';
+import {
+  completeWithModelChain,
+  streamWithModelChain,
+  type FailoverProgress,
+} from '@core/llm/ProviderRegistry';
 import { SPECIALIST_AGENTS, type AgentId } from '@config/agents';
+import { bus } from '@core/bus/EventBus';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
@@ -12,6 +17,17 @@ import { paperSystemInstruction, type PaperRequest } from './paper';
 import type { SpecialistResult, SpecialistTask } from './types';
 
 const MAX_TASKS = 4;
+
+// Surface a silent boss-model failover in the execution trace, so a mid-run
+// provider outage that the chain recovers from is visible rather than only
+// changing the model label after the fact.
+function emitFailover(progress: FailoverProgress): void {
+  bus.emit('agent:activity', {
+    agentId: 'boss',
+    phase: 'tool_call',
+    detail: `model unavailable — switched to ${progress.to.shortLabel} (${progress.reason.slice(0, 80)})`,
+  });
+}
 
 export interface BossPlan {
   mode: 'chat' | 'research';
@@ -122,7 +138,7 @@ End with an overall rating out of 10 and a one-line verdict on publication readi
     },
     { role: 'user', content: `My request: ${question}\n\n--- DOCUMENT TO APPRAISE ---\n${priorWork}` },
   ];
-  const res = await streamWithModelChain(model, { messages, temperature: 0.2, maxTokens: 1800 }, { onToken, signal });
+  const res = await streamWithModelChain(model, { messages, temperature: 0.2, maxTokens: 1800 }, { onToken, signal }, emitFailover);
   return { content: res.content, modelUsed: res.modelUsed };
 }
 
@@ -143,7 +159,7 @@ export async function bossChat(
     ...conversation,
     { role: 'user', content: question },
   ];
-  const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken, signal });
+  const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken, signal }, emitFailover);
   return { content: res.content, modelUsed: res.modelUsed };
 }
 
@@ -215,6 +231,7 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
     model,
     { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 8000 : 1600 },
     { onToken, signal },
+    emitFailover,
   );
   return { content: stripLeakedSpecialistLabels(res.content), modelUsed: res.modelUsed };
 }

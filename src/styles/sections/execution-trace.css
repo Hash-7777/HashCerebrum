@@ -98,6 +98,11 @@
   flex-direction: column;
   gap: 3px;
   padding: 6px 14px 10px;
+  /* The global root sets user-select:none; re-enable it here so trace lines
+     (errors, model failovers, source counts) can be selected and copied. */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 .execution-trace-entries::-webkit-scrollbar { width: 4px; }
 .execution-trace-entries::-webkit-scrollbar-thumb { background: var(--hc-border); border-radius: 2px; }
