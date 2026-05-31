@@ -91,10 +91,17 @@ release (e.g. via `license-checker` for npm and `cargo-about` for Rust).
 
 ## Project's own license
 
-`src-tauri/Cargo.toml` declares no `license` field and there is no top-level
-`LICENSE` file, so the project itself is "all rights reserved" by default. Decide
-and add a license (proprietary, or an open one) before making the repository
-public.
+HashCerebrum is licensed under **GNU AGPL-3.0-or-later** (full text in the
+top-level [`LICENSE`](../LICENSE); SPDX `AGPL-3.0-or-later` declared in
+`package.json` and `src-tauri/Cargo.toml`). AGPL is strong copyleft: anyone who
+distributes a modified version, or who runs a modified version as a network
+service, must release their corresponding source under the same license.
+
+All bundled dependencies and assets are permissive (MIT / Apache-2.0 / BSD /
+ISC / Zlib / OFL-1.1 / MPL-2.0 / CC0) and therefore compatible with AGPL-3.0, so
+the project can be distributed under AGPL without conflict. (Note: AGPL-3.0 is
+compatible with Apache-2.0 and GPLv3-compatible permissive licenses, not with
+GPLv2-only code — none of which is present here.)
 
 ## Static assets
 

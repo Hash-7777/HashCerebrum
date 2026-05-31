@@ -255,5 +255,11 @@ Missing effect sizes produce an honest warning and source-yield/evidence-strengt
 
 ## License
 
-[MIT](LICENSE) — © 2026 Seif Hashish.  
-Bundled third-party assets retain their own licenses — see [docs/LICENSES.md](docs/LICENSES.md).
+[GNU AGPL-3.0-or-later](LICENSE) — © 2026 Seif Hashish.
+
+HashCerebrum is free and open source. Under the AGPL, anyone who distributes a
+modified version — or runs a modified version as a network service — must make
+their corresponding source available under the same license.
+
+Bundled third-party dependencies and assets retain their own (permissive)
+licenses — see [docs/LICENSES.md](docs/LICENSES.md).

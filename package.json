@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "AGPL-3.0-or-later",
   "description": "HashCerebrum — Medical research agent desktop app",
   "engines": {
     "node": "24.x"
@@ -61,6 +62,5 @@
     "vite": "^8.0.14",
     "vitest": "^4.1.7"
   },
-  "license": "MIT",
   "overrides": {}
 }
