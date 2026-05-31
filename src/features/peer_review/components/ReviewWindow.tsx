@@ -222,6 +222,53 @@ function AgentSection({
 
 // ── Document preview (read-only, non-editor mode) ─────────────────────────
 
+// Rasterised PDF preview for uploaded papers. pdf.js is dynamically imported
+// on first use, so it stays out of the main bundle. Falls back to the
+// extracted-text view if rendering fails.
+function PdfCanvasPreview({ url, paper }: { url: string; paper: ReviewedPaper }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    const host = hostRef.current;
+    if (!host) return;
+    host.replaceChildren();
+    setStatus('loading');
+    void (async () => {
+      try {
+        const { renderPdfToCanvases } = await import('../pdfRender');
+        await renderPdfToCanvases(url, host, () => cancelled);
+        if (!cancelled) setStatus('ready');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (status === 'error') {
+    // Rendering failed — show the extracted text so the paper is still usable.
+    return (
+      <div className="review-document-preview">
+        <article
+          className="review-document-page"
+          dangerouslySetInnerHTML={{ __html: textToPreviewHtml(currentDocumentText(paper).slice(0, 120_000)) }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="review-pdf-canvas-pane">
+      {status === 'loading' && <div className="review-pdf-loading">Rendering PDF…</div>}
+      <div ref={hostRef} className="review-pdf-canvas-host" aria-label={`${paper.title} preview`} />
+    </div>
+  );
+}
+
 function DocumentPane({ paper }: { paper: ReviewedPaper }) {
   if (paper.editedHtml) {
     return (
@@ -250,16 +297,11 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
-  // Uploaded user PDFs have only a blobUrl (no htmlContent). Render natively
-  // without sandbox so the macOS PDF plugin can display them faithfully.
+  // Uploaded user PDFs have only a blobUrl (no htmlContent). WKWebView cannot
+  // render a PDF blob inline in an iframe (it shows blank), so rasterise the
+  // pages to canvases with pdf.js instead.
   if (paper.blobUrl) {
-    return (
-      <iframe
-        src={paper.blobUrl}
-        title={paper.title}
-        className="review-pdf-frame"
-      />
-    );
+    return <PdfCanvasPreview url={paper.blobUrl} paper={paper} />;
   }
 
   return (

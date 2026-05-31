@@ -40,6 +40,7 @@
     "@tauri-apps/plugin-store": "^2",
     "dompurify": "^3.4.5",
     "jspdf": "^4.2.1",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.184.0",
