@@ -184,6 +184,7 @@ export async function synthesize(
 Hard rules:
 - Use only the retrieved records and specialist findings below. Never add a fact, statistic, drug effect, dose, or citation that is not supported there.
 - Cite every factual claim with the exact [S#] marker of the record it came from (e.g. [S3]). Use the marker exactly as it appears in the retrieved records list — never invent a marker number that is not in that list.
+- [S#] markers are the ONLY valid citation. Never cite a specialist's name or section label and never write tokens like "[Specialist Findings - ...]" or "[Specialist Findings]"; those are internal scaffolding, not sources. The specialist headings below are context for you, not citable references.
 - Never invent a PMID, DOI, author, year, or title.
 - If the evidence is thin or the specialists found little, say so plainly.
 - This is research triage, not medical advice.`,
@@ -215,5 +216,16 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
     { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 8000 : 1600 },
     { onToken, signal },
   );
-  return { content: res.content, modelUsed: res.modelUsed };
+  return { content: stripLeakedSpecialistLabels(res.content), modelUsed: res.modelUsed };
+}
+
+// Remove internal specialist section labels the model sometimes echoes back as
+// if they were citations (e.g. "[Specialist Findings - Pharmacology]"). They
+// are pipeline scaffolding, not sources, and must never reach the rendered
+// answer or its export.
+export function stripLeakedSpecialistLabels(text: string): string {
+  return text
+    .replace(/\[\s*specialist findings[^\]]*\]/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;:)])/g, '$1');
 }
