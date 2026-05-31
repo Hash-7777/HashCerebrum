@@ -19,7 +19,7 @@ export function ModeRail() {
         <button
           key={m.id}
           type="button"
-          className={`mode${mode === m.id ? ' active' : ''}`}
+          className={`mode-tab${mode === m.id ? ' active' : ''}`}
           onClick={() => setMode(m.id)}
           title={`${m.description} (${m.shortcut})`}
         >

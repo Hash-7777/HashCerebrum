@@ -458,7 +458,11 @@
   color: var(--text-3);
 }
 
-.mode {
+/* Mode-rail navigation button. NOTE: a separate `.mode` rule in
+   brain-canvas.css styles the full-screen mode *container* (display:flex,
+   height:100%). They are different elements — keep this rail button as
+   `.mode-tab` so the two never collide. */
+.mode-tab {
   display: grid;
   grid-template-columns: 22px 1fr auto;
   gap: 10px;
@@ -473,7 +477,7 @@
   transition: all 0.14s ease;
   position: relative;
 }
-.mode:last-child { border-bottom: none; }
+.mode-tab:last-child { border-bottom: none; }
 
 .mode-mark {
   width: 22px;
@@ -499,19 +503,19 @@
   padding-left: 8px;
 }
 
-.mode:hover { background: rgba(255, 255, 255, 0.025); color: var(--text-1); }
-.mode:hover .mode-mark { color: var(--text-1); }
-.mode:hover .mode-label { color: var(--text-1); }
-.mode.active { background: var(--ink-3); color: var(--text-1); }
-.mode.active::before {
+.mode-tab:hover { background: rgba(255, 255, 255, 0.025); color: var(--text-1); }
+.mode-tab:hover .mode-mark { color: var(--text-1); }
+.mode-tab:hover .mode-label { color: var(--text-1); }
+.mode-tab.active { background: var(--ink-3); color: var(--text-1); }
+.mode-tab.active::before {
   content: "";
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 2px;
   background: var(--accent);
 }
-.mode.active .mode-mark { color: var(--accent); }
-.mode.active .mode-label { color: var(--text-1); font-weight: 600; }
+.mode-tab.active .mode-mark { color: var(--accent); }
+.mode-tab.active .mode-label { color: var(--text-1); font-weight: 600; }
 
 /* ── App main ───────────────────────────────────────────────── */
 

@@ -216,8 +216,6 @@
   color: var(--text-1);
   transition: none;
   min-width: 0;
-  /* Override cursor: pointer inherited from .mode rail-button class */
-  cursor: default;
 }
 .brain-workspace .eyebrow {
   margin: 0 0 5px;
