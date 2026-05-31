@@ -31,17 +31,23 @@ All bundled binary assets must be reviewed here before each release.
 
 ## Fonts
 
-UI fonts are loaded at runtime from Google Fonts (no binaries bundled in `dist/`). The `index.html` `<link>` tag fetches them on first load; they are not vendored into the repository.
+UI fonts are **self-hosted** via the `@fontsource/*` npm packages and bundled
+into `dist/` at build time (imported in `src/main.tsx`). They are **not** fetched
+from Google Fonts at runtime — the Tauri CSP (`font-src 'self' data:`) blocks
+external font origins, and self-hosting keeps the app fully offline. Each
+`@fontsource` package ships its `LICENSE` file in `node_modules`.
 
-| Family | Google Fonts page | License |
+| Family | npm package | License |
 |---|---|---|
-| Source Serif 4 | fonts.google.com/specimen/Source+Serif+4 | SIL Open Font License 1.1 |
-| Source Sans 3 | fonts.google.com/specimen/Source+Sans+3 | SIL Open Font License 1.1 |
-| IBM Plex Mono | fonts.google.com/specimen/IBM+Plex+Mono | SIL Open Font License 1.1 |
+| Source Serif 4 | `@fontsource/source-serif-4` | SIL Open Font License 1.1 |
+| Source Sans 3 | `@fontsource/source-sans-3` | SIL Open Font License 1.1 |
+| IBM Plex Mono | `@fontsource/ibm-plex-mono` | SIL Open Font License 1.1 |
+| Newsreader | `@fontsource/newsreader` | SIL Open Font License 1.1 |
 
-The SIL OFL permits use in applications without restriction. No attribution is legally required in the UI, but the font families are credited here as good practice.
-
-If the app is ever shipped for fully offline use (no network access), the font files must be vendored under `public/fonts/` and a copy of the OFL placed alongside them.
+The SIL OFL 1.1 permits bundling and embedding in an application (including a
+commercial one) without restriction. The only obligation is that the OFL text
+accompany the font binaries; a distributed build should therefore include the
+OFL license text alongside the bundled fonts (see "Attribution bundle" below).
 
 ### `public/fonts/DejaVuSerif.ttf`, `public/fonts/DejaVuSerif-Bold.ttf`
 
@@ -50,6 +56,45 @@ If the app is ever shipped for fully offline use (no network access), the font f
 - **License:** Bitstream Vera Fonts Copyright + Arev Fonts Copyright (permissive; allows redistribution and embedding). Full text vendored at [`public/fonts/LICENSE.txt`](../public/fonts/LICENSE.txt).
 - **Usage:** Embedded into jsPDF at export time (`src/features/brain/export/paperPdf.ts`) so downloaded research-paper PDFs can render Greek letters and math/relation/arrow glyphs that the built-in WinAnsi "times" font cannot draw. Lazily fetched from `/fonts/` on first export; not part of the JS bundle. The font is vendored (not fetched from a CDN) so PDF export works fully offline.
 - **Audit date:** 2026-05-31.
+
+## JavaScript / npm dependencies
+
+Notable bundled runtime dependencies (all permissive):
+
+| Package | License | Notes |
+|---|---|---|
+| react, react-dom, three, @react-three/* | MIT | UI + 3D |
+| zustand | MIT | state |
+| dompurify | MPL-2.0 OR Apache-2.0 | SVG/HTML sanitisation; used unmodified (MPL only binds if you modify its own files) |
+| jspdf | MIT | client PDF export |
+| pdfjs-dist | Apache-2.0 | renders uploaded PDFs to canvas in Peer Review; ships the Apache NOTICE |
+| xlsx (SheetJS) | Apache-2.0 | dataset parsing |
+| @tauri-apps/* | MIT OR Apache-2.0 | desktop shell |
+
+## Full dependency-license audit (2026-05-31)
+
+Both trees were scanned end-to-end:
+
+- **npm — 132 packages.** No GPL/AGPL/LGPL/SSPL/BUSL/non-commercial licenses. Two non-obvious entries were verified by hand: `webgl-constants` (blank `license` field but ships an MIT `LICENSE`) and `rgbcolor` (`MIT OR feel-free`) — both permissive.
+- **Cargo — 756 crates.** No GPL/AGPL. The only copyleft mentions are benign: `r-efi` is `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (MIT/Apache is selected, LGPL irrelevant), and 5 crates are `MPL-2.0` (file-level copyleft, used unmodified). Everything else is MIT / Apache-2.0 / BSD / ISC / Zlib / Unicode-3.0 / Unlicense / 0BSD / BSL-1.0 / CC0.
+
+**Conclusion:** nothing in the project can force it to be open-sourced, and every dependency and asset grants commercial use. The only standing obligation is **attribution** — reproducing the third-party copyright/permission notices in the distributed app (see below).
+
+## Attribution bundle (release obligation)
+
+Permissive licenses (MIT, BSD, Apache-2.0, OFL-1.1) require that their copyright
+and permission notices travel with any binary distribution; Apache-2.0 also
+requires retaining upstream `NOTICE` files. This is satisfied by shipping an
+aggregated `THIRD-PARTY-LICENSES` file in the app bundle and/or an in-app
+"Licenses" view. **Not yet generated** — to be produced before the first public
+release (e.g. via `license-checker` for npm and `cargo-about` for Rust).
+
+## Project's own license
+
+`src-tauri/Cargo.toml` declares no `license` field and there is no top-level
+`LICENSE` file, so the project itself is "all rights reserved" by default. Decide
+and add a license (proprietary, or an open one) before making the repository
+public.
 
 ## Static assets
 
