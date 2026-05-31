@@ -531,7 +531,7 @@ export function BrainMode() {
           </div>
           <div className="lede">
             <span className="tip">Tip</span>
-            <span>Set a large model as the Boss in Settings → Agent models for best results.</span>
+            <span>Set a large model as the Boss in Settings for the best results.</span>
           </div>
         </header>
 
