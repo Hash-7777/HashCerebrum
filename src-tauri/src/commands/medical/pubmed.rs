@@ -17,6 +17,10 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
         .append_pair("db", "pubmed")
         .append_pair("retmode", "json")
         .append_pair("retmax", &limit.to_string())
+        // Rank by relevance, not PubMed's default "most recent" — otherwise a
+        // broad term returns the newest loosely-matching papers (off-topic
+        // recent records) instead of the best matches for the query.
+        .append_pair("sort", "relevance")
         .append_pair("term", &query);
     let search = fetch_json(search_url, Some(86400)).await?;
     let ids: Vec<String> = search

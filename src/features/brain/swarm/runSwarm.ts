@@ -59,6 +59,69 @@ export function evidenceScore(record: EvidenceItem): number {
   return score;
 }
 
+// Filler words ignored when scoring a record's relevance to the question.
+const RELEVANCE_FILLER = new Set([
+  'about', 'after', 'against', 'among', 'and', 'any', 'are', 'between', 'both', 'compare', 'comparison',
+  'does', 'effect', 'effects', 'evidence', 'for', 'from', 'have', 'high', 'how', 'into', 'its', 'low',
+  'more', 'most', 'only', 'over', 'paper', 'patient', 'patients', 'research', 'review', 'risk', 'safety',
+  'than', 'that', 'their', 'them', 'these', 'this', 'those', 'using', 'versus', 'what', 'which', 'with',
+  'within', 'your',
+]);
+
+// A few common medical concept synonyms so a record that uses "kidney" still
+// matches a question phrased with "renal" (avoids dropping relevant papers).
+const MEDICAL_SYNONYMS: Record<string, string[]> = {
+  renal: ['kidney'],
+  kidney: ['renal'],
+  cardiac: ['heart', 'cardiovascular'],
+  heart: ['cardiac', 'cardiovascular'],
+  cardiovascular: ['cardiac', 'heart'],
+  hepatic: ['liver'],
+  liver: ['hepatic'],
+  pulmonary: ['lung'],
+  lung: ['pulmonary'],
+  gastric: ['stomach', 'gastrointestinal'],
+  gastrointestinal: ['gastric', 'gi'],
+};
+
+function relevanceTerms(question: string): string[] {
+  const base = [
+    ...new Set(
+      question
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 4 && !RELEVANCE_FILLER.has(w)),
+    ),
+  ];
+  const expanded = new Set(base);
+  for (const term of base) for (const syn of MEDICAL_SYNONYMS[term] ?? []) expanded.add(syn);
+  return [...expanded];
+}
+
+// Re-rank merged evidence by topical relevance to the question: records whose
+// title/snippet match more of the question's key terms rise to the top (so the
+// synthesis cites on-topic sources), and clearly off-topic records (zero term
+// matches) are dropped — but only when enough on-topic evidence remains, so a
+// sparse topic is never gutted. Within equal relevance, the prior
+// quality/recency order from mergeEvidence is preserved.
+export function rankEvidenceByRelevance(question: string, evidence: EvidenceItem[]): EvidenceItem[] {
+  const terms = relevanceTerms(question);
+  if (terms.length === 0) return evidence;
+  const matchCount = (record: EvidenceItem): number => {
+    const hay = `${record.title} ${record.snippet ?? ''}`.toLowerCase();
+    let n = 0;
+    for (const term of terms) if (hay.includes(term)) n += 1;
+    return n;
+  };
+  const scored = evidence
+    .map((record, index) => ({ record, index, m: matchCount(record) }))
+    .sort((a, b) => b.m - a.m || a.index - b.index);
+  const relevant = scored.filter((s) => s.m > 0);
+  const kept = relevant.length >= 6 ? relevant : scored;
+  return kept.map((s) => s.record);
+}
+
 // Conference-proceeding and abstract-collection records (poster books, oral
 // presentation lists, society-meeting abstract supplements). They are not
 // individual peer-reviewed studies and must never be cited as primary
@@ -190,7 +253,10 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     ),
   );
 
-  const merged = mergeEvidence(specialists);
+  // Merge, de-duplicate, quality-rank, then re-rank by topical relevance to the
+  // (context-resolved) question so off-topic records sink or drop out before
+  // they can be cited.
+  const merged = rankEvidenceByRelevance(researchQuestion, mergeEvidence(specialists));
   callbacks.onBossPhase('synthesizing');
 
   // Full-paper requests are drafted section by section into a structured

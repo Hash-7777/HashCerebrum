@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { evidenceScore, isNonCitableProceeding, mergeEvidence } from '../runSwarm';
+import { evidenceScore, isNonCitableProceeding, mergeEvidence, rankEvidenceByRelevance } from '../runSwarm';
 import type { SpecialistResult } from '../types';
 
 function makeRecord(partial: Partial<EvidenceItem> & { source: EvidenceItem['source'] }): EvidenceItem {
@@ -88,5 +88,34 @@ describe('mergeEvidence', () => {
     const merged = mergeEvidence([makeSpecialist([real, poster])]);
     expect(merged).toHaveLength(1);
     expect(merged[0]?.title).toBe('Bleeding risk in anticoagulated patients');
+  });
+});
+
+describe('rankEvidenceByRelevance', () => {
+  const q = 'compare acetaminophen and diclofenac on renal effect';
+  const titled = (title: string, snippet: string) => makeRecord({ source: 'pubmed', title, snippet });
+  const onTopicA = titled('Acetaminophen versus diclofenac and renal injury', 'kidney outcomes');
+  const onTopicB = titled('Diclofenac nephrotoxicity', 'acute renal failure with diclofenac');
+  const synonym = titled('Acetaminophen and kidney function', 'kidney injury markers');
+  const offTopic = titled('Pharmacokinetics of paracetamol in the koala', 'marsupial dosing');
+
+  it('ranks records matching more question terms ahead of weak matches', () => {
+    const ranked = rankEvidenceByRelevance(q, [offTopic, onTopicA, onTopicB]);
+    expect(ranked[0]?.title).toBe('Acetaminophen versus diclofenac and renal injury');
+  });
+
+  it('matches "renal" against records that say "kidney" (synonym aware)', () => {
+    // Only 3 records, so the drop guard keeps all — but the synonym record must
+    // out-rank the off-topic one.
+    const ranked = rankEvidenceByRelevance(q, [offTopic, synonym]);
+    expect(ranked[0]?.title).toBe('Acetaminophen and kidney function');
+  });
+
+  it('drops clearly off-topic records when enough on-topic evidence remains', () => {
+    const onTopic = [onTopicA, onTopicB, synonym]
+      .concat([1, 2, 3].map((n) => titled(`Diclofenac renal cohort ${n}`, 'kidney')));
+    const ranked = rankEvidenceByRelevance(q, [...onTopic, offTopic]);
+    expect(ranked.some((r) => r.title.includes('koala'))).toBe(false);
+    expect(ranked.length).toBe(onTopic.length);
   });
 });
