@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentReviewResult } from '@core/store/peerReviewStore';
-import { parseSuggestions } from '../reviewSwarm';
+import { chunkDocument, parseSuggestions } from '../reviewSwarm';
+
+describe('chunkDocument', () => {
+  it('keeps a short document as a single chunk', () => {
+    expect(chunkDocument('short paper', 100)).toEqual(['short paper']);
+  });
+
+  it('splits a long document at paragraph boundaries within the budget', () => {
+    const para = (n: number) => `${'word '.repeat(18)}p${n}`.trim(); // ~95 chars
+    const doc = [para(1), para(2), para(3), para(4)].join('\n\n');
+    const chunks = chunkDocument(doc, 120);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => c.length <= 120)).toBe(true);
+    // No content is lost across the split.
+    expect(chunks.join(' ')).toContain('p1');
+    expect(chunks.join(' ')).toContain('p4');
+  });
+
+  it('hard-splits a single paragraph larger than the budget', () => {
+    const huge = 'x'.repeat(250);
+    const chunks = chunkDocument(huge, 100);
+    expect(chunks.length).toBe(3);
+    expect(chunks.join('')).toBe(huge);
+  });
+});
 
 const doneAgent = (patch: Partial<AgentReviewResult>): AgentReviewResult => ({
   agentId: 'grammar',

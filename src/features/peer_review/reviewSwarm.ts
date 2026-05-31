@@ -41,6 +41,36 @@ function userMsg(text: string, max: number = MAX_CHARS): string {
   return `Please analyse the following manuscript:\n\n---\n${truncate(text, max)}\n---`;
 }
 
+// Target size of each document part when the manuscript is reviewed in chunks.
+// ~10k chars ≈ 2.5k tokens, leaving room for a long reviewer system prompt and
+// the model's reply under an 8k-token-per-request budget.
+const CHUNK_CHARS = 10_000;
+
+// Split a manuscript into review-sized parts at paragraph boundaries, hard-
+// splitting any single paragraph that is itself larger than the budget.
+export function chunkDocument(text: string, size: number = CHUNK_CHARS): string[] {
+  if (text.length <= size) return [text];
+  const chunks: string[] = [];
+  let current = '';
+  for (const para of text.split(/\n{2,}/)) {
+    if (para.length > size) {
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+      for (let i = 0; i < para.length; i += size) chunks.push(para.slice(i, i + size));
+      continue;
+    }
+    if (current && current.length + para.length + 2 > size) {
+      chunks.push(current);
+      current = '';
+    }
+    current = current ? `${current}\n\n${para}` : para;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 // A provider rejecting the request because the prompt is too big for its
 // token/-per-minute budget (HTTP 413, "request too large", "reduce your message
 // size", a TPM-limit message). Recoverable by shrinking the document.
@@ -218,6 +248,11 @@ For any statistical sentence that should be revised, quote the exact manuscript 
 STATISTICS SCORE: <integer 1-10>
 [One sentence overall verdict on statistical rigour]`;
 
+// Map-phase prompt for the orchestrator when a manuscript is reviewed in
+// parts: gather concise observations per part (cheap, small output) which a
+// final reduce pass then synthesises into the scored review.
+const ORCHESTRATOR_NOTES_PROMPT = `You are a senior peer reviewer reading ONE PART of a larger manuscript. List concise, specific reviewer observations for THIS PART ONLY — methodology, reporting completeness, statistics, clarity, and any claims that need support. Use short bullet points. Do NOT assign a score and do NOT write section headings; a final pass will combine the notes from every part into the formal review.`;
+
 // ── Agent roster ──────────────────────────────────────────────────────────
 
 export interface ReviewAgentDef {
@@ -288,52 +323,117 @@ export async function runReviewSwarm(
 ): Promise<PaperReview> {
   trace('start', `[Peer Review] swarm started — ${REVIEW_SWARM_AGENTS.length} agents`);
 
-  const agentTask = async (def: ReviewAgentDef) => {
-    onPatch(def.agentId, { status: 'running', text: '', items: [] });
-    trace('start', `[Peer Review] ${def.label} running`);
-    let accumulated = '';
-    let budget = MAX_CHARS;
-    // Retry with a progressively smaller document when the model rejects the
-    // prompt as too large for its token budget (e.g. an 8k-TPM model). Safe to
-    // retry only before any token has streamed.
+  // One model call with adaptive shrink: if the provider rejects the prompt as
+  // too large, halve the user content and retry (only before any token has
+  // streamed) down to a floor. Used for both the per-part map calls and the
+  // orchestrator reduce call.
+  const callWithShrink = async (
+    system: string,
+    user: string,
+    maxTokens: number,
+    label: string,
+    onAcc?: (acc: string) => void,
+  ): Promise<{ text: string; modelUsed: string }> => {
+    let content = user;
     for (;;) {
-      accumulated = '';
+      let acc = '';
       try {
         const res = await streamWithModelChain(
           model,
           {
             messages: [
-              { role: 'system' as const, content: def.systemPrompt },
-              { role: 'user' as const, content: userMsg(paperText, budget) },
+              { role: 'system' as const, content: system },
+              { role: 'user' as const, content },
             ],
             temperature: 0.3,
-            maxTokens: def.maxTokens,
+            maxTokens,
           },
           {
             onToken: (delta) => {
-              accumulated += delta;
-              onPatch(def.agentId, { text: accumulated });
+              acc += delta;
+              onAcc?.(acc);
             },
             signal,
           },
         );
-        const finalText = res.content || accumulated;
-        const parsed = bullets(finalText);
-        onPatch(def.agentId, { status: 'done', text: finalText, items: parsed });
-        trace('done', `[Peer Review] ${def.label} — ${parsed.length} items`);
-        return { agentId: def.agentId, text: finalText, modelUsed: res.modelUsed ?? model, error: undefined };
+        return { text: res.content || acc, modelUsed: res.modelUsed ?? model };
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') throw err;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (isTooLargeError(err) && !accumulated && budget > MIN_CHARS) {
-          budget = Math.max(MIN_CHARS, Math.floor(budget / 2));
-          trace('tool_call', `[Peer Review] ${def.label}: prompt too large — retrying with ${budget} chars`);
+        if (isTooLargeError(err) && !acc && content.length > MIN_CHARS) {
+          content = truncate(content, Math.max(MIN_CHARS, Math.floor(content.length / 2)));
+          trace('tool_call', `[Peer Review] ${label}: prompt too large — retrying smaller`);
           continue;
         }
-        onPatch(def.agentId, { status: 'error', error: errMsg });
-        trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
-        return { agentId: def.agentId, text: accumulated, modelUsed: model, error: errMsg };
+        throw err;
       }
+    }
+  };
+
+  const agentTask = async (def: ReviewAgentDef) => {
+    onPatch(def.agentId, { status: 'running', text: '', items: [] });
+    trace('start', `[Peer Review] ${def.label} running`);
+    const chunks = chunkDocument(paperText);
+    const multi = chunks.length > 1;
+    let modelUsed = model;
+    try {
+      // The orchestrator scores the whole paper, so for a multi-part document
+      // it gathers concise notes per part (map) and synthesises the final
+      // scored review from those notes (reduce) — never sending the whole
+      // manuscript in one oversized request.
+      if (def.agentId === 'orchestrator' && multi) {
+        trace('tool_call', `[Peer Review] ${def.label}: reviewing ${chunks.length} parts`);
+        const notes: string[] = [];
+        for (let i = 0; i < chunks.length; i += 1) {
+          onPatch(def.agentId, { text: `Reviewing part ${i + 1} of ${chunks.length}…` });
+          const r = await callWithShrink(
+            ORCHESTRATOR_NOTES_PROMPT,
+            `Manuscript PART ${i + 1} of ${chunks.length}. List concise reviewer observations for THIS part only.\n\n---\n${chunks[i] ?? ''}\n---`,
+            700,
+            `${def.label} part ${i + 1}`,
+          );
+          modelUsed = r.modelUsed;
+          notes.push(`Part ${i + 1} notes:\n${r.text}`);
+        }
+        const r = await callWithShrink(
+          def.systemPrompt,
+          `The following reviewer notes were gathered across all ${chunks.length} parts of ONE manuscript. Produce the final review in the required format, basing the score and every section on these combined notes.\n\n---\n${truncate(notes.join('\n\n'))}\n---`,
+          def.maxTokens,
+          def.label,
+          (acc) => onPatch(def.agentId, { text: acc }),
+        );
+        modelUsed = r.modelUsed;
+        const parsed = bullets(r.text);
+        onPatch(def.agentId, { status: 'done', text: r.text, items: parsed });
+        trace('done', `[Peer Review] ${def.label} — ${parsed.length} items (${chunks.length} parts)`);
+        return { agentId: def.agentId, text: r.text, modelUsed, error: undefined };
+      }
+
+      // Every other agent emits a flat list of issues, so it maps over the
+      // parts and the per-part outputs are concatenated.
+      let accumulated = '';
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunk = chunks[i] ?? '';
+        const user = multi
+          ? `Please analyse PART ${i + 1} OF ${chunks.length} of the following manuscript. Report only issues found in THIS part.\n\n---\n${chunk}\n---`
+          : userMsg(chunk);
+        const base = accumulated;
+        const r = await callWithShrink(def.systemPrompt, user, def.maxTokens, def.label, (acc) =>
+          onPatch(def.agentId, { text: base ? `${base}\n\n${acc}` : acc }),
+        );
+        modelUsed = r.modelUsed;
+        accumulated = accumulated ? `${accumulated}\n\n${r.text}` : r.text;
+        onPatch(def.agentId, { text: accumulated });
+      }
+      const parsed = bullets(accumulated);
+      onPatch(def.agentId, { status: 'done', text: accumulated, items: parsed });
+      trace('done', `[Peer Review] ${def.label} — ${parsed.length} items${multi ? ` (${chunks.length} parts)` : ''}`);
+      return { agentId: def.agentId, text: accumulated, modelUsed, error: undefined };
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') throw err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      onPatch(def.agentId, { status: 'error', error: errMsg });
+      trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
+      return { agentId: def.agentId, text: '', modelUsed: model, error: errMsg };
     }
   };
 
