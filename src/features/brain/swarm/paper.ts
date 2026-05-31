@@ -23,6 +23,16 @@ const PAPER_RX = new RegExp(
   'i',
 );
 
+// Comparative / analytical research intents that warrant a full structured
+// manuscript rather than a one-shot answer: "compare X vs Y", "contrast ...",
+// "overview of ...", "state of the evidence", "evaluate ...", "analyze ...",
+// "review ...". A bare "review" is included because a prior-work review (e.g.
+// "review that draft") is intercepted earlier by isPriorWorkReviewRequest,
+// which requires a back-reference; a fresh "review the evidence on X" is a
+// request for a review paper.
+const ANALYTICAL_RX =
+  /\b(?:compare|comparison|comparative|contrast(?:ing|s)?|versus|vs|overview\s+of|state\s+of\s+the\s+(?:evidence|art|science|literature)|evaluate|evaluation\s+of|analy[sz]e|analy[sz]es|analysis\s+of|review)\b/i;
+
 // A follow-up that asks the team to appraise its own previous output — "rate
 // that paper", "review this draft", "how would you grade it" — rather than to
 // research something new. Requires both an appraisal verb and a back-reference
@@ -38,8 +48,10 @@ export function isPriorWorkReviewRequest(question: string): boolean {
 }
 
 export function detectPaperRequest(question: string): PaperRequest | null {
-  if (!PAPER_RX.test(question)) return null;
-  if (/\b(systematic\s+review|meta[-\s]?analysis|prisma)\b/i.test(question)) {
+  // Explicit "write a paper/review/..." requests OR comparative/analytical
+  // research intents both produce a full structured manuscript.
+  if (!PAPER_RX.test(question) && !ANALYTICAL_RX.test(question)) return null;
+  if (/\b(systematic\s+reviews?|meta[-\s]?analys[ie]s|prisma)\b/i.test(question)) {
     return { standard: 'prisma_review', label: 'PRISMA-style evidence review manuscript' };
   }
   if (/\b(randomi[sz]ed|trial|consort)\b/i.test(question)) {

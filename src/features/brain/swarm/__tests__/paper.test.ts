@@ -35,6 +35,24 @@ describe('paper request helpers', () => {
     expect(request?.standard).toBe('prisma_review');
   });
 
+  it('routes comparative and analytical intents into the manuscript pipeline', () => {
+    expect(detectPaperRequest('Compare SGLT-2 inhibitors in HFrEF vs HFpEF')?.standard).toBe('imrad_review');
+    expect(detectPaperRequest('Overview of statin therapy for primary prevention')?.standard).toBe('imrad_review');
+    expect(detectPaperRequest('Evaluate the evidence on anticoagulation in atrial fibrillation')?.standard).toBe('imrad_review');
+    // An analytical intent that also names a reporting form keeps that form.
+    expect(detectPaperRequest('Analyze meta-analyses on antibiotic stewardship')?.standard).toBe('prisma_review');
+  });
+
+  it('leaves a plain factual question as a freeform answer (no manuscript)', () => {
+    expect(detectPaperRequest('What is the usual maintenance dose of metformin?')).toBeNull();
+    expect(detectPaperRequest('Does dapagliflozin cause hypoglycemia?')).toBeNull();
+  });
+
+  it('does not treat a prior-work review follow-up as a fresh paper request', () => {
+    // "rate that paper" is handled by the appraisal path, not the pipeline.
+    expect(detectPaperRequest('rate that paper')).toBeNull();
+  });
+
   it('maps journal style requests onto export templates', () => {
     expect(manuscriptStandardForQuestion('write this as an AMA manuscript')).toBe('ama');
     expect(manuscriptStandardForQuestion('draft for NEJM style')).toBe('nejm_style');
