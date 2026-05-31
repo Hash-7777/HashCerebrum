@@ -81,6 +81,21 @@ describe('message export helpers', () => {
     expect(cited).toHaveLength(2);
   });
 
+  it('normalises bare S<n> markers glued to the preceding word', () => {
+    const pool = [...Array(9)].map((_, i) => ({ ...citations[0]!, title: `Source ${i + 1}` }));
+    // Some models drop the brackets and glue the marker to the word
+    // (`inhibitionS8`, `CYP2 C19S9`). These must still renumber, gain a space,
+    // and a space-separated stray like "S100" must be left untouched.
+    const { content, citations: cited } = renumberCitations(
+      'CYP2C19 inhibitionS8. Confirmed through CYP2 C19S9. Stray S100 stays.',
+      pool,
+    );
+    expect(content).toBe(
+      'CYP2C19 inhibition [1]. Confirmed through CYP2 C19 [2]. Stray S100 stays.',
+    );
+    expect(cited).toHaveLength(2);
+  });
+
   it('strips model-generated reference sections before appending canonical export references', () => {
     const content = [
       '## Results',
