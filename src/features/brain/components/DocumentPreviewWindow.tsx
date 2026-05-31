@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { downloadBlob } from '../export/messageExport';
 import { useToastStore } from '@core/store/toastStore';
@@ -91,13 +91,13 @@ export function DocumentPreviewWindow({
 }) {
   const [rect, setRect] = useState(loadRect);
   const [copied, setCopied] = useState(false);
-  // A blob object URL is only created when we need to fall back to native PDF
-  // rendering (i.e. when no htmlContent is provided).  Tauri's WKWebView does
-  // not support inline PDF display in iframes, so the blob URL path is a
-  // best-effort fallback for non-Tauri environments.
+  // Object URL for the exported blob. We render the real PDF (rasterised with
+  // pdf.js, see PdfCanvasView) so the in-app preview is byte-identical to the
+  // file the user downloads — instead of a separate HTML approximation that
+  // drifted from it. The URL also backs the iframe fallback paths.
   const url = useMemo(
-    () => (!document.htmlContent && document.kind === 'pdf' ? URL.createObjectURL(document.blob) : ''),
-    [document.blob, document.kind, document.htmlContent],
+    () => (document.kind === 'pdf' ? URL.createObjectURL(document.blob) : ''),
+    [document.blob, document.kind],
   );
   const emptyBlob = document.blob.size < 64 && !document.htmlContent;
 
@@ -235,23 +235,76 @@ export function DocumentPreviewWindow({
               <strong>Preview unavailable</strong>
               <p>The exported file has no readable bytes. Regenerate the document, then export again.</p>
             </div>
-          ) : document.kind === 'pdf' && document.htmlContent ? (
-            // HTML preview: works in every WebView including Tauri WKWebView.
-            // Inline styles are fully rendered; sandbox="" blocks scripts/navigation.
-            <iframe
-              className="document-preview-pdf"
-              title={document.title}
-              srcDoc={document.htmlContent}
-              sandbox=""
-            />
           ) : document.kind === 'pdf' ? (
-            // Fallback: blob URL for non-Tauri Chromium environments.
-            <iframe className="document-preview-pdf" title={document.title} src={url} sandbox="" />
+            // Render the actual exported PDF with pdf.js so the preview matches
+            // the downloaded file exactly. On failure (e.g. the blob is an HTML
+            // fallback because PDF generation failed) it falls back to the HTML
+            // render, then to the native blob iframe.
+            <PdfCanvasView
+              url={url}
+              title={document.title}
+              {...(document.htmlContent ? { fallbackHtml: document.htmlContent } : {})}
+            />
           ) : (
             <pre>{document.copyText}</pre>
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+// Rasterises the exported PDF to canvas pages with pdf.js — the preview is the
+// same bytes as the downloaded file, so it can never visually drift from the
+// download. Falls back to the HTML render (then the native blob iframe) if
+// rasterisation fails — e.g. when the blob is the HTML fallback produced when
+// PDF generation itself failed.
+function PdfCanvasView({
+  url,
+  title,
+  fallbackHtml,
+}: {
+  url: string;
+  title: string;
+  fallbackHtml?: string;
+}) {
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    const host = pagesRef.current;
+    if (!host || !url) return;
+    host.replaceChildren();
+    setStatus('loading');
+    void (async () => {
+      try {
+        const { renderPdfToCanvases } = await import('@ui/pdf/pdfCanvas');
+        const { rendered } = await renderPdfToCanvases(url, host, () => cancelled, {
+          canvasClassName: 'document-preview-page',
+        });
+        if (!cancelled) setStatus(rendered > 0 ? 'ready' : 'error');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (status === 'error') {
+    return fallbackHtml ? (
+      <iframe className="document-preview-pdf" title={title} srcDoc={fallbackHtml} sandbox="" />
+    ) : (
+      <iframe className="document-preview-pdf" title={title} src={url} sandbox="" />
+    );
+  }
+
+  return (
+    <div className="document-preview-canvas-host" aria-label={`${title} preview`}>
+      {status === 'loading' && <div className="document-preview-loading">Rendering PDF…</div>}
+      <div ref={pagesRef} className="document-preview-canvas-pages" />
     </div>
   );
 }

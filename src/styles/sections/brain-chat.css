@@ -702,6 +702,40 @@
 .document-preview-body { min-height: 0; overflow: hidden; background: color-mix(in srgb, var(--ink-0) 72%, transparent); }
 .document-preview-pdf,
 .document-preview-body iframe { width: 100%; height: 100%; border: 0; background: #fff; color-scheme: light; }
+
+/* pdf.js canvas preview — a scrollable grey viewer with drop-shadowed pages,
+   so the in-app preview reads like a real PDF viewer and matches the download. */
+.document-preview-canvas-host {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  padding: 18px;
+  background: #525659;
+  text-align: center;
+}
+.document-preview-canvas-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.document-preview-page {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.document-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #e8ecf1;
+  font: 12px/1 var(--f-mono);
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
 .document-preview-empty {
   display: grid;
   place-items: center;

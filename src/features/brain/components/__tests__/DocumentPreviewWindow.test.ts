@@ -15,17 +15,21 @@ describe('DocumentPreviewWindow security', () => {
     }
   });
 
-  it('primary PDF path renders via srcDoc HTML (Tauri WKWebView compatible)', () => {
-    // The primary display path uses srcDoc with pre-built HTML so the preview
-    // works in every host WebView, including Tauri's WKWebView which cannot
-    // render PDF blobs inline in iframes.
-    expect(source).toContain('srcDoc=');
-    expect(source).toContain('htmlContent');
+  it('primary PDF path rasterises the real PDF with the pdf.js canvas renderer', () => {
+    // The preview renders the actual exported PDF (the same bytes as the
+    // download) via pdf.js canvases, so it can never visually drift from the
+    // downloaded file. WKWebView cannot show a PDF blob inline, but canvas
+    // rasterisation works in every host WebView.
+    expect(source).toContain('PdfCanvasView');
+    expect(source).toContain('@ui/pdf/pdfCanvas');
   });
 
-  it('blob URL path retained as fallback for non-Tauri environments', () => {
-    // The blob URL path is kept so the component still works when htmlContent
-    // is absent (e.g. legacy call-sites that predate the htmlContent field).
+  it('falls back to srcDoc HTML, then the native blob iframe, on render failure', () => {
+    // If rasterisation fails (e.g. the blob is the HTML fallback produced when
+    // PDF generation itself failed) the HTML render is shown; the blob URL
+    // iframe is the last resort.
+    expect(source).toContain('srcDoc=');
+    expect(source).toContain('fallbackHtml');
     expect(source).toContain('URL.createObjectURL(document.blob)');
     expect(source).toContain('src={url}');
   });
