@@ -29,14 +29,31 @@ function trace(phase: string, detail: string) {
 }
 
 const MAX_CHARS = 16_000;
+// Floor for the adaptive shrink below — small enough to clear an 8k TPM model.
+const MIN_CHARS = 4_000;
 
-function truncate(text: string): string {
-  if (text.length <= MAX_CHARS) return text;
-  return `${text.slice(0, MAX_CHARS)}\n\n[... truncated to ${MAX_CHARS} chars ...]`;
+function truncate(text: string, max: number = MAX_CHARS): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n\n[... truncated to ${max} chars ...]`;
 }
 
-function userMsg(text: string): string {
-  return `Please analyse the following manuscript:\n\n---\n${truncate(text)}\n---`;
+function userMsg(text: string, max: number = MAX_CHARS): string {
+  return `Please analyse the following manuscript:\n\n---\n${truncate(text, max)}\n---`;
+}
+
+// A provider rejecting the request because the prompt is too big for its
+// token/-per-minute budget (HTTP 413, "request too large", "reduce your message
+// size", a TPM-limit message). Recoverable by shrinking the document.
+function isTooLargeError(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes('413') ||
+    m.includes('request too large') ||
+    m.includes('reduce your message') ||
+    m.includes('tokens per minute') ||
+    m.includes('context length') ||
+    m.includes('too many tokens')
+  );
 }
 
 function bullets(block: string): string[] {
@@ -269,44 +286,54 @@ export async function runReviewSwarm(
   onPatch: OnAgentPatch,
   signal?: AbortSignal,
 ): Promise<PaperReview> {
-  const msg = userMsg(paperText);
-
   trace('start', `[Peer Review] swarm started — ${REVIEW_SWARM_AGENTS.length} agents`);
 
   const agentTask = async (def: ReviewAgentDef) => {
     onPatch(def.agentId, { status: 'running', text: '', items: [] });
     trace('start', `[Peer Review] ${def.label} running`);
     let accumulated = '';
-    try {
-      const res = await streamWithModelChain(
-        model,
-        {
-          messages: [
-            { role: 'system' as const, content: def.systemPrompt },
-            { role: 'user' as const, content: msg },
-          ],
-          temperature: 0.3,
-          maxTokens: def.maxTokens,
-        },
-        {
-          onToken: (delta) => {
-            accumulated += delta;
-            onPatch(def.agentId, { text: accumulated });
+    let budget = MAX_CHARS;
+    // Retry with a progressively smaller document when the model rejects the
+    // prompt as too large for its token budget (e.g. an 8k-TPM model). Safe to
+    // retry only before any token has streamed.
+    for (;;) {
+      accumulated = '';
+      try {
+        const res = await streamWithModelChain(
+          model,
+          {
+            messages: [
+              { role: 'system' as const, content: def.systemPrompt },
+              { role: 'user' as const, content: userMsg(paperText, budget) },
+            ],
+            temperature: 0.3,
+            maxTokens: def.maxTokens,
           },
-          signal,
-        },
-      );
-      const finalText = res.content || accumulated;
-      const parsed = bullets(finalText);
-      onPatch(def.agentId, { status: 'done', text: finalText, items: parsed });
-      trace('done', `[Peer Review] ${def.label} — ${parsed.length} items`);
-      return { agentId: def.agentId, text: finalText, modelUsed: res.modelUsed ?? model, error: undefined };
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') throw err;
-      const errMsg = err instanceof Error ? err.message : String(err);
-      onPatch(def.agentId, { status: 'error', error: errMsg });
-      trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
-      return { agentId: def.agentId, text: accumulated, modelUsed: model, error: errMsg };
+          {
+            onToken: (delta) => {
+              accumulated += delta;
+              onPatch(def.agentId, { text: accumulated });
+            },
+            signal,
+          },
+        );
+        const finalText = res.content || accumulated;
+        const parsed = bullets(finalText);
+        onPatch(def.agentId, { status: 'done', text: finalText, items: parsed });
+        trace('done', `[Peer Review] ${def.label} — ${parsed.length} items`);
+        return { agentId: def.agentId, text: finalText, modelUsed: res.modelUsed ?? model, error: undefined };
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') throw err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (isTooLargeError(err) && !accumulated && budget > MIN_CHARS) {
+          budget = Math.max(MIN_CHARS, Math.floor(budget / 2));
+          trace('tool_call', `[Peer Review] ${def.label}: prompt too large — retrying with ${budget} chars`);
+          continue;
+        }
+        onPatch(def.agentId, { status: 'error', error: errMsg });
+        trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
+        return { agentId: def.agentId, text: accumulated, modelUsed: model, error: errMsg };
+      }
     }
   };
 

@@ -78,12 +78,39 @@ async function readFileBytes(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.arrayBuffer());
 }
 
-function normalizeExtractedPdfText(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{4,}/g, '\n\n\n')
-    .trim();
+// lopdf's extract_text emits a newline per text run, so a single paragraph
+// arrives as many short fragment-lines (and the occasional stranded hyphen).
+// Re-flow it into readable paragraphs: rejoin hyphenated splits, then join
+// consecutive lines with a space, starting a new paragraph only at a blank
+// line or after a line that ends a sentence. Without this the editor and the
+// review agents see one fragment per line.
+export function normalizeExtractedPdfText(text: string): string {
+  const cleaned = text
+    .replace(/\r\n?/g, '\n')
+    // A hyphen stranded on its own line: "Cross\n-\nSectional" → "Cross-Sectional".
+    .replace(/\s*\n\s*-\s*\n\s*/g, '-')
+    // A word split across a line break: "under-\nutilized" → "underutilized".
+    .replace(/([A-Za-z])-\n+\s*([a-z])/g, '$1$2');
+
+  const paragraphs: string[] = [];
+  let current = '';
+  const flush = () => {
+    const trimmed = current.replace(/[ \t]{2,}/g, ' ').trim();
+    if (trimmed) paragraphs.push(trimmed);
+    current = '';
+  };
+  for (const rawLine of cleaned.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) {
+      flush();
+      continue;
+    }
+    current = current ? `${current} ${line}` : line;
+    // A line ending a sentence closes the paragraph.
+    if (/[.!?]["')\]]?$/.test(line)) flush();
+  }
+  flush();
+  return paragraphs.join('\n\n').trim();
 }
 
 export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
