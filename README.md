@@ -10,14 +10,14 @@
 
 Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all**.
 
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3dd1bf?style=flat-square)](LICENSE)
-[![Local-first](https://img.shields.io/badge/local--first-on--device-3dd1bf?style=flat-square)](#privacy--data-locality)
-[![No telemetry](https://img.shields.io/badge/telemetry-none-3dd1bf?style=flat-square)](#privacy--data-locality)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-333333?style=flat-square)](LICENSE)
+[![Local-first](https://img.shields.io/badge/local--first-on--device-333333?style=flat-square)](#privacy--data-locality)
+[![No telemetry](https://img.shields.io/badge/telemetry-none-333333?style=flat-square)](#privacy--data-locality)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust backend](https://img.shields.io/badge/Rust-backend-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Platform: macOS](https://img.shields.io/badge/macOS-desktop-111?style=flat-square&logo=apple&logoColor=white)](#getting-started)
+[![Platform: macOS](https://img.shields.io/badge/macOS-desktop-333333?style=flat-square&logo=apple&logoColor=white)](#getting-started)
 
 </div>
 
