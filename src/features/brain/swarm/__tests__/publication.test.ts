@@ -124,6 +124,24 @@ describe('publication artifact contract', () => {
     expect(() => assertPublicationReady(artifact)).toThrow(/publication validation/i);
   });
 
+  it('flags a fabricated primary study (the tool only reviews literature)', () => {
+    const fabricated: Manuscript = {
+      ...manuscript,
+      abstract: {
+        ...manuscript.abstract,
+        methods:
+          'A retrospective cohort study was conducted using electronic health records; propensity-score matching was applied to balance baseline kidney function [S1].',
+      },
+    };
+    const artifact = buildPublicationArtifact(fabricated, evidence);
+    expect(artifact.validation.blockers.some((issue) => issue.code === 'fabricated-primary-study')).toBe(true);
+  });
+
+  it('does not flag a faithful evidence-review abstract as fabrication', () => {
+    const artifact = buildPublicationArtifact(manuscript, evidence);
+    expect(artifact.validation.blockers.some((issue) => issue.code === 'fabricated-primary-study')).toBe(false);
+  });
+
   it('exports a markdown package with canonical references and SVG figure assets', () => {
     const artifact = buildPublicationArtifact(manuscript, evidence);
     const markdown = publicationMarkdown(manuscript, artifact);

@@ -682,6 +682,37 @@ function claimConsistencyIssues(manuscript: Manuscript): ValidationIssue[] {
   return issues;
 }
 
+// Detect the model fabricating an original primary study. This tool only
+// reviews retrieved literature, so first-person "we conducted a cohort /
+// enrolled patients / used EHR / applied propensity-score matching" language
+// is a hallucination that must never reach a reader of a medical document.
+function fabricatedPrimaryStudyIssues(manuscript: Manuscript): ValidationIssue[] {
+  const fabricationRx =
+    /\b(a\s+(retrospective|prospective)\s+cohort\s+study\s+was\s+conducted|we\s+(conducted|enrolled|recruited|anal\w+|performed\s+a\s+(cohort|study))|electronic\s+health\s+records?\s+(were|was)|propensity[-\s]?score\s+match|our\s+(cohort|study\s+population|analysis\s+of\s+patients)|patients\s+were\s+(enrolled|recruited|randomi[sz]ed))\b/i;
+  const issues: ValidationIssue[] = [];
+  const abstractText = Object.values(manuscript.abstract).filter(Boolean).join(' ');
+  if (fabricationRx.test(abstractText)) {
+    issues.push({
+      severity: 'blocker',
+      code: 'fabricated-primary-study',
+      section: 'Abstract',
+      message:
+        'The abstract describes original data collection (a conducted cohort / enrolled patients / EHR / propensity matching). This is an automated literature review — that methodology is fabricated and must be removed.',
+    });
+  }
+  for (const section of manuscript.sections) {
+    if (fabricationRx.test(section.body.join(' '))) {
+      issues.push({
+        severity: 'blocker',
+        code: 'fabricated-primary-study',
+        section: section.heading,
+        message: `${section.heading} claims original data collection (conducted study / enrolled patients / EHR / propensity matching), which is fabricated for an automated literature review and must be rewritten as a description of the retrieved evidence.`,
+      });
+    }
+  }
+  return issues;
+}
+
 function promptLeakageIssues(manuscript: Manuscript): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (containsPromptLeakage(manuscript.title)) {
@@ -795,6 +826,7 @@ function validateManuscript(
 
   issues.push(...unsupportedStatisticIssues(manuscript, evidence, dataset, extractions));
   issues.push(...claimConsistencyIssues(manuscript));
+  issues.push(...fabricatedPrimaryStudyIssues(manuscript));
   issues.push(...promptLeakageIssues(manuscript));
 
   if (references.length === 0 && citedSet.size > 0) {

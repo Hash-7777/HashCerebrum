@@ -53,6 +53,12 @@ DEPTH REQUIREMENT — this is the most important instruction:
 - A section that merely lists findings will be rejected. Develop each theme across multiple complete sentences and multiple paragraphs.
 - If the evidence is genuinely thin for this section, write a complete and transparent evidence-gap analysis — explain what is missing, why it matters, and what the absence implies — rather than producing a short section.
 
+EVIDENCE-REVIEW INTEGRITY — this overrides any instinct to write a conventional primary study:
+- This manuscript is an AUTOMATED REVIEW of already-published literature that the agents retrieved. You did NOT conduct a study of your own.
+- NEVER claim or imply that original data were collected. Do NOT write that "a retrospective cohort study was conducted", "we enrolled/recruited patients", "electronic health records were analysed", "propensity-score matching was applied", "AKI was defined by KDIGO in our cohort", or any equivalent — these are fabrications.
+- The Methods are ONLY the automated literature search and synthesis workflow (databases queried, search terms, eligibility, evidence-strength grading). There is no patient cohort, no dataset (unless an uploaded dataset is explicitly provided to you), no primary outcome you measured.
+- Report findings strictly as what the retrieved sources report ("study [S3] reported…"), never as results you produced. Any numeric result, incidence, or effect must be attributed to a specific retrieved source.
+
 CRITICAL FORMATTING RULES — deviations corrupt the manuscript pipeline:
 - Begin your reply with the first word of the section body. No preamble, no heading, no title, no number.
 - Write ONLY the content for the requested section. Never write content for any other section.
@@ -824,29 +830,67 @@ function specialistRoleDigest(specialists: SpecialistResult[]): string {
     .join('\n');
 }
 
-async function callModel(model: string, system: string, user: string, maxTokens: number): Promise<string> {
-  const response = await completeWithModelChain(
-    model,
-    {
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 0.22,
-      maxTokens,
-    },
-    // Surface a silent boss-model failover in the trace so a mid-run provider
-    // outage (e.g. an OpenRouter "Provider returned error" 404) is visible
-    // rather than only changing the model label after the fact.
-    (progress) => {
-      bus.emit('agent:activity', {
-        agentId: 'boss',
-        phase: 'tool_call',
-        detail: `model unavailable — switched to ${progress.to.shortLabel} (${progress.reason.slice(0, 80)})`,
-      });
-    },
+// A provider rejecting the request as too large for its token budget (HTTP
+// 413 / "request too large" / TPM or context-length limit). When the failover
+// chain lands on a small-budget model (e.g. gpt-oss-120b at 8k), a full section
+// prompt overflows; we recover by shrinking the prompt instead of dropping the
+// whole section.
+function isCallTooLarge(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes('413') ||
+    m.includes('request too large') ||
+    m.includes('tokens per minute') ||
+    m.includes('context length') ||
+    m.includes('too many tokens') ||
+    m.includes('maximum context')
   );
-  return response.content.trim();
+}
+
+const MIN_CALL_CHARS = 4_000;
+
+async function callModel(model: string, system: string, user: string, maxTokens: number): Promise<string> {
+  // Surface a silent boss-model failover in the trace so a mid-run provider
+  // outage is visible rather than only changing the model label afterwards.
+  const onProgress = (progress: { to: { shortLabel: string }; reason: string }) => {
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'tool_call',
+      detail: `model unavailable — switched to ${progress.to.shortLabel} (${progress.reason.slice(0, 80)})`,
+    });
+  };
+
+  let content = user;
+  let tokenCap = maxTokens;
+  for (;;) {
+    try {
+      const response = await completeWithModelChain(
+        model,
+        {
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content },
+          ],
+          temperature: 0.22,
+          maxTokens: tokenCap,
+        },
+        onProgress,
+      );
+      return response.content.trim();
+    } catch (err) {
+      if (isCallTooLarge(err) && content.length > MIN_CALL_CHARS) {
+        content = content.slice(0, Math.max(MIN_CALL_CHARS, Math.floor(content.length / 2)));
+        tokenCap = Math.min(tokenCap, 1500);
+        bus.emit('agent:activity', {
+          agentId: 'boss',
+          phase: 'tool_call',
+          detail: `section prompt too large — retrying smaller (${content.length} chars)`,
+        });
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 async function draftLedgerSection(opts: {
@@ -1038,8 +1082,8 @@ async function draftAbstract(opts: {
   try {
     const reply = await callModel(
       opts.model,
-      'You write structured scientific abstracts for source-grounded biomedical evidence reviews. Reply with exactly five labelled fields: Background:, Objective:, Methods:, Results:, Conclusions:. Do not add references or unsupported statistics.',
-      `Write a structured abstract for "${opts.title}" using only this manuscript body and these app-owned statistics.
+      'You write structured scientific abstracts for source-grounded biomedical AUTOMATED EVIDENCE REVIEWS. Reply with exactly five labelled fields: Background:, Objective:, Methods:, Results:, Conclusions:. Do not add references or unsupported statistics. CRITICAL: this is a review of retrieved published literature, not an original study. The Methods field must describe ONLY the automated literature search and synthesis — never claim a cohort was studied, patients were enrolled, electronic health records or propensity-score matching were used, or that you measured any outcome. The Results field reports what the retrieved sources found, never results you produced.',
+      `Write a structured abstract for "${opts.title}" using only this manuscript body and these app-owned statistics. This is an automated evidence review; do not invent a study design or primary data.
 
 Evidence-strength counts: strong ${strong}, moderate ${moderate}, weak ${weak}, context ${context}.
 Extracted numeric statistic/sample-size fields: ${numeric}.

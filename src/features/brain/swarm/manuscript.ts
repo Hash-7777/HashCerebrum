@@ -260,7 +260,10 @@ const EMPTY_ABSTRACT: ManuscriptAbstract = {
 // Anything unparseable falls back to the whole reply as Background so the
 // abstract is never empty.
 export function parseAbstract(reply: string): ManuscriptAbstract {
-  const cleanedReply = stripPromptLeakage(reply);
+  // Strip markdown bold markers up front — the model often wraps the field
+  // labels ("**Background:**") and prose in **, which otherwise leaks into the
+  // rendered abstract as literal "** ..." text.
+  const cleanedReply = stripPromptLeakage(reply).replace(/\*\*/g, '');
   const fields: (keyof ManuscriptAbstract)[] = [
     'background',
     'objective',
@@ -280,7 +283,11 @@ export function parseAbstract(reply: string): ManuscriptAbstract {
     const field = fields.find((f) => f.startsWith(key.slice(0, 6))) ?? 'background';
     const start = match.index! + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1]!.index! : cleanedReply.length;
-    abstract[field] = cleanedReply.slice(start, end).replace(/\s+/g, ' ').trim();
+    abstract[field] = cleanedReply
+      .slice(start, end)
+      .replace(/\s+/g, ' ')
+      .replace(/^[*\s.:—-]+|[*\s]+$/g, '')
+      .trim();
   });
   return abstract;
 }
