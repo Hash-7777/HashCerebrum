@@ -128,6 +128,8 @@ export const Transcript = memo(function Transcript({
   // content while pinned, so scrolling up to read scrollback is never
   // interrupted by an incoming answer.
   const pinnedRef = useRef(true);
+  // Coalesces auto-follow scrolls to one per animation frame.
+  const followRafRef = useRef<number | null>(null);
 
   const hasUserMessage = messages.some((m) => m.role === 'user');
   const capped = !showAll && messages.length > MESSAGE_CAP;
@@ -140,11 +142,27 @@ export const Transcript = memo(function Transcript({
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
+  // Auto-follow the bottom while streaming. Setting scrollTop synchronously on
+  // every token thrashes layout and stutters in WKWebView, so defer to the next
+  // frame (lands after the new content is laid out) and coalesce a burst of
+  // streaming updates into a single scroll. Re-check pinnedRef inside the frame
+  // so a scroll-up that happens before the frame runs is respected, not undone.
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !pinnedRef.current) return;
-    el.scrollTop = el.scrollHeight;
+    if (!pinnedRef.current) return;
+    if (followRafRef.current !== null) cancelAnimationFrame(followRafRef.current);
+    followRafRef.current = requestAnimationFrame(() => {
+      followRafRef.current = null;
+      const el = scrollRef.current;
+      if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+    });
   }, [messages]);
+
+  useEffect(
+    () => () => {
+      if (followRafRef.current !== null) cancelAnimationFrame(followRafRef.current);
+    },
+    [],
+  );
 
   const copyMessage = async (message: ChatMessage) => {
     try {
