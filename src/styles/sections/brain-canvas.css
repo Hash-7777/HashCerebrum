@@ -149,6 +149,14 @@
   color: var(--hc-fg-muted);
   font-size: 11px;
 }
+.brain-label-body .brain-label-agent {
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--hc-accent);
+  text-transform: uppercase;
+}
 @keyframes brain-label-in {
   from { opacity: 0; transform: translate3d(var(--x,0px), var(--y,0px), 0) scale(0.96); }
   to { opacity: 1; }

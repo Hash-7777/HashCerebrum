@@ -26,7 +26,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Parietal lobe',
     meshName: 'Parietal_Lobe',
     emissive: '#3ddc84', // green
-    description: 'Integration, attention',
+    description: 'Sensory integration, attention',
     anchor: [0.08, 1.02, 0.04],
   },
   {
@@ -34,7 +34,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Temporal lobe',
     meshName: 'Temporal_Lobe',
     emissive: '#ff9636', // orange
-    description: 'Auditory, language, pathology context',
+    description: 'Auditory & language processing',
     anchor: [0.84, 0.0, 0.26],
   },
   {
@@ -42,7 +42,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Occipital lobe',
     meshName: 'Occipital_Lobe',
     emissive: '#c77dff', // orchid
-    description: 'Visual processing, imaging',
+    description: 'Visual processing',
     anchor: [0.12, 0.52, -0.92],
   },
   {
@@ -58,7 +58,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Brainstem',
     meshName: 'Brainstem',
     emissive: '#ffc63d', // amber
-    description: 'Cardiorespiratory, autonomic',
+    description: 'Autonomic & cardiorespiratory control',
     anchor: [0, -0.92, -0.18],
   },
   {
@@ -66,7 +66,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Hippocampus',
     meshName: 'Hippocampus',
     emissive: '#22d3ee', // cyan
-    description: 'Memory, recall — Librarian binding',
+    description: 'Memory & recall',
     anchor: [-0.5, -0.2, 0.16],
   },
   {
@@ -74,7 +74,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Amygdala',
     meshName: 'Amygdala',
     emissive: '#ff5a5a', // red
-    description: 'Skepticism, threat — Critic binding',
+    description: 'Threat & salience processing',
     anchor: [-0.62, -0.22, 0.45],
   },
   {
@@ -82,7 +82,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Thalamus',
     meshName: 'Thalamus',
     emissive: '#b9f24a', // lime
-    description: 'Central relay — agent orchestration',
+    description: 'Central sensory relay',
     anchor: [0, 0.05, 0.1],
   },
   {
@@ -90,7 +90,7 @@ export const REGIONS: RegionMeta[] = [
     label: 'Basal ganglia',
     meshName: 'Basal_Ganglia',
     emissive: '#6d5cff', // indigo
-    description: 'Neurochemistry — Pharmacologist binding',
+    description: 'Movement & reward signalling',
     anchor: [0.48, -0.03, 0.22],
   },
 ];

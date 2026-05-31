@@ -10,21 +10,40 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { RegionId } from '@config/agents';
+import { agentForRegion, type RegionId } from '@config/agents';
 import { regionById } from '../data/regions';
 
 interface OverlayProps {
   cameraRef: React.MutableRefObject<THREE.Camera | null>;
   containerRef: React.RefObject<HTMLDivElement>;
+  // The rotating brain group. Region anchors are authored in the group's local
+  // space, so we transform them by its world matrix each frame — otherwise the
+  // label stays put while the brain auto-rotates underneath it.
+  groupRef: React.MutableRefObject<THREE.Group | null>;
   hoveredRegion: RegionId | null;
   selectedRegion: RegionId | null;
 }
 
 const HOVER_DELAY_MS = 160;
+// Keep the whole label box this many px clear of the canvas edges.
+const EDGE_MARGIN = 10;
+// The label box is shifted up by this many px in CSS (margin-top), so its
+// rendered top edge sits above the transform anchor — account for it when
+// clamping vertically so the box, not the anchor, stays on screen.
+const LABEL_Y_OFFSET = 14;
 
-// Project a world-space point to {left, top, visible} in container px.
-function project(camera: THREE.Camera, anchor: [number, number, number], width: number, height: number) {
-  const v = new THREE.Vector3(...anchor).project(camera);
+// Project a group-local point to {x, y, visible} in container px, following the
+// brain's live rotation/tilt via the group's world matrix.
+function project(
+  camera: THREE.Camera,
+  group: THREE.Group | null,
+  anchor: [number, number, number],
+  width: number,
+  height: number,
+) {
+  const v = new THREE.Vector3(...anchor);
+  if (group) v.applyMatrix4(group.matrixWorld);
+  v.project(camera);
   return {
     x: (v.x * 0.5 + 0.5) * width,
     y: (-v.y * 0.5 + 0.5) * height,
@@ -32,7 +51,13 @@ function project(camera: THREE.Camera, anchor: [number, number, number], width: 
   };
 }
 
-export function BrainOverlay({ cameraRef, containerRef, hoveredRegion, selectedRegion }: OverlayProps) {
+// Clamp v into [lo, hi]; if the available span is smaller than the box itself
+// (hi < lo), pin to lo so the box never escapes the leading edge.
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(Math.max(v, lo), Math.max(lo, hi));
+}
+
+export function BrainOverlay({ cameraRef, containerRef, groupRef, hoveredRegion, selectedRegion }: OverlayProps) {
   const [delayedHover, setDelayedHover] = useState<RegionId | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -73,23 +98,33 @@ export function BrainOverlay({ cameraRef, containerRef, hoveredRegion, selectedR
         raf = requestAnimationFrame(loop);
         return;
       }
-      const pos = project(camera, region.anchor, width, height);
+      const pos = project(camera, groupRef.current, region.anchor, width, height);
       if (!pos.visible) {
         label.style.opacity = '0';
         raf = requestAnimationFrame(loop);
         return;
       }
-      const clampedX = Math.min(Math.max(pos.x, 12), width - 12);
-      const clampedY = Math.min(Math.max(pos.y, 12), height - 12);
+      // Clamp the whole box — measured each frame so a late font/content
+      // reflow can't reintroduce a cut-off — not just its anchor point.
+      const boxW = label.offsetWidth;
+      const boxH = label.offsetHeight;
+      const clampedX = clamp(pos.x, EDGE_MARGIN, width - boxW - EDGE_MARGIN);
+      const clampedY = clamp(
+        pos.y,
+        EDGE_MARGIN + LABEL_Y_OFFSET,
+        height - boxH - EDGE_MARGIN + LABEL_Y_OFFSET,
+      );
       label.style.opacity = '1';
       label.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0)`;
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [cameraRef, containerRef, region, visibleId]);
+  }, [cameraRef, containerRef, groupRef, region, visibleId]);
 
-  if (!region) return null;
+  if (!region || !visibleId) return null;
+
+  const agent = agentForRegion(visibleId);
 
   return (
     <div className="brain-overlay" aria-hidden="true">
@@ -98,6 +133,7 @@ export function BrainOverlay({ cameraRef, containerRef, hoveredRegion, selectedR
         <div className="brain-label-body">
           <strong>{region.label}</strong>
           <span>{region.description}</span>
+          {agent && <span className="brain-label-agent">{agent.label}</span>}
         </div>
       </div>
     </div>

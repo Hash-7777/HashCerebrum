@@ -147,3 +147,10 @@ export function agentById(id: AgentId): AgentDef {
   if (!found) throw new Error(`Unknown agent id: ${id}`);
   return found;
 }
+
+// The agent bound to a brain region, or undefined for ambient regions
+// (cerebellum, brainstem) that no agent claims. Derived from AGENTS so the
+// region tooltip can never drift out of sync with the roster.
+export function agentForRegion(regionId: RegionId): AgentDef | undefined {
+  return AGENTS.find((agent) => agent.regionBinding === regionId);
+}

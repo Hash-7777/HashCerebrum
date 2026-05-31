@@ -237,15 +237,15 @@ const BrainMesh = React.memo(function BrainMesh({
 interface BrainModelProps extends BrainCanvasProps {
   rotateEnabled: boolean;
   performanceMode: boolean;
+  groupRef: React.MutableRefObject<THREE.Group | null>;
 }
 
-function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProps) {
+function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: BrainModelProps) {
   const tick = useBrainStore((store) => store.tick);
   const hasActiveGlow = useBrainStore((store) =>
     Object.values(store.regions).some((region) => region.base > 0.01 || region.accent > 0.01),
   );
   const invalidate = useThree((state) => state.invalidate);
-  const groupRef = useRef<THREE.Group>(null);
   const lastTickRef = useRef(0);
   const parts = useBrainMeshParts();
 
@@ -295,6 +295,7 @@ function BrainModel({ rotateEnabled, performanceMode, ...props }: BrainModelProp
 interface SceneProps extends BrainCanvasProps {
   cameraRef: React.MutableRefObject<THREE.Camera | null>;
   controlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
+  groupRef: React.MutableRefObject<THREE.Group | null>;
   performanceMode: boolean;
 }
 
@@ -306,12 +307,12 @@ function CameraCapture({ cameraRef }: { cameraRef: React.MutableRefObject<THREE.
   return null;
 }
 
-function BrainScene({ cameraRef, controlsRef, performanceMode, ...props }: SceneProps) {
+function BrainScene({ cameraRef, controlsRef, groupRef, performanceMode, ...props }: SceneProps) {
   const [rotateEnabled, setRotateEnabled] = useState(true);
   const scene = (
     <>
       <CameraCapture cameraRef={cameraRef} />
-      <BrainModel {...props} rotateEnabled={rotateEnabled} performanceMode={performanceMode} />
+      <BrainModel {...props} groupRef={groupRef} rotateEnabled={rotateEnabled} performanceMode={performanceMode} />
       {!performanceMode && (
         <EffectComposer multisampling={4} autoClear={false}>
           <Outline blur edgeStrength={3.4} pulseSpeed={0.25} visibleEdgeColor={0x3dd1bf} hiddenEdgeColor={0x1d2533} />
@@ -377,6 +378,7 @@ function BrainCanvasInner(props: BrainCanvasProps) {
   const [visible, setVisible] = useState(true);
   const cameraRef = useRef<THREE.Camera | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const groupRef = useRef<THREE.Group | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasDpr = useMemo<[number, number]>(() => (performanceMode ? [0.75, 1] : [1, 2]), [performanceMode]);
   const glOptions = useMemo(
@@ -479,12 +481,13 @@ function BrainCanvasInner(props: BrainCanvasProps) {
         <directionalLight position={[2.8, 4.2, 3.5]} intensity={performanceMode ? 1.4 : 1.95} color="#f3eee2" castShadow={!performanceMode} />
         <directionalLight position={[-3.4, 0.6, -2.4]} intensity={performanceMode ? 0.5 : 0.78} color="#5fdcd0" />
         <Suspense fallback={<LoadingModel />}>
-          <BrainScene cameraRef={cameraRef} controlsRef={controlsRef} performanceMode={performanceMode} {...props} />
+          <BrainScene cameraRef={cameraRef} controlsRef={controlsRef} groupRef={groupRef} performanceMode={performanceMode} {...props} />
         </Suspense>
       </Canvas>
       <BrainOverlay
         cameraRef={cameraRef}
         containerRef={containerRef}
+        groupRef={groupRef}
         hoveredRegion={props.hoveredRegion}
         selectedRegion={props.selectedRegion}
       />
