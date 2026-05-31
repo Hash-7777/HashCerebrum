@@ -4,6 +4,16 @@
 .memory-mode {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  /* Fill the mode host and give the single row an explicit, bounded track.
+     Without grid-template-rows the implicit row is content-sized, so neither
+     the list nor the graph below gets a real height for overflow:auto — the
+     list then can't scroll. height:100% + align-items:stretch also undo the
+     `height:auto`/`align-items:center` that leak from the shell's rail-button
+     `.mode` rule (the cause of the content being stuck in the middle). */
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
   padding: 14px;
   min-width: 0;
 }
