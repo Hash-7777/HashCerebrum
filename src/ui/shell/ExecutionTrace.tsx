@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
 import { Icon, type IconName } from '@ui/icons';
+
+// How close to the bottom (px) still counts as "following" the latest output.
+const STICK_THRESHOLD = 28;
 
 const TRACE_LIMIT = 120;
 
@@ -44,6 +47,16 @@ export function ExecutionTrace() {
   const activity = useAgentStore((s) => s.activity);
   const clear = useAgentStore((s) => s.clear);
   const [expanded, setExpanded] = useState(false);
+  const entriesRef = useRef<HTMLDivElement>(null);
+  // Follow new output by default; released when the user scrolls up, re-armed
+  // when they scroll back to the bottom.
+  const followRef = useRef(true);
+
+  const onScroll = () => {
+    const el = entriesRef.current;
+    if (!el) return;
+    followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD;
+  };
 
   useEffect(() => {
     const onToggle = () => setExpanded((v) => !v);
@@ -59,6 +72,18 @@ export function ExecutionTrace() {
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);
   const startTime = visible[0]?.ts ?? Date.now();
+
+  // Opening the panel re-arms following so it jumps to the latest line.
+  useEffect(() => {
+    if (expanded) followRef.current = true;
+  }, [expanded]);
+
+  // Stick to the bottom as new entries arrive — unless the user scrolled up.
+  useEffect(() => {
+    const el = entriesRef.current;
+    if (!el || !expanded || !followRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [visible, expanded]);
 
   return (
     <aside className={`execution-trace ${expanded ? 'expanded' : 'collapsed'}`} aria-label="Execution trace">
@@ -91,7 +116,7 @@ export function ExecutionTrace() {
         <Icon name="eye" size={13} />
       </div>
 
-      <div className="execution-trace-entries">
+      <div className="execution-trace-entries" ref={entriesRef} onScroll={onScroll}>
         {visible.length === 0 && (
           <div className="execution-trace-entry trace-wait">
             <span className="trace-time">[0.0s]</span>
