@@ -18,7 +18,10 @@ describe('release security configuration', () => {
       expect(policy).toContain("object-src 'none'");
       expect(policy).toContain("frame-ancestors 'none'");
       expect(policy).toContain("frame-src 'self' blob:");
-      expect(policy).toContain("connect-src 'self' ipc: http://ipc.localhost");
+      // blob: is allowed so pdf.js can read the in-memory exported PDF for the
+      // preview; it is local-only and cannot reach the network, so no external
+      // host is permitted (asserted below).
+      expect(policy).toContain("connect-src 'self' blob: ipc: http://ipc.localhost");
       expect(policy).not.toMatch(/api\.openai|generativelanguage|anthropic|openrouter|localhost:11434/);
     }
   });

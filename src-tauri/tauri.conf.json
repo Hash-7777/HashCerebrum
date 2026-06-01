@@ -47,13 +47,17 @@
       // 'unsafe-inline' on style-src is needed for runtime theme tokens
       // and Three.js/R3F dynamic styles.
       //
-      // connect-src is limited to 'self' and the Tauri IPC origin: the
-      // renderer only talks to Rust, never to a provider host directly.
+      // connect-src is limited to 'self', blob:, and the Tauri IPC origin:
+      // the renderer only talks to Rust, never to a provider host directly.
+      // blob: is required so pdf.js can read the in-memory exported PDF it
+      // rasterises for the in-app preview (the worker fetches the blob: URL);
+      // a blob: URL is local in-memory data and cannot reach the network, so
+      // the zero-egress guarantee is unchanged — no external host is allowed.
       //
       // frame-src allows 'self' and blob: so the in-app document preview
       // can render an exported PDF (a blob: URL) inside its <iframe>.
-      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-      "devCsp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob: ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+      "devCsp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob: ipc: http://ipc.localhost; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },
 
