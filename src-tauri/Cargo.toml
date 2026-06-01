@@ -3,7 +3,7 @@
 # ==============================================================
 [package]
 name        = "hashcerebrum"
-version     = "0.1.0"
+version     = "1.1.0"
 description = "HashCerebrum — Medical research agent app with 3D anatomical brain"
 authors     = ["Dr Seif Hashish"]
 edition     = "2021"

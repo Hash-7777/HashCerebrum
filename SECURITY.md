@@ -46,17 +46,14 @@ That is the only path off your device. For zero egress, use Ollama.
 
 ## Supported versions
 
-The project is pre-1.0 and ships from `main`. Only the latest released version
-and the current `main` branch receive security fixes.
+The project ships from `main`. Only the latest released version and the current
+`main` branch receive security fixes.
 
 | Version | Supported |
 |---|---|
 | `main` (latest) | ✅ |
-| `0.1.x` | ✅ |
-| < `0.1.0` | ❌ |
-
-Once a stable `1.x` line is published, this table will be updated to reflect the
-supported release window.
+| `1.1.x` | ✅ |
+| < `1.1.0` | ❌ |
 
 ## Reporting a vulnerability
 
