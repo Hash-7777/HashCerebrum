@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
+import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 
 export function Composer({
   query,
@@ -30,6 +31,8 @@ export function Composer({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const memoryEnabled = useMemorySettingsStore((s) => s.enabled);
+  const toggleMemory = useMemorySettingsStore((s) => s.toggle);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -109,6 +112,21 @@ export function Composer({
             </button>
             <button type="button" className="icon-btn" title="Search">
               <Icon name="search" size={15} />
+            </button>
+            <button
+              type="button"
+              className="memory-toggle-chip"
+              data-on={memoryEnabled}
+              onClick={toggleMemory}
+              aria-pressed={memoryEnabled}
+              title={
+                memoryEnabled
+                  ? 'Memory ON — research may reuse saved findings. Click to research from scratch.'
+                  : 'Memory OFF — researching from fresh sources only. Click to reuse saved findings.'
+              }
+            >
+              <Icon name="database" size={13} />
+              Memory {memoryEnabled ? 'on' : 'off'}
             </button>
           </div>
           <div className="tools-right">

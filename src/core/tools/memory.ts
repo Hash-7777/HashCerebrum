@@ -3,6 +3,7 @@
 // client-side and offline (see ragStore.ts); no network, no IPC.
 
 import { useProjectStore } from '@core/store/projectStore';
+import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { retrieve, type RagSearchHit } from '@core/rag';
 import { tools } from './ToolRegistry';
 
@@ -52,6 +53,15 @@ export function registerMemoryTools() {
       const raw = (args ?? {}) as { query?: unknown; limit?: unknown };
       const query = typeof raw.query === 'string' ? raw.query.trim() : '';
       if (!query) throw new Error('query is required');
+      // Memory use can be switched off from the composer for a clean, "from
+      // scratch" run that relies only on freshly fetched sources.
+      if (!useMemorySettingsStore.getState().enabled) {
+        return {
+          source: 'rag',
+          count: 0,
+          text: 'Project memory is turned off for this run — research fresh from external sources only.',
+        };
+      }
       const parsedLimit = Number(raw.limit);
       const limit = Number.isFinite(parsedLimit)
         ? Math.min(LIMIT_MAX, Math.max(1, Math.round(parsedLimit)))

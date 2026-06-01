@@ -21,6 +21,7 @@ import { usePeerReviewStore } from '@core/store/peerReviewStore';
 import { useModeStore } from '@core/store/modeStore';
 import { manuscriptToReadableText } from '../swarm/manuscript';
 import { Icon } from '@ui/icons';
+import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import {
   buildExportHtml,
   buildMarkdownExport,
@@ -349,7 +350,7 @@ export const Transcript = memo(function Transcript({
                         </button>
                       )}
                       <button type="button" onClick={() => void openPdfPreview(message, actualIndex)} className="action">
-                        <Icon name="filePdf" size={13} /> PDF
+                        <PdfGlyph size={15} /> PDF
                       </button>
                       <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
                         <Icon name="document" size={13} /> MD

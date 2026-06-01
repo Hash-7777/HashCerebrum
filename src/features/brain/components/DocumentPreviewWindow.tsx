@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon } from '@ui/icons';
+import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import { downloadBlob } from '../export/messageExport';
 import { useToastStore } from '@core/store/toastStore';
 
@@ -210,9 +211,12 @@ export function DocumentPreviewWindow({
           />
         ))}
         <header className="document-preview-titlebar" onPointerDown={startDrag}>
-          <div className="document-preview-title">
-            <strong>{document.filename}</strong>
-            <span>{document.typeLabel} · {formatBytes(document.blob.size)}</span>
+          <div className="document-preview-lead">
+            {document.kind === 'pdf' && <PdfGlyph size={26} />}
+            <div className="document-preview-title">
+              <strong>{document.filename}</strong>
+              <span>{document.typeLabel} · {formatBytes(document.blob.size)}</span>
+            </div>
           </div>
           <div className="document-preview-actions">
             <button type="button" onClick={() => void copyDocument()} title="Copy text">

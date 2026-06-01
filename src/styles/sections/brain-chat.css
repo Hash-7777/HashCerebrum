@@ -580,6 +580,30 @@
 }
 .dataset-chip:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--line-strong); }
 
+/* Memory on/off toggle in the composer toolbar. */
+.memory-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-3);
+  font: 12px/1 var(--f-mono);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.memory-toggle-chip:hover { border-color: var(--line-strong); color: var(--text-1); }
+.memory-toggle-chip[data-on='true'] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* When OFF, show a struck-through look so it reads as disabled at a glance. */
+.memory-toggle-chip[data-on='false'] { opacity: 0.78; }
+
 .send-btn {
   display: inline-flex;
   align-items: center;
@@ -681,6 +705,8 @@
   user-select: none;
 }
 .document-preview-titlebar:active { cursor: grabbing; }
+.document-preview-lead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.document-preview-lead > svg { flex: none; }
 .document-preview-title { display: grid; min-width: 0; }
 .document-preview-title strong { overflow: hidden; color: var(--hc-fg); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .document-preview-title span { overflow: hidden; color: var(--hc-fg-dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
