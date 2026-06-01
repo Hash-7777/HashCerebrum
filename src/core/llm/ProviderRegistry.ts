@@ -128,13 +128,23 @@ async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmReque
   return result;
 }
 
+function ollamaOptions(req: LlmRequest): Record<string, unknown> {
+  return {
+    temperature: req.temperature ?? 0.4,
+    num_ctx: 8192,
+    // Honour the caller's output cap when given (Ollama ignores max_tokens; the
+    // equivalent is options.num_predict). Omitted => Ollama's default (no cap).
+    ...(req.maxTokens ? { num_predict: req.maxTokens } : {}),
+  };
+}
+
 async function completeOllama(req: LlmRequest): Promise<LlmResponse> {
   const body: Record<string, unknown> = {
     model: req.model,
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
     stream: false,
     keep_alive: -1,
-    options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
+    options: ollamaOptions(req),
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
   const data = await postJson<{ message?: { content?: string; tool_calls?: unknown[] } }>(
@@ -264,7 +274,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
     keep_alive: -1,
-    options: { temperature: req.temperature ?? 0.4, num_ctx: 8192 },
+    options: ollamaOptions(req),
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
   let content = '';
