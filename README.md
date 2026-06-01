@@ -1,14 +1,10 @@
 <div align="center">
 
-<img width="200" height="200" alt="Sketches" style="border-radius: 500px;" src="https://github.com/user-attachments/assets/1d7fabb4-b697-4ca1-8a2c-b4ceac2aa7ae">
-
-<div align="center">
+<img width="200" height="200" alt="HashCerebrum" style="border-radius: 500px;" src="https://github.com/user-attachments/assets/1d7fabb4-b697-4ca1-8a2c-b4ceac2aa7ae">
 
 # HashCerebrum
 
 ### A private, local-first agentic desktop app for medical research
-
-Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all**.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-333333?style=flat-square)](LICENSE)
 [![Local-first](https://img.shields.io/badge/local--first-on--device-333333?style=flat-square)](#privacy--data-locality)
@@ -20,6 +16,8 @@ Your research stays on your machine. HashCerebrum is a **local-first desktop app
 [![Platform: macOS](https://img.shields.io/badge/macOS-desktop-333333?style=flat-square&logo=apple&logoColor=white)](#getting-started)
 
 </div>
+
+Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all** — including the embedding model that powers memory, which is bundled and runs on-device.
 
 ---
 
@@ -89,16 +87,16 @@ After the review, **Fix Problems** opens a live `contenteditable` document edito
 
 ## Semantic memory (private, on-device)
 
-Every research run saves the findings it actually cited into a per-project memory
-that the agents can reuse — and it works by **meaning, not keywords**. A small,
-medical-tuned embedding model (**MedEmbed-small**, Apache-2.0) is **bundled in the
-app** and runs entirely on-device in a Web Worker, so a search for "MI" finds a
-paper about "myocardial infarction." Nothing is downloaded at runtime and no text
-leaves the machine.
+Every research run saves the findings it actually cited, and later research can
+reuse them **across all your projects** — ranked to prefer the one you're in.
+Retrieval works by **meaning, not keywords**: a small, medical-tuned embedding
+model (**MedEmbed-small**, Apache-2.0) is **bundled in the app** and runs entirely
+on-device in a Web Worker, so a search for "MI" finds a paper about "myocardial
+infarction." Nothing is downloaded at runtime and no text leaves the machine.
 
-- **Hybrid retrieval** — semantic (vector) similarity fused with lexical search
-  via Reciprocal Rank Fusion, then weighted toward the active project; results are
-  re-ranked by evidence strength + recency and de-duplicated (MMR).
+- **Hybrid, cross-project retrieval** — semantic (vector) similarity fused with
+  lexical search via Reciprocal Rank Fusion, weighted toward the active project;
+  results are re-ranked by evidence strength + recency and de-duplicated (MMR).
 - **Offline term normalisation** — a built-in brand↔generic / abbreviation
   dictionary (Tylenol↔acetaminophen, MI↔myocardial infarction, plus common
   Egyptian and international brands) widens each search, fully offline.
@@ -193,7 +191,8 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 **Prerequisites:** Node ≥ 20 and the [Rust toolchain](https://rustup.rs).
 
 ```sh
-# Install dependencies
+# Install dependencies (offline-clean — no native binary downloads;
+# the bundled embedding model is committed, so there is no extra setup step)
 npm install
 
 # Desktop development (hot reload — Tauri + Vite)
@@ -239,16 +238,18 @@ src/
   core/
     bus/           typed EventBus
     llm/           provider registry, model catalog, streaming
-    store/         Zustand stores — brain, agents, projects, runs, memory
+    rag/           semantic memory — embeddings, hybrid retrieval, vector store
+    store/         Zustand stores — brain, agents, projects, runs, reset
     tools/         ToolRegistry — medical, stat, memory tools
   features/
     brain/         3D canvas, swarm runner, paper pipeline, manuscript editor
-    memory/        per-project RAG store + TF-IDF postings + brain diagram
+    memory/        memory UI — semantic search, 3D vector map (PCA), prune
     peer_review/   review swarm, document editor, report PDF export
     resources/     saved-paper library
   platform/
     tauri/         Tauri IPC bindings (the ONLY caller of invoke())
     browser/       mock implementation for browser dev
+  workers/         embed.worker.ts — in-app embeddings (transformers.js, WASM)
   ui/              shell, icons, shared components
 
 src-tauri/
@@ -272,7 +273,7 @@ User prompt
 detectPaperRequest()  ──no──▶  normal chat answer
     │ yes
     ▼
-Parallel evidence fetch  (PubMed · PMC · OpenAlex · ClinicalTrials · openFDA · RxNorm)
+Parallel evidence fetch  (PubMed · PMC · OpenAlex · ClinicalTrials · openFDA · RxNorm · Semantic Scholar)
     │
     ▼
 extractEvidenceFromRecords()  →  structured rows: [design, population, exposure,
