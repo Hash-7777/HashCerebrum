@@ -104,8 +104,3 @@ docs/SESSION_HANDOFF.md
 REMAINING_WORK.md
 *_REPORT.md
 *_AUDIT.md
-
-# Bundled embedding model weights — fetched via `npm run setup:models`,
-# not committed (large binaries; exceed the pre-commit 5 MB limit). The
-# README in that folder stays tracked.
-public/models/embed/*/

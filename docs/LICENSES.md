@@ -82,8 +82,8 @@ The semantic memory uses a small, fixed, **pre-trained sentence-embedding model*
 
 | Asset | License | Notes |
 |---|---|---|
-| `abhinand/MedEmbed-small-v0.1` (default) | Apache-2.0 | medical/clinical fine-tune of bge-small; converted to ONNX and vendored. Retain NOTICE + model card; cite the MedEmbed authors. |
-| `Xenova/bge-small-en-v1.5` (fallback) | MIT | prebuilt transformers.js export; same 384-dim drop-in. Retain license text. |
+| `abhinand/MedEmbed-small-v0.1` (default, **committed & bundled**) | Apache-2.0 | medical/clinical fine-tune of bge-small; exported to int8 ONNX and vendored at `public/models/embed/medembed-small-v0.1/` with `LICENSE.md`. Ships in the app. |
+| `BAAI/bge-small-en-v1.5` (optional fallback) | MIT | same 384-dim drop-in; not bundled by default — regenerate with `scripts/convert-embed-model.py` if needed. |
 
 Models **rejected for licensing** (kept out of the tree on purpose): BioLORD-2023
 (commercial use conditional on UMLS/SNOMED-CT licensing) and EmbeddingGemma /
