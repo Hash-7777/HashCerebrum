@@ -305,6 +305,51 @@
   color: var(--hc-fg-dim);
   pointer-events: none;
 }
+/* Cluster legend — top-right chips, one per semantic group. Click to focus. */
+.memory-vec3d-clusters {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  max-width: 46%;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+.memory-vec3d-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--hc-radius-pill);
+  background: rgba(3, 7, 12, 0.66);
+  backdrop-filter: blur(10px);
+  font-size: 11px;
+  color: var(--hc-fg);
+  cursor: pointer;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.memory-vec3d-cluster:hover { border-color: rgba(255, 255, 255, 0.28); }
+.memory-vec3d-cluster[data-active='true'] {
+  border-color: var(--accent);
+  background: rgba(3, 7, 12, 0.85);
+}
+.memory-vec3d-cluster[data-muted='true'] { opacity: 0.4; }
+.memory-vec3d-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 6px currentColor;
+}
+.memory-vec3d-cluster-count {
+  font: 10px var(--hc-font-mono);
+  color: var(--hc-fg-dim);
+}
 .memory-vec3d-label-wrap { pointer-events: none; }
 .memory-vec3d-label {
   display: inline-block;
