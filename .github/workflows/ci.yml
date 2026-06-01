@@ -31,6 +31,12 @@ concurrency:
 permissions:
   contents: read # lock GITHUB_TOKEN to read-only; no write surface exposed
 
+# onnxruntime-node (a hard dep of @huggingface/transformers) downloads a native
+# binary on install, which times out on CI. We only use onnxruntime-web (WASM),
+# so skip that download. Also pinned in .npmrc for local installs.
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
