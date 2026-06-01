@@ -421,6 +421,7 @@ export function MemoryGraphView({
                 onPointerEnter={() => setHoverId(node.id)}
                 onPointerLeave={() => setHoverId((current) => (current === node.id ? null : current))}
               >
+                <circle className="memory-graph-halo" r={radius * 2.4} />
                 <circle className="memory-graph-dot" r={radius} />
                 {showLabel ? (
                   <text

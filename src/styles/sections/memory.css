@@ -328,6 +328,18 @@
 
 .memory-graph-node { cursor: grab; }
 .memory-graph-node:active { cursor: grabbing; }
+/* Soft cluster-coloured halo behind a node, revealed on hover / lit / selected.
+   Scales with the node radius (graph units) so it tracks zoom naturally. */
+.memory-graph-halo {
+  fill: var(--cluster-color, var(--hc-accent));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--hc-ease);
+}
+.memory-graph-node:hover .memory-graph-halo { opacity: 0.1; }
+.memory-graph-node[data-state='lit'] .memory-graph-halo { opacity: 0.14; }
+.memory-graph-node[data-selected='true'] .memory-graph-halo { opacity: 0.22; }
+.memory-graph-node[data-state='dim'] .memory-graph-halo { opacity: 0; }
 .memory-graph-dot {
   fill: var(--cluster-color, var(--hc-accent));
   stroke: var(--hc-bg-canvas);
