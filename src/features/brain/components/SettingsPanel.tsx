@@ -180,6 +180,45 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </ul>
       </section>
 
+      <section className="settings-privacy" aria-label="Privacy and data locality">
+        <header>
+          <strong>
+            <Icon name="lock" size={12} /> Privacy &amp; data
+          </strong>
+          <span className="settings-privacy-pill" data-on={localOnly}>
+            {localOnly ? 'Local-only' : 'Standard'}
+          </span>
+        </header>
+        <p>
+          Local-first. Your projects, saved findings, evidence cache, audit log, and API keys stay on
+          this device — no account, no cloud, no telemetry. The interface cannot make a network call;
+          only the Rust core can, and only to the destinations below.
+        </p>
+        <ul className="settings-privacy-facts">
+          <li>
+            <span>Evidence sources</span>
+            <span>PubMed · Europe PMC · OpenAlex · ClinicalTrials.gov · openFDA · RxNorm · Semantic Scholar</span>
+          </li>
+          <li>
+            <span>LLM provider</span>
+            <span>Only the provider you configure receives your prompts</span>
+          </li>
+          <li>
+            <span>Telemetry</span>
+            <span>None</span>
+          </li>
+        </ul>
+        <label className="toggle-row">
+          <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
+          <span>Local-only mode — block cloud providers, use a local Ollama model only</span>
+        </label>
+        <p className="settings-privacy-note">
+          {localOnly
+            ? 'Cloud providers are blocked. With a local Ollama model the app makes no external LLM calls — your prompts never leave this device.'
+            : 'A cloud provider receives your prompt (question + retrieved evidence) under its own terms. For zero external calls, enable Local-only and use Ollama.'}
+        </p>
+      </section>
+
       <section className="settings-theme" aria-label="Appearance">
         <header>
           <strong>Appearance</strong>
@@ -212,13 +251,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <AgentModelSettings />
-
-      <label className="toggle-row">
-        <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
-        <span>
-          <Icon name="lock" size={12} /> Privacy Local Only
-        </span>
-      </label>
 
       <div className="field inline">
         <label>

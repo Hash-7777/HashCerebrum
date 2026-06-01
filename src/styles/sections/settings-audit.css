@@ -27,13 +27,92 @@
 .settings-status,
 .settings-cache,
 .settings-audit,
-.settings-agents {
+.settings-agents,
+.settings-privacy {
   display: grid;
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius);
   background: rgba(11, 17, 26, 0.55);
+}
+
+/* ── Privacy & data locality ─────────────────────────────────── */
+.settings-privacy {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--hc-border));
+  background:
+    linear-gradient(color-mix(in srgb, var(--accent) 6%, transparent), transparent),
+    rgba(11, 17, 26, 0.55);
+}
+.settings-privacy header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-privacy header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--hc-fg);
+}
+.settings-privacy header strong svg { color: var(--hc-accent-strong); }
+.settings-privacy-pill {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--hc-radius-pill);
+  border: 1px solid var(--hc-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hc-fg-muted);
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.settings-privacy-pill[data-on='true'] {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--hc-accent-strong);
+}
+.settings-privacy > p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--hc-fg-muted);
+}
+.settings-privacy-facts {
+  list-style: none;
+  margin: 2px 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.settings-privacy-facts li {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.settings-privacy-facts li > span:first-child {
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hc-fg-dim);
+}
+.settings-privacy-facts li > span:last-child {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--hc-fg);
+}
+.settings-privacy-note {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: var(--hc-radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--hc-fg-muted);
 }
 .settings-agents header strong { font-size: 12px; color: var(--hc-fg); }
 .settings-agents-hint {
