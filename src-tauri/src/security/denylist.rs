@@ -10,6 +10,7 @@
 //!     the general allowlist path, but the `ollama` provider may reach them
 //!     (see guard::check_llm_net) so a user can run Ollama on another device on
 //!     their own network.
+//!
 //! `is_blocked` = hard OR private-lan, preserving the strict default for every
 //! non-Ollama caller (medical sources, all cloud LLMs).
 
