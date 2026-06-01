@@ -48,6 +48,9 @@ export interface LlmResponse {
   content: string;
   toolCalls: LlmToolCall[];
   usage?: { inputTokens: number; outputTokens: number };
+  /** Provider's stop reason, when known (e.g. 'length'/'max_tokens' when the
+   *  output hit the model's token cap — used to resume a capped generation). */
+  finishReason?: string;
 }
 
 export interface LlmProvider {

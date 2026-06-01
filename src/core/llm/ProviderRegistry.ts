@@ -278,6 +278,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
   let content = '';
+  let finishReason: string | undefined;
   const accumulator = new ToolCallAccumulator();
   await chatStream(
     'ollama',
@@ -291,11 +292,12 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
         content += parsed.delta;
         opts.onToken(parsed.delta);
       }
+      if (parsed.finishReason) finishReason = parsed.finishReason;
       accumulator.ingest(parsed.toolCallDeltas);
     },
     opts.signal,
   );
-  return { content, toolCalls: accumulator.collect() };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
 }
 
 async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -323,6 +325,7 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
     body.tool_choice = 'auto';
   }
   let content = '';
+  let finishReason: string | undefined;
   const accumulator = new ToolCallAccumulator();
   await chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
     const parsed = parseOpenAiStreamLine(line);
@@ -331,9 +334,10 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
       content += parsed.delta;
       opts.onToken(parsed.delta);
     }
+    if (parsed.finishReason) finishReason = parsed.finishReason;
     accumulator.ingest(parsed.toolCallDeltas);
   }, opts.signal);
-  return { content, toolCalls: accumulator.collect() };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
 }
 
 async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -354,6 +358,7 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
     ...(typeof req.temperature === 'number' ? { temperature: req.temperature } : {}),
   };
   let content = '';
+  let finishReason: string | undefined;
   await chatStream(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
@@ -366,18 +371,21 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
     JSON.stringify(body),
     (line) => {
       const parsed = parseAnthropicStreamLine(line);
-      if (!parsed?.delta) return;
+      if (!parsed) return;
+      if (parsed.finishReason) finishReason = parsed.finishReason;
+      if (!parsed.delta) return;
       content += parsed.delta;
       opts.onToken(parsed.delta);
     },
     opts.signal,
   );
-  return { content, toolCalls: [] };
+  return { content, toolCalls: [], ...(finishReason ? { finishReason } : {}) };
 }
 
 async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
   const key = await requireKey('gemini');
   let content = '';
+  let finishReason: string | undefined;
   const toolCalls: LlmToolCall[] = [];
   await chatStream(
     'gemini',
@@ -395,11 +403,12 @@ async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
         content += parsed.delta;
         opts.onToken(parsed.delta);
       }
+      if (parsed.finishReason) finishReason = parsed.finishReason;
       toolCalls.push(...parsed.toolCalls);
     },
     opts.signal,
   );
-  return { content, toolCalls };
+  return { content, toolCalls, ...(finishReason ? { finishReason } : {}) };
 }
 
 export async function streamWithModel(
@@ -458,6 +467,7 @@ export async function streamWithModelChain(
   let failovers = 0;
   let acc = ''; // everything emitted so far, across every model leg
   let resuming = false; // true once we are continuing a cut-off response
+  let lengthContinuations = 0; // bounded resumes after hitting a model output cap
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
@@ -503,6 +513,21 @@ export async function streamWithModelChain(
         },
         signal: opts.signal,
       });
+      // Free-tier models often cap output and stop cleanly mid-answer
+      // (finish_reason 'length'/'max_tokens'). Resume on the SAME model from
+      // what was written so far, so a small output cap doesn't truncate a long
+      // answer. Bounded, and never on an abort.
+      const fr = (response.finishReason ?? '').toLowerCase();
+      if (
+        (fr === 'length' || fr === 'max_tokens') &&
+        acc.length > 0 &&
+        lengthContinuations < MAX_LENGTH_CONTINUATIONS &&
+        !opts.signal?.aborted
+      ) {
+        lengthContinuations += 1;
+        resuming = true;
+        continue; // same model continues from acc
+      }
       return {
         ...response,
         content: acc, // full answer across all legs, not just the last one
@@ -639,6 +664,9 @@ export interface FailoverResult extends LlmResponse {
 }
 
 const MAX_FAILOVERS = 4;
+// How many times a length-capped generation may be resumed on the same model
+// before we return what we have — bounds total output on free-tier caps.
+const MAX_LENGTH_CONTINUATIONS = 4;
 const RETRY_WAIT_MS = 2000;
 
 function delay(ms: number): Promise<void> {

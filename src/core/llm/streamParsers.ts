@@ -11,6 +11,10 @@ export interface StreamParseResult {
   delta: string;
   toolCalls: LlmToolCall[];
   toolCallDeltas?: OpenAiToolCallDelta[];
+  // Why generation stopped, when the provider reports it on a chunk:
+  // OpenAI 'length'/'stop', Anthropic 'max_tokens'/'end_turn', Gemini
+  // 'MAX_TOKENS'/'STOP', Ollama done_reason 'length'/'stop'.
+  finishReason?: string;
 }
 
 export function parseToolArgs(args: unknown): Record<string, unknown> {
@@ -104,13 +108,15 @@ function withDeltas(base: { delta: string; toolCalls: LlmToolCall[] }, raw: unkn
 export function parseOllamaStreamLine(line: string): StreamParseResult | null {
   try {
     const json = JSON.parse(line);
-    return withDeltas(
+    const result = withDeltas(
       {
         delta: json.message?.content ?? '',
         toolCalls: normalizeOpenAiToolCalls(json.message?.tool_calls),
       },
       json.message?.tool_calls,
     );
+    if (typeof json.done_reason === 'string') result.finishReason = json.done_reason;
+    return result;
   } catch {
     return null;
   }
@@ -122,11 +128,13 @@ export function parseOpenAiStreamLine(line: string): StreamParseResult | null {
   if (!payload || payload === '[DONE]') return null;
   try {
     const json = JSON.parse(payload);
-    const delta = json.choices?.[0]?.delta;
-    return withDeltas(
-      { delta: delta?.content ?? '', toolCalls: normalizeOpenAiToolCalls(delta?.tool_calls) },
-      delta?.tool_calls,
+    const choice = json.choices?.[0];
+    const result = withDeltas(
+      { delta: choice?.delta?.content ?? '', toolCalls: normalizeOpenAiToolCalls(choice?.delta?.tool_calls) },
+      choice?.delta?.tool_calls,
     );
+    if (typeof choice?.finish_reason === 'string') result.finishReason = choice.finish_reason;
+    return result;
   } catch {
     return null;
   }
@@ -138,6 +146,10 @@ export function parseAnthropicStreamLine(line: string): StreamParseResult | null
   if (!payload || payload === '[DONE]') return null;
   try {
     const json = JSON.parse(payload);
+    // message_delta carries the stop_reason (e.g. 'max_tokens') at the end.
+    if (json.type === 'message_delta' && typeof json.delta?.stop_reason === 'string') {
+      return { delta: '', toolCalls: [], finishReason: json.delta.stop_reason };
+    }
     if (json.type !== 'content_block_delta' || json.delta?.type !== 'text_delta') return null;
     return { delta: json.delta.text ?? '', toolCalls: [] };
   } catch {
@@ -165,9 +177,11 @@ function parseGeminiParts(parts: unknown[]): StreamParseResult {
 }
 
 export function parseGeminiResponse(data: unknown): StreamParseResult {
-  const json = data as { candidates?: Array<{ content?: { parts?: unknown[] } }> };
-  const parts = json.candidates?.[0]?.content?.parts ?? [];
-  return parseGeminiParts(parts);
+  const json = data as { candidates?: Array<{ content?: { parts?: unknown[] }; finishReason?: string }> };
+  const candidate = json.candidates?.[0];
+  const result = parseGeminiParts(candidate?.content?.parts ?? []);
+  if (typeof candidate?.finishReason === 'string') result.finishReason = candidate.finishReason;
+  return result;
 }
 
 export function parseGeminiStreamLine(line: string): StreamParseResult | null {
