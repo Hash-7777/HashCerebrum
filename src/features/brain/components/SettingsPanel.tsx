@@ -265,6 +265,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         Run Ollama on this machine, or on another device on your network — e.g.{' '}
         <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
         automatically; only your local network is reachable, never the public internet.
+        <br />
+        For a LAN device, start Ollama there with <code>OLLAMA_HOST=0.0.0.0</code> and allow port{' '}
+        <code>11434</code> through its firewall so this machine can reach it.
       </p>
 
       <section className="settings-cache" aria-label="Source cache">
