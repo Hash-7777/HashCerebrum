@@ -188,11 +188,11 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
               const state = rows[i]!;
               return (
                 <div key={row.msg} className={`boot-row${state.shown ? ' show' : ''}${state.done ? ' done' : ''}`}>
-                  <span className="ic" aria-hidden="true">
+                  <span className="b-ic" aria-hidden="true">
                     {state.done ? <span className="boot-check">✓</span> : <span className="boot-spinner" />}
                   </span>
-                  <span className="msg">{row.msg}</span>
-                  <span className="t">{row.t}</span>
+                  <span className="b-msg">{row.msg}</span>
+                  <span className="b-time">{row.t}</span>
                 </div>
               );
             })}

@@ -243,15 +243,16 @@
   transform: translateY(4px);
 }
 .boot-row.show { opacity: 1; transform: none; transition: opacity 0.35s ease, transform 0.35s ease; }
-.boot-row .ic { width: 14px; display: inline-grid; place-items: center; }
-.boot-row .msg {
+.boot-row .b-ic { width: 14px; display: inline-grid; place-items: center; }
+.boot-row .b-msg {
+  display: block; min-width: 0;
   color: var(--b-ink-dim); letter-spacing: 0.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.boot-row.done .msg { color: var(--b-ink); }
-.boot-row .msg b { color: var(--b-mint-soft); font-weight: 400; }
-.boot-row .t { color: var(--b-ink-faint); font-size: 11px; opacity: 0; }
-.boot-row.done .t { opacity: 1; transition: opacity 0.3s ease; }
+.boot-row.done .b-msg { color: var(--b-ink); }
+.boot-row .b-msg b { color: var(--b-mint-soft); font-weight: 400; }
+.boot-row .b-time { color: var(--b-ink-faint); font-size: 11px; opacity: 0; }
+.boot-row.done .b-time { opacity: 1; transition: opacity 0.3s ease; }
 .boot-spinner {
   width: 10px; height: 10px; border-radius: 50%;
   border: 1.5px solid var(--b-line-strong); border-top-color: var(--b-mint);
