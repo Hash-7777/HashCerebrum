@@ -92,6 +92,36 @@ export const PROVIDER_DEFS: ProviderDef[] = [
     keyName: 'llm.nvidia',
     kind: 'cloud',
   },
+  {
+    provider: 'minimax',
+    label: 'MiniMax',
+    keyName: 'llm.minimax',
+    kind: 'cloud',
+  },
+  {
+    provider: 'xai',
+    label: 'xAI (Grok)',
+    keyName: 'llm.xai',
+    kind: 'cloud',
+  },
+  {
+    provider: 'together',
+    label: 'Together AI',
+    keyName: 'llm.together',
+    kind: 'cloud',
+  },
+  {
+    provider: 'fireworks',
+    label: 'Fireworks AI',
+    keyName: 'llm.fireworks',
+    kind: 'cloud',
+  },
+  {
+    provider: 'deepinfra',
+    label: 'DeepInfra',
+    keyName: 'llm.deepinfra',
+    kind: 'cloud',
+  },
 ];
 
 export const MODEL_GROUPS: ModelGroup[] = PROVIDER_DEFS.map((def) => {

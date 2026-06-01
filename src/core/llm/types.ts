@@ -10,7 +10,12 @@ export type LlmProviderId =
   | 'moonshot'
   | 'deepseek'
   | 'mistral'
-  | 'nvidia';
+  | 'nvidia'
+  | 'minimax'
+  | 'xai'
+  | 'together'
+  | 'fireworks'
+  | 'deepinfra';
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

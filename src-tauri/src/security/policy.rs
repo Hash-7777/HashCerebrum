@@ -47,6 +47,11 @@ const ALLOWED_HOSTS: &[&str] = &[
     "api.deepseek.com",
     "api.mistral.ai",
     "integrate.api.nvidia.com",
+    "api.minimax.io",
+    "api.x.ai",
+    "api.together.xyz",
+    "api.fireworks.ai",
+    "api.deepinfra.com",
     // Ollama (local). "::1" is the IPv6 loopback: on a dual-stack host
     // "localhost" can resolve to ::1, and url::Host renders it without
     // brackets, so it must be allowlisted alongside the IPv4 loopback.
@@ -67,6 +72,11 @@ const ALLOWED_KEYCHAIN_KEYS: &[&str] = &[
     "llm.deepseek",
     "llm.mistral",
     "llm.nvidia",
+    "llm.minimax",
+    "llm.xai",
+    "llm.together",
+    "llm.fireworks",
+    "llm.deepinfra",
 ];
 
 const ALLOWED_LLM_PROVIDERS: &[&str] = &[
@@ -82,6 +92,11 @@ const ALLOWED_LLM_PROVIDERS: &[&str] = &[
     "deepseek",
     "mistral",
     "nvidia",
+    "minimax",
+    "xai",
+    "together",
+    "fireworks",
+    "deepinfra",
 ];
 
 pub fn load_default() -> AppResult<()> {

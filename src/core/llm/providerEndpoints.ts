@@ -10,6 +10,11 @@ export const OPENAI_COMPAT_CHAT_URL: Partial<Record<LlmProviderId, string>> = {
   deepseek: 'https://api.deepseek.com/v1/chat/completions',
   mistral: 'https://api.mistral.ai/v1/chat/completions',
   nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
+  minimax: 'https://api.minimax.io/v1/chat/completions',
+  xai: 'https://api.x.ai/v1/chat/completions',
+  together: 'https://api.together.xyz/v1/chat/completions',
+  fireworks: 'https://api.fireworks.ai/inference/v1/chat/completions',
+  deepinfra: 'https://api.deepinfra.com/v1/openai/chat/completions',
 };
 
 export const OPENAI_COMPAT_MODELS_URL: Partial<Record<LlmProviderId, string>> = {
@@ -22,4 +27,9 @@ export const OPENAI_COMPAT_MODELS_URL: Partial<Record<LlmProviderId, string>> = 
   deepseek: 'https://api.deepseek.com/v1/models',
   mistral: 'https://api.mistral.ai/v1/models',
   nvidia: 'https://integrate.api.nvidia.com/v1/models',
+  minimax: 'https://api.minimax.io/v1/models',
+  xai: 'https://api.x.ai/v1/models',
+  together: 'https://api.together.xyz/v1/models',
+  fireworks: 'https://api.fireworks.ai/inference/v1/models',
+  deepinfra: 'https://api.deepinfra.com/v1/openai/models',
 };

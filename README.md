@@ -183,7 +183,7 @@ npm run build:web      # tsc over app + tests, then Vite build
 
 Open **Settings** (gear icon), find the provider row, paste your API key, and click Save. Supported providers:
 
-`OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `Ollama (local)`
+`OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `MiniMax` · `xAI (Grok)` · `Together AI` · `Fireworks AI` · `DeepInfra` · `Ollama (local)`
 
 Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundle identifier. They are never committed, never written to the audit log, and never stored in the response cache.
 
