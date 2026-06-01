@@ -261,6 +261,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           Save
         </button>
       </div>
+      <p className="field-hint">
+        Run Ollama on this machine, or on another device on your network — e.g.{' '}
+        <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
+        automatically; only your local network is reachable, never the public internet.
+      </p>
 
       <section className="settings-cache" aria-label="Source cache">
         <header>

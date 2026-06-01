@@ -148,6 +148,39 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
     }
 }
 
+/// Net check for an LLM provider request. Identical to the generic `Net` check,
+/// except the `ollama` provider may also reach the user's own machine on their
+/// LAN — RFC1918 / CGNAT / ULA addresses, `*.local` (mDNS), or a bare LAN
+/// hostname — so Ollama can run on a second device on the same network (parity
+/// with the desktop sibling app). Cloud-metadata, link-local, `0.0.0.0`, and
+/// public hosts remain blocked even for ollama, so this is not a general SSRF
+/// hole: the ollama path can only ever reach local/LAN targets.
+pub fn check_llm_net(provider: &str, host: &str, port: Option<u16>) -> AppResult<()> {
+    if provider == "ollama" && is_lan_ollama_host(host) {
+        return Ok(());
+    }
+    check(Action::Net { host, port })
+}
+
+/// A host the Ollama provider is permitted to reach: loopback, a private/LAN IP,
+/// an mDNS `.local` name, or a bare single-label hostname. Hard-blocked targets
+/// (cloud metadata / link-local) are excluded, and a dotted public FQDN is not
+/// matched, so the ollama path cannot reach arbitrary internet hosts.
+fn is_lan_ollama_host(host: &str) -> bool {
+    if denylist::is_hard_blocked(host) {
+        return false;
+    }
+    if is_localhost(host) || denylist::is_private_lan(host) {
+        return true;
+    }
+    let h = host.to_ascii_lowercase();
+    if h.ends_with(".local") {
+        return true;
+    }
+    // Bare single-label LAN/NetBIOS hostname (no dots, not an IP literal).
+    !h.contains('.') && h.parse::<IpAddr>().is_err()
+}
+
 fn is_localhost(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;
@@ -266,6 +299,26 @@ mod tests {
         assert!(!is_localhost("10.0.0.1"));
         assert!(!is_localhost("example.com"));
         assert!(!is_localhost("169.254.169.254"));
+    }
+
+    #[test]
+    fn ollama_may_reach_lan_but_others_and_dangerous_targets_cannot() {
+        // The user's own machine / LAN — allowed for ollama.
+        assert!(check_llm_net("ollama", "127.0.0.1", Some(11434)).is_ok());
+        assert!(check_llm_net("ollama", "192.168.1.50", Some(11434)).is_ok());
+        assert!(check_llm_net("ollama", "10.0.0.5", Some(11434)).is_ok());
+        assert!(check_llm_net("ollama", "172.16.4.4", Some(11434)).is_ok());
+        assert!(check_llm_net("ollama", "ollama.local", Some(11434)).is_ok());
+        assert!(check_llm_net("ollama", "mybox", Some(11434)).is_ok());
+
+        // Cloud metadata / link-local / public stay blocked even for ollama.
+        assert!(check_llm_net("ollama", "169.254.169.254", Some(80)).is_err());
+        assert!(check_llm_net("ollama", "8.8.8.8", Some(11434)).is_err());
+        assert!(check_llm_net("ollama", "evil.example.com", Some(11434)).is_err());
+
+        // Other providers get no LAN relaxation.
+        assert!(check_llm_net("openai", "192.168.1.50", Some(11434)).is_err());
+        assert!(check_llm_net("openai", "ollama.local", Some(11434)).is_err());
     }
 
     #[test]

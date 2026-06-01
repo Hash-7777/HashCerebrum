@@ -37,6 +37,17 @@
   background: rgba(11, 17, 26, 0.55);
 }
 
+.field-hint {
+  margin: -2px 0 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--hc-fg-muted);
+}
+.field-hint code {
+  font: 10.5px var(--hc-font-mono);
+  color: var(--hc-accent-strong);
+}
+
 /* ── Privacy & data locality ─────────────────────────────────── */
 .settings-privacy {
   border-color: color-mix(in srgb, var(--accent) 26%, var(--hc-border));

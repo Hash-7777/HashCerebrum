@@ -90,6 +90,18 @@ consulted:
 (IPv6 loopback) is allowlisted because on a dual-stack host `localhost` can
 resolve to `::1`, which `url::Host` renders in bracketless form.
 
+**LAN Ollama exception.** The denylist is split into two tiers
+(`security/denylist.rs`): *hard* blocks (cloud metadata, link-local `169.254`/
+`fe80:`, `0.0.0.0`) and *private-LAN* ranges (RFC1918 / CGNAT / ULA). The general
+path blocks both. The **`ollama` provider only** may additionally reach a
+private-LAN host — an RFC1918/CGNAT/ULA address, a `*.local` mDNS name, or a bare
+single-label hostname — via `guard::check_llm_net`, so a user can run Ollama on
+another device on their own network. This is deliberately narrow: hard-blocked
+targets and dotted public FQDNs are still refused on the ollama path, so it can
+only ever reach local/LAN hosts and cannot be used to exfiltrate to the internet
+or hit cloud metadata. Every non-Ollama caller (medical sources, all cloud LLMs)
+keeps the strict allowlist with no private-range access.
+
 Known limitation: the denylist matches host *strings*. An allowlisted
 domain whose DNS resolves to an internal address is not re-checked at the
 resolved-IP level. This is acceptable given the fixed set of government and

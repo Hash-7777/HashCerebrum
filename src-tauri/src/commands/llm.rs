@@ -11,7 +11,7 @@
 use crate::audit::store as audit;
 use crate::crypto::sha256_hex;
 use crate::error::{AppError, AppResult};
-use crate::security::guard::{check, Action};
+use crate::security::guard::{check, check_llm_net, Action};
 use dashmap::DashMap;
 use futures::StreamExt;
 use once_cell::sync::Lazy;
@@ -137,10 +137,9 @@ pub async fn llm_http_get(
         provider: &provider,
     })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net {
-        host: &host,
-        port: parsed.port(),
-    })?;
+    // Provider-aware: the ollama provider may reach a LAN host (run Ollama on
+    // another device); every other provider keeps the strict allowlist.
+    check_llm_net(&provider, &host, parsed.port())?;
     crate::ratelimit::acquire(&host).await;
 
     let mut request = http_client()?
@@ -199,10 +198,9 @@ pub async fn llm_http_post(
         provider: &provider,
     })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net {
-        host: &host,
-        port: parsed.port(),
-    })?;
+    // Provider-aware: the ollama provider may reach a LAN host (run Ollama on
+    // another device); every other provider keeps the strict allowlist.
+    check_llm_net(&provider, &host, parsed.port())?;
     crate::ratelimit::acquire(&host).await;
 
     let mut request = http_client()?
@@ -269,10 +267,9 @@ pub async fn llm_chat_stream(
         provider: &provider,
     })?;
     let (parsed, host) = parse_host(&url)?;
-    check(Action::Net {
-        host: &host,
-        port: parsed.port(),
-    })?;
+    // Provider-aware: the ollama provider may reach a LAN host (run Ollama on
+    // another device); every other provider keeps the strict allowlist.
+    check_llm_net(&provider, &host, parsed.port())?;
     crate::ratelimit::acquire(&host).await;
 
     let abort = Arc::new(AtomicBool::new(false));
