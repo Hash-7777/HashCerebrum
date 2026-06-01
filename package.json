@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "description": "HashCerebrum — a private, local-first agentic desktop app for medical research. Evidence comes only from trusted public biomedical databases (PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar); your data stays on-device with no accounts, no cloud, and no telemetry.",
+  "description": "HashCerebrum — a private, local-first agentic desktop app for medical research. A boss-and-specialist agent swarm fetches source-grounded evidence from trusted public biomedical databases (PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar) and writes fully-cited answers and papers — with on-device semantic memory (a bundled medical embedding model + 3D vector map). Everything stays on your machine: no accounts, no cloud, no telemetry; run fully offline with local Ollama.",
   "engines": {
     "node": "24.x"
   },

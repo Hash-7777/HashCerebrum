@@ -32,7 +32,13 @@ promise:
   audit log readable from **Settings → Audit log**.
 - **A fully-offline mode exists.** Configure a local **Ollama** model and the
   app makes no external network calls at all — questions, evidence, and
-  reasoning never leave the device.
+  reasoning never leave the device. (Ollama may run on another device on your
+  LAN; that path is narrowly allowed and still blocks public/cloud-metadata
+  hosts.)
+- **On-device semantic memory.** The embedding model that powers meaning-based
+  memory search is bundled and runs locally (no download, no egress).
+- **One-click wipe.** Settings → *Reset all data* clears all projects, memory,
+  chats, runs, and cache for a clean slate (settings and API keys are kept).
 
 **One honest caveat:** when you choose a cloud LLM provider, the text of your
 prompt is transmitted to that provider and is governed by their privacy policy.

@@ -36,6 +36,13 @@ privacy is a property of the architecture rather than a policy:
   retrieved evidence). Every request is hash-chain audited.
 - **Offline-capable.** With a local Ollama model the app makes zero external
   network calls; all reasoning stays on the device.
+- **On-device semantic memory.** The embedding model (MedEmbed-small) is bundled
+  in the app and run in a Web Worker via transformers.js with
+  `allowRemoteModels = false` — memory search is meaning-based but fully local,
+  with no model download and no text leaving the machine.
+- **User-controlled wipe.** Settings → *Reset all data* erases all projects,
+  memory + embeddings, chats, research runs, and the source cache (settings and
+  API keys are kept).
 - **Honest limit.** A cloud LLM provider receives the prompt text under its own
   terms — the single path off-device. This is disclosed in `SECURITY.md` and
   the README, and is avoidable by using Ollama.

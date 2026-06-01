@@ -66,7 +66,7 @@ The roster and the region map are compile-time constants — the type system rej
 |---|---|---|
 | **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain |
 | **Resources** | `⌘2` | Saved paper library |
-| **Memory** | `⌘3` | Per-project knowledge store — only cited medical findings, organised by subject, with a brain-shaped relatedness diagram and one-click **Prune** to drop off-topic / non-research entries |
+| **Memory** | `⌘3` | Semantic knowledge store — cited medical findings, searched by meaning, shown on a real **3D vector map**; one-click **Prune** drops off-topic entries |
 | **Peer Review** | `⌘4` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor |
 
 The mode registry is a typed tuple capped at five entries (`src/config/modes.ts`) — adding a sixth is a compile error.
@@ -84,6 +84,33 @@ Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm o
 - **Statistics** — methods, reporting completeness, sample-size/power, interpretation
 
 After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable.
+
+---
+
+## Semantic memory (private, on-device)
+
+Every research run saves the findings it actually cited into a per-project memory
+that the agents can reuse — and it works by **meaning, not keywords**. A small,
+medical-tuned embedding model (**MedEmbed-small**, Apache-2.0) is **bundled in the
+app** and runs entirely on-device in a Web Worker, so a search for "MI" finds a
+paper about "myocardial infarction." Nothing is downloaded at runtime and no text
+leaves the machine.
+
+- **Hybrid retrieval** — semantic (vector) similarity fused with lexical search
+  via Reciprocal Rank Fusion, then weighted toward the active project; results are
+  re-ranked by evidence strength + recency and de-duplicated (MMR).
+- **Offline term normalisation** — a built-in brand↔generic / abbreviation
+  dictionary (Tylenol↔acetaminophen, MI↔myocardial infarction, plus common
+  Egyptian and international brands) widens each search, fully offline.
+- **3D vector map** — the Memory graph plots each finding by the PCA projection of
+  its real embedding, with nearest-neighbour edges from genuine cosine similarity —
+  a faithful picture of your knowledge, not a decorative layout.
+- **Memory toggle** — flip memory off in the composer to research a topic from
+  scratch on fresh sources only.
+
+Embeddings are stored compactly (int8-quantised) with oldest-first eviction. A
+**Reset all data** control in Settings wipes memory, chats, runs, and cache for a
+clean slate (settings and API keys are kept).
 
 ---
 
@@ -118,11 +145,16 @@ The renderer never makes an outbound HTTP request. Every call — medical databa
 ```
 Renderer  ─IPC─▶  security::guard::check()
                     ├── denylist  (cloud-metadata, RFC1918, link-local + ULA IPv6)
-                    ├── allowlist (ALLOWED_HOSTS — 20 approved hosts + loopback)
+                    ├── allowlist (ALLOWED_HOSTS — 25 approved hosts + loopback)
                     ├── rate limiter (per-host token bucket)
                     └── audit log (hash-chained, SQLite, verifiable)
                   ─────▶  reqwest  ─────▶  external host
 ```
+
+The one deliberate exception: the **Ollama provider** may reach a **private-LAN**
+host (RFC1918 / `*.local` / a bare hostname) so you can run Ollama on another
+device on your network. Cloud-metadata, link-local, and public hosts stay blocked
+even for Ollama, and every other caller keeps the strict allowlist.
 
 | Guarantee | Implementation |
 |---|---|
@@ -149,7 +181,8 @@ The audit log is readable and verifiable from Settings → Audit log.
 | State | Zustand 5 · typed EventBus |
 | PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF + embedded DejaVu Unicode font (fallback) |
 | PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
-| Testing | Vitest (204 tests) + `cargo test` (27 tests) |
+| Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
+| Testing | Vitest (238 tests) + `cargo test` (28 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -174,7 +207,7 @@ npm run build          # macOS .app
 npm run build:dmg      # macOS .dmg
 
 # Checks
-npm test               # Vitest — 204 unit tests
+npm test               # Vitest — 238 unit tests
 npm run typecheck      # tsc strict — app + node configs
 npm run build:web      # tsc over app + tests, then Vite build
 ```
