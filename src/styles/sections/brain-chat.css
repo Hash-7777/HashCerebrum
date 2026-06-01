@@ -462,20 +462,13 @@
 .document-artifact-icon {
   display: grid;
   place-items: center;
-  gap: 2px;
   width: 42px;
   height: 44px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border: 1px solid var(--hc-border);
   border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--hc-accent-strong);
-}
-.document-artifact-icon span {
-  color: var(--hc-fg-muted);
-  font-family: var(--f-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0;
+  /* Neutral well so the self-coloured PDF glyph (cream page + red badge)
+     reads cleanly instead of fighting the accent tint. */
+  background: color-mix(in srgb, var(--hc-bg) 60%, transparent);
 }
 .document-artifact-meta { display: grid; gap: 4px; min-width: 0; }
 .document-artifact-meta strong {

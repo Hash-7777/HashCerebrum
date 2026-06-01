@@ -56,8 +56,7 @@ function DocumentArtifactCard({
     <div className="document-artifact-card">
       <button type="button" className="document-artifact-main" onClick={onOpen}>
         <span className="document-artifact-icon" aria-hidden="true">
-          <Icon name="document" size={22} />
-          <span>PDF</span>
+          <PdfGlyph size={30} />
         </span>
         <span className="document-artifact-meta">
           <strong>{title}</strong>
@@ -349,7 +348,7 @@ export const Transcript = memo(function Transcript({
                         </button>
                       )}
                       <button type="button" onClick={() => void openPdfPreview(message, actualIndex)} className="action">
-                        <PdfGlyph size={15} /> PDF
+                        <Icon name="filePdf" size={13} /> PDF
                       </button>
                       <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
                         <Icon name="document" size={13} /> MD
