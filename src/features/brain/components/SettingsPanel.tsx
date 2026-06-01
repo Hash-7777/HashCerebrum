@@ -8,6 +8,7 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
+import { resetAllData } from '@core/store/resetData';
 import { Icon } from '@ui/icons';
 import { AgentModelSettings } from './AgentModelSettings';
 import { AuditModal } from './AuditModal';
@@ -28,6 +29,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const modelStatuses = useModelCatalogStore((s) => s.statuses);
   const refreshingModels = useModelCatalogStore((s) => s.refreshing);
@@ -365,6 +367,35 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
+
+      <section className="settings-danger" aria-label="Reset all data">
+        <header>
+          <strong>
+            <Icon name="alert" size={12} /> Reset all data
+          </strong>
+        </header>
+        <p>
+          Permanently erases every project&apos;s memory and embeddings, all chat history, research
+          runs, and the source cache — a clean slate for new research. Your settings and API keys are
+          kept. This cannot be undone.
+        </p>
+        <button
+          type="button"
+          className="settings-danger-button"
+          disabled={resetting}
+          onClick={() => {
+            const ok = window.confirm(
+              'Erase ALL saved data — every project’s memory, chats, research runs, and cache? ' +
+                'Settings and API keys are kept. This cannot be undone.',
+            );
+            if (!ok) return;
+            setResetting(true);
+            void resetAllData(); // wipes storage + cache, then reloads
+          }}
+        >
+          <Icon name="close" size={12} /> {resetting ? 'Resetting…' : 'Reset everything'}
+        </button>
+      </section>
 
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
     </aside>

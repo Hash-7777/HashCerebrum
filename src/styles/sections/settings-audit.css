@@ -37,6 +37,45 @@
   background: rgba(11, 17, 26, 0.55);
 }
 
+/* ── Reset all data (danger zone) ────────────────────────────── */
+.settings-danger {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--hc-danger) 38%, var(--hc-border));
+  border-radius: var(--hc-radius);
+  background: color-mix(in srgb, var(--hc-danger) 7%, rgba(11, 17, 26, 0.55));
+}
+.settings-danger header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--hc-danger);
+}
+.settings-danger p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--hc-fg-muted); }
+.settings-danger-button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--hc-danger) 50%, transparent);
+  border-radius: var(--hc-radius-pill);
+  background: color-mix(in srgb, var(--hc-danger) 14%, transparent);
+  color: var(--hc-danger);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--hc-ease), border-color var(--hc-ease);
+}
+.settings-danger-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--hc-danger) 22%, transparent);
+  border-color: var(--hc-danger);
+}
+.settings-danger-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .field-hint {
   margin: -2px 0 4px;
   font-size: 11px;
