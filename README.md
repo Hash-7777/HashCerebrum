@@ -191,8 +191,10 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 **Prerequisites:** Node ≥ 20 and the [Rust toolchain](https://rustup.rs).
 
 ```sh
-# Install dependencies (offline-clean — no native binary downloads;
-# the bundled embedding model is committed, so there is no extra setup step)
+# Install dependencies. The embedding model is committed, so there's no model
+# download or setup step. (On an offline/restricted machine, set
+# ONNXRUNTIME_NODE_INSTALL=skip to skip onnxruntime-node's unused native binary —
+# the app uses onnxruntime-web/WASM. CI sets this automatically.)
 npm install
 
 # Desktop development (hot reload — Tauri + Vite)
