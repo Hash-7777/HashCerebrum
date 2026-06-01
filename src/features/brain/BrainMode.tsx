@@ -17,6 +17,7 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
+import { classifyEvidenceStrength } from '@core/rag';
 import { useToastStore } from '@core/store/toastStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
@@ -341,21 +342,28 @@ export function BrainMode() {
         const memoryTopic = memoryTopicLabel(cleanQuery);
         const citableForMemory = citedEvidenceFor(finalContent, result.evidence);
         if (activeProjectId && memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
-          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => ({
-            kind: 'evidence',
-            title: item.title,
-            text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
-            source: item.source,
-            runId,
-            query: memoryTopic,
-            // Carry the medical metadata forward so memory can rank by it (and
-            // the Phase-2 medical-aware ranker has the fields it needs).
-            ...(item.url ? { url: item.url } : {}),
-            ...(item.year != null ? { year: item.year } : {}),
-            ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
-            ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
-            ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
-          }));
+          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
+            const strength = classifyEvidenceStrength(
+              [item.title, item.snippet ?? ''].join(' '),
+              item.source,
+            );
+            return {
+              kind: 'evidence',
+              title: item.title,
+              text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
+              source: item.source,
+              runId,
+              query: memoryTopic,
+              // Carry the medical metadata forward so memory ranks by evidence
+              // strength + recency (search/ranking.ts), not just text overlap.
+              ...(item.url ? { url: item.url } : {}),
+              ...(item.year != null ? { year: item.year } : {}),
+              ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
+              ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
+              ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
+              ...(strength ? { evidenceStrength: strength } : {}),
+            };
+          });
           const answerChunk: NewRagChunk = {
             kind: 'answer',
             title: memoryTopic,

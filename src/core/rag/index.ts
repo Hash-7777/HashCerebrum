@@ -20,6 +20,7 @@ export type {
 export { useRagStore } from './store/ragStore';
 export { lexicalSearch, tokenize } from './search/lexical';
 export { getEmbeddingProvider } from './embeddings/workerClient';
+export { classifyEvidenceStrength } from './search/ranking';
 
 export interface RetrieveOptions {
   activeProjectId: string;

@@ -7,6 +7,7 @@ import type { RagChunk, RagSearchHit } from '../types';
 import { cosineSim } from './cosine';
 import { fuseAndWeight } from './fusion';
 import { lexicalSearch } from './lexical';
+import { medicalBoost, mmrRerank } from './ranking';
 
 export interface HybridInput {
   /** All candidate chunks (cross-project). */
@@ -23,6 +24,10 @@ export interface HybridInput {
   candidateK?: number;
   /** Multiplier for chunks outside the active project (default 0.6). */
   otherProjectWeight?: number;
+  /** Apply MMR diversity re-ranking over the top candidates (default false). */
+  diversify?: boolean;
+  /** MMR relevance/novelty balance in [0,1] (default 0.7). */
+  mmrLambda?: number;
 }
 
 export function hybridSearch(input: HybridInput): RagSearchHit[] {
@@ -55,12 +60,20 @@ export function hybridSearch(input: HybridInput): RagSearchHit[] {
     return byId.get(id)?.projectId === activeProjectId ? 1 : otherWeight;
   };
 
-  const hits: RagSearchHit[] = [];
+  // Fuse, then nudge by clinical signal (evidence strength + recency). The boost
+  // is a no-op for chunks without that metadata, so ranking is unchanged there.
+  const ranked: RagSearchHit[] = [];
   for (const fused of fuseAndWeight(rankedLists, weightOf)) {
     const chunk = byId.get(fused.id);
     if (!chunk) continue;
-    hits.push({ chunk, score: fused.score });
-    if (hits.length >= limit) break;
+    ranked.push({ chunk, score: fused.score * medicalBoost(chunk) });
   }
-  return hits;
+  ranked.sort((a, b) => b.score - a.score);
+
+  // Optional MMR diversity over a candidate window, else just take the top.
+  if (input.diversify) {
+    const window = ranked.slice(0, Math.max(limit * 3, limit));
+    return mmrRerank(window, vectorFor, input.mmrLambda ?? 0.7, limit);
+  }
+  return ranked.slice(0, limit);
 }

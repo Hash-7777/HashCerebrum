@@ -194,7 +194,7 @@ export const useRagStore = create<RagStore>((set, get) => ({
     } catch {
       queryVector = null; // lexical-only fallback
     }
-    return hybridSearch({ chunks, query, queryVector, vectorFor, activeProjectId, limit });
+    return hybridSearch({ chunks, query, queryVector, vectorFor, activeProjectId, limit, diversify: true });
   },
 
   chunksForProject: (projectId) => get().chunks.filter((c) => c.projectId === projectId),
