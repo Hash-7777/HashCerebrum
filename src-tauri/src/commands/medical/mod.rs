@@ -142,12 +142,19 @@ async fn backoff_delay(attempt: u32) {
 pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<serde_json::Value> {
     let cache_key = sha256_hex(url.as_str().as_bytes());
 
-    // Check cache first
-    if let Some(cached) = cache::get(&cache_key)? {
-        let mut log_url = url.clone();
-        log_url.set_query(None);
-        tracing::debug!(url = %log_url, "cache hit");
-        return Ok(serde_json::from_slice(&cached)?);
+    // Check cache first. A cache read error must NOT abort the fetch — a
+    // transient SQLite hiccup (e.g. a momentary lock under parallel agents)
+    // would otherwise drop a whole source's evidence. Treat any read error as a
+    // cache miss and fall through to the live network fetch.
+    match cache::get(&cache_key) {
+        Ok(Some(cached)) => {
+            let mut log_url = url.clone();
+            log_url.set_query(None);
+            tracing::debug!(url = %log_url, "cache hit");
+            return Ok(serde_json::from_slice(&cached)?);
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!(error = %e, "cache read failed; bypassing cache for this fetch"),
     }
 
     // Public biomedical endpoints (Europe PMC's EBI host especially) return

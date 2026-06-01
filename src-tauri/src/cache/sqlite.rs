@@ -29,6 +29,10 @@ fn try_open(path: &Path) -> AppResult<Connection> {
          PRAGMA synchronous = NORMAL;
          PRAGMA foreign_keys = ON;
          PRAGMA temp_store = MEMORY;
+         -- Wait out a transient lock instead of erroring immediately, so a
+         -- momentary contention under parallel agent fetches doesn't surface
+         -- as a 'database operation failed' and drop a source's evidence.
+         PRAGMA busy_timeout = 5000;
 
          CREATE TABLE IF NOT EXISTS cache (
             key         TEXT PRIMARY KEY,
