@@ -26,6 +26,7 @@ import {
   buildExportHtml,
   buildMarkdownExport,
   buildMessagePdfBlob,
+  deriveDocumentTitle,
   slugifyFilename,
   stripGeneratedReferenceSections,
   type ExportableMessage,
@@ -183,10 +184,8 @@ export const Transcript = memo(function Transcript({
     }
   };
 
-  const titleFor = (message: ChatMessage, index: number) => {
-    const firstLine = message.content.split('\n').find((line) => line.trim())?.replace(/^#+\s*/, '').trim();
-    return firstLine ? firstLine.slice(0, 96) : `HashCerebrum message ${index + 1}`;
-  };
+  const titleFor = (message: ChatMessage, index: number) =>
+    deriveDocumentTitle(message.content, `HashCerebrum message ${index + 1}`);
 
   const exportableFor = (message: ChatMessage, index: number): ExportableMessage => ({
     title: titleFor(message, index),

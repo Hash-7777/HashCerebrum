@@ -3,12 +3,33 @@ import type { EvidenceItem } from '@platform/index';
 import {
   buildExportHtml,
   buildMarkdownExport,
+  deriveDocumentTitle,
   escapeHtml,
   markdownToHtml,
   renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
 } from '../messageExport';
+
+describe('deriveDocumentTitle', () => {
+  it('skips a bare "**Title:**" label and uses the real title line', () => {
+    const content = '**Title:**\n\nTitle: NSAIDs with Warfarin in Young Adults\n\nAbstract\n…';
+    expect(deriveDocumentTitle(content, 'fallback')).toBe('NSAIDs with Warfarin in Young Adults');
+  });
+
+  it('strips a leading markdown heading and bold markers', () => {
+    expect(deriveDocumentTitle('# **Metformin** in PCOS\nbody', 'fb')).toBe('Metformin in PCOS');
+  });
+
+  it('passes a clean first line through', () => {
+    expect(deriveDocumentTitle('Statins and CoQ10\nmore', 'fb')).toBe('Statins and CoQ10');
+  });
+
+  it('falls back when there is no usable line', () => {
+    expect(deriveDocumentTitle('\n\n   \n', 'HashCerebrum message 1')).toBe('HashCerebrum message 1');
+    expect(deriveDocumentTitle('**Title:**', 'fb')).toBe('fb');
+  });
+});
 
 const citations: EvidenceItem[] = [
   {

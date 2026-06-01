@@ -20,6 +20,27 @@ export interface ExportableMessage {
   manuscript?: Manuscript;
 }
 
+// Derive a clean human title from a message's content (for the artifact card and
+// the export filename). Skips a bare label line like "Title:" or "**Title:**",
+// strips markdown (bold/italic/code/heading marks), and drops a leading "Title:"
+// label — so the title never renders as the literal "**Title:**".
+export function deriveDocumentTitle(content: string, fallback: string): string {
+  for (const raw of content.split('\n')) {
+    let line = raw.trim();
+    if (!line) continue;
+    line = line
+      .replace(/^#{1,6}\s*/, '') // heading marks
+      .replace(/\*\*(.*?)\*\*/g, '$1') // bold
+      .replace(/\*(.*?)\*/g, '$1') // italic
+      .replace(/`([^`]*)`/g, '$1') // inline code
+      .replace(/^[*_>\s-]+/, '') // stray leading markers
+      .trim();
+    line = line.replace(/^title\s*[:：\-—]\s*/i, '').trim(); // drop a "Title:" label
+    if (line) return line.slice(0, 96);
+  }
+  return fallback;
+}
+
 export function slugifyFilename(value: string): string {
   const slug = value
     .toLowerCase()
