@@ -7,6 +7,7 @@ import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useRagStore } from '@core/store/ragStore';
+import { warmupEmbeddings } from '@core/rag';
 import { useAgentModelStore } from '@core/store/agentModelStore';
 import { useAgentStore } from '@core/store/agentStore';
 import { getModeComponent } from '@modes/registry';
@@ -55,6 +56,7 @@ export function AppShell() {
     void refreshModels();
     void hydrateResearchRuns();
     void hydrateRag();
+    void warmupEmbeddings(); // begin loading the local embedding model early
     void hydrateAgentModels();
     // Projects must hydrate before chats so legacy chats with no projectId
     // can be adopted into the active project.

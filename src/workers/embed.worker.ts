@@ -29,7 +29,8 @@ async function ensureModel(): Promise<FeatureExtractionPipeline> {
   let lastError: unknown;
   for (const id of [EMBED_MODEL.id, EMBED_MODEL_FALLBACK.id]) {
     try {
-      extractor = await pipeline('feature-extraction', id);
+      // q8 = the int8-quantised ONNX (~33 MB) rather than the fp32 weights.
+      extractor = await pipeline('feature-extraction', id, { dtype: 'q8' });
       return extractor;
     } catch (error) {
       lastError = error;

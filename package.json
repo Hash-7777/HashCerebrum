@@ -23,6 +23,7 @@
     "tauri:build": "tauri build --bundles app",
     "icons": "node scripts/generate-icons.mjs",
     "validate:brain-model": "node scripts/validate-brain-model.mjs",
+    "setup:models": "node scripts/fetch-embed-models.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
