@@ -418,9 +418,18 @@ export async function streamWithModel(
   return streamOpenAiCompatible(parsed.provider, request, opts);
 }
 
-// Streaming variant of completeWithModelChain — same failover semantics
-// applied to a streaming endpoint. We do not retry once the stream has
-// started emitting tokens (a partial response is not retriable).
+// Handed to the next model when a stream is cut off mid-answer, so the switch
+// is seamless instead of truncating (cf. switching Opus→Sonnet mid-task).
+const CONTINUE_INSTRUCTION =
+  'Your previous response was cut off mid-stream. Continue it from exactly where it stopped. ' +
+  'Do not repeat any text you already wrote, do not restart, and do not add any preamble — ' +
+  'resume seamlessly with the very next word.';
+
+// Streaming variant of completeWithModelChain. On a retriable failure BEFORE any
+// token is emitted, it restarts fresh on the next model. On a retriable failure
+// AFTER tokens have streamed, it now RESUMES the answer on the next model
+// (feeding it what was written so far) rather than truncating — so a mid-stream
+// model switch reads as one continuous answer.
 export async function streamWithModelChain(
   modelValue: string,
   req: Omit<LlmRequest, 'model'>,
@@ -447,6 +456,8 @@ export async function streamWithModelChain(
   const modelGroups = useModelCatalogStore.getState().groups;
 
   let failovers = 0;
+  let acc = ''; // everything emitted so far, across every model leg
+  let resuming = false; // true once we are continuing a cut-off response
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
@@ -465,24 +476,64 @@ export async function streamWithModelChain(
       }
     }
     tried.add(current);
-    let receivedAny = false;
+
+    // On a continuation leg, give the next model what was written so far and ask
+    // it to resume seamlessly. Rebuild the request with only prose fields — tools
+    // are intentionally dropped (this is a prose continuation, not tool calling).
+    let legReq: Omit<LlmRequest, 'model'> = req;
+    if (resuming) {
+      legReq = {
+        messages: [
+          ...req.messages,
+          { role: 'assistant', content: acc },
+          { role: 'user', content: CONTINUE_INSTRUCTION },
+        ],
+        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),
+      };
+    }
+
+    let receivedThisLeg = false;
     try {
-      const response = await streamWithModel(current, req, {
+      const response = await streamWithModel(current, legReq, {
         onToken: (token) => {
-          receivedAny = true;
+          receivedThisLeg = true;
+          acc += token;
           opts.onToken(token);
         },
         signal: opts.signal,
       });
       return {
         ...response,
+        content: acc, // full answer across all legs, not just the last one
         modelUsed: current,
         failover: { attempted: switchedTo.length, switchedTo },
       };
     } catch (error) {
       lastError = error;
-      if (receivedAny) break; // mid-stream failure — cannot retry without duplicating tokens
+      if (opts.signal?.aborted) break;
       const parsed = parseModelRef(current);
+
+      if (receivedThisLeg) {
+        // Mid-stream interruption. If retriable and budget remains, RESUME the
+        // answer on another model rather than truncating it.
+        if (!isRetriableError(error) && !isHardProviderError(error)) break;
+        cooldownProvider(parsed.provider, error);
+        let cont = findBestFailover(current, tried, hasKeySync, modelGroups);
+        while (cont && isProviderOnCooldown(cont.provider)) {
+          tried.add(cont.value);
+          cont = findBestFailover(current, tried, hasKeySync, modelGroups);
+        }
+        if (!cont) break;
+        failovers++;
+        switchedTo.push(cont.value);
+        onProgress?.({ from: current, to: cont, attempt: failovers, reason: 'resuming after a mid-stream interruption' });
+        current = cont.value;
+        resuming = true;
+        continue;
+      }
+
+      // No tokens yet on this leg — safe to restart fresh on the same/next model.
       const retries = providerRetries.get(parsed.provider) ?? 0;
       if (shouldRetrySameProvider(error) && retries < 1) {
         providerRetries.set(parsed.provider, retries + 1);
@@ -517,6 +568,12 @@ export async function streamWithModelChain(
       });
       current = next.value;
     }
+  }
+
+  // Budget/abort exhausted. If a partial answer already streamed, return it (the
+  // user can see it — better than discarding); otherwise surface the error.
+  if (acc) {
+    return { content: acc, toolCalls: [], modelUsed: current, failover: { attempted: switchedTo.length, switchedTo } };
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'unknown LLM error'));
 }
