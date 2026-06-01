@@ -14,6 +14,7 @@ import { PASSAGE_CHAR_BUDGET } from '../model.config';
 import { getEmbeddingProvider } from '../embeddings/workerClient';
 import { buildRagIndex, searchRagIndex, type RagIndex } from '../search/lexical';
 import { hybridSearch } from '../search/hybrid';
+import { expandQuery } from '../search/normalize';
 import {
   dequantize,
   migrateV1ToV2,
@@ -183,18 +184,22 @@ export const useRagStore = create<RagStore>((set, get) => ({
   searchHybrid: async (activeProjectId, query, limit = DEFAULT_SEARCH_LIMIT) => {
     const chunks = get().chunks;
     if (chunks.length === 0 || !query.trim()) return [];
+    // Widen the query with offline brand↔generic / abbreviation synonyms so a
+    // search for one surface form ("Tylenol", "MI") matches findings written
+    // with another. Feeds both the embedding and the lexical match.
+    const expanded = expandQuery(query);
     let queryVector: Float32Array | null = null;
     try {
       const provider = getEmbeddingProvider();
       await provider.warmup();
       if (provider.ready) {
-        const [vec] = await provider.embed([query]);
+        const [vec] = await provider.embed([expanded]);
         queryVector = vec ?? null;
       }
     } catch {
       queryVector = null; // lexical-only fallback
     }
-    return hybridSearch({ chunks, query, queryVector, vectorFor, activeProjectId, limit, diversify: true });
+    return hybridSearch({ chunks, query: expanded, queryVector, vectorFor, activeProjectId, limit, diversify: true });
   },
 
   chunksForProject: (projectId) => get().chunks.filter((c) => c.projectId === projectId),
