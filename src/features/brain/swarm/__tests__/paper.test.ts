@@ -30,6 +30,17 @@ describe('paper request helpers', () => {
     expect(request?.label).toContain('IMRaD');
   });
 
+  it('still routes a paper request when a stray/misspelled word sits before the doc noun', () => {
+    // "reaserch" (typo) used to block the adjacency match and fall through to
+    // plain synthesis; the verb+noun intent now catches it.
+    expect(detectPaperRequest('make a full reaserch paper about NSAIDs with warfarin and digoxin')?.standard).toBe(
+      'imrad_review',
+    );
+    expect(detectPaperRequest('please write me a detailed clinical manuscript on metformin')?.standard).toBe(
+      'imrad_review',
+    );
+  });
+
   it('detects review reporting forms when the user asks for them', () => {
     const request = detectPaperRequest('draft a systematic review manuscript using PRISMA');
 

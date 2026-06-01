@@ -59,10 +59,23 @@ export function isMetaOrAppQuestion(question: string): boolean {
   return META_QUESTION_RX.test(question);
 }
 
+// Typo-tolerant fallback: a creation verb plus a document noun anywhere in the
+// question (not necessarily adjacent) is a paper request. PAPER_RX requires the
+// noun to immediately follow the verb + qualifiers, so a stray or misspelled
+// word in between ("make a full reaserch paper") would otherwise slip through to
+// the plain-synthesis path. The nouns here are strongly document-like to avoid
+// false positives.
+const PAPER_INTENT_VERB_RX =
+  /\b(write|draft|create|make|produce|generate|develop|compose|prepare|build)\b/i;
+const PAPER_DOC_NOUN_RX =
+  /\b(paper|manuscript|monograph|thesis|dissertation|journal\s+article|publication)\b/i;
+
 export function detectPaperRequest(question: string): PaperRequest | null {
-  // Explicit "write a paper/review/..." requests OR comparative/analytical
-  // research intents both produce a full structured manuscript.
-  if (!PAPER_RX.test(question) && !ANALYTICAL_RX.test(question)) return null;
+  // Explicit "write a paper/review/..." requests, a verb+document-noun intent
+  // (typo-tolerant), OR comparative/analytical research intents all produce a
+  // full structured manuscript.
+  const verbNounIntent = PAPER_INTENT_VERB_RX.test(question) && PAPER_DOC_NOUN_RX.test(question);
+  if (!PAPER_RX.test(question) && !verbNounIntent && !ANALYTICAL_RX.test(question)) return null;
   if (/\b(systematic\s+reviews?|meta[-\s]?analys[ie]s|prisma)\b/i.test(question)) {
     return { standard: 'prisma_review', label: 'PRISMA-style evidence review manuscript' };
   }
