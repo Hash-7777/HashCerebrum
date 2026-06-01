@@ -9,4 +9,5 @@
 @import './sections/peerreview.css';
 @import './sections/execution-trace.css';
 @import './sections/region-editor.css';
+@import './sections/boot-splash.css';
 @import './sections/system.css';

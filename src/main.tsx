@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppShell } from '@ui/shell/AppShell';
+import { BootSplash } from '@ui/shell/BootSplash';
 import { RootErrorBoundary } from '@ui/errors/RootErrorBoundary';
 import { setPlatform } from '@platform/index';
 import { tauriPlatform } from '@platform/tauri';
@@ -43,10 +44,23 @@ setPlatform(isTauri ? tauriPlatform : browserPlatform);
 registerMedicalTools();
 registerMemoryTools();
 
+// The app shell mounts immediately (and warms up behind the splash) so it is
+// ready the instant the user clicks Enter. The boot splash overlays it on
+// launch and fades out on Enter.
+function Root() {
+  const [entered, setEntered] = React.useState(false);
+  return (
+    <>
+      <AppShell />
+      {!entered && <BootSplash onEnter={() => setEntered(true)} />}
+    </>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RootErrorBoundary>
-      <AppShell />
+      <Root />
     </RootErrorBoundary>
   </React.StrictMode>,
 );
