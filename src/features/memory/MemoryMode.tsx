@@ -9,7 +9,7 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
 import { MemoryCard } from './components/MemoryCard';
-import { MemoryGraphView } from './graph/MemoryGraphView';
+import { MemoryVectorGraph3D } from './graph/MemoryVectorGraph3D';
 import { keepMemoryChunk } from './pruneMemory';
 
 const SEARCH_RESULT_LIMIT = 200;
@@ -165,7 +165,7 @@ export function MemoryMode() {
             </p>
           </div>
         ) : view === 'graph' ? (
-          <MemoryGraphView chunks={visible} onRemove={removeChunk} />
+          <MemoryVectorGraph3D chunks={visible} onRemove={removeChunk} />
         ) : (
           <div className="memory-list">
             {visible.map((chunk) => (

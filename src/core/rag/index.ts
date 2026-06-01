@@ -17,7 +17,7 @@ export type {
   EmbeddingProvider,
 } from './types';
 
-export { useRagStore } from './store/ragStore';
+export { useRagStore, getChunkVectors } from './store/ragStore';
 export { lexicalSearch, tokenize } from './search/lexical';
 export { getEmbeddingProvider } from './embeddings/workerClient';
 export { classifyEvidenceStrength } from './search/ranking';

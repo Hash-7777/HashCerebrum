@@ -265,6 +265,60 @@
   cursor: not-allowed;
 }
 
+/* --- 3D vector map --- */
+.memory-vec3d {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.03), transparent 60%), #05080f;
+}
+.memory-vec3d canvas { display: block; touch-action: none; cursor: grab; }
+.memory-vec3d canvas:active { cursor: grabbing; }
+.memory-vec3d-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--hc-fg-muted);
+}
+.memory-vec3d-empty svg { color: var(--hc-fg-dim); }
+.memory-vec3d-empty p { margin: 0; font-size: 13px; max-width: 360px; }
+.memory-vec3d-hint { font-size: 11.5px !important; color: var(--hc-fg-dim); line-height: 1.5; }
+.memory-vec3d-legend {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--hc-radius-pill);
+  background: rgba(3, 7, 12, 0.66);
+  backdrop-filter: blur(10px);
+  font: 10px var(--hc-font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--hc-fg-dim);
+  pointer-events: none;
+}
+.memory-vec3d-label-wrap { pointer-events: none; }
+.memory-vec3d-label {
+  display: inline-block;
+  transform: translateY(-14px);
+  padding: 3px 8px;
+  border-radius: var(--hc-radius-sm);
+  border: 1px solid var(--hc-border);
+  background: rgba(3, 7, 12, 0.82);
+  color: var(--hc-fg-strong);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--hc-shadow-1);
+}
+
 /* --- Graph view --- */
 .memory-graph {
   position: relative;

@@ -61,6 +61,17 @@ function vectorFor(id: string): Float32Array | undefined {
   return vec;
 }
 
+/** Stored (dequantised) embeddings for the given chunk ids — only those that
+ *  have been embedded. Used by the 3D vector map to plot real vector data. */
+export function getChunkVectors(ids: string[]): Map<string, Float32Array> {
+  const out = new Map<string, Float32Array>();
+  for (const id of ids) {
+    const vec = vectorFor(id);
+    if (vec) out.set(id, vec);
+  }
+  return out;
+}
+
 function embedTextForChunk(chunk: { title: string; text: string }): string {
   return [chunk.title, chunk.text].filter(Boolean).join('. ').slice(0, PASSAGE_CHAR_BUDGET);
 }
