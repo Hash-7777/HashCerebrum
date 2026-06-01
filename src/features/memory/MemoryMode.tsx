@@ -3,8 +3,8 @@
 // earlier research runs. Saving happens in BrainMode after a research run;
 // this view reads, searches, and prunes the same store.
 
-import { useMemo, useState } from 'react';
-import { lexicalSearch, useRagStore } from '@core/store/ragStore';
+import { useEffect, useMemo, useState } from 'react';
+import { lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
@@ -35,14 +35,39 @@ export function MemoryMode() {
     [chunks, activeProjectId],
   );
 
-  // Empty search lists everything newest-first; a query ranks by the same
-  // lexical scorer the research agent's rag_search tool uses.
+  // A query paints lexical results instantly, then refines to the semantic
+  // (meaning-based) hybrid ranking once the embedder is ready — scoped to the
+  // project being viewed. Empty search lists everything newest-first.
+  const [searchResults, setSearchResults] = useState<RagChunk[]>([]);
+  useEffect(() => {
+    const query = search.trim();
+    if (!query || !activeProjectId) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    // Instant lexical first paint.
+    setSearchResults(lexicalSearch(projectChunks, query, SEARCH_RESULT_LIMIT).map((hit) => hit.chunk));
+    // Semantic refine (project-scoped).
+    void useRagStore
+      .getState()
+      .searchHybrid(activeProjectId, query, SEARCH_RESULT_LIMIT)
+      .then((hits) => {
+        if (cancelled) return;
+        const scoped = hits.filter((hit) => hit.chunk.projectId === activeProjectId).map((hit) => hit.chunk);
+        if (scoped.length > 0) setSearchResults(scoped);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectChunks, search, activeProjectId]);
+
   const visible = useMemo(() => {
     if (!search.trim()) {
       return [...projectChunks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
-    return lexicalSearch(projectChunks, search, SEARCH_RESULT_LIMIT).map((hit) => hit.chunk);
-  }, [projectChunks, search]);
+    return searchResults;
+  }, [projectChunks, search, searchResults]);
 
   return (
     <div className="mode memory-mode">

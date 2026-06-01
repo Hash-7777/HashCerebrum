@@ -32,6 +32,7 @@
     "@fontsource/newsreader": "^5.2.10",
     "@fontsource/source-sans-3": "^5.2.9",
     "@fontsource/source-serif-4": "^5.2.9",
+    "@huggingface/transformers": "^4.2.0",
     "@react-three/drei": "^9.114.0",
     "@react-three/fiber": "^8.17.10",
     "@react-three/postprocessing": "^2.16.3",

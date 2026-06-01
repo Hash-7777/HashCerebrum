@@ -348,7 +348,13 @@ export function BrainMode() {
             source: item.source,
             runId,
             query: memoryTopic,
+            // Carry the medical metadata forward so memory can rank by it (and
+            // the Phase-2 medical-aware ranker has the fields it needs).
             ...(item.url ? { url: item.url } : {}),
+            ...(item.year != null ? { year: item.year } : {}),
+            ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
+            ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
+            ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
           }));
           const answerChunk: NewRagChunk = {
             kind: 'answer',

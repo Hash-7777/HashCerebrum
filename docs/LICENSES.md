@@ -70,6 +70,28 @@ Notable bundled runtime dependencies (all permissive):
 | pdfjs-dist | Apache-2.0 | renders uploaded PDFs to canvas in Peer Review; ships the Apache NOTICE |
 | xlsx (SheetJS) | Apache-2.0 | dataset parsing |
 | @tauri-apps/* | MIT OR Apache-2.0 | desktop shell |
+| @huggingface/transformers | Apache-2.0 | in-app embedding inference (RAG memory); ships the Apache NOTICE |
+| onnxruntime-web (transitive via @huggingface/transformers) | MIT | WASM model runtime for the embedder |
+
+## Embedding model (RAG medical memory)
+
+The semantic memory uses a small, fixed, **pre-trained sentence-embedding model**
+(inference only — not an LLM, nothing is trained) bundled under
+`public/models/embed/` and run fully offline via `@huggingface/transformers`
+(`allowRemoteModels=false`).
+
+| Asset | License | Notes |
+|---|---|---|
+| `abhinand/MedEmbed-small-v0.1` (default) | Apache-2.0 | medical/clinical fine-tune of bge-small; converted to ONNX and vendored. Retain NOTICE + model card; cite the MedEmbed authors. |
+| `Xenova/bge-small-en-v1.5` (fallback) | MIT | prebuilt transformers.js export; same 384-dim drop-in. Retain license text. |
+
+Models **rejected for licensing** (kept out of the tree on purpose): BioLORD-2023
+(commercial use conditional on UMLS/SNOMED-CT licensing) and EmbeddingGemma /
+its medical fine-tune (governed by Google's non-OSI Gemma Terms). Both would
+conflict with clean, commercial, AGPL-compatible distribution.
+
+Vendoring + the upstream `LICENSE`/`NOTICE`/model-card files live next to the
+weights in `public/models/embed/` (see that folder's `README.md`).
 
 ## Full dependency-license audit (2026-05-31)
 
@@ -77,6 +99,7 @@ Both trees were scanned end-to-end:
 
 - **npm — 132 packages.** No GPL/AGPL/LGPL/SSPL/BUSL/non-commercial licenses. Two non-obvious entries were verified by hand: `webgl-constants` (blank `license` field but ships an MIT `LICENSE`) and `rgbcolor` (`MIT OR feel-free`) — both permissive.
 - **Cargo — 756 crates.** No GPL/AGPL. The only copyleft mentions are benign: `r-efi` is `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (MIT/Apache is selected, LGPL irrelevant), and 5 crates are `MPL-2.0` (file-level copyleft, used unmodified). Everything else is MIT / Apache-2.0 / BSD / ISC / Zlib / Unicode-3.0 / Unlicense / 0BSD / BSL-1.0 / CC0.
+- **Embedding stack (added 2026-06).** `@huggingface/transformers` (Apache-2.0) and its transitive `onnxruntime-web` (MIT), plus the bundled embedding model (Apache-2.0 default / MIT fallback) — all permissive, no GPL/AGPL/non-commercial.
 
 **Conclusion:** nothing in the project can force it to be open-sourced, and every dependency and asset grants commercial use. The only standing obligation is **attribution** — reproducing the third-party copyright/permission notices in the distributed app (see below).
 

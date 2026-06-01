@@ -3,7 +3,7 @@
 // client-side and offline (see ragStore.ts); no network, no IPC.
 
 import { useProjectStore } from '@core/store/projectStore';
-import { useRagStore, type RagSearchHit } from '@core/store/ragStore';
+import { retrieve, type RagSearchHit } from '@core/rag';
 import { tools } from './ToolRegistry';
 
 const LIMIT_DEFAULT = 6;
@@ -26,17 +26,18 @@ export interface RagSearchToolResult {
   text: string;
 }
 
-function formatHits(hits: RagSearchHit[]): string {
+function formatHits(hits: RagSearchHit[], activeProjectId: string): string {
   if (hits.length === 0) {
-    return 'Project memory: no earlier research in this project matches the query.';
+    return 'Project memory: no earlier research matches the query.';
   }
   const lines = hits.map((hit) => {
     const chunk = hit.chunk;
     const tag = chunk.kind === 'answer' ? 'prior answer' : chunk.source.toUpperCase();
+    const scope = chunk.projectId === activeProjectId ? '' : ' [other project]';
     const excerpt = chunk.text.replace(/\s+/g, ' ').trim().slice(0, EXCERPT_CHARS);
-    return `- (${tag}) ${chunk.title} — ${excerpt}`;
+    return `- (${tag}${scope}) ${chunk.title} — ${excerpt}`;
   });
-  return `Project memory — ${hits.length} earlier finding(s) in this project:\n${lines.join('\n')}`;
+  return `Project memory — ${hits.length} relevant earlier finding(s):\n${lines.join('\n')}`;
 }
 
 export function registerMemoryTools() {
@@ -45,7 +46,7 @@ export function registerMemoryTools() {
   tools.register<{ query?: unknown; limit?: unknown }, RagSearchToolResult>({
     name: 'rag_search',
     description:
-      "Search this project's saved research memory — evidence and answers from earlier research runs in the same project. Call this before the external database tools to reuse prior findings and avoid repeating searches.",
+      "Search the saved research memory — evidence and answers from earlier research runs — by meaning, not just keywords. Spans all of your projects but ranks findings from the current project first. Call this before the external database tools to reuse prior findings and avoid repeating searches.",
     parameters: ragSearchSchema,
     execute: async (args) => {
       const raw = (args ?? {}) as { query?: unknown; limit?: unknown };
@@ -56,8 +57,8 @@ export function registerMemoryTools() {
         ? Math.min(LIMIT_MAX, Math.max(1, Math.round(parsedLimit)))
         : LIMIT_DEFAULT;
       const projectId = useProjectStore.getState().activeProjectId ?? '';
-      const hits = projectId ? useRagStore.getState().search(projectId, query, limit) : [];
-      return { source: 'rag', count: hits.length, text: formatHits(hits) };
+      const hits = projectId ? await retrieve(query, { activeProjectId: projectId, limit }) : [];
+      return { source: 'rag', count: hits.length, text: formatHits(hits, projectId) };
     },
   });
 }
