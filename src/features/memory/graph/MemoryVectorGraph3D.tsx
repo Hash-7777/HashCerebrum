@@ -49,7 +49,7 @@ function cosine(a: Float32Array, b: Float32Array): number {
 // Evenly-spaced, high-separation hues so adjacent clusters never blur together.
 function clusterColor(index: number, total: number): string {
   const hue = Math.round((index * 360) / Math.max(1, total));
-  return `hsl(${hue} 82% 60%)`;
+  return `hsl(${hue} 85% 64%)`;
 }
 
 interface BuiltGraph {
@@ -162,7 +162,9 @@ function Edges({ positions, color, opacity }: { positions: Float32Array; color: 
   if (positions.length === 0) return null;
   return (
     <lineSegments geometry={geometry}>
-      <lineBasicMaterial color={color} transparent opacity={opacity} />
+      {/* toneMapped=false keeps the link colour at full strength instead of
+          being darkened by the renderer's tone mapping. */}
+      <lineBasicMaterial color={color} transparent opacity={opacity} toneMapped={false} />
     </lineSegments>
   );
 }
@@ -196,11 +198,14 @@ function AxisLine({ dir, color }: { dir: readonly [number, number, number]; colo
   }, [dir]);
   return (
     <lineSegments geometry={geometry}>
-      <lineBasicMaterial color={color} transparent opacity={0.6} />
+      <lineBasicMaterial color={color} transparent opacity={0.8} toneMapped={false} />
     </lineSegments>
   );
 }
 
+// A light wireframe "ground" plane below the cloud — gives the scene a floor to
+// read depth against. Drawn in a cool white at low opacity so it reads as a
+// grid without washing out the data above it.
 function FloorGrid() {
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -216,7 +221,7 @@ function FloorGrid() {
   }, []);
   return (
     <lineSegments geometry={geometry}>
-      <lineBasicMaterial color="#162032" transparent opacity={0.3} />
+      <lineBasicMaterial color="#cdd8f0" transparent opacity={0.16} toneMapped={false} />
     </lineSegments>
   );
 }
@@ -267,7 +272,7 @@ function Node({
   onSelect: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const r = node.chunk.kind === 'answer' ? 0.09 : 0.062;
+  const r = node.chunk.kind === 'answer' ? 0.11 : 0.078;
   return (
     <group position={node.pos}>
       <mesh
@@ -282,14 +287,17 @@ function Node({
         }}
         scale={selected ? 1.9 : hovered ? 1.5 : 1}
       >
-        <sphereGeometry args={[r, 16, 16]} />
+        <sphereGeometry args={[r, 20, 20]} />
+        {/* toneMapped=false + a strong emissive keeps every node vivid against
+            the dark scene so the clusters and their colours read clearly. */}
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={selected ? 1 : hovered ? 0.8 : 0.6}
-          roughness={0.35}
+          emissiveIntensity={selected ? 1.5 : hovered ? 1.3 : 1.05}
+          roughness={0.3}
+          toneMapped={false}
           transparent
-          opacity={dimmed ? 0.18 : 1}
+          opacity={dimmed ? 0.2 : 1}
         />
       </mesh>
       {(hovered || selected) && (
@@ -348,14 +356,14 @@ export function MemoryVectorGraph3D({
           setFocusCluster(null);
         }}
       >
-        <color attach="background" args={['#05080f']} />
-        <fog attach="fog" args={['#05080f', 9, 19]} />
-        <ambientLight intensity={0.7} />
-        <pointLight position={[6, 8, 10]} intensity={1.1} />
+        <color attach="background" args={['#070c16']} />
+        <fog attach="fog" args={['#070c16', 11, 22]} />
+        <ambientLight intensity={0.95} />
+        <pointLight position={[6, 8, 10]} intensity={1.2} />
         <SceneSpin active={spin && focusCluster === null && !selected} />
         <Axes3D />
-        <Edges positions={graph.intraPositions} color="#6b7aa0" opacity={focusCluster === null ? 0.3 : 0.12} />
-        <Edges positions={graph.interPositions} color="#3a465e" opacity={0.12} />
+        <Edges positions={graph.intraPositions} color="#b9c6ee" opacity={focusCluster === null ? 0.5 : 0.18} />
+        <Edges positions={graph.interPositions} color="#7180a6" opacity={0.22} />
         {graph.nodes.map((node) => (
           <Node
             key={node.chunk.id}
