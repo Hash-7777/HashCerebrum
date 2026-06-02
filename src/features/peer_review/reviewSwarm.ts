@@ -13,16 +13,35 @@ import { parseReviewResponse } from './reviewEngine';
  *  total time an agent can spend. */
 const CALL_TIMEOUT_MS = 70_000;
 
-/** How many review agents may call a provider at once. The free-tier keys this
- *  app targets rate-limit hard, so firing all five agents (each looping over
- *  document parts) in parallel guarantees a 429 storm. A small cap trades a
- *  little wall-clock time for actually completing. */
-const REVIEW_CONCURRENCY = 2;
+/** Review agents run ONE AT A TIME. The free tiers this app targets have very
+ *  low token-per-minute budgets (e.g. Groq's 8000 TPM): a single review request
+ *  is already 4–7k tokens, so even two in parallel instantly overflow the limit
+ *  and every agent gets a 429. Serial execution lets the rolling TPM window
+ *  recover between calls — the difference between "all agents failed" and a
+ *  completed review. */
+const REVIEW_CONCURRENCY = 1;
 
 /** Bounded retries so a call always terminates. Shrinking is for genuine
  *  context-size rejections; backoff is for rate/quota limits. */
 const MAX_SHRINK_RETRIES = 4;
-const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RATE_LIMIT_RETRIES = 4;
+/** Cap on how long a single rate-limit backoff will wait. Providers sometimes
+ *  report a "try again in 195s" cooldown; honouring that verbatim would stall
+ *  the whole review, so we wait the smaller of the reported delay and this cap. */
+const RATE_LIMIT_WAIT_CAP_MS = 25_000;
+
+/** Parse a provider's suggested retry delay from a 429 message ("try again in
+ *  8.7s", "Please try again in 13.635s") into milliseconds, capped. Returns
+ *  null when no delay is advertised. */
+function retryAfterMs(err: unknown): number | null {
+  const m = err instanceof Error ? err.message : String(err);
+  const match = m.match(/try again in\s+([\d.]+)\s*(ms|s)?/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  const ms = match[2]?.toLowerCase() === 'ms' ? value : value * 1000;
+  return Math.min(ms, RATE_LIMIT_WAIT_CAP_MS);
+}
 
 /** Race a promise against a timeout rejection. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -74,9 +93,10 @@ function userMsg(text: string, max: number = MAX_CHARS): string {
 }
 
 // Target size of each document part when the manuscript is reviewed in chunks.
-// ~10k chars ≈ 2.5k tokens, leaving room for a long reviewer system prompt and
-// the model's reply under an 8k-token-per-request budget.
-const CHUNK_CHARS = 10_000;
+// ~6k chars ≈ 1.5k tokens; with a long reviewer system prompt (~1.5k) and the
+// model's reply, this keeps a single request well under an 8k token-per-minute
+// budget so a low free tier can actually serve it.
+const CHUNK_CHARS = 6_000;
 
 // Split a manuscript into review-sized parts at paragraph boundaries, hard-
 // splitting any single paragraph that is itself larger than the budget.
@@ -431,7 +451,12 @@ export async function runReviewSwarm(
         }
         if (isRateLimited(err) && !acc && rateRetries < MAX_RATE_LIMIT_RETRIES) {
           rateRetries += 1;
-          const waitMs = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1)) + Math.floor(Math.random() * 400);
+          // Prefer the provider's advertised cooldown ("try again in Xs",
+          // capped) over a blind exponential — it is the real time the TPM
+          // window needs to recover.
+          const advertised = retryAfterMs(err);
+          const backoff = Math.min(RATE_LIMIT_WAIT_CAP_MS, 1_000 * 2 ** (rateRetries - 1));
+          const waitMs = (advertised ?? backoff) + Math.floor(Math.random() * 400);
           trace('tool_call', `[Peer Review] ${label}: rate-limited — pausing ${Math.round(waitMs / 1000)}s`);
           await sleep(waitMs, signal);
           continue;
@@ -535,11 +560,18 @@ export async function runReviewSwarm(
     Array.from({ length: Math.min(REVIEW_CONCURRENCY, REVIEW_SWARM_AGENTS.length) }, () => worker()),
   );
 
-  // If every single agent failed, surface an error rather than an empty review.
+  // If every single agent failed, surface a clear, actionable error rather than
+  // an empty review or a raw provider JSON dump. The dominant cause on free
+  // tiers is the token-per-minute limit, so name that and what to do about it.
   if (results.every((r) => r?.error)) {
     const firstErr = results.find((r) => r?.error)?.error ?? 'All review agents failed';
     trace('error', `[Peer Review] all agents failed: ${firstErr}`);
-    throw new Error(`Peer review failed: ${firstErr}`);
+    const rateLimited = results.some((r) => r?.error && isRateLimited(new Error(r.error)));
+    throw new Error(
+      rateLimited
+        ? "Peer review couldn't complete: the selected model's free tier ran out of tokens-per-minute. Wait a minute and re-review, or switch to a higher-tier API key in Settings."
+        : `Peer review failed: ${firstErr}`,
+    );
   }
 
   trace('done', '[Peer Review] swarm complete — building report');
