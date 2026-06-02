@@ -17,6 +17,14 @@
 
 </div>
 
+> **Built on [HashCortX](#lineage--built-on-hashcortx).** HashCerebrum is built
+> using the author's earlier local-first agentic desktop app, **HashCortX**, as
+> its building blocks — its multi-provider failover chain, guarded/audited
+> network core, swarm + tool-registry orchestration, and the "Medical
+> Lexi-Check" drug-interaction grader — then extends them for medicine with a
+> hallucination-gated paper pipeline, on-device semantic memory, and a 3D
+> anatomical workspace.
+
 Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all** — including the embedding model that powers memory, which is bundled and runs on-device.
 
 ---
