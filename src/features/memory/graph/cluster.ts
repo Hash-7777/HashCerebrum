@@ -164,3 +164,53 @@ export function clusterLabel(texts: string[], maxWords = 2): string {
   if (top.length === 0) return 'misc';
   return top.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' · ');
 }
+
+const cap = (w: string): string => w.charAt(0).toUpperCase() + w.slice(1);
+
+/**
+ * Label each cluster by the terms most DISTINCTIVE to it — frequent within the
+ * cluster but rare across the others — so two clusters on the same broad topic
+ * don't collapse to the same name (e.g. both "Digoxin · Nsaids"). Guarantees no
+ * two returned labels are identical.
+ */
+export function distinctiveClusterLabels(textsPerCluster: string[][], maxWords = 2): string[] {
+  const termClusterCount = new Map<string, number>();
+  const perClusterFreq = textsPerCluster.map((texts) => {
+    const freq = new Map<string, number>();
+    const present = new Set<string>();
+    for (const text of texts) {
+      const seen = new Set<string>();
+      for (const raw of text.toLowerCase().split(/[^a-z0-9-]+/)) {
+        const w = raw.trim();
+        if (w.length < 4 || STOP.has(w) || seen.has(w)) continue;
+        seen.add(w);
+        freq.set(w, (freq.get(w) ?? 0) + 1);
+        present.add(w);
+      }
+    }
+    for (const w of present) termClusterCount.set(w, (termClusterCount.get(w) ?? 0) + 1);
+    return freq;
+  });
+
+  const total = textsPerCluster.length;
+  const used = new Set<string>();
+  return perClusterFreq.map((freq, i) => {
+    // Rank: terms confined to FEWER clusters first (a term in every cluster is
+    // not distinctive), then by frequency/spread, then raw frequency, then name.
+    const ranked = [...freq.entries()]
+      .map(([w, f]) => {
+        const df = termClusterCount.get(w) ?? 1;
+        return { w, f, ubiquitous: df >= total ? 1 : 0, score: f / df };
+      })
+      .sort((a, b) => a.ubiquitous - b.ubiquitous || b.score - a.score || b.f - a.f || a.w.localeCompare(b.w))
+      .map((r) => r.w);
+    const picked = ranked.slice(0, maxWords);
+    let label = picked.length ? picked.map(cap).join(' · ') : `Group ${i + 1}`;
+    if (used.has(label)) {
+      const extra = ranked.find((w) => !picked.includes(w));
+      label = extra ? `${label} · ${cap(extra)}` : `${label} ${i + 1}`;
+    }
+    used.add(label);
+    return label;
+  });
+}

@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { getChunkVectors, type RagChunk } from '@core/rag';
 import { Icon } from '@ui/icons';
 import { pca3, type Vec3 } from './pca3';
-import { chooseK, clusterLabel, kmeans } from './cluster';
+import { chooseK, distinctiveClusterLabels, kmeans } from './cluster';
 
 const MAX_NODES = 500; // cap for smooth interaction
 const NEIGHBOURS_PER_NODE = 2;
@@ -49,7 +49,7 @@ function cosine(a: Float32Array, b: Float32Array): number {
 // Evenly-spaced, high-separation hues so adjacent clusters never blur together.
 function clusterColor(index: number, total: number): string {
   const hue = Math.round((index * 360) / Math.max(1, total));
-  return `hsl(${hue} 70% 62%)`;
+  return `hsl(${hue} 82% 60%)`;
 }
 
 interface BuiltGraph {
@@ -109,9 +109,12 @@ function buildGraph(chunks: RagChunk[]): BuiltGraph | null {
     sizes[node.cluster] = (sizes[node.cluster] ?? 0) + 1;
     labelTexts[node.cluster]!.push(node.chunk.query ?? node.chunk.title);
   });
+  // Distinctive per-cluster labels so two groups on the same broad topic don't
+  // both read "Digoxin · Nsaids".
+  const labels = distinctiveClusterLabels(labelTexts);
   const clusters: ClusterInfo[] = Array.from({ length: k }, (_, i) => ({
     index: i,
-    label: clusterLabel(labelTexts[i]!),
+    label: labels[i] ?? `Group ${i + 1}`,
     color: clusterColor(i, k),
     size: sizes[i]!,
   })).sort((a, b) => b.size - a.size);
@@ -233,7 +236,7 @@ function Node({
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={selected ? 1 : hovered ? 0.75 : 0.45}
+          emissiveIntensity={selected ? 1 : hovered ? 0.8 : 0.6}
           roughness={0.35}
           transparent
           opacity={dimmed ? 0.18 : 1}

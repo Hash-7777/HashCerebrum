@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseK, clusterLabel, kmeans } from '../cluster';
+import { chooseK, clusterLabel, distinctiveClusterLabels, kmeans } from '../cluster';
 
 // Build a unit vector that lives near one of three orthogonal directions, with
 // a little deterministic jitter, so the three groups are genuinely separable.
@@ -49,6 +49,25 @@ describe('kmeans clustering', () => {
     expect(chooseK(800)).toBe(10);
     expect(chooseK(50)).toBeGreaterThanOrEqual(2);
     expect(chooseK(50)).toBeLessThanOrEqual(10);
+  });
+
+  it('gives two same-topic clusters distinct labels via distinctive terms', () => {
+    const labels = distinctiveClusterLabels([
+      // both clusters share "warfarin"/"nsaids" but differ on bleeding vs kinetics
+      ['warfarin nsaids bleeding hemorrhage', 'warfarin nsaids bleeding risk'],
+      ['warfarin nsaids pharmacokinetics clearance', 'warfarin nsaids metabolism kinetics'],
+    ]);
+    expect(labels[0]).not.toBe(labels[1]); // no "Digoxin · Nsaids" twice
+    expect(`${labels[0]} ${labels[1]}`.toLowerCase()).toMatch(/bleeding|hemorrhage/);
+    expect(`${labels[0]} ${labels[1]}`.toLowerCase()).toMatch(/pharmacokinetics|kinetics|metabolism|clearance/);
+  });
+
+  it('never returns identical labels even when clusters are indistinguishable', () => {
+    const labels = distinctiveClusterLabels([
+      ['warfarin nsaids', 'warfarin nsaids'],
+      ['warfarin nsaids', 'warfarin nsaids'],
+    ]);
+    expect(new Set(labels).size).toBe(2);
   });
 
   it('labels a cluster by its most frequent meaningful terms', () => {
