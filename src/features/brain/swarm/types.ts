@@ -63,4 +63,7 @@ export interface SwarmOptions {
   // set, smaller token budgets, and no rate-limit pausing — for free / small
   // local models.
   mini?: boolean;
+  // Drug-Interactions focus: route to a single drug-interaction specialist that
+  // writes a focused interaction report instead of the general research team.
+  drugFocus?: boolean;
 }

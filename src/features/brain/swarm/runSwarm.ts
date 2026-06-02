@@ -7,7 +7,14 @@
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import type { EvidenceItem } from '@platform/index';
-import { appraisePriorWork, bossChat, contextualizeQuestion, planResearch, synthesize } from './boss';
+import {
+  appraisePriorWork,
+  bossChat,
+  contextualizeQuestion,
+  planResearch,
+  synthesize,
+  synthesizeInteractionReport,
+} from './boss';
 import {
   detectPaperRequest,
   fallbackPaperTasks,
@@ -247,6 +254,7 @@ function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const mini = opts.mini ?? false;
+  const drugFocus = opts.drugFocus ?? false;
   const bossModel = modelFor('boss');
 
   // A follow-up that asks the team to appraise its own previous output ("rate
@@ -278,6 +286,38 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // original phrasing.
   const paperRequest = detectPaperRequest(question);
   const researchQuestion = await contextualizeQuestion(bossModel, question, conversation);
+
+  // Drug-Interactions focus: a single specialist gathers interaction evidence
+  // from trusted sources and the boss writes a focused interaction report —
+  // not a manuscript and not the full research team. Findings still flow into
+  // the shared memory through the normal save path, so Brain benefits later.
+  if (drugFocus) {
+    callbacks.onBossPhase('delegating');
+    const specialist = await runSpecialist(
+      agentById('drug_interactions'),
+      modelFor('drug_interactions'),
+      researchQuestion,
+      callbacks,
+    );
+    const merged = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    const citable = merged.filter((record) => !CONTEXT_ONLY_SOURCES.has(record.source));
+    callbacks.onBossPhase('synthesizing');
+    const report = await synthesizeInteractionReport(
+      bossModel,
+      researchQuestion,
+      [specialist],
+      citable,
+      callbacks.onAnswerToken,
+      signal,
+    );
+    return {
+      kind: 'research',
+      answer: report.content,
+      evidence: citable,
+      specialists: [specialist],
+      modelUsed: report.modelUsed,
+    };
+  }
 
   callbacks.onBossPhase('routing');
   let plan = await planResearch(bossModel, researchQuestion, conversation);

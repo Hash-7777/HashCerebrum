@@ -207,6 +207,66 @@ export async function bossChat(
 
 
 
+// Focused drug-interaction report — streamed. Used by the Brain "Interactions"
+// toggle: a single specialist gathered interaction evidence and this writes a
+// clinician-facing report from it. Strictly grounded in the retrieved records.
+export async function synthesizeInteractionReport(
+  model: string,
+  question: string,
+  specialists: SpecialistResult[],
+  evidence: EvidenceItem[],
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<{ content: string; modelUsed: string }> {
+  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
+  const findings = specialists
+    .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
+    .join('\n\n');
+  const messages: LlmMessage[] = [
+    {
+      role: 'system',
+      content: `You are HashCerebrum's Drug Interactions specialist writing a focused, professional drug–drug / drug–food / drug–herb interaction report for a clinician.
+
+Hard rules:
+- Use ONLY the retrieved records and findings provided. Never invent an interaction, mechanism, severity, dose, PMID, or statistic.
+- Cite every factual claim inline with the exact [S#] marker of the record it came from. Never write a bare or list-style marker.
+- If the retrieved evidence does not establish a clinically significant interaction, say so plainly.
+- This is research triage, not medical advice.
+
+Write the report in this Markdown structure, each as developed prose:
+## Interaction Summary
+The substances involved and whether a clinically significant interaction is supported by the evidence.
+## Mechanism
+The pharmacokinetic (CYP450, P-glycoprotein, protein-binding, absorption) and/or pharmacodynamic basis [S#].
+## Severity & Clinical Significance
+Magnitude, onset, documentation level, and which patients are at highest risk.
+## Management & Monitoring
+Concrete clinical actions — avoid, adjust dose, monitor (INR, drug levels, symptoms), or substitute — grounded in the sources.
+## Evidence & Gaps
+The type and strength of the cited sources and any gaps that limit certainty.`,
+    },
+    {
+      role: 'user',
+      content: `Interaction question: ${question}
+
+Retrieved records:
+${evidenceBlock}
+
+Specialist findings:
+${findings}
+
+Write the drug-interaction report now, citing [S#] markers exactly as shown.`,
+    },
+  ];
+  const res = await streamWithModelChain(
+    model,
+    { messages, temperature: 0.2, maxTokens: 2200 },
+    { onToken, signal },
+    emitFailover,
+  );
+  return { content: stripLeakedSpecialistLabels(res.content), modelUsed: res.modelUsed };
+}
+
 // Synthesize the specialists' findings into the final answer — streamed.
 export async function synthesize(
   model: string,

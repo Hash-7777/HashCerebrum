@@ -319,6 +319,7 @@ export function BrainMode() {
         callbacks,
         signal: abortRef.current?.signal,
         mini: useBrainModesStore.getState().mini,
+        drugFocus: useBrainModesStore.getState().drugFocus,
       });
 
       flushTopicHits(result.answer || streamedContent);
