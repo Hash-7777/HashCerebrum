@@ -45,6 +45,10 @@ export const CONTEXT_ONLY_SOURCES = new Set<EvidenceItem['source']>(['openfda', 
 // for any genuine question.
 const MIN_PRIMARY_EVIDENCE = 5;
 
+// Visible marker prefixed to any section the pipeline could not properly draft
+// or repair, so an incomplete section is never silently shipped as if finished.
+const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
+
 const SECTION_SYSTEM = `You are The Cerebrum, the final biomedical manuscript compiler for HashCerebrum. The full manuscript is being assembled one section at a time. You are writing EXACTLY ONE SECTION — the section named in the prompt and nothing else.
 
 DEPTH REQUIREMENT — this is the most important instruction:
@@ -886,24 +890,48 @@ function specialistRoleDigest(specialists: SpecialistResult[]): string {
     .join('\n');
 }
 
-// A provider rejecting the request as too large for its token budget (HTTP
-// 413 / "request too large" / TPM or context-length limit). When the failover
-// chain lands on a small-budget model (e.g. gpt-oss-120b at 8k), a full section
-// prompt overflows; we recover by shrinking the prompt instead of dropping the
-// whole section.
+// A provider rejecting the request because the prompt is too big for the
+// model's CONTEXT WINDOW (HTTP 413 / "request too large" / "context length").
+// When the failover chain lands on a small-budget model (e.g. gpt-oss-120b at
+// 8k), a full section prompt overflows; we recover by shrinking it. NOTE: a
+// "tokens per minute" message is a RATE limit, not a context-size error —
+// shrinking cannot fix a per-minute quota, so it is classified separately below.
 function isCallTooLarge(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
     m.includes('413') ||
     m.includes('request too large') ||
-    m.includes('tokens per minute') ||
     m.includes('context length') ||
+    m.includes('context_length') ||
     m.includes('too many tokens') ||
     m.includes('maximum context')
   );
 }
 
+// A rate / quota limit (per-minute requests or tokens, daily quota, cooldown).
+// Shrinking does not help; a brief backoff (the failover chain has already
+// tried every provider) gives a cooling key time to recover.
+function isCallRateLimited(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes('429') ||
+    m.includes('rate limit') ||
+    m.includes('rate_limit') ||
+    m.includes('quota') ||
+    m.includes('requests per minute') ||
+    m.includes('tokens per minute') ||
+    m.includes('too many requests') ||
+    m.includes('cooling down') ||
+    m.includes('cooldown')
+  );
+}
+
 const MIN_CALL_CHARS = 4_000;
+const MAX_CALL_RATE_RETRIES = 3;
+
+function callSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function callModel(model: string, system: string, user: string, maxTokens: number): Promise<string> {
   // Surface a silent boss-model failover in the trace so a mid-run provider
@@ -918,6 +946,7 @@ async function callModel(model: string, system: string, user: string, maxTokens:
 
   let content = user;
   let tokenCap = maxTokens;
+  let rateRetries = 0;
   for (;;) {
     try {
       const response = await completeWithModelChain(
@@ -942,6 +971,17 @@ async function callModel(model: string, system: string, user: string, maxTokens:
           phase: 'tool_call',
           detail: `section prompt too large — retrying smaller (${content.length} chars)`,
         });
+        continue;
+      }
+      if (isCallRateLimited(err) && rateRetries < MAX_CALL_RATE_RETRIES) {
+        rateRetries += 1;
+        const waitMs = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1)) + Math.floor(Math.random() * 400);
+        bus.emit('agent:activity', {
+          agentId: 'boss',
+          phase: 'tool_call',
+          detail: `rate-limited — pausing ${Math.round(waitMs / 1000)}s before retry`,
+        });
+        await callSleep(waitMs);
         continue;
       }
       throw err;
@@ -1005,9 +1045,9 @@ Write the ${opts.section.heading} section now. Start immediately with the first 
     if (salvaged) {
       return sectionBodyFromReply(opts.section.heading, salvaged);
     }
-    // Cannot salvage — return a gap section body directly
+    // Cannot salvage — return a flagged gap section body directly
     return [
-      `The language model produced a complete-document structure instead of the requested ${opts.section.heading.toLowerCase()} section. A targeted evidence summary is provided in place of synthesised prose. The claim ledger and extraction table should be reviewed directly before publication ${[...sourceMarkers].slice(0, 3).join(' ')}.`,
+      `${SECTION_REVIEW_FLAG} the language model produced a complete-document structure instead of the requested ${opts.section.heading.toLowerCase()} section, so this section needs to be regenerated before submission. The claim ledger and extraction table should be reviewed directly ${[...sourceMarkers].slice(0, 3).join(' ')}.`,
     ];
   }
 
@@ -1098,7 +1138,7 @@ async function compileSections(opts: {
         detail: `Section "${blueprintSection.heading}" draft failed: ${detail.slice(0, 120)}`,
       });
       body = [
-        `This section could not be drafted from the claim ledger because the language-model call failed: ${detail}. The available claim ledger should be reviewed directly before publication ${assignedMarkers.slice(0, 3).join(' ')}.`,
+        `${SECTION_REVIEW_FLAG} this section could not be drafted from the claim ledger because the language-model call failed (${detail.slice(0, 160)}). It needs to be written or regenerated before submission. The available claim ledger should be reviewed directly ${assignedMarkers.slice(0, 3).join(' ')}.`,
       ];
     }
 
