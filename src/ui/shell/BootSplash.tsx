@@ -1,7 +1,7 @@
-// First-run loading splash. The brand logo mark is the animated centerpiece,
-// set over an ambient particle field, with a glassy boot console, a progress
-// trace, and a "Ready → Enter" gate. Uses the app's bundled fonts so it stays
-// fully offline / CSP-clean.
+// First-run loading splash. A calm, clinical loading screen: the brand mark
+// over a soft ambient field, a single live status line, a clean progress bar,
+// and a "Ready → Enter" gate. Uses the app's bundled fonts so it stays fully
+// offline / CSP-clean.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import logoMark from '@/assets/logo-mark.png';
@@ -9,33 +9,27 @@ import { APP_VERSION } from '@config/constants';
 
 const DURATION = 3.0; // seconds
 
-const ROWS: Array<{ msg: string; t: string }> = [
-  { msg: 'Establishing encrypted session', t: '46ms' },
-  { msg: 'Waking the Cerebrum', t: '118ms' },
-  { msg: 'Indexing research corpus', t: '232ms' },
-  { msg: 'Spinning up agent swarm · 8 specialists', t: '164ms' },
-  { msg: 'Calibrating peer review', t: '93ms' },
-  { msg: 'Verifying provenance & trust chain', t: '71ms' },
+// The phases shown, one at a time, on the status line as the app warms up.
+const STEPS = [
+  'Establishing encrypted session',
+  'Waking the Cerebrum',
+  'Indexing research corpus',
+  'Preparing the agent team',
+  'Calibrating peer review',
+  'Verifying provenance & trust chain',
 ];
-
-interface RowState {
-  shown: boolean;
-  done: boolean;
-}
 
 export function BootSplash({ onEnter }: { onEnter: () => void }) {
   const reduced =
     typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const [rows, setRows] = useState<RowState[]>(() =>
-    ROWS.map(() => ({ shown: reduced, done: reduced })),
-  );
+  const [step, setStep] = useState(reduced ? STEPS.length - 1 : 0);
   const [pct, setPct] = useState(reduced ? 100 : 0);
   const [ready, setReady] = useState(reduced);
   const [exiting, setExiting] = useState(false);
   const fieldRef = useRef<HTMLCanvasElement>(null);
 
-  // Ambient drifting particle field (very subtle).
+  // Ambient drifting particle field (very subtle — adds depth, not noise).
   useEffect(() => {
     const cv = fieldRef.current;
     if (!cv) return;
@@ -52,14 +46,14 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
       h = cv.height = innerHeight * dpr;
       cv.style.width = `${innerWidth}px`;
       cv.style.height = `${innerHeight}px`;
-      const n = Math.round((innerWidth * innerHeight) / 42000);
+      const n = Math.round((innerWidth * innerHeight) / 60000);
       seeds = Array.from({ length: n }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,
-        s: (1.1 + Math.random() * 1.8) * dpr,
-        vx: (Math.random() - 0.5) * 0.05 * dpr,
-        vy: (Math.random() * 0.06 + 0.02) * dpr,
-        a: 0.04 + Math.random() * 0.07,
+        s: (1 + Math.random() * 1.4) * dpr,
+        vx: (Math.random() - 0.5) * 0.04 * dpr,
+        vy: (Math.random() * 0.05 + 0.015) * dpr,
+        a: 0.03 + Math.random() * 0.05,
         tw: Math.random() * Math.PI * 2,
       }));
     };
@@ -69,7 +63,7 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
         if (!reduced) {
           p.x += p.vx;
           p.y += p.vy;
-          p.tw += 0.01;
+          p.tw += 0.008;
           if (p.y > h + 4) p.y = -4;
           if (p.x < -4) p.x = w + 4;
           if (p.x > w + 4) p.x = -4;
@@ -89,7 +83,7 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
     };
   }, [reduced]);
 
-  // Boot timeline: reveal + complete rows, ramp progress, then go Ready.
+  // Boot timeline: ramp progress and advance the status line, then go Ready.
   useEffect(() => {
     if (reduced) return;
     const timers: number[] = [];
@@ -104,19 +98,10 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
     };
     raf = requestAnimationFrame(ramp);
 
-    const startRows = 1000;
-    const gap = (total - 1000 - 260) / ROWS.length;
-    ROWS.forEach((_, i) => {
-      timers.push(
-        window.setTimeout(() => {
-          setRows((prev) => prev.map((r, j) => (j === i ? { ...r, shown: true } : r)));
-        }, startRows + i * gap),
-      );
-      timers.push(
-        window.setTimeout(() => {
-          setRows((prev) => prev.map((r, j) => (j === i ? { ...r, done: true } : r)));
-        }, startRows + i * gap + gap * 0.78),
-      );
+    const startAt = 600;
+    const gap = (total - startAt - 200) / STEPS.length;
+    STEPS.forEach((_, i) => {
+      timers.push(window.setTimeout(() => setStep(i), startAt + i * gap));
     });
 
     timers.push(
@@ -135,7 +120,7 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
   const doEnter = useCallback(() => {
     if (!ready || exiting) return;
     setExiting(true);
-    window.setTimeout(onEnter, 950); // let the exit transition play
+    window.setTimeout(onEnter, 850); // let the exit transition play
   }, [ready, exiting, onEnter]);
 
   useEffect(() => {
@@ -147,18 +132,17 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
   }, [doEnter]);
 
   return (
-    <div className={`boot${ready ? ' ready' : ''}${exiting ? ' exiting' : ''}`} role="status" aria-label="Loading HashCerebrum">
+    <div
+      className={`boot${ready ? ' ready' : ''}${exiting ? ' exiting' : ''}`}
+      role="status"
+      aria-label="Loading HashCerebrum"
+    >
       <canvas ref={fieldRef} className="boot-field" aria-hidden="true" />
       <div className="boot-vignette" aria-hidden="true" />
-      <div className="boot-grain" aria-hidden="true" />
 
       <main className="boot-stage">
         <div className="boot-emblem">
           <img src={logoMark} alt="HashCerebrum" draggable={false} />
-          <span className="boot-spark s1" aria-hidden="true" />
-          <span className="boot-spark s2" aria-hidden="true" />
-          <span className="boot-spark s3" aria-hidden="true" />
-          <span className="boot-spark s4" aria-hidden="true" />
         </div>
 
         <div className="boot-brand">
@@ -172,43 +156,23 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
           <div className="kicker">
             Private<span className="dot">·</span>Agentic<span className="dot">·</span>Trusted
           </div>
-          <div className="field">Medical Research</div>
+          <div className="field">Medical Research Workspace</div>
         </div>
 
-        <section className="boot-console" aria-label="Boot sequence">
-          <div className="head">
-            <div className="stat">
-              <span className="led" />
-              <span>{ready ? 'SYSTEM · READY' : 'SYSTEM · BOOT'}</span>
-            </div>
-            <span>v{APP_VERSION}</span>
+        <div className="boot-progress">
+          <div className="boot-status" aria-live="polite">
+            <span className="boot-status-dot" />
+            <span className="boot-status-text">{ready ? 'Ready' : `${STEPS[step]}…`}</span>
           </div>
-          <div className="rows">
-            {ROWS.map((row, i) => {
-              const state = rows[i]!;
-              return (
-                <div key={row.msg} className={`boot-row${state.shown ? ' show' : ''}${state.done ? ' done' : ''}`}>
-                  <span className="b-ic" aria-hidden="true">
-                    {state.done ? <span className="boot-check">✓</span> : <span className="boot-spinner" />}
-                  </span>
-                  <span className="b-msg">{row.msg}</span>
-                  <span className="b-time">{row.t}</span>
-                </div>
-              );
-            })}
+          <div className="boot-track">
+            <div className="boot-fill" style={{ width: `${pct}%` }} />
           </div>
-        </section>
-
-        <div className="boot-prog">
-          <div className="track">
-            <div className="fill" style={{ right: `${100 - pct}%` }} />
-          </div>
-          <div className="pct">{Math.round(pct)}%</div>
+          <div className="boot-pct">{Math.round(pct)}%</div>
         </div>
 
         <div className="boot-enter-wrap">
           <button type="button" className={`boot-enter${ready ? ' ready' : ''}`} onClick={doEnter}>
-            Enter HashCerebrum <span className="arr">→</span>
+            Enter <span className="arr">→</span>
           </button>
           <div className={`boot-hint${ready ? ' ready' : ''}`}>
             press <kbd>↵</kbd> to enter
