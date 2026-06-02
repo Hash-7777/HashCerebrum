@@ -99,6 +99,58 @@ const STOPWORDS = new Set([
   'with',
 ]);
 
+// Words that describe the REQUEST or the deliverable ("make a full research
+// paper about ...") rather than the subject. Stripped from the fallback title
+// and from keyword extraction so neither echoes the user's instruction verbatim
+// (the source of titles like "Full reaserch paper about ..." and keywords like
+// "full, reaserch"). Includes common misspellings of "research".
+const META_INSTRUCTION_WORDS = new Set([
+  'make', 'write', 'draft', 'create', 'generate', 'produce', 'compose', 'prepare', 'give', 'need',
+  'want', 'please', 'full', 'complete', 'comprehensive', 'detailed', 'thorough', 'professional',
+  'publishable', 'proper', 'research', 'reaserch', 'reasearch', 'reserch', 'paper', 'manuscript',
+  'article', 'report', 'document', 'about', 'regarding', 'concerning', 'statistics', 'statistical',
+  'stats', 'numbers', 'numeric', 'data',
+]);
+
+// Common typos corrected before a token reaches a title or keyword list.
+const TYPO_FIXES: Record<string, string> = {
+  reaserch: 'research',
+  reasearch: 'research',
+  reserch: 'research',
+  mecanism: 'mechanism',
+  mechanim: 'mechanism',
+  pharmacolgy: 'pharmacology',
+  warafin: 'warfarin',
+  digoxine: 'digoxin',
+};
+
+const STRUCTURAL_WORDS = new Set(['a', 'an', 'the', 'me', 'on', 'of', 'for', 'to', 'with', 'in']);
+
+function fixTypos(text: string): string {
+  return text.replace(/[A-Za-z]+/g, (w) => TYPO_FIXES[w.toLowerCase()] ?? w);
+}
+
+// Strip leading request/deliverable words ("make a full research paper about")
+// token by token — robust to word order and misspellings, unlike a fixed regex.
+function stripLeadingMeta(text: string): string {
+  const tokens = text.trim().split(/\s+/);
+  let i = 0;
+  while (i < tokens.length) {
+    const w = tokens[i]!.toLowerCase().replace(/[^a-z]/g, '');
+    if (META_INSTRUCTION_WORDS.has(w) || STRUCTURAL_WORDS.has(w)) i += 1;
+    else break;
+  }
+  return tokens.slice(i).join(' ');
+}
+
+// Strip a trailing "with statistics / and stats / including numeric data" clause
+// — an instruction about presentation, not part of the subject.
+function stripTrailingMeta(text: string): string {
+  return text
+    .replace(/[\s,]+(with|and|including|plus|featuring)\s+(statistics|statistical analysis|stats|numbers|numeric data|data|figures)\s*$/i, '')
+    .trim();
+}
+
 const SECTION_KEYWORDS: Array<{ section: string; terms: RegExp[] }> = [
   {
     section: 'Mechanistic and Pharmacologic Evidence',
@@ -527,12 +579,9 @@ export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedger
   return [...byClaim.values()];
 }
 
-function titleTopic(question: string): string {
-  return question
-    .replace(/^\s*(make|write|draft|create|generate|produce|compose|prepare)\s+(a\s+|an\s+|me\s+a\s+|me\s+an\s+)?(full\s+|complete\s+|comprehensive\s+|detailed\s+)?(professional\s+|publishable\s+)?(research\s+)?(paper|manuscript|article|report)\s+(about|on|for|titled?|called|named)\s+/i, '')
-    .replace(/^\s*(make|write|draft|create|generate|produce|compose|prepare)\s+(a\s+|an\s+|me\s+a\s+|me\s+an\s+)?/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+export function titleTopic(question: string): string {
+  const subject = stripTrailingMeta(stripLeadingMeta(question)).replace(/\s+/g, ' ').trim();
+  return fixTypos(subject || question.trim());
 }
 
 function blueprintTitle(question: string): string {
@@ -594,13 +643,20 @@ export function buildPaperBlueprint(question: string, ledger: ClaimLedgerEntry[]
   };
 }
 
-function keywordsFrom(question: string): string[] {
+// Keywords are drawn from the SUBJECT (instruction words stripped), with typos
+// corrected and instruction/deliverable words excluded — so a request like
+// "make a full reaserch paper about ..." yields the actual topic terms, never
+// "full" or "reaserch".
+export function keywordsFrom(question: string): string[] {
   return [
     ...new Set(
-      question
+      titleTopic(question)
         .toLowerCase()
         .split(/[^a-z0-9]+/)
-        .filter((word) => word.length >= 4 && !STOPWORDS.has(word)),
+        .map((word) => TYPO_FIXES[word] ?? word)
+        .filter(
+          (word) => word.length >= 4 && !STOPWORDS.has(word) && !META_INSTRUCTION_WORDS.has(word),
+        ),
     ),
   ].slice(0, 7);
 }

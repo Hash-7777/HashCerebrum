@@ -6,9 +6,39 @@ import {
   buildClaimLedger,
   buildPaperBlueprint,
   extractEvidenceFromRecords,
+  keywordsFrom,
   parseEvidenceExtractionJson,
+  titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('title & keyword cleanup', () => {
+  const prompt = 'make a full reaserch paper about nsaids use with warfarin and digoxin in young population with statistics';
+
+  it('strips instruction words and the trailing statistics clause from the title topic', () => {
+    const topic = titleTopic(prompt);
+    expect(topic.toLowerCase()).not.toContain('reaserch');
+    expect(topic.toLowerCase()).not.toContain('full');
+    expect(topic.toLowerCase()).not.toMatch(/\bpaper\b/);
+    expect(topic.toLowerCase()).not.toMatch(/with statistics$/);
+    expect(topic.toLowerCase()).toContain('nsaids');
+    expect(topic.toLowerCase()).toContain('warfarin');
+  });
+
+  it('derives keywords from the subject, never the instruction or typos', () => {
+    const keywords = keywordsFrom(prompt);
+    expect(keywords).not.toContain('full');
+    expect(keywords).not.toContain('reaserch');
+    expect(keywords).not.toContain('research');
+    expect(keywords).not.toContain('paper');
+    expect(keywords).not.toContain('statistics');
+    expect(keywords).toEqual(expect.arrayContaining(['nsaids', 'warfarin', 'digoxin']));
+  });
+
+  it('leaves an already-clean topic intact', () => {
+    expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
+  });
+});
 
 function record(partial: Partial<EvidenceItem> & { source?: EvidenceItem['source'] } = {}): EvidenceItem {
   return {
