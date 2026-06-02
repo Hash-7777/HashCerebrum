@@ -190,6 +190,18 @@ describe('assessEvidenceSufficiency', () => {
     expect(note).toContain('digoxin');
   });
 
+  it('never reports instruction words or typos as uncovered concepts', () => {
+    // The raw request including "make a full reaserch paper ... with statistics".
+    const rawPrompt = 'make a full reaserch paper about NSAIDs use with warfarin and digoxin in young population with statistics';
+    const evidence = [titled('Warfarin and NSAID bleeding', 'warfarin nsaids')];
+    const { uncovered } = assessEvidenceSufficiency(rawPrompt, evidence);
+    for (const junk of ['make', 'full', 'reaserch', 'research', 'paper', 'statistics']) {
+      expect(uncovered).not.toContain(junk);
+    }
+    // The genuine uncovered medical concepts still surface.
+    expect(uncovered).toContain('digoxin');
+  });
+
   it('returns no note when every concept is covered', () => {
     const evidence = [
       titled('NSAIDs, warfarin and digoxin in young patients', 'nsaids warfarin digoxin young population'),

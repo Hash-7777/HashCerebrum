@@ -61,12 +61,22 @@ export function evidenceScore(record: EvidenceItem): number {
 }
 
 // Filler words ignored when scoring a record's relevance to the question.
+// Includes request/deliverable instruction words ("make a full research paper
+// about …") and common misspellings, so they never become "concepts" — they
+// were leaking into the evidence-gap note as "no records cover: make, full,
+// reaserch, …".
 const RELEVANCE_FILLER = new Set([
   'about', 'after', 'against', 'among', 'and', 'any', 'are', 'between', 'both', 'compare', 'comparison',
   'does', 'effect', 'effects', 'evidence', 'for', 'from', 'have', 'high', 'how', 'into', 'its', 'low',
   'more', 'most', 'only', 'over', 'paper', 'patient', 'patients', 'research', 'review', 'risk', 'safety',
   'than', 'that', 'their', 'them', 'these', 'this', 'those', 'using', 'versus', 'what', 'which', 'with',
   'within', 'your',
+  // request / deliverable instruction words + typos (not subject concepts)
+  'make', 'write', 'draft', 'create', 'generate', 'produce', 'compose', 'prepare', 'give', 'want',
+  'need', 'please', 'full', 'complete', 'comprehensive', 'detailed', 'thorough', 'professional',
+  'publishable', 'proper', 'reaserch', 'reasearch', 'reserch', 'manuscript', 'article', 'report',
+  'document', 'regarding', 'concerning', 'statistics', 'statistical', 'stats', 'numbers', 'numeric',
+  'data', 'analysis',
 ]);
 
 // A few common medical concept synonyms so a record that uses "kidney" still
