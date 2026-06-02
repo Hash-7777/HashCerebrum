@@ -349,7 +349,7 @@ mod tests {
             "/Library/Application Support",
         ];
         for path in &blocked {
-            let result = check(Action::Fs { path: path });
+            let result = check(Action::Fs { path });
             assert!(result.is_err(), "expected {path} to be blocked but got Ok");
         }
     }

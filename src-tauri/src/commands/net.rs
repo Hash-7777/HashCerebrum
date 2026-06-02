@@ -36,6 +36,23 @@ fn http_client() -> AppResult<&'static reqwest::Client> {
 
 const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 
+/// Read a response body with a hard size cap, streaming chunk-by-chunk so a
+/// response WITHOUT a Content-Length header cannot buffer unbounded into memory
+/// (DoS / OOM). Decoded as UTF-8 (lossy), matching the previous `.text()`.
+pub(crate) async fn read_body_capped(
+    mut resp: reqwest::Response,
+    max: usize,
+) -> AppResult<String> {
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp.chunk().await? {
+        if buf.len() + chunk.len() > max {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpResponse {
     pub status: u16,
@@ -66,10 +83,7 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
             return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
         }
     }
-    let body = resp.text().await?;
-    if body.len() > MAX_BODY_BYTES {
-        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
-    }
+    let body = read_body_capped(resp, MAX_BODY_BYTES).await?;
     let mut redacted = parsed.clone();
     redacted.set_query(None);
     // Strip URL userinfo (username:password@host) so credentials are never

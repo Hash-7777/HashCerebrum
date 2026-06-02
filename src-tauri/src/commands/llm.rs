@@ -161,11 +161,7 @@ pub async fn llm_http_get(
             return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
         }
     }
-    let body_bytes = response.bytes().await?;
-    if body_bytes.len() > MAX_BODY_BYTES {
-        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
-    }
-    let body = String::from_utf8_lossy(&body_bytes).into_owned();
+    let body = crate::commands::net::read_body_capped(response, MAX_BODY_BYTES).await?;
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
@@ -223,11 +219,7 @@ pub async fn llm_http_post(
             return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
         }
     }
-    let resp_bytes = response.bytes().await?;
-    if resp_bytes.len() > MAX_BODY_BYTES {
-        return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
-    }
-    let resp_body = String::from_utf8_lossy(&resp_bytes).into_owned();
+    let resp_body = crate::commands::net::read_body_capped(response, MAX_BODY_BYTES).await?;
 
     let mut redacted = parsed.clone();
     redacted.set_query(None);
@@ -303,7 +295,9 @@ pub async fn llm_chat_stream(
     let _ = redacted.set_password(None);
 
     if !status.is_success() {
-        let text = response.text().await.unwrap_or_default();
+        let text = crate::commands::net::read_body_capped(response, MAX_BODY_BYTES)
+            .await
+            .unwrap_or_default();
         let _ = on_event.send(StreamEvent::Error {
             message: format!("HTTP {}: {}", status.as_u16(), truncate(text.trim(), 240)),
         });

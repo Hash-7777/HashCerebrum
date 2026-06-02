@@ -14,6 +14,8 @@
 //! `is_blocked` = hard OR private-lan, preserving the strict default for every
 //! non-Ollama caller (medical sources, all cloud LLMs).
 
+use std::net::IpAddr;
+
 /// Cloud-metadata + known-bad exact hosts. Always blocked.
 const HARD_BLOCKED_HOSTS: &[&str] = &[
     "169.254.169.254", // AWS / GCP metadata
@@ -26,23 +28,6 @@ const HARD_BLOCKED_HOSTS: &[&str] = &[
 /// even for the Ollama LAN path — link-local is not a legitimate Ollama target.
 const HARD_BLOCKED_PREFIXES: &[&str] = &["169.254.", "fe80:"];
 
-/// Private / LAN ranges: RFC1918, CGNAT (RFC6598), and IPv6 ULA. Blocked for the
-/// general path; allowed only for the user's LAN Ollama.
-const PRIVATE_LAN_PREFIXES: &[&str] = &[
-    "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
-    "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-    "192.168.", "fc00:", "fd",
-    // CGNAT / Shared Address Space (RFC 6598) — effectively private IP space
-    "100.64.", "100.65.", "100.66.", "100.67.", "100.68.", "100.69.", "100.70.", "100.71.",
-    "100.72.", "100.73.", "100.74.", "100.75.", "100.76.", "100.77.", "100.78.", "100.79.",
-    "100.80.", "100.81.", "100.82.", "100.83.", "100.84.", "100.85.", "100.86.", "100.87.",
-    "100.88.", "100.89.", "100.90.", "100.91.", "100.92.", "100.93.", "100.94.", "100.95.",
-    "100.96.", "100.97.", "100.98.", "100.99.", "100.100.", "100.101.", "100.102.", "100.103.",
-    "100.104.", "100.105.", "100.106.", "100.107.", "100.108.", "100.109.", "100.110.", "100.111.",
-    "100.112.", "100.113.", "100.114.", "100.115.", "100.116.", "100.117.", "100.118.", "100.119.",
-    "100.120.", "100.121.", "100.122.", "100.123.", "100.124.", "100.125.", "100.126.", "100.127.",
-];
-
 /// Always-blocked targets — cloud metadata, link-local, 0.0.0.0.
 pub fn is_hard_blocked(host: &str) -> bool {
     if HARD_BLOCKED_HOSTS.contains(&host) {
@@ -51,12 +36,67 @@ pub fn is_hard_blocked(host: &str) -> bool {
     HARD_BLOCKED_PREFIXES.iter().any(|p| host.starts_with(p))
 }
 
-/// Private / LAN address (RFC1918 / CGNAT / ULA).
+/// True only for an actual private / LAN **IP address**: RFC1918, CGNAT
+/// (RFC6598), or IPv6 ULA (`fc00::/7`).
+///
+/// The host is parsed as an `IpAddr` first — a previous string-prefix list
+/// matched any hostname starting with "fd" (e.g. `fda.gov`, `fdic.gov`) as
+/// private, which the Ollama LAN exception then allowed, opening an SSRF hole.
+/// A non-IP hostname is NOT private here; legitimate LAN *names* (`*.local`,
+/// bare single-label hosts) are handled for the Ollama path in
+/// `guard::is_lan_ollama_host`, so running Ollama on another LAN device still
+/// works while public FQDNs can never match.
 pub fn is_private_lan(host: &str) -> bool {
-    PRIVATE_LAN_PREFIXES.iter().any(|p| host.starts_with(p))
+    // Tolerate a bracketed IPv6 literal like `[fd00::1]`.
+    let h = host.trim_start_matches('[').trim_end_matches(']');
+    match h.parse::<IpAddr>() {
+        Ok(IpAddr::V4(v4)) => {
+            let o = v4.octets();
+            // RFC1918 (10/8, 172.16/12, 192.168/16) + CGNAT 100.64.0.0/10.
+            v4.is_private() || (o[0] == 100 && (64..=127).contains(&o[1]))
+        }
+        // IPv6 unique-local fc00::/7 (covers fc00:: and fd00::). Link-local
+        // fe80::/10 is hard-blocked separately, not treated as private-LAN.
+        Ok(IpAddr::V6(v6)) => (v6.segments()[0] & 0xfe00) == 0xfc00,
+        Err(_) => false,
+    }
 }
 
 pub fn is_blocked(host: &str) -> bool {
     // localhost is allowed for Ollama — handled in policy/guard, not here.
     is_hard_blocked(host) || is_private_lan(host)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_fqdns_starting_with_fd_are_not_private() {
+        // The SSRF regression: these are public hosts, never private-LAN.
+        for h in ["fda.gov", "fdic.gov", "fd-example.com", "feed.example.org"] {
+            assert!(!is_private_lan(h), "{h} must not be treated as private LAN");
+            assert!(!is_blocked(h), "{h} must not be denylist-blocked");
+        }
+    }
+
+    #[test]
+    fn real_lan_addresses_are_private() {
+        for h in [
+            "192.168.1.50", "10.0.0.5", "172.16.4.9", "172.31.255.1",
+            "100.64.0.1", "fd00::1", "fc00::abcd", "[fd12:3456::1]",
+        ] {
+            assert!(is_private_lan(h), "{h} should be private LAN (LAN Ollama target)");
+        }
+    }
+
+    #[test]
+    fn public_ips_and_link_local_are_not_private() {
+        assert!(!is_private_lan("8.8.8.8"));
+        assert!(!is_private_lan("2607:f8b0::1")); // public IPv6
+        assert!(!is_private_lan("fe80::1")); // link-local (hard-blocked elsewhere)
+        // Link-local + metadata stay hard-blocked.
+        assert!(is_hard_blocked("169.254.169.254"));
+        assert!(is_hard_blocked("fe80::1"));
+    }
 }

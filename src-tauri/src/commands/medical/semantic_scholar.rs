@@ -62,8 +62,11 @@ pub async fn semantic_scholar_search(
                     let snippet = paper["abstract"]
                         .as_str()
                         .map(|s| {
-                            if s.len() > 280 {
-                                format!("{}…", &s[..277])
+                            // Truncate by CHARACTERS, not bytes — byte-slicing
+                            // `&s[..277]` panics when byte 277 lands inside a
+                            // multi-byte UTF-8 character (common in abstracts).
+                            if s.chars().count() > 280 {
+                                format!("{}…", s.chars().take(277).collect::<String>())
                             } else {
                                 s.to_string()
                             }

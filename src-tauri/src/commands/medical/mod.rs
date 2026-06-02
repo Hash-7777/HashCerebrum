@@ -178,6 +178,10 @@ pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<s
                     }
                     let mut log_url = url.clone();
                     log_url.set_query(None);
+                    // Also drop any user:pass@ userinfo so credentials can never
+                    // ride along in an error surfaced over IPC.
+                    let _ = log_url.set_username("");
+                    let _ = log_url.set_password(None);
                     return Err(AppError::Network(format!(
                         "upstream returned HTTP {} for {}",
                         resp.status, log_url
