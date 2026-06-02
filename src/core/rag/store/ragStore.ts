@@ -226,7 +226,11 @@ export const useRagStore = create<RagStore>((set, get) => ({
       const provider = getEmbeddingProvider();
       await provider.warmup();
       if (provider.ready) {
-        const [vec] = await provider.embed([expanded]);
+        // Embed the ORIGINAL query, not the synonym-expanded one: appending a
+        // long list of brand/generic synonyms drifts the meaning vector away
+        // from what the user actually asked, blunting semantic retrieval. The
+        // expansion still widens the LEXICAL match below.
+        const [vec] = await provider.embed([query]);
         queryVector = vec ?? null;
       }
     } catch {
