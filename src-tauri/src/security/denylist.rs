@@ -83,10 +83,19 @@ mod tests {
     #[test]
     fn real_lan_addresses_are_private() {
         for h in [
-            "192.168.1.50", "10.0.0.5", "172.16.4.9", "172.31.255.1",
-            "100.64.0.1", "fd00::1", "fc00::abcd", "[fd12:3456::1]",
+            "192.168.1.50",
+            "10.0.0.5",
+            "172.16.4.9",
+            "172.31.255.1",
+            "100.64.0.1",
+            "fd00::1",
+            "fc00::abcd",
+            "[fd12:3456::1]",
         ] {
-            assert!(is_private_lan(h), "{h} should be private LAN (LAN Ollama target)");
+            assert!(
+                is_private_lan(h),
+                "{h} should be private LAN (LAN Ollama target)"
+            );
         }
     }
 
@@ -95,7 +104,7 @@ mod tests {
         assert!(!is_private_lan("8.8.8.8"));
         assert!(!is_private_lan("2607:f8b0::1")); // public IPv6
         assert!(!is_private_lan("fe80::1")); // link-local (hard-blocked elsewhere)
-        // Link-local + metadata stay hard-blocked.
+                                             // Link-local + metadata stay hard-blocked.
         assert!(is_hard_blocked("169.254.169.254"));
         assert!(is_hard_blocked("fe80::1"));
     }

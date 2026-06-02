@@ -39,10 +39,7 @@ const MAX_BODY_BYTES: usize = 50 * 1024 * 1024; // 50 MB
 /// Read a response body with a hard size cap, streaming chunk-by-chunk so a
 /// response WITHOUT a Content-Length header cannot buffer unbounded into memory
 /// (DoS / OOM). Decoded as UTF-8 (lossy), matching the previous `.text()`.
-pub(crate) async fn read_body_capped(
-    mut resp: reqwest::Response,
-    max: usize,
-) -> AppResult<String> {
+pub(crate) async fn read_body_capped(mut resp: reqwest::Response, max: usize) -> AppResult<String> {
     let mut buf: Vec<u8> = Vec::new();
     while let Some(chunk) = resp.chunk().await? {
         if buf.len() + chunk.len() > max {
