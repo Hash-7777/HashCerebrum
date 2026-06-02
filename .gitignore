@@ -104,3 +104,10 @@ docs/SESSION_HANDOFF.md
 REMAINING_WORK.md
 *_REPORT.md
 *_AUDIT.md
+
+# macOS Finder "duplicate" artifacts (e.g. "cache 2/", "__tests__ 2/")
+# — appear from copy operations; must never be committed.
+* 2/
+* 2.ts
+* 2.tsx
+* 2.rs

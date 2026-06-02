@@ -940,7 +940,10 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                   {allDone && review && <span className="review-swarm-done">complete</span>}
                 </p>
                 {liveAgents.map((agent) => {
-                  const def = REVIEW_SWARM_AGENTS.find((d) => d.agentId === agent.agentId)!;
+                  // Guard against an unknown agentId: a missing def would crash
+                  // the render through the old non-null assertion.
+                  const def = REVIEW_SWARM_AGENTS.find((d) => d.agentId === agent.agentId);
+                  if (!def) return null;
                   return <AgentSection key={agent.agentId} agent={agent} def={def} />;
                 })}
               </div>
