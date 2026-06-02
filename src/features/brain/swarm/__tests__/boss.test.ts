@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { stripLeakedSpecialistLabels } from '../boss';
+import { isConfidentInteractionReport, stripLeakedSpecialistLabels } from '../boss';
+
+describe('isConfidentInteractionReport', () => {
+  it('keeps a clear verdict (including a confident "no interaction")', () => {
+    expect(isConfidentInteractionReport('**Verdict:** Established interaction — CYP3A4 inhibition [S1].')).toBe(true);
+    expect(
+      isConfidentInteractionReport('**Verdict:** No clinically significant interaction is expected [S2].'),
+    ).toBe(true);
+  });
+
+  it('rejects an unsure report so the shared memory is fed only sure answers', () => {
+    expect(isConfidentInteractionReport('**Verdict:** Insufficient evidence to assess this combination.')).toBe(false);
+    expect(isConfidentInteractionReport('The interaction could not be established from the retrieved records.')).toBe(false);
+    expect(isConfidentInteractionReport('')).toBe(false);
+  });
+});
 
 describe('stripLeakedSpecialistLabels', () => {
   it('removes leaked internal specialist-label pseudo-citations', () => {

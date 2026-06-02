@@ -6,6 +6,7 @@
 
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
+import { setMemoryScope } from '@core/tools/memoryScope';
 import type { EvidenceItem } from '@platform/index';
 import {
   appraisePriorWork,
@@ -293,27 +294,38 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // the shared memory through the normal save path, so Brain benefits later.
   if (drugFocus) {
     callbacks.onBossPhase('delegating');
-    const specialist = await runSpecialist(
-      agentById('drug_interactions'),
-      modelFor('drug_interactions'),
-      researchQuestion,
-      callbacks,
-    );
-    const merged = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
-    const citable = merged.filter((record) => !CONTEXT_ONLY_SOURCES.has(record.source));
+    // Scope memory to the drug-interaction domain for the duration of this run,
+    // so the specialist is fed only its own trusted findings — never other
+    // modes' general research.
+    setMemoryScope('drug_interactions');
+    let specialist: SpecialistResult;
+    try {
+      specialist = await runSpecialist(
+        agentById('drug_interactions'),
+        modelFor('drug_interactions'),
+        researchQuestion,
+        callbacks,
+      );
+    } finally {
+      setMemoryScope(null);
+    }
+    // Keep the drug-label (OpenFDA) and terminology (RxNorm) records here — for
+    // an interaction question they are authoritative trusted sources, not just
+    // background, so the report can cite them for a clear regulatory-grade answer.
+    const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
     callbacks.onBossPhase('synthesizing');
     const report = await synthesizeInteractionReport(
       bossModel,
       researchQuestion,
       [specialist],
-      citable,
+      evidence,
       callbacks.onAnswerToken,
       signal,
     );
     return {
       kind: 'research',
       answer: report.content,
-      evidence: citable,
+      evidence,
       specialists: [specialist],
       modelUsed: report.modelUsed,
     };

@@ -42,8 +42,11 @@ interface RagStore {
   addChunks: (projectId: string, chunks: NewRagChunk[]) => void;
   /** Lexical-only search (synchronous) — fallback + UI instant paint. */
   search: (projectId: string, query: string, limit?: number) => RagSearchHit[];
-  /** Hybrid semantic+lexical search across all projects, active-weighted. */
-  searchHybrid: (activeProjectId: string, query: string, limit?: number) => Promise<RagSearchHit[]>;
+  /** Hybrid semantic+lexical search across all projects, active-weighted.
+   *  When `tag` is given, only findings carrying that domain tag are searched
+   *  (the Drug-Interactions mode passes 'drug_interactions' to read only its
+   *  own trusted findings). */
+  searchHybrid: (activeProjectId: string, query: string, limit?: number, tag?: string) => Promise<RagSearchHit[]>;
   chunksForProject: (projectId: string) => RagChunk[];
   removeChunk: (id: string) => void;
   clearProject: (projectId: string) => void;
@@ -211,8 +214,8 @@ export const useRagStore = create<RagStore>((set, get) => ({
   search: (projectId, query, limit = DEFAULT_SEARCH_LIMIT) =>
     searchRagIndex(projectIndex(get().chunks, projectId), query, limit),
 
-  searchHybrid: async (activeProjectId, query, limit = DEFAULT_SEARCH_LIMIT) => {
-    const chunks = get().chunks;
+  searchHybrid: async (activeProjectId, query, limit = DEFAULT_SEARCH_LIMIT, tag) => {
+    const chunks = tag ? get().chunks.filter((c) => c.tag === tag) : get().chunks;
     if (chunks.length === 0 || !query.trim()) return [];
     // Widen the query with offline brand↔generic / abbreviation synonyms so a
     // search for one surface form ("Tylenol", "MI") matches findings written

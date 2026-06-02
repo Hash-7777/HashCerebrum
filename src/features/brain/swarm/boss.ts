@@ -207,6 +207,18 @@ export async function bossChat(
 
 
 
+// A drug-interaction report is "confident" — worth saving into the shared,
+// trusted memory — unless it explicitly signals the evidence was insufficient
+// or the interaction could not be determined. A clear "no clinically
+// significant interaction" verdict IS confident and is kept.
+const UNSURE_INTERACTION_RX =
+  /\*\*\s*insufficient evidence|insufficient (evidence|data)|cannot be determined|could not (be )?establish|unable to (assess|determine)|no (records|sources|evidence) (were|was) retrieved|no relevant (records|evidence)|evidence is (too )?(thin|limited|sparse)/i;
+
+export function isConfidentInteractionReport(text: string): boolean {
+  if (!text.trim()) return false;
+  return !UNSURE_INTERACTION_RX.test(text);
+}
+
 // Focused drug-interaction report — streamed. Used by the Brain "Interactions"
 // toggle: a single specialist gathered interaction evidence and this writes a
 // clinician-facing report from it. Strictly grounded in the retrieved records.
@@ -225,15 +237,19 @@ export async function synthesizeInteractionReport(
   const messages: LlmMessage[] = [
     {
       role: 'system',
-      content: `You are HashCerebrum's Drug Interactions specialist writing a focused, professional drug–drug / drug–food / drug–herb interaction report for a clinician.
+      content: `You are HashCerebrum's Drug Interactions specialist writing a focused, professional drug–drug / drug–food / drug–herb interaction report for a clinician. Your job is to give a CLEAR, trusted answer, not a literature dump.
 
 Hard rules:
 - Use ONLY the retrieved records and findings provided. Never invent an interaction, mechanism, severity, dose, PMID, or statistic.
+- Weight the sources by authority: regulatory drug-label interaction statements (OPENFDA records) and drug-terminology records (RXNORM) are AUTHORITATIVE for whether an interaction is recognised — treat them as the backbone of the verdict, with primary literature (PubMed/Europe PMC) adding mechanism, magnitude, and management detail.
 - Cite every factual claim inline with the exact [S#] marker of the record it came from. Never write a bare or list-style marker.
-- If the retrieved evidence does not establish a clinically significant interaction, say so plainly.
+- Open with a one-line VERDICT in bold, choosing exactly one: **Established interaction**, **Likely interaction**, **Theoretical / minor**, **No clinically significant interaction**, or **Insufficient evidence** — then justify it.
+- Only claim "Established" or "No clinically significant interaction" when a label/regulatory record or strong literature supports it; otherwise be honest about uncertainty.
 - This is research triage, not medical advice.
 
 Write the report in this Markdown structure, each as developed prose:
+**Verdict:** <one of the five above, in bold> — one sentence.
+
 ## Interaction Summary
 The substances involved and whether a clinically significant interaction is supported by the evidence.
 ## Mechanism

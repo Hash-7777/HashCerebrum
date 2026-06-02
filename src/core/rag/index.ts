@@ -25,13 +25,16 @@ export { classifyEvidenceStrength } from './search/ranking';
 export interface RetrieveOptions {
   activeProjectId: string;
   limit?: number;
+  /** Restrict the search to findings carrying this domain tag (e.g.
+   *  'drug_interactions'). Omit to search the whole library. */
+  tag?: string;
 }
 
 /** The one retrieval entry point: hybrid semantic+lexical search across all
  *  projects, weighted toward the active one. Falls back to lexical when the
  *  embedder is unavailable. */
 export async function retrieve(query: string, opts: RetrieveOptions): Promise<RagSearchHit[]> {
-  return useRagStore.getState().searchHybrid(opts.activeProjectId, query, opts.limit);
+  return useRagStore.getState().searchHybrid(opts.activeProjectId, query, opts.limit, opts.tag);
 }
 
 /** Begin loading the embedding model so the first real search is fast. Safe to

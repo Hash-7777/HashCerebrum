@@ -6,6 +6,7 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { retrieve, type RagSearchHit } from '@core/rag';
 import { tools } from './ToolRegistry';
+import { getMemoryScope } from './memoryScope';
 
 const LIMIT_DEFAULT = 6;
 const LIMIT_MAX = 12;
@@ -67,7 +68,12 @@ export function registerMemoryTools() {
         ? Math.min(LIMIT_MAX, Math.max(1, Math.round(parsedLimit)))
         : LIMIT_DEFAULT;
       const projectId = useProjectStore.getState().activeProjectId ?? '';
-      const hits = projectId ? await retrieve(query, { activeProjectId: projectId, limit }) : [];
+      // The Drug-Interactions run scopes retrieval to its own domain so it is
+      // only ever fed by its own trusted findings, never other modes'.
+      const scope = getMemoryScope();
+      const hits = projectId
+        ? await retrieve(query, { activeProjectId: projectId, limit, ...(scope ? { tag: scope } : {}) })
+        : [];
       return { source: 'rag', count: hits.length, text: formatHits(hits, projectId) };
     },
   });

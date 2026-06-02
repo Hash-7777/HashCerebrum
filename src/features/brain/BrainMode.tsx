@@ -27,6 +27,7 @@ import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
+import { isConfidentInteractionReport } from './swarm/boss';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -346,7 +347,19 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         //   • file it under a clean subject topic, not the raw query string.
         const memoryTopic = memoryTopicLabel(cleanQuery);
         const citableForMemory = citedEvidenceFor(finalContent, result.evidence);
-        if (activeProjectId && memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
+        // The Drug-Interactions mode contributes to the shared memory ONLY when
+        // it reached a confident verdict (so the app is fed sure answers, not
+        // "insufficient evidence" reports), and tags its findings so its own
+        // retrieval stays isolated to this trusted domain.
+        const diTag = drugFocus ? 'drug_interactions' : undefined;
+        const diConfident = !drugFocus || isConfidentInteractionReport(finalContent);
+        if (
+          activeProjectId &&
+          memoryTopic &&
+          citableForMemory.length > 0 &&
+          !isMetaOrAppQuestion(cleanQuery) &&
+          diConfident
+        ) {
           const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
             const strength = classifyEvidenceStrength(
               [item.title, item.snippet ?? ''].join(' '),
@@ -367,6 +380,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
               ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
               ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
               ...(strength ? { evidenceStrength: strength } : {}),
+              ...(diTag ? { tag: diTag } : {}),
             };
           });
           const answerChunk: NewRagChunk = {
@@ -376,6 +390,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             source: 'answer',
             runId,
             query: memoryTopic,
+            ...(diTag ? { tag: diTag } : {}),
           };
           useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
         }

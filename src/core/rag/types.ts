@@ -28,6 +28,11 @@ export interface RagChunk {
   doi?: string;
   authors?: string[];
   evidenceStrength?: EvidenceStrength;
+
+  // Domain tag. Findings saved by the Drug-Interactions mode are tagged
+  // 'drug_interactions' so that mode retrieves ONLY its own trusted findings,
+  // while the rest of the app can still read them. Absent on general findings.
+  tag?: string;
 }
 
 // Caller-supplied fields — the store stamps id, projectId, and createdAt.
