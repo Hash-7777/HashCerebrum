@@ -121,11 +121,15 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   // Load a transcript when one is opened from the left rail. activeChatId
   // only becomes non-null after an explicit rail action or the first
   // saved turn, so this never clobbers an in-progress conversation.
+  // Brain and Drug-Interactions are separate histories. Both instances stay
+  // mounted, so each only loads the active chat when it belongs to ITS mode.
+  const chatMode = drugFocus ? 'drug_interactions' : 'brain';
   useEffect(() => {
     if (!activeChatId) return;
     const chat = useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId);
-    if (chat) setMessages(chat.messages.length > 0 ? chat.messages : [WELCOME_MESSAGE]);
-  }, [activeChatId]);
+    if (!chat || (chat.mode ?? 'brain') !== chatMode) return;
+    setMessages(chat.messages.length > 0 ? chat.messages : [WELCOME_MESSAGE]);
+  }, [activeChatId, chatMode]);
 
   // Switching projects starts a fresh transcript so a chat is never saved
   // into the wrong project. The snapshot effect below skips welcome-only
@@ -139,8 +143,8 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   useEffect(() => {
     if (isRunning) return;
     if (!messages.some((m) => m.role === 'user')) return;
-    useChatHistoryStore.getState().saveActive(messages);
-  }, [isRunning, messages]);
+    useChatHistoryStore.getState().saveActive(messages, chatMode);
+  }, [isRunning, messages, chatMode]);
 
   const toConversation = (turns: ChatMessage[]): LlmMessage[] =>
     turns.flatMap<LlmMessage>((message) => {

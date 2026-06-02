@@ -32,6 +32,11 @@ export interface ChatMessage {
   manuscript?: Manuscript;
 }
 
+// Which workspace produced a chat. Brain and Drug-Interactions keep separate
+// histories so an interaction report never lands among research papers.
+// Absent on chats saved before this field existed — treated as 'brain'.
+export type ChatMode = 'brain' | 'drug_interactions';
+
 export interface SavedChat {
   id: string;
   title: string;
@@ -39,6 +44,7 @@ export interface SavedChat {
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
+  mode?: ChatMode;
   // True once the user has manually renamed the chat — saveActive then
   // keeps that title instead of re-deriving it from the first message.
   titleCustom?: boolean;
@@ -53,10 +59,10 @@ interface ChatHistoryStore {
   activeChatId: string | null;
   hydrated: boolean;
   hydrate: (fallbackProjectId?: string) => Promise<void>;
-  newChat: () => string;
+  newChat: (mode?: ChatMode) => string;
   selectChat: (id: string) => void;
   renameChat: (id: string, title: string) => void;
-  saveActive: (messages: ChatMessage[]) => void;
+  saveActive: (messages: ChatMessage[], mode?: ChatMode) => void;
   deleteChat: (id: string) => void;
   deleteChatsForProject: (projectId: string) => void;
 }
@@ -111,7 +117,7 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
     set({ chats, hydrated: true });
   },
 
-  newChat: () => {
+  newChat: (mode = 'brain') => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const chat: SavedChat = {
@@ -121,6 +127,7 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       messages: [],
       createdAt: now,
       updatedAt: now,
+      mode,
     };
     set((state) => {
       // Drop any earlier empty drafts so repeated New chat clicks do not
@@ -145,15 +152,19 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       return { chats };
     }),
 
-  saveActive: (messages) => {
+  saveActive: (messages, mode = 'brain') => {
     const cleaned = messages.map((message) => ({ ...message, isStreaming: false }));
     const title = deriveTitle(cleaned);
     const now = new Date().toISOString();
     set((state) => {
-      const hasActive = !!state.activeChatId && state.chats.some((c) => c.id === state.activeChatId);
+      // Only fold into the active chat when it belongs to the SAME mode —
+      // otherwise a Drug-Interactions turn would overwrite the Brain chat the
+      // user last opened (and vice versa). Mismatched/none ⇒ start a new chat.
+      const active = state.chats.find((c) => c.id === state.activeChatId);
+      const canUpdate = !!active && (active.mode ?? 'brain') === mode;
       let activeChatId = state.activeChatId;
       let chats: SavedChat[];
-      if (hasActive) {
+      if (canUpdate) {
         chats = state.chats.map((c) =>
           c.id === activeChatId
             ? { ...c, title: c.titleCustom ? c.title : title, messages: cleaned, updatedAt: now }
@@ -169,6 +180,7 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
             messages: cleaned,
             createdAt: now,
             updatedAt: now,
+            mode,
           },
           ...state.chats.filter((c) => c.messages.length > 0),
         ].slice(0, MAX_CHATS);

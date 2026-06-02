@@ -27,13 +27,17 @@ export function ChatHistoryPanel() {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
 
   const setMode = useModeStore((s) => s.setMode);
+  const mode = useModeStore((s) => s.mode);
+  // Brain and Drug-Interactions keep separate chat lists; every other mode
+  // shows the Brain history.
+  const chatMode = mode === 'drug_interactions' ? 'drug_interactions' : 'brain';
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [filter, setFilter] = useState('');
 
   const ordered = [...chats]
-    .filter((c) => c.projectId === activeProjectId)
+    .filter((c) => c.projectId === activeProjectId && (c.mode ?? 'brain') === chatMode)
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   const filtered = filter
@@ -64,7 +68,7 @@ export function ChatHistoryPanel() {
         <button
           type="button"
           className="icon-btn compact"
-          onClick={() => newChat()}
+          onClick={() => newChat(chatMode)}
           title="New chat"
           aria-label="New chat"
         >
@@ -88,7 +92,7 @@ export function ChatHistoryPanel() {
                   onClick={() => {
                     if (editingId !== chat.id) {
                       selectChat(chat.id);
-                      setMode('brain');
+                      setMode((chat.mode ?? 'brain') === 'drug_interactions' ? 'drug_interactions' : 'brain');
                     }
                   }}
                 >
