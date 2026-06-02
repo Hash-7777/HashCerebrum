@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { evidenceScore, isNonCitableProceeding, mergeEvidence, rankEvidenceByRelevance } from '../runSwarm';
+import {
+  conceptCoverage,
+  conceptGroups,
+  evidenceScore,
+  isNonCitableProceeding,
+  mergeEvidence,
+  rankEvidenceByRelevance,
+} from '../runSwarm';
 import type { SpecialistResult } from '../types';
 
 function makeRecord(partial: Partial<EvidenceItem> & { source: EvidenceItem['source'] }): EvidenceItem {
@@ -117,5 +124,50 @@ describe('rankEvidenceByRelevance', () => {
     const ranked = rankEvidenceByRelevance(q, [...onTopic, offTopic]);
     expect(ranked.some((r) => r.title.includes('koala'))).toBe(false);
     expect(ranked.length).toBe(onTopic.length);
+  });
+});
+
+describe('concept-conjunctive ranking', () => {
+  const titled = (title: string, snippet = '') => makeRecord({ source: 'pubmed', title, snippet });
+  // The real failing query: NSAIDs + warfarin + digoxin in a young population.
+  const q = 'full research paper about NSAIDs use with warfarin and digoxin in young population';
+
+  it('groups a term with its synonyms as a single concept', () => {
+    const groups = conceptGroups('warfarin and renal effect');
+    const renalGroup = groups.find((g) => g.includes('renal'));
+    expect(renalGroup).toContain('kidney'); // synonym folded into the same concept
+    // "effect"/"and" are filler and produce no concept.
+    expect(groups.some((g) => g.includes('effect'))).toBe(false);
+  });
+
+  it('credits a record once per concept, not once per synonym', () => {
+    const groups = conceptGroups('renal injury'); // one concept: [renal, kidney]
+    // A record naming both synonyms still only covers ONE concept.
+    expect(conceptCoverage(titled('renal and kidney damage'), groups)).toBe(1);
+  });
+
+  it('ranks a multi-drug record above a warfarin-only record', () => {
+    const multi = titled('Warfarin and NSAID bleeding risk', 'meta-analysis of warfarin plus NSAIDs');
+    const warfarinOnly = titled('Vortioxetine and warfarin pharmacokinetics', 'no effect on warfarin');
+    const ranked = rankEvidenceByRelevance(q, [warfarinOnly, multi]);
+    expect(ranked[0]?.title).toBe('Warfarin and NSAID bleeding risk');
+  });
+
+  it('drops single-concept noise once enough multi-concept records exist', () => {
+    const multi = [1, 2, 3, 4, 5, 6].map((n) =>
+      titled(`Warfarin NSAID digoxin study ${n}`, 'warfarin nsaids digoxin young'),
+    );
+    const noise = titled('Vortioxetine pharmacokinetics', 'unrelated antidepressant warfarin note');
+    const ranked = rankEvidenceByRelevance(q, [...multi, noise]);
+    // The single-concept antidepressant record is excluded as off-target.
+    expect(ranked.some((r) => r.title.includes('Vortioxetine'))).toBe(false);
+    expect(ranked.length).toBe(multi.length);
+  });
+
+  it('keeps every record when the topic is genuinely sparse', () => {
+    const a = titled('Warfarin pharmacology', 'warfarin metabolism');
+    const b = titled('Digoxin clearance', 'digoxin renal handling');
+    const ranked = rankEvidenceByRelevance(q, [a, b]);
+    expect(ranked).toHaveLength(2); // sparse topic is never gutted
   });
 });

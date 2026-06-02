@@ -84,8 +84,13 @@ const MEDICAL_SYNONYMS: Record<string, string[]> = {
   gastrointestinal: ['gastric', 'gi'],
 };
 
-function relevanceTerms(question: string): string[] {
-  const base = [
+// Build concept groups from the question: each significant term plus its known
+// synonyms forms ONE group, so a record is credited once per concept it covers
+// rather than once per synonym (the old flat list double-counted "renal" and
+// "kidney"). Records covering MORE distinct concepts — e.g. both "warfarin" and
+// "NSAIDs" — then outrank single-concept matches.
+export function conceptGroups(question: string): string[][] {
+  const terms = [
     ...new Set(
       question
         .toLowerCase()
@@ -94,31 +99,34 @@ function relevanceTerms(question: string): string[] {
         .filter((w) => w.length >= 4 && !RELEVANCE_FILLER.has(w)),
     ),
   ];
-  const expanded = new Set(base);
-  for (const term of base) for (const syn of MEDICAL_SYNONYMS[term] ?? []) expanded.add(syn);
-  return [...expanded];
+  return terms.map((term) => [term, ...(MEDICAL_SYNONYMS[term] ?? [])]);
 }
 
-// Re-rank merged evidence by topical relevance to the question: records whose
-// title/snippet match more of the question's key terms rise to the top (so the
-// synthesis cites on-topic sources), and clearly off-topic records (zero term
-// matches) are dropped — but only when enough on-topic evidence remains, so a
-// sparse topic is never gutted. Within equal relevance, the prior
-// quality/recency order from mergeEvidence is preserved.
+// How many distinct question concepts a record's title/snippet actually covers.
+export function conceptCoverage(record: EvidenceItem, groups: string[][]): number {
+  const hay = `${record.title} ${record.snippet ?? ''}`.toLowerCase();
+  let n = 0;
+  for (const group of groups) if (group.some((syn) => hay.includes(syn))) n += 1;
+  return n;
+}
+
+// Re-rank merged evidence by how many of the question's CONCEPTS each record
+// covers (conjunctive relevance), so multi-concept records lead and
+// single-concept noise sinks or drops. When the question spans ≥3 concepts a
+// record must cover at least two to count as on-topic — a record matching only
+// "warfarin" on a warfarin + NSAID + digoxin question is off-target noise. The
+// bar loosens automatically (≥2 → ≥1 → keep all) so a genuinely sparse topic is
+// never gutted. Equal coverage preserves the prior quality/recency order.
 export function rankEvidenceByRelevance(question: string, evidence: EvidenceItem[]): EvidenceItem[] {
-  const terms = relevanceTerms(question);
-  if (terms.length === 0) return evidence;
-  const matchCount = (record: EvidenceItem): number => {
-    const hay = `${record.title} ${record.snippet ?? ''}`.toLowerCase();
-    let n = 0;
-    for (const term of terms) if (hay.includes(term)) n += 1;
-    return n;
-  };
+  const groups = conceptGroups(question);
+  if (groups.length === 0) return evidence;
   const scored = evidence
-    .map((record, index) => ({ record, index, m: matchCount(record) }))
+    .map((record, index) => ({ record, index, m: conceptCoverage(record, groups) }))
     .sort((a, b) => b.m - a.m || a.index - b.index);
-  const relevant = scored.filter((s) => s.m > 0);
-  const kept = relevant.length >= 6 ? relevant : scored;
+  const minConcepts = groups.length >= 3 ? 2 : 1;
+  const strong = scored.filter((s) => s.m >= minConcepts);
+  const loose = scored.filter((s) => s.m > 0);
+  const kept = strong.length >= 6 ? strong : loose.length >= 6 ? loose : scored;
   return kept.map((s) => s.record);
 }
 
