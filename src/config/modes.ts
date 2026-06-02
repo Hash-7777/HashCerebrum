@@ -44,9 +44,9 @@ export const MODES = defineModes([
   },
   {
     id: 'drug_interactions',
-    label: 'Interactions',
+    label: 'Drug Interactions',
     shortcut: '⌘4',
-    description: 'Focused drug-interaction reports from a dedicated specialist — mechanism, severity, and management',
+    description: 'A clinical-pharmacology checker — grades each drug pair A–X with mechanism, effect, and management',
   },
 ]);
 

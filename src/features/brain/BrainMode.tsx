@@ -30,6 +30,7 @@ import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentInteractionReport } from './swarm/boss';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
+import { DrugInteractionPanel } from './components/DrugInteractionPanel';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
@@ -614,31 +615,37 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
       </section>
 
       <section className="brain-side">
-        {/* The Drug-Interactions mode reuses this chat but skips the heavy 3D
-            brain canvas — it would be a second WebGL scene for no benefit. */}
-        {!drugFocus && (
-          <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
-            <div className="brain-model-panel">
-              <div className="brain-stage">
-                <BrainCanvas
-                  selectedRegion={selectedRegion}
-                  hoveredRegion={hoveredRegion}
-                  onSelectRegion={toggleRegion}
-                  onHoverRegion={setHoveredRegion}
-                />
-                <p className="brain-credit-line">
-                  {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
-                </p>
+        {drugFocus ? (
+          // Specialised layout for Drug-Interactions: no 3D brain and no agent
+          // swarm panel — just the interaction-grade key beside the report.
+          <FeatureBoundary name="Drug interaction panel">
+            <DrugInteractionPanel />
+          </FeatureBoundary>
+        ) : (
+          <>
+            <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
+              <div className="brain-model-panel">
+                <div className="brain-stage">
+                  <BrainCanvas
+                    selectedRegion={selectedRegion}
+                    hoveredRegion={hoveredRegion}
+                    onSelectRegion={toggleRegion}
+                    onHoverRegion={setHoveredRegion}
+                  />
+                  <p className="brain-credit-line">
+                    {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
+                  </p>
+                </div>
               </div>
-            </div>
-          </FeatureBoundary>
-        )}
+            </FeatureBoundary>
 
-        <div className="source-panel">
-          <FeatureBoundary name="Agents">
-            <AgentPanel statuses={agentStatuses} />
-          </FeatureBoundary>
-        </div>
+            <div className="source-panel">
+              <FeatureBoundary name="Agents">
+                <AgentPanel statuses={agentStatuses} />
+              </FeatureBoundary>
+            </div>
+          </>
+        )}
       </section>
 
     </div>

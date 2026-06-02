@@ -67,8 +67,9 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   ),
   pill: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
-      <rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-30 12 12)" />
-      <path d="M9.5 6.7l4.7 8.1" />
+      {/* A clear two-tone drug capsule: a rounded body split across the middle. */}
+      <rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-32 12 12)" />
+      <path d="M8.4 5.6l4.9 8.6" />
     </svg>
   ),
   book: (p) => (

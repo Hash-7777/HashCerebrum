@@ -798,3 +798,82 @@
 .document-preview-resize.nw { top: -4px; left: -4px; cursor: nwse-resize; }
 .document-preview-resize.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
 .document-preview-resize.sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
+
+/* ── Drug-Interactions side panel (replaces the agent swarm in that mode) ── */
+.di-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 220px);
+}
+.di-panel-head { display: flex; align-items: flex-start; gap: 11px; }
+.di-panel-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.di-panel-head h2 {
+  margin: 0;
+  font-family: var(--f-serif, var(--hc-font-serif));
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.di-panel-head p { margin: 3px 0 0; font-size: 12px; color: var(--text-3); line-height: 1.45; }
+
+.di-grades { display: flex; flex-direction: column; gap: 7px; }
+.di-grade {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.di-grade-badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 6px;
+  font: 700 13px var(--f-mono);
+  color: #06121a;
+}
+.di-grade-text { display: grid; gap: 1px; min-width: 0; }
+.di-grade-text strong { font-size: 12.5px; color: var(--text-1); }
+.di-grade-text span { font-size: 11px; color: var(--text-3); }
+/* Severity colours, A (safe) → X (contraindicated). */
+.di-grade-a { border-left-color: #3ddc97; }
+.di-grade-a .di-grade-badge { background: #3ddc97; }
+.di-grade-b { border-left-color: #5fd0b0; }
+.di-grade-b .di-grade-badge { background: #5fd0b0; }
+.di-grade-c { border-left-color: #e9c46a; }
+.di-grade-c .di-grade-badge { background: #e9c46a; }
+.di-grade-d { border-left-color: #f4a261; }
+.di-grade-d .di-grade-badge { background: #f4a261; }
+.di-grade-x { border-left-color: #e76f73; }
+.di-grade-x .di-grade-badge { background: #e76f73; color: #fff; }
+
+.di-panel-note {
+  margin: auto 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-4, var(--text-3));
+}
