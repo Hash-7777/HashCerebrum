@@ -16,6 +16,7 @@ export function Composer({
   datasetDetail,
   onDatasetFile,
   onClearDataset,
+  placeholder = 'Ask the Brain. Cite papers, run specialists, draft a literature review…',
 }: {
   query: string;
   setQuery: (value: string) => void;
@@ -29,6 +30,7 @@ export function Composer({
   datasetDetail?: string | null;
   onDatasetFile?: (file: File) => void;
   onClearDataset?: () => void;
+  placeholder?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -36,8 +38,6 @@ export function Composer({
   const toggleMemory = useMemorySettingsStore((s) => s.toggle);
   const miniEnabled = useBrainModesStore((s) => s.mini);
   const toggleMini = useBrainModesStore((s) => s.toggleMini);
-  const drugFocus = useBrainModesStore((s) => s.drugFocus);
-  const toggleDrugFocus = useBrainModesStore((s) => s.toggleDrugFocus);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -93,7 +93,7 @@ export function Composer({
           className="composer-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask the Brain. Cite papers, run specialists, draft a literature review…"
+          placeholder={placeholder}
           rows={1}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -147,21 +147,6 @@ export function Composer({
             >
               <Icon name="brain" size={13} />
               Mini {miniEnabled ? 'on' : 'off'}
-            </button>
-            <button
-              type="button"
-              className="memory-toggle-chip"
-              data-on={drugFocus}
-              onClick={toggleDrugFocus}
-              aria-pressed={drugFocus}
-              title={
-                drugFocus
-                  ? 'Drug-Interactions focus ON — a single specialist writes a focused interaction report from trusted interaction sources. Click for the general research team.'
-                  : 'Drug-Interactions focus OFF. Click to answer interaction questions with a dedicated drug-interaction report.'
-              }
-            >
-              <Icon name="activity" size={13} />
-              Interactions {drugFocus ? 'on' : 'off'}
             </button>
           </div>
           <div className="tools-right">

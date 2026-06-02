@@ -42,6 +42,12 @@ export const MODES = defineModes([
     shortcut: '⌘3',
     description: 'AI-driven peer review of generated research papers — score, critique, and publication guidance',
   },
+  {
+    id: 'drug_interactions',
+    label: 'Interactions',
+    shortcut: '⌘4',
+    description: 'Focused drug-interaction reports from a dedicated specialist — mechanism, severity, and management',
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];

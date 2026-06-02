@@ -45,7 +45,9 @@ const WELCOME_MESSAGE: ChatMessage = {
     'Ask the boss anything. It routes plain questions to a quick chat reply, and research questions to a swarm of medical specialists that fetch guarded evidence and answer with citations.',
 };
 
-export function BrainMode() {
+// `drugFocus` is set by the Drug-Interactions mode/tab, which reuses this same
+// chat experience but routes every question to the dedicated interaction report.
+export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const modelGroups = useModelCatalogStore((s) => s.groups);
@@ -319,7 +321,7 @@ export function BrainMode() {
         callbacks,
         signal: abortRef.current?.signal,
         mini: useBrainModesStore.getState().mini,
-        drugFocus: useBrainModesStore.getState().drugFocus,
+        drugFocus,
       });
 
       flushTopicHits(result.answer || streamedContent);
@@ -589,26 +591,33 @@ export function BrainMode() {
             }}
             onSubmit={submit}
             onOpenSettings={() => window.dispatchEvent(new CustomEvent('hc:open-settings'))}
+            {...(drugFocus
+              ? { placeholder: 'Ask about a drug interaction — e.g. “warfarin and grapefruit”. Get a cited interaction report.' }
+              : {})}
           />
         </FeatureBoundary>
       </section>
 
       <section className="brain-side">
-        <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
-          <div className="brain-model-panel">
-            <div className="brain-stage">
-              <BrainCanvas
-                selectedRegion={selectedRegion}
-                hoveredRegion={hoveredRegion}
-                onSelectRegion={toggleRegion}
-                onHoverRegion={setHoveredRegion}
-              />
-              <p className="brain-credit-line">
-                {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
-              </p>
+        {/* The Drug-Interactions mode reuses this chat but skips the heavy 3D
+            brain canvas — it would be a second WebGL scene for no benefit. */}
+        {!drugFocus && (
+          <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
+            <div className="brain-model-panel">
+              <div className="brain-stage">
+                <BrainCanvas
+                  selectedRegion={selectedRegion}
+                  hoveredRegion={hoveredRegion}
+                  onSelectRegion={toggleRegion}
+                  onHoverRegion={setHoveredRegion}
+                />
+                <p className="brain-credit-line">
+                  {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
+                </p>
+              </div>
             </div>
-          </div>
-        </FeatureBoundary>
+          </FeatureBoundary>
+        )}
 
         <div className="source-panel">
           <FeatureBoundary name="Agents">
