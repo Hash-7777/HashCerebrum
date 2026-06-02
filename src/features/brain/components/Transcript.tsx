@@ -29,6 +29,7 @@ import {
   deriveDocumentTitle,
   slugifyFilename,
   stripGeneratedReferenceSections,
+  stripResidualSourceMarkers,
   type ExportableMessage,
 } from '../export/messageExport';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
@@ -166,11 +167,13 @@ export const Transcript = memo(function Transcript({
   );
 
   const copyMessage = async (message: ChatMessage) => {
+    // Never put internal source markers ([S#], 【S#】) on the clipboard.
+    const text = stripResidualSourceMarkers(message.content);
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(message.content);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
       else {
         const textarea = document.createElement('textarea');
-        textarea.value = message.content;
+        textarea.value = text;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
@@ -222,7 +225,7 @@ export const Transcript = memo(function Transcript({
       typeLabel: message.manuscript ? 'Research manuscript' : 'Research result',
       blob,
       htmlContent,
-      copyText: stripGeneratedReferenceSections(message.content),
+      copyText: stripResidualSourceMarkers(stripGeneratedReferenceSections(message.content)),
     });
   };
 

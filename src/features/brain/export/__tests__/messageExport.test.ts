@@ -9,6 +9,7 @@ import {
   renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
+  stripResidualSourceMarkers,
 } from '../messageExport';
 
 describe('deriveDocumentTitle', () => {
@@ -115,6 +116,42 @@ describe('message export helpers', () => {
       'CYP2C19 inhibition [1]. Confirmed through CYP2 C19 [2]. Stray S100 stays.',
     );
     expect(cited).toHaveLength(2);
+  });
+
+  it('normalises fullwidth/CJK bracket markers (【S2】) and renumbers them', () => {
+    const pool = [...Array(5)].map((_, i) => ({ ...citations[0]!, title: `Source ${i + 1}` }));
+    const { content } = renumberCitations(
+      'Mechanism reported【S2】and confirmed〔S4〕again ［S2］.',
+      pool,
+    );
+    expect(content).toBe('Mechanism reported[1]and confirmed[2]again [1].');
+    expect(content).not.toMatch(/[【〔［】〕］]/);
+    expect(content).not.toMatch(/S\d/);
+  });
+
+  it('expands citation ranges ([S1-S9], incl. unicode hyphens) before renumbering', () => {
+    const pool = [...Array(9)].map((_, i) => ({ ...citations[0]!, title: `Source ${i + 1}` }));
+    // ASCII hyphen, U+2011 non-breaking hyphen, and an en dash all expand.
+    const { content, citations: cited } = renumberCitations(
+      'Broadly supported [S1-S3]. Also [S5‑S6]. And 【S8–S9】.',
+      pool,
+    );
+    expect(content).toBe('Broadly supported [1][2][3]. Also [4][5]. And [6][7].');
+    expect(cited).toHaveLength(7);
+    expect(content).not.toMatch(/S\d/);
+  });
+
+  it('guards against any residual bracketed marker leaking into the output', () => {
+    const pool = [citations[0]!]; // only [S1] resolves
+    const { content } = renumberCitations('Real [S1]. Phantom range 【S40-S44】 here.', pool);
+    // The phantom fullwidth range neither resolves nor survives as text.
+    expect(content).toBe('Real [1]. Phantom range here.');
+    expect(content).not.toMatch(/[【】]|S\d/);
+  });
+
+  it('stripResidualSourceMarkers removes bracketed markers but keeps bare prose tokens', () => {
+    expect(stripResidualSourceMarkers('Effect [S2] seen 【S3】.')).toBe('Effect seen.');
+    expect(stripResidualSourceMarkers('Variant S100 stays.')).toBe('Variant S100 stays.');
   });
 
   it('strips model-generated reference sections before appending canonical export references', () => {

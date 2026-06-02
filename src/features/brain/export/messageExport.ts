@@ -190,6 +190,49 @@ function citationBlock(citations: EvidenceItem[] = []): string {
   return `<section class="references"><h2>References</h2><ol>${rows}</ol></section>`;
 }
 
+// Citation markers can arrive in non-canonical shapes that the renumber pass
+// below would otherwise miss and leak verbatim into the exported document:
+//   • fullwidth / CJK brackets — 【S2】 〔S2〕 ［S2］ — which some models emit
+//     instead of the ASCII [S2]; and
+//   • ranges — [S1-S9], [S5‑S9] (incl. the U+2011 non-breaking hyphen and the
+//     en/em dashes) — a shorthand standing for every marker in the span.
+// Both are normalised to the canonical [S<n>] form (ranges expanded to the
+// explicit sequence) so the single marker pass can handle everything uniformly.
+const ALT_BRACKET_MARKER = /[【〔［]\s*(S\d+(?:\s*[-‑–—]\s*S?\d+)?)\s*[】〕］]/g;
+const RANGE_MARKER = /\[S(\d+)\s*[-‑–—]\s*S?(\d+)\]/g;
+// Any residual *bracketed* internal marker (canonical or fullwidth) that
+// survives the renumber pass — stripped as a last-resort guard so nothing
+// internal can reach the PDF/MD. A bare, unbracketed "S100" in prose is left
+// alone deliberately: it is not a citation marker.
+const RESIDUAL_BRACKET_MARKER = /[[【〔]\s*S\d+\s*[\]】〕]/g;
+
+function normaliseCitationMarkers(content: string, citationCount: number): string {
+  const bracketed = content.replace(ALT_BRACKET_MARKER, '[$1]');
+  return bracketed.replace(RANGE_MARKER, (full, a: string, b: string) => {
+    let lo = Number(a);
+    let hi = Number(b);
+    if (!Number.isInteger(lo) || !Number.isInteger(hi)) return full;
+    if (hi < lo) [lo, hi] = [hi, lo];
+    // Cap the span so a malformed "[S1-S9999]" cannot explode the document.
+    if (hi - lo > Math.max(citationCount, 50)) return full;
+    let expanded = '';
+    for (let n = lo; n <= hi; n += 1) expanded += `[S${n}]`;
+    return expanded;
+  });
+}
+
+const TIDY_MARKER_GAPS = (text: string): string =>
+  text.replace(/ {2,}/g, ' ').replace(/\s+([.,;:)])/g, '$1');
+
+/**
+ * Strip any residual *bracketed* internal source marker ([S#], 【S#】) from a
+ * block of text. Used so copied/previewed text never shows internal labels even
+ * when it does not go through the full renumber pass.
+ */
+export function stripResidualSourceMarkers(content: string): string {
+  return TIDY_MARKER_GAPS(content.replace(RESIDUAL_BRACKET_MARKER, ''));
+}
+
 // Rewrite [S<n>] evidence markers as sequential [1], [2], … in order of
 // first appearance (Vancouver numbering), and return the cited evidence
 // in that same order so the reference list lines up with the body.
@@ -222,7 +265,10 @@ export function renumberCitations(
   //      `inhibitionS8` → `inhibition [8]`. The trailing `(?![A-Za-z0-9])`
   //      keeps it from biting into real tokens, and any marker that fails to
   //      resolve is dropped, so a stray "S100" cannot survive as a citation.
-  const rewritten = content.replace(
+  // Normalise fullwidth brackets and expand ranges so the marker pass sees only
+  // canonical [S<n>] forms.
+  const normalised = normaliseCitationMarkers(content, citations.length);
+  const rewritten = normalised.replace(
     /\[S(\d+)\]|([A-Za-z0-9)])S(\d+)(?![A-Za-z0-9])/g,
     (full, bracketed: string | undefined, prefix: string | undefined, glued: string | undefined) => {
       const raw = bracketed ?? glued;
@@ -232,8 +278,10 @@ export function renumberCitations(
       return prefix !== undefined ? `${prefix} ${rendered}` : rendered;
     },
   );
-  // Tidy whitespace left behind by any dropped markers.
-  const cleaned = rewritten.replace(/ {2,}/g, ' ').replace(/\s+([.,;:)])/g, '$1');
+  // Last-resort guard: drop any residual bracketed internal marker that slipped
+  // past (an odd fullwidth variant, a marker the pass could not resolve), then
+  // tidy whitespace left behind by dropped markers.
+  const cleaned = TIDY_MARKER_GAPS(rewritten.replace(RESIDUAL_BRACKET_MARKER, ''));
   if (order.length === 0) return { content: cleaned, citations };
   const cited = order
     .map((original) => citations[original - 1])
