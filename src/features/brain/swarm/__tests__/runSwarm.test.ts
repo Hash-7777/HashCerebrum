@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
 import {
+  assessEvidenceSufficiency,
   conceptCoverage,
   conceptGroups,
   evidenceScore,
@@ -169,5 +170,36 @@ describe('concept-conjunctive ranking', () => {
     const b = titled('Digoxin clearance', 'digoxin renal handling');
     const ranked = rankEvidenceByRelevance(q, [a, b]);
     expect(ranked).toHaveLength(2); // sparse topic is never gutted
+  });
+});
+
+describe('assessEvidenceSufficiency', () => {
+  const titled = (title: string, snippet = '') => makeRecord({ source: 'pubmed', title, snippet });
+  const q = 'NSAIDs use with warfarin and digoxin in young population';
+
+  it('names the requested concepts that no record covers', () => {
+    // Records cover NSAIDs + warfarin, but never digoxin or the young population.
+    const evidence = [
+      titled('Warfarin and NSAID bleeding risk', 'warfarin nsaids adults'),
+      titled('NSAID gastrointestinal safety', 'nsaids warfarin'),
+    ];
+    const { uncovered, note } = assessEvidenceSufficiency(q, evidence);
+    expect(uncovered).toContain('digoxin');
+    expect(uncovered).toContain('young');
+    expect(note).toBeTruthy();
+    expect(note).toContain('digoxin');
+  });
+
+  it('returns no note when every concept is covered', () => {
+    const evidence = [
+      titled('NSAIDs, warfarin and digoxin in young patients', 'nsaids warfarin digoxin young population'),
+    ];
+    expect(assessEvidenceSufficiency(q, evidence).note).toBeNull();
+  });
+
+  it('returns no note when the retrieval missed everything (handled by the floor)', () => {
+    const evidence = [titled('Unrelated cardiology review', 'beta blockers in heart failure')];
+    // Every concept uncovered → total miss, left to the low-evidence floor.
+    expect(assessEvidenceSufficiency(q, evidence).note).toBeNull();
   });
 });

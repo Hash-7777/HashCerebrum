@@ -5,6 +5,7 @@
 //   4. Boss merges their evidence and synthesizes one cited answer.
 
 import { agentById } from '@config/agents';
+import { bus } from '@core/bus/EventBus';
 import type { EvidenceItem } from '@platform/index';
 import { appraisePriorWork, bossChat, contextualizeQuestion, planResearch, synthesize } from './boss';
 import {
@@ -108,6 +109,36 @@ export function conceptCoverage(record: EvidenceItem, groups: string[][]): numbe
   let n = 0;
   for (const group of groups) if (group.some((syn) => hay.includes(syn))) n += 1;
   return n;
+}
+
+// Assess whether the retrieved evidence actually covers the question's
+// concepts. Returns the concepts that NO retrieved record addresses — the
+// honest gaps. These are surfaced to the user and named for the drafting model
+// so the output states the gap plainly instead of implying depth that the
+// sources do not support. Only a PARTIAL gap is flagged (some concepts covered,
+// some not): that is the dangerous case where a paper looks complete while
+// silently missing a core entity. A total miss is left to the low-evidence floor.
+export function assessEvidenceSufficiency(
+  question: string,
+  evidence: EvidenceItem[],
+): { uncovered: string[]; note: string | null } {
+  const groups = conceptGroups(question);
+  if (groups.length === 0) return { uncovered: [], note: null };
+  const uncovered = groups
+    .filter((group) => {
+      const present = evidence.some((record) => {
+        const hay = `${record.title} ${record.snippet ?? ''}`.toLowerCase();
+        return group.some((syn) => hay.includes(syn));
+      });
+      return !present;
+    })
+    .map((group) => group[0]!);
+  if (uncovered.length === 0 || uncovered.length === groups.length) return { uncovered, note: null };
+  const note =
+    `The retrieved records contain NO direct evidence for the following requested concept(s): ` +
+    `${uncovered.join(', ')}. State this gap explicitly and early, attribute it to the absence of ` +
+    `retrieved sources, and do not imply that evidence exists for these concepts.`;
+  return { uncovered, note };
 }
 
 // Re-rank merged evidence by how many of the question's CONCEPTS each record
@@ -265,6 +296,18 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // (context-resolved) question so off-topic records sink or drop out before
   // they can be cited.
   const merged = rankEvidenceByRelevance(researchQuestion, mergeEvidence(specialists));
+
+  // Honesty gate: name any requested concept with NO direct supporting record,
+  // so the answer states the gap plainly instead of implying depth. Surfaced in
+  // the trace and passed to the drafting model.
+  const gap = assessEvidenceSufficiency(researchQuestion, merged);
+  if (gap.note) {
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'tool_call',
+      detail: `Direct evidence gap — no records cover: ${gap.uncovered.join(', ')}`,
+    });
+  }
   callbacks.onBossPhase('synthesizing');
 
   // Full-paper requests are drafted section by section into a structured
@@ -277,6 +320,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       specialists,
       standard: manuscriptStandardForQuestion(researchQuestion),
       ...(dataset ? { dataset } : {}),
+      ...(gap.note ? { evidenceGap: gap.note } : {}),
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
     });
     return {
@@ -298,7 +342,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   let synth;
   try {
-    synth = await synthesize(bossModel, researchQuestion, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal);
+    synth = await synthesize(bossModel, researchQuestion, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal, gap.note ?? undefined);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {

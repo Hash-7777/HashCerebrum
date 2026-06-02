@@ -216,6 +216,7 @@ export async function synthesize(
   onToken: (delta: string) => void,
   paperRequest?: PaperRequest | null,
   signal?: AbortSignal,
+  evidenceGap?: string,
 ): Promise<{ content: string; modelUsed: string }> {
   // Cap the block so a deep retrieval sweep cannot overflow the synthesis
   // model's context window. mergedEvidence is already sorted best-first
@@ -245,7 +246,7 @@ Hard rules:
 - [S#] markers are the ONLY valid citation. Never cite a specialist's name or section label and never write tokens like "[Specialist Findings - ...]" or "[Specialist Findings]"; those are internal scaffolding, not sources. The specialist headings below are context for you, not citable references.
 - Always write the marker in brackets, attached to the claim ("...bleeding risk [S2]."). Never write a marker bare or as a list label — do not enumerate the sources as "S1 - ...", "(S2, S3)", or "S1:"; those internal labels must never appear in the prose. Refer to evidence only inline as [S#].
 - Never invent a PMID, DOI, author, year, or title.
-- If the evidence is thin or the specialists found little, say so plainly.
+- If the evidence is thin or the specialists found little, say so plainly.${evidenceGap ? `\n- ${evidenceGap}` : ''}
 - This is research triage, not medical advice.`,
     },
     {

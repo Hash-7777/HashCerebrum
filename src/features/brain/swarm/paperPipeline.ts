@@ -903,13 +903,16 @@ async function draftLedgerSection(opts: {
   datasetBlock: string;
   priorDigest: string;
   currentBody?: string[];
+  evidenceGap?: string;
 }): Promise<string[]> {
   const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
   const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
   const claimsBlock = opts.claims.map(formatClaim).join('\n');
   const extractionBlock = relevantExtractions.map(formatExtraction).join('\n');
   const current = opts.currentBody?.length ? `\nCurrent draft to repair:\n${opts.currentBody.join('\n\n')}\n` : '';
+  const gapNote = opts.evidenceGap ? `\nEVIDENCE GAP — MANDATORY HONESTY:\n${opts.evidenceGap}\n` : '';
   const userPrompt = `Manuscript topic: ${opts.question}
+${gapNote}
 
 Pipeline stage: claim-led manuscript drafting.
 Section to write now: ${opts.section.heading}
@@ -986,6 +989,7 @@ async function compileSections(opts: {
   onStage?: (stage: string) => void;
   repairTargets?: Map<string, string[]>;
   existingSections?: ManuscriptSection[];
+  evidenceGap?: string;
 }): Promise<ManuscriptSection[]> {
   const sections: ManuscriptSection[] = [];
   const roleDigest = specialistRoleDigest(opts.specialists);
@@ -1026,6 +1030,7 @@ async function compileSections(opts: {
         datasetBlock,
         priorDigest,
         ...(existing ? { currentBody: existing.body } : {}),
+        ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -1055,6 +1060,7 @@ async function compileSections(opts: {
           datasetBlock,
           priorDigest,
           currentBody: body,
+          ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
         });
       } catch {
         break;
@@ -1143,6 +1149,7 @@ export async function compileManuscriptFromLedger(opts: {
   standard?: ManuscriptStandard;
   dataset?: UploadedDatasetSummary | null;
   onStage?: (stage: string) => void;
+  evidenceGap?: string;
 }): Promise<Manuscript> {
   opts.onStage?.('Drafting');
   let sections = await compileSections({
@@ -1153,6 +1160,7 @@ export async function compileManuscriptFromLedger(opts: {
     claimLedger: opts.claimLedger,
     paperBlueprint: opts.paperBlueprint,
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
+    ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
   });
   let abstract = await draftAbstract({
@@ -1199,6 +1207,7 @@ export async function compileManuscriptFromLedger(opts: {
       claimLedger: opts.claimLedger,
       paperBlueprint: opts.paperBlueprint,
       ...(opts.dataset ? { dataset: opts.dataset } : {}),
+      ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
       ...(opts.onStage ? { onStage: opts.onStage } : {}),
       repairTargets: sectionMap,
       existingSections: sections,
@@ -1250,6 +1259,7 @@ export async function runPaperPipeline(opts: {
   standard?: ManuscriptStandard;
   dataset?: UploadedDatasetSummary | null;
   onStage?: (stage: string) => void;
+  evidenceGap?: string;
 }): Promise<Manuscript> {
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
@@ -1295,6 +1305,7 @@ export async function runPaperPipeline(opts: {
     paperBlueprint,
     ...(opts.standard ? { standard: opts.standard } : {}),
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
+    ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
   });
 }
