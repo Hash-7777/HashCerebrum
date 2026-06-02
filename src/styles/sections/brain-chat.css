@@ -549,9 +549,12 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px 10px;
+  /* Wrap to a second row on narrow widths instead of clipping the Send button. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
-.composer-toolbar .tools-left { display: flex; gap: 4px; align-items: center; }
-.composer-toolbar .tools-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.composer-toolbar .tools-left { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.composer-toolbar .tools-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 
 .dataset-chip {
   display: inline-flex;
@@ -577,14 +580,15 @@
 .memory-toggle-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 5px 9px;
   border-radius: 2px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text-3);
-  font: 12px/1 var(--f-mono);
-  letter-spacing: 0.04em;
+  font: 11.5px/1 var(--f-mono);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
 }
