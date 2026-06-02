@@ -32,6 +32,9 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--hc-border);
 }
+/* The title/subtitle column must be allowed to shrink so its single-line text
+   ellipsises instead of overflowing into the tools or forcing the bar taller. */
+.memory-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; }
 .memory-toolbar .eyebrow {
   margin: 0 0 5px;
   color: var(--hc-accent-strong);
@@ -45,8 +48,25 @@
   font-size: 26px;
   font-weight: 500;
   color: var(--hc-fg-strong);
+  /* Single line so the header height stays constant when the title switches
+     between a project name and "Library". */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
-.memory-subtitle { margin: 4px 0 0; color: var(--hc-fg-muted); font-size: 12px; }
+/* Keep the subtitle on one line too: when its text changes between scopes
+   ("… across all projects") the toolbar must not grow/shrink, or the graph's
+   grid row resizes and the R3F canvas glitches to a different size. */
+.memory-subtitle {
+  margin: 4px 0 0;
+  color: var(--hc-fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .memory-search {
   display: inline-flex;
   align-items: center;
