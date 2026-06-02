@@ -31,9 +31,34 @@ export function recencyWeight(year?: number | string, nowYear: number = new Date
   return 0.95;
 }
 
-/** Combined clinical multiplier applied to a chunk's retrieval score. */
+// Source-credibility tier — what makes the memory a TRUSTED library rather than
+// a dump. Peer-reviewed biomedical indexes are trusted highest; drug-label /
+// terminology sources and free-text answers are supportive only. Gentle (±15%)
+// so semantics still lead retrieval.
+const SOURCE_TRUST: Record<string, number> = {
+  pubmed: 1.15,
+  europepmc: 1.12,
+  ctgov: 1.1,
+  openalex: 1.06,
+  openfda: 0.95,
+  rxnorm: 0.92,
+  answer: 0.9,
+};
+
+// Trust multiplier from a chunk's provenance: its source tier and whether it
+// carries a resolvable identifier (a record that can be verified is worth more
+// in a citable library; PMID outranks DOI). Unknown sources stay neutral.
+export function trustWeight(chunk: RagChunk): number {
+  let w = SOURCE_TRUST[chunk.source] ?? 1;
+  if (chunk.pmid) w *= 1.06;
+  else if (chunk.doi) w *= 1.03;
+  return w;
+}
+
+/** Combined clinical multiplier applied to a chunk's retrieval score:
+ *  evidence strength × recency × source/identifier trust. */
 export function medicalBoost(chunk: RagChunk, nowYear?: number): number {
-  return evidenceStrengthWeight(chunk.evidenceStrength) * recencyWeight(chunk.year, nowYear);
+  return evidenceStrengthWeight(chunk.evidenceStrength) * recencyWeight(chunk.year, nowYear) * trustWeight(chunk);
 }
 
 // Heuristic evidence-strength grade from a record's text + source. Deliberately

@@ -5,6 +5,7 @@ import {
   medicalBoost,
   mmrRerank,
   recencyWeight,
+  trustWeight,
 } from '../search/ranking';
 import type { RagChunk, RagSearchHit } from '../types';
 
@@ -39,12 +40,27 @@ describe('recencyWeight', () => {
   });
 });
 
+describe('trustWeight', () => {
+  it('ranks peer-reviewed sources above drug-label sources and answers', () => {
+    expect(trustWeight(chunk({ source: 'pubmed' }))).toBeGreaterThan(trustWeight(chunk({ source: 'rxnorm' })));
+    expect(trustWeight(chunk({ source: 'pubmed' }))).toBeGreaterThan(trustWeight(chunk({ source: 'answer' })));
+    // A resolvable identifier raises trust; PMID outranks DOI.
+    expect(trustWeight(chunk({ source: 'pubmed', pmid: '123' }))).toBeGreaterThan(trustWeight(chunk({ source: 'pubmed' })));
+    expect(trustWeight(chunk({ source: 'pubmed', pmid: '123' }))).toBeGreaterThan(trustWeight(chunk({ source: 'pubmed', doi: '10.x' })));
+    // Unknown source stays neutral.
+    expect(trustWeight(chunk({ source: 'mystery' }))).toBe(1);
+  });
+});
+
 describe('medicalBoost', () => {
-  it('combines strength and recency', () => {
+  it('combines strength, recency, and source trust', () => {
     const strongRecent = medicalBoost(chunk({ evidenceStrength: 'strong', year: 2025 }), 2026);
     const weakOld = medicalBoost(chunk({ evidenceStrength: 'weak', year: 2004 }), 2026);
     expect(strongRecent).toBeGreaterThan(weakOld);
-    expect(medicalBoost(chunk({}), 2026)).toBe(1); // no metadata -> no-op
+    // Neutral metadata on an unknown source is a true no-op.
+    expect(medicalBoost(chunk({ source: 'mystery' }), 2026)).toBe(1);
+    // A trusted, verifiable source lifts an otherwise-neutral chunk.
+    expect(medicalBoost(chunk({ source: 'pubmed', pmid: '1' }), 2026)).toBeGreaterThan(1);
   });
 });
 
