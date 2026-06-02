@@ -40,6 +40,23 @@ describe('title & keyword cleanup', () => {
   });
 });
 
+describe('Brain Mini blueprint', () => {
+  it('builds a reduced section set that is lighter than the full pipeline', () => {
+    const extractions = extractEvidenceFromRecords([
+      record({ identifiers: { pmid: '1' }, provenanceHash: 'a' }),
+    ]);
+    const ledger = buildClaimLedger(extractions);
+    const full = buildPaperBlueprint('anticoagulant safety', ledger);
+    const mini = buildPaperBlueprint('anticoagulant safety', ledger, undefined, true);
+    expect(mini.sections.length).toBeLessThan(full.sections.length);
+    const headings = mini.sections.map((s) => s.heading);
+    expect(headings).toEqual(expect.arrayContaining(['Introduction', 'Conclusion', 'Declarations']));
+    // The heavy breakdown sections are dropped in Mini.
+    expect(headings).not.toContain('Mechanistic and Pharmacologic Evidence');
+    expect(headings).not.toContain('Clinical Evidence and Safety Outcomes');
+  });
+});
+
 function record(partial: Partial<EvidenceItem> & { source?: EvidenceItem['source'] } = {}): EvidenceItem {
   return {
     source: 'pubmed',

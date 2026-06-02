@@ -26,6 +26,8 @@ import type { SpecialistResult } from './types';
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
 const SECTION_TOKENS = 5800;
+// Brain Mini drafts shorter sections so a small / free model finishes quickly.
+const MINI_SECTION_TOKENS = 1600;
 const MAX_SECTION_PASSES = 4;
 const MAX_QA_REPAIR_SECTIONS = 4;
 const TRUSTED_EVIDENCE_SOURCES = new Set<EvidenceItem['source']>([
@@ -615,12 +617,29 @@ function claimIdsForSection(section: SectionSpec, ledger: ClaimLedgerEntry[]): s
   return ledger.filter((entry) => entry.evidenceStrength !== 'context').slice(0, 8).map((entry) => entry.id);
 }
 
-export function buildPaperBlueprint(question: string, ledger: ClaimLedgerEntry[], overrideTitle?: string): PaperBlueprint {
+// Brain Mini's reduced section set — a coherent shorter paper (about half the
+// drafting calls of the full plan) for low-quota / small local models.
+const MINI_SECTION_HEADINGS = new Set([
+  'Introduction',
+  'Methods',
+  'Evidence Base and Search Yield',
+  'Discussion',
+  'Conclusion',
+  'Declarations',
+]);
+
+export function buildPaperBlueprint(
+  question: string,
+  ledger: ClaimLedgerEntry[],
+  overrideTitle?: string,
+  mini = false,
+): PaperBlueprint {
+  const plan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
   return {
     title: overrideTitle ?? blueprintTitle(question),
     abstractIntent:
       'Structured evidence-review abstract summarizing the automated search, source-backed findings, evidence strength, limitations, and clinical/research implications without unsupported statistics.',
-    sections: SECTION_PLAN.map((section) => {
+    sections: plan.map((section) => {
       const requiredClaimIds = claimIdsForSection(section, ledger);
       const requiredSourceMarkers = [
         ...new Set(
@@ -933,7 +952,13 @@ function callSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callModel(model: string, system: string, user: string, maxTokens: number): Promise<string> {
+async function callModel(
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  noPause = false,
+): Promise<string> {
   // Surface a silent boss-model failover in the trace so a mid-run provider
   // outage is visible rather than only changing the model label afterwards.
   const onProgress = (progress: { to: { shortLabel: string }; reason: string }) => {
@@ -973,7 +998,9 @@ async function callModel(model: string, system: string, user: string, maxTokens:
         });
         continue;
       }
-      if (isCallRateLimited(err) && rateRetries < MAX_CALL_RATE_RETRIES) {
+      // Brain Mini deliberately does NOT pause on rate limits — it fails fast
+      // (the section gets flagged) so a low-quota run never stalls in backoff.
+      if (isCallRateLimited(err) && !noPause && rateRetries < MAX_CALL_RATE_RETRIES) {
         rateRetries += 1;
         const waitMs = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1)) + Math.floor(Math.random() * 400);
         bus.emit('agent:activity', {
@@ -1000,6 +1027,7 @@ async function draftLedgerSection(opts: {
   priorDigest: string;
   currentBody?: string[];
   evidenceGap?: string;
+  mini?: boolean;
 }): Promise<string[]> {
   const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
   const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
@@ -1036,7 +1064,13 @@ Previously drafted sections for continuity:
 ${opts.priorDigest}
 ${current}
 Write the ${opts.section.heading} section now. Start immediately with the first sentence — no heading, no number, no title. Write to the UPPER end of the target range (${opts.section.targetWords}); a thorough section is better than a brief one. Every factual sentence must be traceable to the claim ledger or extraction rows. Develop every point fully across multiple sentences — do not reduce findings to brief statements. If no effect sizes are extracted, state clearly that quantitative statistics are limited to source-yield and evidence-strength counts, then compensate with rich contextual discussion.`;
-  const reply = await callModel(opts.model, SECTION_SYSTEM, userPrompt, SECTION_TOKENS);
+  const reply = await callModel(
+    opts.model,
+    SECTION_SYSTEM,
+    userPrompt,
+    opts.mini ? MINI_SECTION_TOKENS : SECTION_TOKENS,
+    opts.mini ?? false,
+  );
 
   // Reject replies that look like the model wrote a complete document instead of
   // one section — salvage what we can or fall back to a gap section.
@@ -1086,6 +1120,7 @@ async function compileSections(opts: {
   repairTargets?: Map<string, string[]>;
   existingSections?: ManuscriptSection[];
   evidenceGap?: string;
+  mini?: boolean;
 }): Promise<ManuscriptSection[]> {
   const sections: ManuscriptSection[] = [];
   const roleDigest = specialistRoleDigest(opts.specialists);
@@ -1127,6 +1162,7 @@ async function compileSections(opts: {
         priorDigest,
         ...(existing ? { currentBody: existing.body } : {}),
         ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+        mini: opts.mini ?? false,
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -1157,6 +1193,7 @@ async function compileSections(opts: {
           priorDigest,
           currentBody: body,
           ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+          mini: opts.mini ?? false,
         });
       } catch {
         break;
@@ -1246,6 +1283,7 @@ export async function compileManuscriptFromLedger(opts: {
   dataset?: UploadedDatasetSummary | null;
   onStage?: (stage: string) => void;
   evidenceGap?: string;
+  mini?: boolean;
 }): Promise<Manuscript> {
   opts.onStage?.('Drafting');
   let sections = await compileSections({
@@ -1257,6 +1295,7 @@ export async function compileManuscriptFromLedger(opts: {
     paperBlueprint: opts.paperBlueprint,
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+    mini: opts.mini ?? false,
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
   });
   let abstract = await draftAbstract({
@@ -1304,6 +1343,7 @@ export async function compileManuscriptFromLedger(opts: {
       paperBlueprint: opts.paperBlueprint,
       ...(opts.dataset ? { dataset: opts.dataset } : {}),
       ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+      mini: opts.mini ?? false,
       ...(opts.onStage ? { onStage: opts.onStage } : {}),
       repairTargets: sectionMap,
       existingSections: sections,
@@ -1356,6 +1396,7 @@ export async function runPaperPipeline(opts: {
   dataset?: UploadedDatasetSummary | null;
   onStage?: (stage: string) => void;
   evidenceGap?: string;
+  mini?: boolean;
 }): Promise<Manuscript> {
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
@@ -1367,6 +1408,7 @@ export async function runPaperPipeline(opts: {
       'You write concise, formal academic manuscript titles for peer-reviewed journals. Reply with the title only — no quotation marks, no extra text, no explanation.',
       `Write a manuscript title for a ${opts.dataset ? 'original-dataset' : 'evidence-review'} biomedical manuscript addressing: ${opts.question}`,
       150,
+      opts.mini ?? false,
     );
     const candidate = (reply.split('\n')[0] ?? '')
       .replace(/^[#\s"']+|[#\s"']+$/g, '')
@@ -1390,7 +1432,7 @@ export async function runPaperPipeline(opts: {
   const evidenceExtractions = extractEvidenceFromRecords(opts.evidence);
   opts.onStage?.('Building claims');
   const claimLedger = buildClaimLedger(evidenceExtractions);
-  const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger, overrideTitle);
+  const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger, overrideTitle, opts.mini ?? false);
   return compileManuscriptFromLedger({
     question: opts.question,
     bossModel: opts.bossModel,
@@ -1402,6 +1444,7 @@ export async function runPaperPipeline(opts: {
     ...(opts.standard ? { standard: opts.standard } : {}),
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+    mini: opts.mini ?? false,
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
   });
 }

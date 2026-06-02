@@ -59,4 +59,8 @@ export interface SwarmOptions {
   callbacks: SwarmCallbacks;
   // Abort signal to cancel in-flight LLM streams when the component unmounts.
   signal?: AbortSignal;
+  // Brain Mini: a lighter run — fewer specialists, a reduced manuscript section
+  // set, smaller token budgets, and no rate-limit pausing — for free / small
+  // local models.
+  mini?: boolean;
 }

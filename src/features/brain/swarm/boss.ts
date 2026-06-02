@@ -217,6 +217,7 @@ export async function synthesize(
   paperRequest?: PaperRequest | null,
   signal?: AbortSignal,
   evidenceGap?: string,
+  mini = false,
 ): Promise<{ content: string; modelUsed: string }> {
   // Cap the block so a deep retrieval sweep cannot overflow the synthesis
   // model's context window. mergedEvidence is already sorted best-first
@@ -273,7 +274,11 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
   ];
   const res = await streamWithModelChain(
     model,
-    { messages, temperature: paperRequest ? 0.18 : 0.25, maxTokens: paperRequest ? 8000 : 1600 },
+    {
+      messages,
+      temperature: paperRequest ? 0.18 : 0.25,
+      maxTokens: paperRequest ? (mini ? 3000 : 8000) : mini ? 900 : 1600,
+    },
     { onToken, signal },
     emitFailover,
   );

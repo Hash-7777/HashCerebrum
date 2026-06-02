@@ -246,6 +246,7 @@ function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null 
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
+  const mini = opts.mini ?? false;
   const bossModel = modelFor('boss');
 
   // A follow-up that asks the team to appraise its own previous output ("rate
@@ -286,6 +287,12 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       mode: 'research',
       tasks: plan.mode === 'research' ? mergePaperTasks(plan.tasks, requiredPaperTasks) : requiredPaperTasks,
     };
+  }
+
+  // Brain Mini: cap the swarm to a couple of specialists so a low-quota or
+  // small local model isn't asked to run six source agents in parallel.
+  if (mini && plan.mode === 'research') {
+    plan = { mode: 'research', tasks: plan.tasks.slice(0, 2) };
   }
 
   if (plan.mode === 'chat') {
@@ -331,6 +338,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       standard: manuscriptStandardForQuestion(researchQuestion),
       ...(dataset ? { dataset } : {}),
       ...(gap.note ? { evidenceGap: gap.note } : {}),
+      mini,
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
     });
     return {
@@ -352,7 +360,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   let synth;
   try {
-    synth = await synthesize(bossModel, researchQuestion, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal, gap.note ?? undefined);
+    synth = await synthesize(bossModel, researchQuestion, specialists, citableEvidence, callbacks.onAnswerToken, undefined, signal, gap.note ?? undefined, mini);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {

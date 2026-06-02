@@ -12,6 +12,7 @@ import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 import type { LlmMessage } from '@core/llm/types';
 import { agentModelFor } from '@core/store/agentModelStore';
+import { useBrainModesStore } from '@core/store/brainModesStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -317,6 +318,7 @@ export function BrainMode() {
         modelFor: agentModelFor,
         callbacks,
         signal: abortRef.current?.signal,
+        mini: useBrainModesStore.getState().mini,
       });
 
       flushTopicHits(result.answer || streamedContent);

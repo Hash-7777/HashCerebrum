@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
+import { useBrainModesStore } from '@core/store/brainModesStore';
 
 export function Composer({
   query,
@@ -33,6 +34,8 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement>(null);
   const memoryEnabled = useMemorySettingsStore((s) => s.enabled);
   const toggleMemory = useMemorySettingsStore((s) => s.toggle);
+  const miniEnabled = useBrainModesStore((s) => s.mini);
+  const toggleMini = useBrainModesStore((s) => s.toggleMini);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -127,6 +130,21 @@ export function Composer({
             >
               <Icon name="database" size={13} />
               Memory {memoryEnabled ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              className="memory-toggle-chip"
+              data-on={miniEnabled}
+              onClick={toggleMini}
+              aria-pressed={miniEnabled}
+              title={
+                miniEnabled
+                  ? 'Brain Mini ON — lighter, faster papers on fewer agents and no rate-limit waiting. Best for free / small Ollama models. Click for the full pipeline.'
+                  : 'Brain Mini OFF — full-depth pipeline. Click for a lighter, low-quota run.'
+              }
+            >
+              <Icon name="brain" size={13} />
+              Mini {miniEnabled ? 'on' : 'off'}
             </button>
           </div>
           <div className="tools-right">
