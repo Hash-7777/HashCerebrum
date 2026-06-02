@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentReviewResult } from '@core/store/peerReviewStore';
-import { chunkDocument, parseSuggestions } from '../reviewSwarm';
+import {
+  buildPaperReview,
+  chunkDocument,
+  isContextTooLarge,
+  isRateLimited,
+  parseSuggestions,
+} from '../reviewSwarm';
 
 describe('chunkDocument', () => {
   it('keeps a short document as a single chunk', () => {
@@ -23,6 +29,64 @@ describe('chunkDocument', () => {
     const chunks = chunkDocument(huge, 100);
     expect(chunks.length).toBe(3);
     expect(chunks.join('')).toBe(huge);
+  });
+});
+
+describe('error classification', () => {
+  it('treats a tokens-per-minute / 429 message as a rate limit, NOT a size error', () => {
+    const tpm = new Error('groq HTTP 429: Rate limit reached ... tokens per minute');
+    expect(isRateLimited(tpm)).toBe(true);
+    expect(isContextTooLarge(tpm)).toBe(false); // the bug that caused the shrink loop
+
+    expect(isRateLimited(new Error('Requests per minute limit exceeded'))).toBe(true);
+    expect(isRateLimited(new Error('provider cooling down from a recent rate limit'))).toBe(true);
+    expect(isRateLimited(new Error('You exceeded your current quota'))).toBe(true);
+  });
+
+  it('treats a 413 / context-length message as a size error, NOT a rate limit', () => {
+    const big = new Error('HTTP 413: request too large; reduce your message size');
+    expect(isContextTooLarge(big)).toBe(true);
+    expect(isRateLimited(big)).toBe(false);
+    expect(isContextTooLarge(new Error('maximum context length is 8192 tokens'))).toBe(true);
+  });
+});
+
+describe('buildPaperReview', () => {
+  const run = (agentId: string, patch: Partial<{ text: string; error: string }> = {}) => ({
+    agentId,
+    text: patch.text ?? '',
+    modelUsed: 'test-model',
+    error: patch.error,
+  });
+
+  it('builds the scored review from the orchestrator when it completed', () => {
+    const review = buildPaperReview(
+      [
+        run('orchestrator', { text: 'SCORE: 7\n\nSUMMARY:\nSolid.\n\nSTRENGTHS:\n- clear\n\nWEAKNESSES:\n- thin stats' }),
+        run('statistics', { text: '- CIs missing' }),
+      ],
+      'test-model',
+    );
+    expect(review.score).toBe(7);
+    expect(review.summary).toContain('Solid');
+    expect(review.agentResults).toHaveLength(2);
+  });
+
+  it('degrades to a labelled partial review when the orchestrator failed', () => {
+    const review = buildPaperReview(
+      [
+        run('orchestrator', { error: 'HTTP 429: rate limit' }),
+        run('statistics', { text: '- Confidence intervals are not reported.' }),
+        run('grammar', { text: '- Several comma splices.' }),
+      ],
+      'test-model',
+    );
+    expect(review.score).toBe(0);
+    expect(review.summary).toContain('Partial review');
+    expect(review.publishReadiness).toContain('Incomplete');
+    // The specialists' findings are preserved as weaknesses.
+    expect(review.weaknesses.join(' ')).toContain('Confidence intervals');
+    expect(review.statistics).toContain('Confidence intervals');
   });
 });
 

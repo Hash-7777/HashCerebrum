@@ -7,20 +7,52 @@ import { useAgentStore } from '@core/store/agentStore';
 import type { AgentReviewResult, PaperReview } from '@core/store/peerReviewStore';
 import { parseReviewResponse } from './reviewEngine';
 
-/** Per-agent hard timeout (ms). If an agent takes longer it is marked as failed. */
-const AGENT_TIMEOUT_MS = 55_000;
+/** Hard timeout (ms) for a SINGLE model call. Applied per request — not per
+ *  agent — so a multi-part agent making steady progress is never killed, while
+ *  one genuinely hung request still fails fast. Bounded retries (below) cap the
+ *  total time an agent can spend. */
+const CALL_TIMEOUT_MS = 70_000;
+
+/** How many review agents may call a provider at once. The free-tier keys this
+ *  app targets rate-limit hard, so firing all five agents (each looping over
+ *  document parts) in parallel guarantees a 429 storm. A small cap trades a
+ *  little wall-clock time for actually completing. */
+const REVIEW_CONCURRENCY = 2;
+
+/** Bounded retries so a call always terminates. Shrinking is for genuine
+ *  context-size rejections; backoff is for rate/quota limits. */
+const MAX_SHRINK_RETRIES = 4;
+const MAX_RATE_LIMIT_RETRIES = 3;
 
 /** Race a promise against a timeout rejection. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  // Store the timer ID so we can clear it when the real promise wins first.
-  // Without clearTimeout the timer fires 55 s later on every resolved review
-  // and calls reject() on an already-settled promise — a silent no-op, but
-  // it leaks one timer per agent per review session.
+  // Store the timer ID so we can clear it when the real promise wins first —
+  // otherwise the timer fires later and rejects an already-settled promise
+  // (a silent no-op, but it leaks one timer per call).
   let timerId: ReturnType<typeof setTimeout>;
   const timeout = new Promise<T>((_, reject) => {
     timerId = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timerId));
+}
+
+/** Promise-based delay that rejects with an AbortError if the signal fires. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
 }
 
 function trace(phase: string, detail: string) {
@@ -71,18 +103,40 @@ export function chunkDocument(text: string, size: number = CHUNK_CHARS): string[
   return chunks;
 }
 
-// A provider rejecting the request because the prompt is too big for its
-// token/-per-minute budget (HTTP 413, "request too large", "reduce your message
-// size", a TPM-limit message). Recoverable by shrinking the document.
-function isTooLargeError(err: unknown): boolean {
+// A provider rejecting the request because the prompt is physically too big for
+// the model's CONTEXT WINDOW (HTTP 413, "request too large", "context length").
+// This is recoverable by shrinking the document.
+export function isContextTooLarge(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
     m.includes('413') ||
     m.includes('request too large') ||
     m.includes('reduce your message') ||
-    m.includes('tokens per minute') ||
     m.includes('context length') ||
+    m.includes('context_length') ||
+    m.includes('maximum context') ||
     m.includes('too many tokens')
+  );
+}
+
+// A provider — or every provider in the failover chain — refusing because of a
+// RATE or QUOTA limit: requests-per-minute, tokens-per-minute, daily quota, or a
+// cooldown after a recent 429. Shrinking the prompt does NOT help here; only
+// waiting (or a fresh provider) does. Critically, a "tokens per minute" message
+// is a rate limit, NOT a context-size error — misclassifying it sent the old
+// code into a shrink loop that burned the whole timeout and failed every agent.
+export function isRateLimited(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes('429') ||
+    m.includes('rate limit') ||
+    m.includes('rate_limit') ||
+    m.includes('quota') ||
+    m.includes('requests per minute') ||
+    m.includes('tokens per minute') ||
+    m.includes('too many requests') ||
+    m.includes('cooling down') ||
+    m.includes('cooldown')
   );
 }
 
@@ -323,11 +377,15 @@ export async function runReviewSwarm(
 ): Promise<PaperReview> {
   trace('start', `[Peer Review] swarm started — ${REVIEW_SWARM_AGENTS.length} agents`);
 
-  // One model call with adaptive shrink: if the provider rejects the prompt as
-  // too large, halve the user content and retry (only before any token has
-  // streamed) down to a floor. Used for both the per-part map calls and the
-  // orchestrator reduce call.
-  const callWithShrink = async (
+  // One model call with bounded recovery. Two failure modes are handled
+  // distinctly (the old code conflated them and looped forever):
+  //   • CONTEXT-too-large → shrink the document once per failure and retry,
+  //     down to a floor, capped at MAX_SHRINK_RETRIES;
+  //   • RATE/QUOTA limited → the provider chain is exhausted, so wait with
+  //     jittered exponential backoff and retry, capped at MAX_RATE_LIMIT_RETRIES.
+  // Each attempt is wrapped in a per-call timeout so a hung request fails fast
+  // without killing a steadily-progressing agent.
+  const callModel = async (
     system: string,
     user: string,
     maxTokens: number,
@@ -335,33 +393,47 @@ export async function runReviewSwarm(
     onAcc?: (acc: string) => void,
   ): Promise<{ text: string; modelUsed: string }> => {
     let content = user;
+    let shrinks = 0;
+    let rateRetries = 0;
     for (;;) {
       let acc = '';
       try {
-        const res = await streamWithModelChain(
-          model,
-          {
-            messages: [
-              { role: 'system' as const, content: system },
-              { role: 'user' as const, content },
-            ],
-            temperature: 0.3,
-            maxTokens,
-          },
-          {
-            onToken: (delta) => {
-              acc += delta;
-              onAcc?.(acc);
+        const res = await withTimeout(
+          streamWithModelChain(
+            model,
+            {
+              messages: [
+                { role: 'system' as const, content: system },
+                { role: 'user' as const, content },
+              ],
+              temperature: 0.3,
+              maxTokens,
             },
-            signal,
-          },
+            {
+              onToken: (delta) => {
+                acc += delta;
+                onAcc?.(acc);
+              },
+              signal,
+            },
+          ),
+          CALL_TIMEOUT_MS,
+          label,
         );
         return { text: res.content || acc, modelUsed: res.modelUsed ?? model };
       } catch (err) {
         if ((err as Error)?.name === 'AbortError') throw err;
-        if (isTooLargeError(err) && !acc && content.length > MIN_CHARS) {
+        if (isContextTooLarge(err) && !acc && content.length > MIN_CHARS && shrinks < MAX_SHRINK_RETRIES) {
+          shrinks += 1;
           content = truncate(content, Math.max(MIN_CHARS, Math.floor(content.length / 2)));
           trace('tool_call', `[Peer Review] ${label}: prompt too large — retrying smaller`);
+          continue;
+        }
+        if (isRateLimited(err) && !acc && rateRetries < MAX_RATE_LIMIT_RETRIES) {
+          rateRetries += 1;
+          const waitMs = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1)) + Math.floor(Math.random() * 400);
+          trace('tool_call', `[Peer Review] ${label}: rate-limited — pausing ${Math.round(waitMs / 1000)}s`);
+          await sleep(waitMs, signal);
           continue;
         }
         throw err;
@@ -385,7 +457,7 @@ export async function runReviewSwarm(
         const notes: string[] = [];
         for (let i = 0; i < chunks.length; i += 1) {
           onPatch(def.agentId, { text: `Reviewing part ${i + 1} of ${chunks.length}…` });
-          const r = await callWithShrink(
+          const r = await callModel(
             ORCHESTRATOR_NOTES_PROMPT,
             `Manuscript PART ${i + 1} of ${chunks.length}. List concise reviewer observations for THIS part only.\n\n---\n${chunks[i] ?? ''}\n---`,
             700,
@@ -394,7 +466,7 @@ export async function runReviewSwarm(
           modelUsed = r.modelUsed;
           notes.push(`Part ${i + 1} notes:\n${r.text}`);
         }
-        const r = await callWithShrink(
+        const r = await callModel(
           def.systemPrompt,
           `The following reviewer notes were gathered across all ${chunks.length} parts of ONE manuscript. Produce the final review in the required format, basing the score and every section on these combined notes.\n\n---\n${truncate(notes.join('\n\n'))}\n---`,
           def.maxTokens,
@@ -417,7 +489,7 @@ export async function runReviewSwarm(
           ? `Please analyse PART ${i + 1} OF ${chunks.length} of the following manuscript. Report only issues found in THIS part.\n\n---\n${chunk}\n---`
           : userMsg(chunk);
         const base = accumulated;
-        const r = await callWithShrink(def.systemPrompt, user, def.maxTokens, def.label, (acc) =>
+        const r = await callModel(def.systemPrompt, user, def.maxTokens, def.label, (acc) =>
           onPatch(def.agentId, { text: base ? `${base}\n\n${acc}` : acc }),
         );
         modelUsed = r.modelUsed;
@@ -437,43 +509,103 @@ export async function runReviewSwarm(
     }
   };
 
-  const tasks = REVIEW_SWARM_AGENTS.map((def) =>
-    withTimeout(agentTask(def), AGENT_TIMEOUT_MS, def.label).catch((err) => {
-      if ((err as Error)?.name === 'AbortError') throw err;
-      const errMsg = err instanceof Error ? err.message : String(err);
-      onPatch(def.agentId, { status: 'error', error: errMsg });
-      trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
-      return { agentId: def.agentId, text: '', modelUsed: model, error: errMsg };
-    }),
+  // Run the agents with a small concurrency cap instead of all at once, so the
+  // free-tier provider keys are not slammed into a 429 storm. Order is
+  // preserved; an AbortError propagates and aborts the whole review.
+  const results = new Array<AgentRun>(REVIEW_SWARM_AGENTS.length);
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= REVIEW_SWARM_AGENTS.length) return;
+      const def = REVIEW_SWARM_AGENTS[i]!;
+      try {
+        results[i] = await agentTask(def);
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') throw err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        onPatch(def.agentId, { status: 'error', error: errMsg });
+        trace('error', `[Peer Review] ${def.label}: ${errMsg}`);
+        results[i] = { agentId: def.agentId, text: '', modelUsed: model, error: errMsg };
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(REVIEW_CONCURRENCY, REVIEW_SWARM_AGENTS.length) }, () => worker()),
   );
 
-  const results = await Promise.all(tasks);
-
-  // If every single agent failed, surface an error rather than an empty review
-  const allFailed = results.every((r) => r.error);
-  if (allFailed) {
-    const firstErr = results[0]?.error ?? 'All review agents failed';
+  // If every single agent failed, surface an error rather than an empty review.
+  if (results.every((r) => r?.error)) {
+    const firstErr = results.find((r) => r?.error)?.error ?? 'All review agents failed';
     trace('error', `[Peer Review] all agents failed: ${firstErr}`);
     throw new Error(`Peer review failed: ${firstErr}`);
   }
 
   trace('done', '[Peer Review] swarm complete — building report');
+  return buildPaperReview(results, model);
+}
 
-  // Build PaperReview from orchestrator
+// ── Report assembly ─────────────────────────────────────────────────────────
+
+interface AgentRun {
+  agentId: string;
+  text: string;
+  modelUsed: string;
+  error: string | undefined;
+}
+
+const labelForAgent = (id: string): string =>
+  REVIEW_SWARM_AGENTS.find((a) => a.agentId === id)?.label ?? id;
+
+// When the orchestrator (the scored lead review) did not complete — usually
+// because every provider was rate-limited — degrade gracefully: build a clearly
+// labelled partial review from the specialist agents that DID finish, rather
+// than returning an empty review or throwing away their work.
+function synthesizeReviewFromSpecialists(results: AgentRun[], model: string): PaperReview {
+  const done = results.filter((r) => !r.error && r.text && r.agentId !== 'orchestrator');
+  const completed = done.map((r) => labelForAgent(r.agentId));
+  const failed = results.filter((r) => r.error).map((r) => labelForAgent(r.agentId));
+  const weaknesses = done.flatMap((r) => bullets(r.text)).slice(0, 12);
+  const statistics = done.find((r) => r.agentId === 'statistics')?.text ?? '';
+  const summary =
+    `Partial review — the lead reviewer did not complete (likely provider rate limits). ` +
+    `Compiled from: ${completed.join(', ') || 'no agents'}.` +
+    (failed.length ? ` Not completed: ${failed.join(', ')}.` : '') +
+    ` Re-run the review for a full scored assessment.`;
+  return {
+    score: 0,
+    summary,
+    strengths: [],
+    weaknesses,
+    methodology: '',
+    statistics,
+    conclusions: '',
+    publishReadiness: 'Incomplete — re-run review',
+    reviewedAt: new Date().toISOString(),
+    modelUsed: done[0]?.modelUsed ?? model,
+  };
+}
+
+// Assemble the PaperReview from the swarm results: the orchestrator's scored
+// critique when it completed, otherwise a labelled partial built from the
+// specialists. Either way every agent's output is attached for the UI.
+export function buildPaperReview(results: AgentRun[], model: string): PaperReview {
   const orch = results.find((r) => r.agentId === 'orchestrator');
-  const review = parseReviewResponse(orch?.text ?? '', orch?.modelUsed ?? model);
+  const base =
+    orch && orch.text && !orch.error
+      ? parseReviewResponse(orch.text, orch.modelUsed || model)
+      : synthesizeReviewFromSpecialists(results, model);
 
-  // Attach per-agent results
-  const agentResults: AgentReviewResult[] = results.map((r, i) => ({
+  const agentResults: AgentReviewResult[] = results.map((r) => ({
     agentId: r.agentId,
-    label: REVIEW_SWARM_AGENTS[i]!.label,
+    label: labelForAgent(r.agentId),
     status: r.error ? ('error' as const) : ('done' as const),
     text: r.text,
     items: bullets(r.text),
     ...(r.error ? { error: r.error } : {}),
   }));
-
-  return { ...review, agentResults };
+  return { ...base, agentResults };
 }
 
 // ── Suggestion types & parser ─────────────────────────────────────────────
