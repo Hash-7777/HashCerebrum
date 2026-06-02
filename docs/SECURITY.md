@@ -74,8 +74,12 @@ privacy is a property of the architecture rather than a policy:
    `'wasm-unsafe-eval'`, which permits WebAssembly compilation needed by
    WebKit/PDF rendering paths without allowing general JavaScript string
    evaluation. Style allows `'unsafe-inline'` for dynamic theme tokens only.
-   Production and development Tauri CSP entries carry the same script policy
-   so dev-time injected script hashes do not remove the WebAssembly allowance.
+   `connect-src` is `'self' blob: ipc:` — `blob:` is required so pdf.js can read
+   the in-memory PDF it rasterises for the in-app preview; a `blob:` URL is local
+   in-memory data and cannot address the network, so the zero-external-egress
+   property is unchanged (no external host is permitted). Production and
+   development Tauri CSP entries carry the same script policy so dev-time
+   injected script hashes do not remove the WebAssembly allowance.
 6. **`withGlobalTauri: false`.** No implicit `window.__TAURI__`. The
    renderer must import from `@tauri-apps/api/core`, which is
    bundle-introspectable.
@@ -91,6 +95,15 @@ consulted:
 - All RFC1918 private ranges (10/8, 172.16/12, 192.168/16)
 - CGNAT / shared address space (100.64.0.0/10, RFC 6598)
 - Link-local IPv6 (`fe80:`) and ULA IPv6 (`fc00::/7`)
+
+**Private ranges are matched by parsing the host as an `IpAddr`, not by string
+prefix.** A prior implementation prefix-matched the literal `"fd"` (intended for
+IPv6 ULA `fd00::/8`), which made any public hostname beginning with `fd`
+(`fda.gov`, `fdic.gov`) count as private — and, through the Ollama LAN exception
+below, reachable. `is_private_lan` now returns true only for an actual private
+IP (RFC1918 / CGNAT / `fc00::/7`); a non-IP hostname is never "private," so a
+public FQDN can no longer masquerade as a LAN host. Regression-tested in
+`denylist.rs`.
 
 `localhost`, `127.0.0.1`, and `::1` are NOT denylisted — they are allowed via
 `policy::ALLOWED_HOSTS`, and only on the Ollama port, for local models. `::1`
@@ -109,10 +122,11 @@ only ever reach local/LAN hosts and cannot be used to exfiltrate to the internet
 or hit cloud metadata. Every non-Ollama caller (medical sources, all cloud LLMs)
 keeps the strict allowlist with no private-range access.
 
-Known limitation: the denylist matches host *strings*. An allowlisted
-domain whose DNS resolves to an internal address is not re-checked at the
-resolved-IP level. This is acceptable given the fixed set of government and
-academic API hosts the app talks to, but it is a deliberate, documented gap.
+Known limitation: guarding is performed on the host as supplied, not on the
+resolved IP. An allowlisted domain whose DNS resolves to an internal address
+(DNS-rebinding) is not re-checked at the resolved-IP level. This is acceptable
+given the fixed set of government and academic API hosts the app talks to, but
+it is a deliberate, documented gap.
 
 ## Logging hygiene
 
@@ -122,6 +136,9 @@ academic API hosts the app talks to, but it is a deliberate, documented gap.
   `RUST_LOG` for debugging.
 - `AppError`'s `Display` impl is what crosses IPC. It must not leak
   paths or secret material.
+- URLs written to the audit log or surfaced in an error have their query
+  string **and** `user:pass@` userinfo stripped, so credentials embedded in a
+  URL can never ride along into a log line or an IPC error.
 
 ## Untrusted-content handling (model + tool output)
 
@@ -153,6 +170,12 @@ These are availability/integrity properties, not just hardening:
 - **Bounded reads + cache eviction.** Audit reads are bounded (`read_recent`);
   the response cache evicts oldest rows past `MAX_CACHE_ROWS` (2000) so a
   long-running install cannot grow the SQLite cache without limit.
+- **Bounded response bodies.** Every HTTP response is read with `read_body_capped`,
+  which streams the body chunk-by-chunk and aborts past a 50 MB cap — so a reply
+  with no `Content-Length` header cannot buffer unbounded into memory (DoS/OOM).
+- **No panics on untrusted text.** Snippet truncation is character-based
+  (`chars().take(n)`), never byte-slicing, so a multi-byte UTF-8 abstract cannot
+  panic the fetch (the crate builds with `panic = "abort"`).
 
 ## Adding a new permission
 

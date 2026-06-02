@@ -58,14 +58,14 @@ The roster and the region map are compile-time constants — the type system rej
 
 ---
 
-## Four modes
+## Modes
 
 | Mode | Key | Description |
 |---|---|---|
-| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain |
-| **Resources** | `⌘2` | Saved paper library |
-| **Memory** | `⌘3` | Semantic knowledge store — cited medical findings, searched by meaning, shown on a real **3D vector map**; one-click **Prune** drops off-topic entries |
-| **Peer Review** | `⌘4` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor |
+| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain. Two composer toggles: **Memory** on/off (research from scratch) and **Brain Mini** (a lighter pipeline — fewer specialists, shorter sections, no rate-limit waiting — tuned for free models and small Ollama models) |
+| **Memory** | `⌘2` | Semantic knowledge store — cited findings searched by meaning, plotted on a real **labelled 3-axis (PC1/PC2/PC3) vector map** with k-means clusters; a **Project / Library** scope toggle browses the whole cross-project corpus; one-click **Prune** |
+| **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review |
+| **Drug Interactions** | `⌘4` | A focused clinical-pharmacology checker — grades each drug pair **A–X** (none → contraindicated) with mechanism, effect, and management, weighting authoritative drug-label sources |
 
 The mode registry is a typed tuple capped at five entries (`src/config/modes.ts`) — adding a sixth is a compile error.
 
@@ -83,6 +83,18 @@ Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm o
 
 After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable.
 
+On a low-quota or local model the review runs **serially with backoff** that honours the provider's own retry hint, sends each agent a **condensed view** of the manuscript (far fewer calls), and — if a provider is exhausted — degrades to a clearly-labelled **partial** review instead of failing outright.
+
+---
+
+## Drug Interactions — a graded clinical checker
+
+The **Drug Interactions** mode is a focused interaction checker rather than the general research team. A single specialist gathers evidence and the report **grades every drug pair on the A–X scale** — A (none) · B (minor) · C (moderate) · D (major) · X (contraindicated) — as one card per pair with **Mechanism · Effect · Action · Evidence**, a critical-alerts summary, and a verify-with-a-clinician line. It biases toward the more serious grade when evidence is thin, treats **drug-label (openFDA) and RxNorm** records as authoritative, and cites `[S#]` throughout — it will not invent an interaction.
+
+Its confirmed findings are saved to the shared memory (tagged `drug_interactions`) so ordinary Brain research benefits from them — but the checker itself only draws on its **own trusted interaction findings**, never the other modes' general research.
+
+This grading model and the failover chain are adapted from patterns in the author's prior desktop app, **HashCortX** (see *Lineage* below).
+
 ---
 
 ## Semantic memory (private, on-device)
@@ -94,15 +106,24 @@ model (**MedEmbed-small**, Apache-2.0) is **bundled in the app** and runs entire
 on-device in a Web Worker, so a search for "MI" finds a paper about "myocardial
 infarction." Nothing is downloaded at runtime and no text leaves the machine.
 
-- **Hybrid, cross-project retrieval** — semantic (vector) similarity fused with
-  lexical search via Reciprocal Rank Fusion, weighted toward the active project;
-  results are re-ranked by evidence strength + recency and de-duplicated (MMR).
+- **A trusted, de-duplicated library** — the same paper is stored **once** across
+  all projects (keyed by PMID → DOI → URL → title), and retrieval favours
+  verifiable, higher-tier sources (a PubMed record with a PMID outranks an
+  unidentified one). A **Project / Library** scope toggle browses the whole
+  corpus — your own focused PubMed.
+- **Hybrid, concept-aware retrieval** — semantic (vector) similarity fused with
+  lexical search via Reciprocal Rank Fusion, weighted toward the active project,
+  re-ranked by evidence strength + recency + source trust and de-duplicated (MMR).
+  The semantic vector is built from your **original** query (not a synonym-expanded
+  one) so meaning stays sharp, while the expansion still widens keyword recall.
 - **Offline term normalisation** — a built-in brand↔generic / abbreviation
   dictionary (Tylenol↔acetaminophen, MI↔myocardial infarction, plus common
   Egyptian and international brands) widens each search, fully offline.
-- **3D vector map** — the Memory graph plots each finding by the PCA projection of
-  its real embedding, with nearest-neighbour edges from genuine cosine similarity —
-  a faithful picture of your knowledge, not a decorative layout.
+- **Real 3-axis vector map** — the Memory graph plots each finding by the PCA
+  projection of its real embedding onto labelled **PC1 / PC2 / PC3** axes over a
+  reference grid, colours nodes by genuine **k-means** clusters, and draws
+  nearest-neighbour edges from real cosine similarity — a faithful picture of
+  your knowledge, not a decorative layout.
 - **Memory toggle** — flip memory off in the composer to research a topic from
   scratch on fresh sources only.
 
@@ -124,7 +145,7 @@ HashCerebrum is designed so that **your data stays yours**. It is a single-user 
 | Generated papers / PDFs | Written to your Downloads folder | Only if you export them |
 | Your question + retrieved evidence | Sent **only** to the one LLM provider you configure | Yes — to that provider, unless you use a local model |
 
-**The web layer cannot reach the internet.** A strict Content-Security-Policy (`connect-src 'self'`) means the UI has no network capability at all. Every outbound request is made by the Rust core, and only to a **fixed allowlist** of destinations:
+**The web layer cannot reach the internet.** A strict Content-Security-Policy (`connect-src 'self' blob:`, where `blob:` is in-memory data only and cannot address the network) means the UI has no network capability at all. Every outbound request is made by the Rust core, and only to a **fixed allowlist** of destinations:
 
 - **Trusted medical data sources** — eutils/PubMed (NLM), Europe PMC (EBI), OpenAlex, ClinicalTrials.gov, openFDA, RxNorm (NLM), Semantic Scholar. These are public, authoritative biomedical databases; the app reads from them and sends no personal data.
 - **The single LLM provider you choose** — your prompt (question + retrieved evidence) goes to that provider under their terms. Nothing else does.
@@ -156,13 +177,15 @@ even for Ollama, and every other caller keeps the strict allowlist.
 
 | Guarantee | Implementation |
 |---|---|
-| No renderer-to-internet HTTP | CSP `connect-src 'self'`; all external calls are Tauri commands |
-| SSRF protection | RFC1918 + cloud-metadata denylist checked before allowlist |
+| No renderer-to-internet HTTP | CSP `connect-src 'self' blob:` (blob: is in-memory only — for the in-app PDF preview — and cannot reach the network); all external calls are Tauri commands |
+| SSRF protection | Hosts are **parsed as IP addresses** and matched against real RFC1918 / CGNAT / IPv6-ULA ranges + a cloud-metadata denylist, checked before the allowlist — a public FQDN can never masquerade as a private host |
+| Bounded response bodies | Every response is read with a streaming 50 MB cap, so a reply **without a `Content-Length` header** still cannot exhaust memory |
 | LLM header injection prevention | Rust-side allowlist — only `content-type`, `authorization`, `x-api-key`, `http-referer`, `x-title`, `anthropic-*`, `openai-*` |
 | Tamper-evident audit trail | SHA-256 hash chain; each entry commits `seq \| prev_hash \| ts \| category \| subject \| action \| data_hash` |
-| API keys never logged | Headers are forwarded to reqwest, never written to the audit log or cache |
+| API keys never logged | Headers are forwarded to reqwest, never written to the audit log or cache; URL `user:pass@` userinfo is stripped from every logged/error URL |
 | Path traversal + TOCTOU | `symlink_metadata → canonicalize → same_file` check; hardlinks rejected |
 | PDF magic-byte validation | `%PDF` header check before `lopdf` parser is invoked |
+| Crash-safe parsing | Snippet truncation is character-based (no UTF-8 byte-slice panics) |
 
 The audit log is readable and verifiable from Settings → Audit log.
 
@@ -180,7 +203,8 @@ The audit log is readable and verifiable from Settings → Audit log.
 | PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF + embedded DejaVu Unicode font (fallback) |
 | PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
-| Testing | Vitest (238 tests) + `cargo test` (28 tests) |
+| LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
+| Testing | Vitest (283 tests) + `cargo test` (31 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -208,7 +232,7 @@ npm run build          # macOS .app
 npm run build:dmg      # macOS .dmg
 
 # Checks
-npm test               # Vitest — 238 unit tests
+npm test               # Vitest — 283 unit tests
 npm run typecheck      # tsc strict — app + node configs
 npm run build:web      # tsc over app + tests, then Vite build
 ```
@@ -317,6 +341,27 @@ Missing effect sizes produce an honest warning and source-yield/evidence-strengt
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model, invariants, SSRF denylist, logging hygiene |
 | [docs/AGENTS.md](docs/AGENTS.md) | Full agent roster, lifecycle, system-prompt discipline |
 | [docs/LICENSES.md](docs/LICENSES.md) | Third-party asset and dependency licenses |
+
+---
+
+## Lineage — built on HashCortX
+
+HashCerebrum is built using **HashCortX** — the author's earlier local-first
+agentic desktop app — as its building blocks. Several core patterns are carried
+over and adapted for the medical domain:
+
+- the **multi-provider failover chain** (tier-based candidate selection, provider
+  cooldown, retriable/billing error classification) — ported and extended with
+  cross-provider spreading;
+- the **guarded, audited network core** (single Rust chokepoint, host allowlist,
+  hash-chained audit log) hardened for SSRF;
+- the **swarm + tool-registry** orchestration model; and
+- the **Drug Interactions grader**, modelled on HashCortX's "Medical Lexi-Check"
+  agent (A–X interaction grading with per-pair cards).
+
+HashCerebrum then layers on what HashCortX did not have: a typeset,
+hallucination-gated paper pipeline, on-device semantic memory with a real 3-axis
+vector map, the 3D anatomical workspace, and a peer-review swarm.
 
 ---
 

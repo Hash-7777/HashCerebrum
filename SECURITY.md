@@ -20,8 +20,9 @@ promise:
   device. There is no backend, no account, no cloud sync, and no telemetry,
   analytics, or crash-reporting SDK anywhere in the codebase.
 - **The renderer has no network capability.** A strict CSP (`connect-src
-  'self'`) means the web layer cannot make an outbound request. Only the Rust
-  core can, and only to a fixed host allowlist
+  'self' blob:`) means the web layer cannot make an outbound request — `blob:`
+  covers only in-memory data (the in-app PDF preview) and cannot address the
+  network. Only the Rust core can reach out, and only to a fixed host allowlist
   (`src-tauri/src/security/policy.rs`).
 - **Egress is enumerable and audited.** The only destinations the app can reach
   are (1) trusted public biomedical databases — PubMed/NLM, Europe PMC,
