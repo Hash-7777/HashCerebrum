@@ -16,7 +16,10 @@ import { buildRagIndex, searchRagIndex, type RagIndex } from '../search/lexical'
 import { hybridSearch } from '../search/hybrid';
 import { expandQuery } from '../search/normalize';
 import {
+  dedupeChunks,
   dequantize,
+  globalChunkKey,
+  mergeChunks,
   migrateV1ToV2,
   normalizeV2,
   quantize,
@@ -74,10 +77,6 @@ export function getChunkVectors(ids: string[]): Map<string, Float32Array> {
 
 function embedTextForChunk(chunk: { title: string; text: string }): string {
   return [chunk.title, chunk.text].filter(Boolean).join('. ').slice(0, PASSAGE_CHAR_BUDGET);
-}
-
-function evidenceKey(projectId: string, chunk: { url?: string; title: string }): string {
-  return `${projectId}::${(chunk.url || chunk.title).trim().toLowerCase()}`;
 }
 
 // --- persistence ---
@@ -143,11 +142,23 @@ export const useRagStore = create<RagStore>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const { chunks, vectors } = await loadPersisted();
+    const loaded = await loadPersisted();
     quantized.clear();
     floatCache.clear();
-    for (const [id, qv] of Object.entries(vectors)) quantized.set(id, qv);
+    for (const [id, qv] of Object.entries(loaded.vectors)) quantized.set(id, qv);
+
+    // Clean any cross-project duplicates that predate global de-duplication, so
+    // an existing store also becomes a single, library-grade corpus. Drop the
+    // removed chunks' vectors and persist the collapsed set.
+    const { chunks, removedIds } = dedupeChunks(loaded.chunks);
+    if (removedIds.length > 0) {
+      for (const id of removedIds) {
+        quantized.delete(id);
+        floatCache.delete(id);
+      }
+    }
     set({ chunks, hydrated: true });
+    if (removedIds.length > 0) persist(chunks);
 
     // Backfill any chunk that has no vector yet (e.g. migrated v1 data), then
     // persist. Fire-and-forget; failures are silent (lexical still works).
@@ -163,21 +174,29 @@ export const useRagStore = create<RagStore>((set, get) => ({
     if (!projectId || inputs.length === 0) return;
     let fresh: RagChunk[] = [];
     set((state) => {
-      const seenEvidence = new Set(
-        state.chunks.filter((c) => c.kind === 'evidence').map((c) => evidenceKey(c.projectId, c)),
-      );
       const now = new Date().toISOString();
+      // Index existing chunks by their GLOBAL identity (PMID/DOI/url/title), so
+      // a record already in the library — even from another project — is not
+      // stored again; its richer metadata is merged into the existing copy.
+      const byKey = new Map<string, RagChunk>();
+      for (const c of state.chunks) byKey.set(globalChunkKey(c), c);
+      const merges = new Map<string, RagChunk>(); // existing id -> merged copy
       fresh = [];
       for (const input of inputs) {
-        if (input.kind === 'evidence') {
-          const key = evidenceKey(projectId, input);
-          if (seenEvidence.has(key)) continue;
-          seenEvidence.add(key);
+        const candidate: RagChunk = { ...input, id: crypto.randomUUID(), projectId, createdAt: now };
+        const key = globalChunkKey(candidate);
+        const existing = byKey.get(key);
+        if (existing) {
+          const merged = mergeChunks(existing, candidate);
+          if (merged !== existing) merges.set(existing.id, merged);
+          continue; // already in the library — do not duplicate
         }
-        fresh.push({ ...input, id: crypto.randomUUID(), projectId, createdAt: now });
+        byKey.set(key, candidate);
+        fresh.push(candidate);
       }
-      if (fresh.length === 0) return state;
-      const chunks = [...fresh, ...state.chunks].slice(0, MAX_CHUNKS);
+      if (fresh.length === 0 && merges.size === 0) return state;
+      const base = merges.size > 0 ? state.chunks.map((c) => merges.get(c.id) ?? c) : state.chunks;
+      const chunks = [...fresh, ...base].slice(0, MAX_CHUNKS);
       persist(chunks);
       return { ...state, chunks };
     });

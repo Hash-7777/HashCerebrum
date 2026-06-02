@@ -97,3 +97,89 @@ export function normalizeV2(raw: Partial<PersistShapeV2> | null | undefined): Pe
 export function migrateV1ToV2(raw: { chunks?: unknown } | null | undefined): PersistShapeV2 {
   return { version: RAG_SCHEMA_VERSION, chunks: validChunks(raw?.chunks), vectors: {} };
 }
+
+// --- global de-duplication (turns memory into a library, not a per-project dump) ---
+
+/**
+ * Stable identity for an evidence record across ALL projects, so the same paper
+ * saved while researching two different topics is stored once. PMID is the
+ * strongest key, then DOI, then URL, then a normalised title. Answer chunks are
+ * project-specific narrative and are never merged across projects — they key by
+ * their own id.
+ */
+export function globalChunkKey(
+  chunk: Pick<RagChunk, 'kind' | 'pmid' | 'doi' | 'url' | 'title' | 'id'>,
+): string {
+  if (chunk.kind !== 'evidence') return `id:${chunk.id}`;
+  const pmid = chunk.pmid?.trim();
+  if (pmid) return `pmid:${pmid}`;
+  const doi = chunk.doi?.trim().toLowerCase();
+  if (doi) return `doi:${doi}`;
+  const url = chunk.url?.trim().toLowerCase();
+  if (url) return `url:${url}`;
+  return `title:${chunk.title.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+}
+
+/**
+ * Merge a duplicate's richer metadata into the kept chunk without changing the
+ * kept chunk's identity (id / projectId / createdAt / vector stay valid).
+ * Returns the original `keep` reference unchanged when nothing was added, so
+ * callers can cheaply detect a real change.
+ */
+export function mergeChunks(keep: RagChunk, dup: RagChunk): RagChunk {
+  const merged: RagChunk = { ...keep };
+  let changed = false;
+  if (merged.year === undefined && dup.year !== undefined) {
+    merged.year = dup.year;
+    changed = true;
+  }
+  if (!merged.pmid && dup.pmid) {
+    merged.pmid = dup.pmid;
+    changed = true;
+  }
+  if (!merged.doi && dup.doi) {
+    merged.doi = dup.doi;
+    changed = true;
+  }
+  if (!merged.url && dup.url) {
+    merged.url = dup.url;
+    changed = true;
+  }
+  if ((!merged.authors || merged.authors.length === 0) && dup.authors && dup.authors.length > 0) {
+    merged.authors = dup.authors;
+    changed = true;
+  }
+  if (merged.evidenceStrength === undefined && dup.evidenceStrength !== undefined) {
+    merged.evidenceStrength = dup.evidenceStrength;
+    changed = true;
+  }
+  if (dup.text.length > merged.text.length) {
+    merged.text = dup.text;
+    changed = true;
+  }
+  return changed ? merged : keep;
+}
+
+/**
+ * Collapse duplicate chunks (same globalChunkKey) keeping the first occurrence
+ * and merging later duplicates' metadata into it. Returns the de-duplicated
+ * list (first-seen order) and the ids that were removed (so their vectors can
+ * be dropped).
+ */
+export function dedupeChunks(chunks: RagChunk[]): { chunks: RagChunk[]; removedIds: string[] } {
+  const byKey = new Map<string, RagChunk>();
+  const order: string[] = [];
+  const removedIds: string[] = [];
+  for (const chunk of chunks) {
+    const key = globalChunkKey(chunk);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, chunk);
+      order.push(key);
+    } else {
+      removedIds.push(chunk.id);
+      byKey.set(key, mergeChunks(existing, chunk));
+    }
+  }
+  return { chunks: order.map((key) => byKey.get(key)!), removedIds };
+}

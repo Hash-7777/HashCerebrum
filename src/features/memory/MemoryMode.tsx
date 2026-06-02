@@ -27,11 +27,20 @@ export function MemoryMode() {
   const [search, setSearch] = useState('');
   // Graph is the default view — the topic map is the primary way to read memory.
   const [view, setView] = useState<MemoryView>('graph');
+  // Scope: this project only, or the whole cross-project library (the deduped
+  // "focused PubMed" of every trusted finding saved across projects).
+  const [scope, setScope] = useState<'project' | 'library'>('project');
 
   const projectName = projects.find((p) => p.id === activeProjectId)?.name ?? 'Project';
 
-  const projectChunks = useMemo(
-    () => chunks.filter((chunk) => chunk.projectId === activeProjectId),
+  const scopedChunks = useMemo(
+    () => (scope === 'library' ? chunks : chunks.filter((chunk) => chunk.projectId === activeProjectId)),
+    [chunks, activeProjectId, scope],
+  );
+  // Prune / clear / delete always act on the ACTIVE project, so their state
+  // tracks the active project's count regardless of the browse scope.
+  const activeProjectCount = useMemo(
+    () => chunks.filter((chunk) => chunk.projectId === activeProjectId).length,
     [chunks, activeProjectId],
   );
 
@@ -47,27 +56,30 @@ export function MemoryMode() {
     }
     let cancelled = false;
     // Instant lexical first paint.
-    setSearchResults(lexicalSearch(projectChunks, query, SEARCH_RESULT_LIMIT).map((hit) => hit.chunk));
-    // Semantic refine (project-scoped).
+    setSearchResults(lexicalSearch(scopedChunks, query, SEARCH_RESULT_LIMIT).map((hit) => hit.chunk));
+    // Semantic refine. searchHybrid is cross-project; in library scope we keep
+    // every hit, otherwise we keep only the active project's.
     void useRagStore
       .getState()
       .searchHybrid(activeProjectId, query, SEARCH_RESULT_LIMIT)
       .then((hits) => {
         if (cancelled) return;
-        const scoped = hits.filter((hit) => hit.chunk.projectId === activeProjectId).map((hit) => hit.chunk);
+        const scoped = (scope === 'library' ? hits : hits.filter((hit) => hit.chunk.projectId === activeProjectId)).map(
+          (hit) => hit.chunk,
+        );
         if (scoped.length > 0) setSearchResults(scoped);
       });
     return () => {
       cancelled = true;
     };
-  }, [projectChunks, search, activeProjectId]);
+  }, [scopedChunks, search, activeProjectId, scope]);
 
   const visible = useMemo(() => {
     if (!search.trim()) {
-      return [...projectChunks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return [...scopedChunks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     return searchResults;
-  }, [projectChunks, search, searchResults]);
+  }, [scopedChunks, search, searchResults]);
 
   return (
     <div className="mode memory-mode">
@@ -77,9 +89,10 @@ export function MemoryMode() {
             <p className="eyebrow">
               <Icon name="database" size={10} /> Memory
             </p>
-            <h1>{projectName}</h1>
+            <h1>{scope === 'library' ? 'Library' : projectName}</h1>
             <p className="memory-subtitle">
               {visible.length} {visible.length === 1 ? 'saved finding' : 'saved findings'}
+              {scope === 'library' ? ' across all projects' : ''}
               {search.trim() ? ` matching "${search.trim()}"` : ''}
             </p>
           </div>
@@ -92,6 +105,26 @@ export function MemoryMode() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
+            <div className="memory-view-toggle" role="group" aria-label="Memory scope">
+              <button
+                type="button"
+                data-active={scope === 'project'}
+                onClick={() => setScope('project')}
+                aria-pressed={scope === 'project'}
+                title="Browse only this project's memory"
+              >
+                <Icon name="database" size={13} /> Project
+              </button>
+              <button
+                type="button"
+                data-active={scope === 'library'}
+                onClick={() => setScope('library')}
+                aria-pressed={scope === 'library'}
+                title="Browse the whole cross-project library (every trusted finding, de-duplicated)"
+              >
+                <Icon name="graph" size={13} /> Library
+              </button>
+            </div>
             <div className="memory-view-toggle" role="group" aria-label="Memory view">
               <button
                 type="button"
@@ -113,10 +146,10 @@ export function MemoryMode() {
             <button
               type="button"
               className="memory-prune"
-              disabled={projectChunks.length === 0}
+              disabled={activeProjectCount === 0}
               title="Remove non-medical and off-topic findings, keeping the rest"
               onClick={() => {
-                if (!activeProjectId || projectChunks.length === 0) return;
+                if (!activeProjectId || activeProjectCount === 0) return;
                 const removed = pruneProject(activeProjectId, keepMemoryChunk);
                 useToastStore
                   .getState()
@@ -133,13 +166,13 @@ export function MemoryMode() {
             <button
               type="button"
               className="memory-clear"
-              disabled={projectChunks.length === 0}
+              disabled={activeProjectCount === 0}
               title="Delete all saved memory in this project"
               onClick={() => {
-                if (!activeProjectId || projectChunks.length === 0) return;
+                if (!activeProjectId || activeProjectCount === 0) return;
                 const ok = window.confirm(
-                  `Delete all ${projectChunks.length} saved ${
-                    projectChunks.length === 1 ? 'finding' : 'findings'
+                  `Delete all ${activeProjectCount} saved ${
+                    activeProjectCount === 1 ? 'finding' : 'findings'
                   } in "${projectName}"? This permanently empties this project's memory and cannot be undone.`,
                 );
                 if (ok) clearProject(activeProjectId);
@@ -154,8 +187,10 @@ export function MemoryMode() {
           <div className="memory-empty">
             <Icon name="database" size={22} />
             <p>
-              {projectChunks.length === 0
-                ? 'This project has no saved research yet.'
+              {scopedChunks.length === 0
+                ? scope === 'library'
+                  ? 'No research saved in any project yet.'
+                  : 'This project has no saved research yet.'
                 : 'No saved memory matches your search.'}
             </p>
             <p className="memory-empty-hint">

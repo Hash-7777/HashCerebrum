@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { cosineSim } from '../search/cosine';
 import {
+  dedupeChunks,
   dequantize,
+  globalChunkKey,
+  mergeChunks,
   migrateV1ToV2,
   normalizeV2,
   quantize,
@@ -9,6 +12,18 @@ import {
   type QuantizedVector,
 } from '../store/persistence';
 import type { RagChunk } from '../types';
+
+function ragChunk(partial: Partial<RagChunk> & { id: string }): RagChunk {
+  return {
+    projectId: 'p1',
+    kind: 'evidence',
+    title: 'A record',
+    text: 'body',
+    source: 'pubmed',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    ...partial,
+  };
+}
 
 describe('quantize / dequantize', () => {
   it('round-trips a 384-dim vector with near-perfect cosine fidelity', () => {
@@ -21,6 +36,36 @@ describe('quantize / dequantize', () => {
   it('handles a zero vector without NaNs', () => {
     const back = dequantize(quantize(new Float32Array(8)));
     expect(Array.from(back)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe('global de-duplication', () => {
+  it('keys evidence by PMID, then DOI, then url, then normalised title', () => {
+    expect(globalChunkKey(ragChunk({ id: 'a', pmid: '123', doi: '10.1/x' }))).toBe('pmid:123');
+    expect(globalChunkKey(ragChunk({ id: 'b', doi: '10.1/X' }))).toBe('doi:10.1/x');
+    expect(globalChunkKey(ragChunk({ id: 'c', url: 'https://E.com' }))).toBe('url:https://e.com');
+    expect(globalChunkKey(ragChunk({ id: 'd', title: '  Warfarin   Risk ' }))).toBe('title:warfarin risk');
+    // Answers are project narrative — never merged across projects.
+    expect(globalChunkKey(ragChunk({ id: 'e', kind: 'answer' }))).toBe('id:e');
+  });
+
+  it('collapses the same PMID saved under different projects into one chunk', () => {
+    const a = ragChunk({ id: 'a', projectId: 'p1', pmid: '99', year: 2020 });
+    const b = ragChunk({ id: 'b', projectId: 'p2', pmid: '99', doi: '10.1/y', authors: ['Smith'] });
+    const { chunks, removedIds } = dedupeChunks([a, b]);
+    expect(chunks).toHaveLength(1);
+    expect(removedIds).toEqual(['b']);
+    // The kept chunk keeps its identity but gains the duplicate's richer metadata.
+    expect(chunks[0]!.id).toBe('a');
+    expect(chunks[0]!.doi).toBe('10.1/y');
+    expect(chunks[0]!.authors).toEqual(['Smith']);
+    expect(chunks[0]!.year).toBe(2020);
+  });
+
+  it('mergeChunks returns the original reference when nothing is added', () => {
+    const keep = ragChunk({ id: 'a', pmid: '1', year: 2021, authors: ['X'] });
+    const dup = ragChunk({ id: 'b', pmid: '1' });
+    expect(mergeChunks(keep, dup)).toBe(keep);
   });
 });
 
