@@ -82,6 +82,12 @@ export function findBestFailover(
   if (available.length === 0) return null;
   available.sort((a, b) => {
     if (b.tier !== a.tier) return b.tier - a.tier;
+    // Prefer a DIFFERENT provider than the one that just failed, so failover
+    // spreads load to a fresh key instead of hammering another model on the
+    // same (usually rate-limited) provider.
+    const aFresh = a.provider !== current.provider ? 1 : 0;
+    const bFresh = b.provider !== current.provider ? 1 : 0;
+    if (aFresh !== bFresh) return bFresh - aFresh;
     return (FREE_PREFERRED[b.provider] ?? 0) - (FREE_PREFERRED[a.provider] ?? 0);
   });
   return (

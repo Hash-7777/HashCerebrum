@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 import { AGENTS, type AgentId } from '@config/agents';
 import { modelStrengthScore } from '@core/llm/modelRanking';
-import { DEFAULT_MODEL, type ModelOption } from '@core/llm/modelCatalog';
+import { DEFAULT_MODEL, parseModelRef, type ModelOption } from '@core/llm/modelCatalog';
 import { platform } from '@platform/index';
 import { allDiscoveredModels } from './modelCatalogStore';
 
@@ -28,11 +28,14 @@ interface AgentModelStore {
 
 // Auto-assignment: the boss writes the synthesis and the manuscript, so it
 // takes the strongest connected model — ranked by modelStrengthScore, which
-// weighs capability tier *and* parameter size. The coarse failover tier is
-// not used here because it cannot tell, say, a 17B model from a 70B one of
-// the same family. Specialists round-robin over the full ranked list so
-// every agent has a model even when only one provider is connected.
-function autoAssignModels(models: ModelOption[]): Record<AgentId, string> {
+// weighs capability tier *and* parameter size.
+//
+// Specialists are spread across DISTINCT providers (round-robin over providers,
+// strongest first) rather than over a flat model list. With several keys
+// connected this means each specialist runs on a different provider, so a swarm
+// no longer burns one key into rate limits — the cause of the cascading 429s in
+// long runs. When only one provider is connected they all share it as before.
+export function autoAssignModels(models: ModelOption[]): Record<AgentId, string> {
   const result = {} as Record<AgentId, string>;
   if (models.length === 0) {
     for (const agent of AGENTS) result[agent.id] = DEFAULT_MODEL;
@@ -41,13 +44,34 @@ function autoAssignModels(models: ModelOption[]): Record<AgentId, string> {
   const ranked = [...models].sort(
     (a, b) => modelStrengthScore(b.value, b.label) - modelStrengthScore(a.value, a.label),
   );
-  let cursor = 0;
+  // Group ranked models by provider, preserving strength order; providers are
+  // ordered by their strongest model (insertion order of `ranked`).
+  const byProvider = new Map<string, ModelOption[]>();
+  for (const model of ranked) {
+    const provider = parseModelRef(model.value).provider;
+    const list = byProvider.get(provider);
+    if (list) list.push(model);
+    else byProvider.set(provider, [model]);
+  }
+  const providers = [...byProvider.keys()];
+  const cursorByProvider = new Map<string, number>();
+  const nextFrom = (provider: string): string => {
+    const list = byProvider.get(provider)!;
+    const i = cursorByProvider.get(provider) ?? 0;
+    cursorByProvider.set(provider, i + 1);
+    return list[i % list.length]!.value;
+  };
+
+  // Start specialists on the second provider when more than one is connected,
+  // so the boss's (strongest) provider isn't immediately doubled up.
+  let provIdx = providers.length > 1 ? 1 : 0;
   for (const agent of AGENTS) {
     if (agent.kind === 'boss') {
-      result[agent.id] = ranked[0]!.value;
+      result[agent.id] = ranked[0]!.value; // strongest model overall
     } else {
-      result[agent.id] = ranked[cursor % ranked.length]!.value;
-      cursor += 1;
+      const provider = providers[provIdx % providers.length]!;
+      result[agent.id] = nextFrom(provider);
+      provIdx += 1;
     }
   }
   return result;

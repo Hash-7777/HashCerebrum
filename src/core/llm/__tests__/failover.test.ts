@@ -56,6 +56,31 @@ describe('LLM failover', () => {
     expect(next?.value).toBe('cloud:groq:openai/gpt-oss-120b');
   });
 
+  it('prefers a fresh provider over another model on the just-failed provider at equal tier', () => {
+    const tieGroups: ModelGroup[] = [
+      {
+        provider: 'groq',
+        label: 'Groq',
+        keyName: 'llm.groq',
+        models: [
+          { value: 'cloud:groq:openai/gpt-oss-120b', label: 'GPT OSS 120B', shortLabel: 'OSS' },
+          { value: 'cloud:groq:nemotron-ultra', label: 'Nemotron Ultra', shortLabel: 'Nemotron' },
+        ],
+      },
+      {
+        provider: 'anthropic',
+        label: 'Anthropic',
+        keyName: 'llm.anthropic',
+        models: [{ value: 'cloud:anthropic:claude-opus', label: 'Claude Opus', shortLabel: 'Opus' }],
+      },
+    ];
+    const all = (_: LlmProviderId) => true;
+    // gpt-oss-120b just failed on groq; nemotron-ultra (groq) and claude-opus
+    // (anthropic) are both tier 400. The fresh provider must win.
+    const next = findBestFailover('cloud:groq:openai/gpt-oss-120b', new Set(['cloud:groq:openai/gpt-oss-120b']), all, tieGroups);
+    expect(next?.provider).toBe('anthropic');
+  });
+
   it('distinguishes transient retry from quota exhaustion', () => {
     expect(isRetriableError(new Error('HTTP 429 rate limit'))).toBe(true);
     expect(shouldRetrySameProvider(new Error('HTTP 429 temporary rate limit'))).toBe(true);
