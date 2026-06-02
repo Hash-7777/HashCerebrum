@@ -555,7 +555,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   };
 
   return (
-    <div className="mode brain-mode brain-workspace">
+    <div className={`mode brain-mode brain-workspace${drugFocus ? ' brain-mode--drug' : ''}`}>
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">
@@ -587,6 +587,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             onRegenerate={regenerateMessage}
             onEdit={editMessage}
             onPromptSelect={(prompt) => { if (!isRunning) setQuery(prompt); }}
+            drugFocus={drugFocus}
           />
         </FeatureBoundary>
 
@@ -614,7 +615,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         </FeatureBoundary>
       </section>
 
-      <section className="brain-side">
+      <section className={`brain-side${drugFocus ? ' brain-side--solo' : ''}`}>
         {drugFocus ? (
           // Specialised layout for Drug-Interactions: no 3D brain and no agent
           // swarm panel — just the interaction-grade key beside the report.

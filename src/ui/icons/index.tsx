@@ -67,9 +67,13 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
   ),
   pill: (p) => (
     <svg viewBox="0 0 24 24" {...p}>
-      {/* A clear two-tone drug capsule: a rounded body split across the middle. */}
-      <rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-32 12 12)" />
-      <path d="M8.4 5.6l4.9 8.6" />
+      {/* A clean diagonal capsule split across the middle (both the body and the
+          divider live in one rotated group, so the divider always lands square
+          on the centre — the old separate diagonal line looked broken). */}
+      <g transform="rotate(45 12 12)">
+        <rect x="3" y="8" width="18" height="8" rx="4" />
+        <line x1="12" y1="8" x2="12" y2="16" />
+      </g>
     </svg>
   ),
   book: (p) => (

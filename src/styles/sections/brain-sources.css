@@ -12,6 +12,11 @@
   background: var(--ink-0);
   border-left: 1px solid var(--line);
 }
+/* Drug-Interactions mode has a single side widget (the grade key), so collapse
+   the two-row brain layout to one full-height row — otherwise the panel is
+   crammed into the top half and its content overflows. */
+.brain-side--solo { grid-template-rows: 1fr; }
+
 .brain-side::-webkit-scrollbar { width: 8px; }
 .brain-side::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 4px; }
 .brain-side::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.12); }

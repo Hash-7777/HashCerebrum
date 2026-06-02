@@ -81,7 +81,37 @@ const READY_PROMPTS = [
   'What do recent Cochrane reviews conclude on antidepressant efficacy vs placebo?',
 ];
 
-function EmptyState({ onSelect }: { onSelect: (prompt: string) => void }) {
+// Example interaction queries shown on the Drug-Interactions home screen.
+const DI_PROMPTS = [
+  'Warfarin and grapefruit juice',
+  'Ibuprofen with lisinopril and hydrochlorothiazide',
+  'Simvastatin and clarithromycin',
+  'Sertraline and tramadol',
+  'Methotrexate and trimethoprim',
+  'Clopidogrel and omeprazole',
+];
+
+function EmptyState({ onSelect, drugFocus }: { onSelect: (prompt: string) => void; drugFocus?: boolean }) {
+  if (drugFocus) {
+    return (
+      <div className="brain-empty-state di-empty">
+        <div className="brain-empty-brand">
+          <span className="di-empty-mark" aria-hidden="true">
+            <Icon name="pill" size={30} />
+          </span>
+          <h2 className="brain-empty-title">Drug Interactions</h2>
+          <p className="brain-empty-sub">Grade any combination A–X from trusted label &amp; literature sources</p>
+        </div>
+        <div className="brain-empty-prompts">
+          {DI_PROMPTS.map((prompt) => (
+            <button key={prompt} type="button" className="brain-prompt-chip" onClick={() => onSelect(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
   const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
   return (
     <div className="brain-empty-state">
@@ -113,6 +143,7 @@ export const Transcript = memo(function Transcript({
   onRegenerate,
   onEdit,
   onPromptSelect,
+  drugFocus,
 }: {
   messages: ChatMessage[];
   modelLabel: string;
@@ -121,6 +152,7 @@ export const Transcript = memo(function Transcript({
   onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   onPromptSelect?: (prompt: string) => void;
+  drugFocus?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -264,7 +296,7 @@ export const Transcript = memo(function Transcript({
     <>
       <div className="transcript chat-scroll" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
         {!hasUserMessage && onPromptSelect && (
-          <EmptyState onSelect={onPromptSelect} />
+          <EmptyState onSelect={onPromptSelect} drugFocus={drugFocus ?? false} />
         )}
         {capped && (
           <button

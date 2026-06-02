@@ -799,6 +799,30 @@
 .document-preview-resize.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
 .document-preview-resize.sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
 
+/* ── Drug-Interactions mode theme ─────────────────────────────────────────
+   A distinct clinical-violet accent so the mode reads as its own pharmacology
+   tool, not a copy of the green research workspace. Scoped to the mode root so
+   it retints the composer chips, Send button, eyebrow, and DI panel together. */
+.brain-mode--drug {
+  --accent: #9b8cff;
+  --accent-strong: #b6abff;
+  --accent-soft: rgba(155, 140, 255, 0.13);
+  --accent-ink: #0a0a14;
+}
+
+/* Drug-Interactions home screen mark (capsule) */
+.di-empty .di-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 4px;
+  border-radius: 16px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--accent-soft);
+}
+
 /* ── Drug-Interactions side panel (replaces the agent swarm in that mode) ── */
 .di-panel {
   display: flex;
