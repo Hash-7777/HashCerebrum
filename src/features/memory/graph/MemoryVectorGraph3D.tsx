@@ -167,30 +167,80 @@ function Edges({ positions, color, opacity }: { positions: Float32Array; color: 
   );
 }
 
-// Faint origin gizmo so the three principal axes are legible — this is the
-// "3-axis" frame the vectors are projected onto.
-function AxisFrame() {
+// The real 3-axis reference frame the embeddings are projected onto: three
+// coloured, labelled principal-component axes (PC1/PC2/PC3) plus a faint floor
+// grid for depth. Rendered inside the rotating scene so the frame turns with
+// the data and the axes always describe the points' true orientation.
+const AXIS_LEN = 5;
+const AXES = [
+  { dir: [1, 0, 0] as const, color: '#e0607a', label: 'PC1' },
+  { dir: [0, 1, 0] as const, color: '#5fd0b0', label: 'PC2' },
+  { dir: [0, 0, 1] as const, color: '#7c8cff', label: 'PC3' },
+] as const;
+
+function AxisLine({ dir, color }: { dir: readonly [number, number, number]; color: string }) {
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
-    const L = 5.2;
+    // A short negative stub through the origin + the full positive axis.
     g.setAttribute(
       'position',
       new THREE.BufferAttribute(
-        // prettier-ignore
         new Float32Array([
-          -L, 0, 0, L, 0, 0,
-          0, -L, 0, 0, L, 0,
-          0, 0, -L, 0, 0, L,
+          -dir[0] * AXIS_LEN * 0.35, -dir[1] * AXIS_LEN * 0.35, -dir[2] * AXIS_LEN * 0.35,
+          dir[0] * AXIS_LEN, dir[1] * AXIS_LEN, dir[2] * AXIS_LEN,
         ]),
         3,
       ),
     );
     return g;
+  }, [dir]);
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={color} transparent opacity={0.6} />
+    </lineSegments>
+  );
+}
+
+function FloorGrid() {
+  const geometry = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const half = AXIS_LEN;
+    const y = -AXIS_LEN;
+    const pts: number[] = [];
+    for (let i = -half; i <= half; i += 1) {
+      pts.push(-half, y, i, half, y, i);
+      pts.push(i, y, -half, i, y, half);
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    return g;
   }, []);
   return (
     <lineSegments geometry={geometry}>
-      <lineBasicMaterial color="#243049" transparent opacity={0.5} />
+      <lineBasicMaterial color="#162032" transparent opacity={0.3} />
     </lineSegments>
+  );
+}
+
+function Axes3D() {
+  return (
+    <group>
+      <FloorGrid />
+      {AXES.map((axis) => (
+        <group key={axis.label}>
+          <AxisLine dir={axis.dir} color={axis.color} />
+          <Html
+            position={[axis.dir[0] * AXIS_LEN, axis.dir[1] * AXIS_LEN, axis.dir[2] * AXIS_LEN]}
+            center
+            className="memory-vec3d-axis-wrap"
+            zIndexRange={[10, 0]}
+          >
+            <span className="memory-vec3d-axis" style={{ color: axis.color }}>
+              {axis.label}
+            </span>
+          </Html>
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -303,7 +353,7 @@ export function MemoryVectorGraph3D({
         <ambientLight intensity={0.7} />
         <pointLight position={[6, 8, 10]} intensity={1.1} />
         <SceneSpin active={spin && focusCluster === null && !selected} />
-        <AxisFrame />
+        <Axes3D />
         <Edges positions={graph.intraPositions} color="#6b7aa0" opacity={focusCluster === null ? 0.3 : 0.12} />
         <Edges positions={graph.interPositions} color="#3a465e" opacity={0.12} />
         {graph.nodes.map((node) => (

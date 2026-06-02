@@ -350,6 +350,14 @@
   font: 10px var(--hc-font-mono);
   color: var(--hc-fg-dim);
 }
+.memory-vec3d-axis-wrap { pointer-events: none; }
+.memory-vec3d-axis {
+  font: 700 10px var(--hc-font-mono);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
+  opacity: 0.85;
+  user-select: none;
+}
 .memory-vec3d-label-wrap { pointer-events: none; }
 .memory-vec3d-label {
   display: inline-block;
