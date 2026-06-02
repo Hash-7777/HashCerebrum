@@ -123,6 +123,41 @@ export function chunkDocument(text: string, size: number = CHUNK_CHARS): string[
   return chunks;
 }
 
+// Maximum number of parts any one agent will review. A 12-section manuscript
+// chunked at 6k chars is ~12 parts, and at 5 agents that is dozens of calls —
+// on a low free tier that meant a 10-minute, heavily rate-limited review.
+const MAX_REVIEW_PARTS = 3;
+
+// Reduce a manuscript to at most MAX_REVIEW_PARTS review chunks. A short paper
+// is returned whole. A long one is condensed by proportionally trimming the
+// MIDDLE of each over-long paragraph block — so every section is still
+// represented (headings, opening and closing claims survive) — then re-chunked.
+// This cuts an agent's calls ~4x without dropping any section entirely.
+export function reviewParts(text: string, maxParts: number = MAX_REVIEW_PARTS): string[] {
+  const full = chunkDocument(text);
+  if (full.length <= maxParts) return full;
+  const blocks = text.split(/\n{2,}/);
+  const condenseTo = (budget: number): string =>
+    blocks
+      .map((block) => {
+        const keep = Math.max(240, Math.floor((block.length * budget) / text.length));
+        if (block.length <= keep) return block;
+        const head = Math.ceil(keep * 0.6);
+        const tail = keep - head;
+        return `${block.slice(0, head)} […] ${block.slice(block.length - tail)}`;
+      })
+      .join('\n\n');
+  // Tighten the budget until the condensed paper re-chunks to <= maxParts
+  // (paragraph-boundary packing leaves slack, so one target rarely lands exact).
+  let factor = 1;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const parts = chunkDocument(condenseTo(Math.floor(maxParts * CHUNK_CHARS * factor)));
+    if (parts.length <= maxParts) return parts;
+    factor *= 0.8;
+  }
+  return chunkDocument(condenseTo(Math.floor(maxParts * CHUNK_CHARS * 0.5))).slice(0, maxParts);
+}
+
 // A provider rejecting the request because the prompt is physically too big for
 // the model's CONTEXT WINDOW (HTTP 413, "request too large", "context length").
 // This is recoverable by shrinking the document.
@@ -469,7 +504,7 @@ export async function runReviewSwarm(
   const agentTask = async (def: ReviewAgentDef) => {
     onPatch(def.agentId, { status: 'running', text: '', items: [] });
     trace('start', `[Peer Review] ${def.label} running`);
-    const chunks = chunkDocument(paperText);
+    const chunks = reviewParts(paperText);
     const multi = chunks.length > 1;
     let modelUsed = model;
     try {

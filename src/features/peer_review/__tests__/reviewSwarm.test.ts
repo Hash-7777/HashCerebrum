@@ -6,6 +6,7 @@ import {
   isContextTooLarge,
   isRateLimited,
   parseSuggestions,
+  reviewParts,
 } from '../reviewSwarm';
 
 describe('chunkDocument', () => {
@@ -29,6 +30,26 @@ describe('chunkDocument', () => {
     const chunks = chunkDocument(huge, 100);
     expect(chunks.length).toBe(3);
     expect(chunks.join('')).toBe(huge);
+  });
+});
+
+describe('reviewParts', () => {
+  it('returns a short manuscript whole', () => {
+    expect(reviewParts('one\n\ntwo')).toEqual(['one\n\ntwo']);
+  });
+
+  it('caps a long manuscript to at most MAX_REVIEW_PARTS chunks', () => {
+    // 12 sizeable sections → would be ~many chunks; reviewParts condenses them.
+    const sections = Array.from({ length: 12 }, (_, i) => `Section ${i + 1}\n${'word '.repeat(2000)}`);
+    const doc = sections.join('\n\n');
+    const parts = reviewParts(doc);
+    expect(parts.length).toBeLessThanOrEqual(3);
+    // Every section is still represented (headings survive the condensation).
+    const joined = parts.join('\n');
+    expect(joined).toContain('Section 1');
+    expect(joined).toContain('Section 12');
+    // It used an ellipsis marker to show trimming, not silent loss.
+    expect(joined).toContain('[…]');
   });
 });
 
