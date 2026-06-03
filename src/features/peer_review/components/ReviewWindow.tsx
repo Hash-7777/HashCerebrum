@@ -16,6 +16,7 @@ import {
 import { buildReviewReportPdf } from '../reviewReportPdf';
 import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../citationAudit';
 import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
+import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../rewriteSelection';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 
@@ -583,6 +584,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const [activeSugId, setActiveSugId] = useState<string | null>(null);
   const [showEditor,  setShowEditor]  = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [rewriteBusy, setRewriteBusy] = useState<RewriteRegister | null>(null);
 
   const liveAgents: AgentReviewResult[] =
     paper.reviewAgents ??
@@ -661,6 +663,61 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       useToastStore.getState().show('Document text copied', 'info');
     } catch {
       useToastStore.getState().show('Copy failed', 'error');
+    }
+  };
+
+  // Rewrite the highlighted passage in a chosen register. Citation markers are
+  // preserved — if the model alters them the rewrite is rejected so no claim
+  // ever loses (or gains) its source.
+  const rewriteSelected = async (register: RewriteRegister) => {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      useToastStore.getState().show('Select a sentence or passage to rewrite first.', 'info');
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) {
+      useToastStore.getState().show('Select text inside the document to rewrite.', 'info');
+      return;
+    }
+    const passage = selection.toString().trim();
+    if (passage.length < 3) {
+      useToastStore.getState().show('Select a longer passage to rewrite.', 'info');
+      return;
+    }
+    if (passage.length > 4000) {
+      useToastStore.getState().show('That selection is too long — rewrite a paragraph at a time.', 'info');
+      return;
+    }
+    const savedRange = range.cloneRange();
+    setRewriteBusy(register);
+    try {
+      const { text, markersOk } = await rewriteSelection(agentModelFor('boss'), passage, register);
+      if (!text) {
+        useToastStore.getState().show('The rewrite came back empty.', 'info');
+        return;
+      }
+      if (!markersOk) {
+        useToastStore.getState().show('Rewrite changed a citation — kept the original.', 'error');
+        return;
+      }
+      // Restore the selection (lost across the await) and replace it in place,
+      // routed through execCommand so the editor's native undo stack records it.
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+      editor.focus();
+      saveHistory();
+      document.execCommand('insertText', false, text);
+      persistEditor();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`Rewrite failed: ${detail}`, 'error');
+    } finally {
+      setRewriteBusy(null);
     }
   };
 
@@ -945,6 +1002,21 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                   <button type="button" className="doc-toolbar-btn doc-toolbar-btn--icon" onClick={() => runEditorCommand('removeFormat')} title="Clear formatting" aria-label="Clear formatting">
                     <Icon name="close" size={12} />
                   </button>
+                </div>
+                <div className="doc-toolbar-group doc-toolbar-rewrite">
+                  <span className="doc-toolbar-rewrite-label">Rewrite</span>
+                  {REWRITE_REGISTERS.map((r) => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      className="doc-toolbar-btn doc-toolbar-btn--rewrite"
+                      onClick={() => void rewriteSelected(r.value)}
+                      disabled={rewriteBusy !== null}
+                      title={`${r.hint} (rewrites the selected text, keeping citations)`}
+                    >
+                      {rewriteBusy === r.value ? <Icon name="spinner" size={11} /> : r.label}
+                    </button>
+                  ))}
                 </div>
                 {pendingCount > 0 && (
                   <span className="doc-editor-count">

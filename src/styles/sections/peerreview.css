@@ -1166,6 +1166,32 @@
   border-color: var(--danger);
 }
 
+/* Rewrite-in-register group */
+.doc-toolbar-rewrite {
+  gap: 4px;
+}
+.doc-toolbar-rewrite-label {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent, #8aa0ff);
+  align-self: center;
+  padding-right: 2px;
+}
+.doc-toolbar-btn--rewrite {
+  color: var(--accent, #8aa0ff);
+  border-color: var(--accent-line, rgba(138, 160, 255, 0.3));
+}
+.doc-toolbar-btn--rewrite:hover:not(:disabled) {
+  background: var(--accent-line, rgba(138, 160, 255, 0.16));
+  color: var(--accent, #8aa0ff);
+}
+.doc-toolbar-btn--rewrite svg {
+  animation: pr-spin 0.9s linear infinite;
+}
+
 /* ── Editable area ────────────────────────────────────────── */
 .doc-editor {
   flex: 1;
