@@ -4,7 +4,7 @@
 
 import type { RagChunk } from '../types';
 
-export const RAG_SCHEMA_VERSION = 2;
+export const RAG_SCHEMA_VERSION = 3;
 
 // A vector stored compactly: int8 components (base64) plus the per-vector scale
 // used to map them back to float. ~384 bytes/vector vs ~1.5 KB for float32 JSON.
@@ -108,8 +108,13 @@ export function migrateV1ToV2(raw: { chunks?: unknown } | null | undefined): Per
  * their own id.
  */
 export function globalChunkKey(
-  chunk: Pick<RagChunk, 'kind' | 'pmid' | 'doi' | 'url' | 'title' | 'id'>,
+  chunk: Pick<RagChunk, 'kind' | 'pmid' | 'doi' | 'url' | 'title' | 'id' | 'docId' | 'chunkIndex'>,
 ): string {
+  // Imported-document passages dedupe by file content hash + passage index, so
+  // re-importing the same file (even renamed) never duplicates its passages.
+  if (chunk.kind === 'document') {
+    return chunk.docId ? `doc:${chunk.docId}:${chunk.chunkIndex ?? 0}` : `id:${chunk.id}`;
+  }
   if (chunk.kind !== 'evidence') return `id:${chunk.id}`;
   const pmid = chunk.pmid?.trim();
   if (pmid) return `pmid:${pmid}`;

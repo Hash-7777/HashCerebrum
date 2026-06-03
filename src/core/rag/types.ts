@@ -2,7 +2,10 @@
 // React, no zustand, no platform) so every layer below — search math, fusion,
 // persistence — can import these and stay pure and unit-testable.
 
-export type RagChunkKind = 'evidence' | 'answer';
+// 'document' = a passage of a user-imported PDF (the local library). Like
+// 'answer' it is project-narrative content, but it carries docId/page so the UI
+// can group and delete whole documents and the Brain can cite a specific paper.
+export type RagChunkKind = 'evidence' | 'answer' | 'document';
 
 // Evidence-strength grade, when the pipeline can derive one. Used later by the
 // Phase-2 medical-aware ranker; stored now so the data is there when we need it.
@@ -33,6 +36,15 @@ export interface RagChunk {
   // 'drug_interactions' so that mode retrieves ONLY its own trusted findings,
   // while the rest of the app can still read them. Absent on general findings.
   tag?: string;
+
+  // --- v3 imported-document fields (present only on kind 'document') ---
+  /** Stable per-file id (SHA-256 of the bytes) — groups a document's passages
+   *  and dedupes re-imports. */
+  docId?: string;
+  /** 1-based page number when the extractor provides one (citation locality). */
+  page?: number;
+  /** Passage order within the document. */
+  chunkIndex?: number;
 }
 
 // Caller-supplied fields — the store stamps id, projectId, and createdAt.

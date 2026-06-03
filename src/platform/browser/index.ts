@@ -10,6 +10,7 @@ const sourceUrl: Record<EvidenceItem['source'], string> = {
   ctgov: 'https://clinicaltrials.gov/',
   openfda: 'https://open.fda.gov/',
   rxnorm: 'https://rxnav.nlm.nih.gov/',
+  library: '',
 };
 
 const sample = (source: EvidenceItem['source'], title: string): EvidenceItem => ({

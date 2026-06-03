@@ -15,7 +15,7 @@ export interface MedicalSourceQuery {
 }
 
 export interface EvidenceItem {
-  source: 'pubmed' | 'europepmc' | 'openalex' | 'ctgov' | 'openfda' | 'rxnorm';
+  source: 'pubmed' | 'europepmc' | 'openalex' | 'ctgov' | 'openfda' | 'rxnorm' | 'library';
   title: string;
   year?: number | string | null;
   authors: string[];

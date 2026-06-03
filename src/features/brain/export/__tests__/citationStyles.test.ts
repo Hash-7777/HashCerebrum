@@ -60,6 +60,28 @@ describe('formatReference — Harvard', () => {
   });
 });
 
+describe('formatReference — imported library document', () => {
+  const libDoc = rec({
+    title: 'Local Project Paper on Anticoagulation',
+    source: 'library',
+    authors: ['Jane Roe'],
+    year: 2019,
+    identifiers: { docId: 'abc123', page: '12' },
+  });
+
+  it('labels it as an imported document and appends the page', () => {
+    const out = formatReference(libDoc, 'vancouver');
+    expect(out).toContain('Imported document');
+    expect(out).toContain('p. 12.');
+    expect(out).toContain('Local Project Paper on Anticoagulation');
+  });
+
+  it('works across styles', () => {
+    expect(formatReference(libDoc, 'apa')).toContain('Imported document');
+    expect(formatReference(libDoc, 'harvard')).toContain('Imported document');
+  });
+});
+
 describe('formatReference — comma-form author names', () => {
   it('parses "Family, Given" without duplicating the family name', () => {
     const out = formatReference(rec({ title: 'X', authors: ['Smith, John'] }), 'apa');

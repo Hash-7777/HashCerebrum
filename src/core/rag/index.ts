@@ -17,10 +17,18 @@ export type {
   EmbeddingProvider,
 } from './types';
 
-export { useRagStore, getChunkVectors } from './store/ragStore';
+export { useRagStore, getChunkVectors, type LibraryDocument } from './store/ragStore';
 export { lexicalSearch, tokenize } from './search/lexical';
 export { getEmbeddingProvider } from './embeddings/workerClient';
 export { classifyEvidenceStrength } from './search/ranking';
+export {
+  chunkDocument,
+  cleanPdfText,
+  deriveDocMeta,
+  hashBytes,
+  textQuality,
+  type DocChunk,
+} from './ingest/pdfImport';
 
 export interface RetrieveOptions {
   activeProjectId: string;

@@ -8,6 +8,7 @@ import {
   migrateV1ToV2,
   normalizeV2,
   quantize,
+  RAG_SCHEMA_VERSION,
   type PersistShapeV2,
   type QuantizedVector,
 } from '../store/persistence';
@@ -70,14 +71,14 @@ describe('global de-duplication', () => {
 });
 
 describe('migration & normalisation', () => {
-  it('migrates the legacy v1 { chunks } blob to v2 with empty vectors', () => {
+  it('migrates the legacy v1 { chunks } blob forward to the current schema with empty vectors', () => {
     const v1 = {
       chunks: [
         { id: '1', projectId: 'p', kind: 'evidence', title: 't', text: 'x', source: 'pubmed', createdAt: '2020' },
       ],
     };
     const v2 = migrateV1ToV2(v1);
-    expect(v2.version).toBe(2);
+    expect(v2.version).toBe(RAG_SCHEMA_VERSION);
     expect(v2.chunks).toHaveLength(1);
     expect(v2.vectors).toEqual({});
   });

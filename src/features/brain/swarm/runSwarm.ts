@@ -7,6 +7,9 @@
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { setMemoryScope } from '@core/tools/memoryScope';
+import { retrieve } from '@core/rag';
+import { useProjectStore } from '@core/store/projectStore';
+import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import type { EvidenceItem } from '@platform/index';
 import {
   appraisePriorWork,
@@ -46,6 +49,9 @@ export function evidenceKey(record: EvidenceItem): string {
 // set and are the last to be dropped under truncation.
 const SOURCE_SCORE: Record<EvidenceItem['source'], number> = {
   pubmed: 12,
+  // User-imported library papers are deliberately chosen primary sources — rank
+  // them high, just below PubMed, so the Brain leans on the user's own corpus.
+  library: 11,
   ctgov: 6,
   europepmc: 5,
   openalex: 4,
@@ -252,6 +258,46 @@ function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null 
   return null;
 }
 
+// Retrieve passages from the user's imported PDF library that match the
+// question and turn them into citable EvidenceItems (source 'library'), so the
+// Brain can cite the specific papers the user added — exactly like an external
+// database record. Gated by the memory toggle; deduped by document+passage.
+async function libraryEvidence(question: string): Promise<EvidenceItem[]> {
+  if (!useMemorySettingsStore.getState().enabled) return [];
+  const projectId = useProjectStore.getState().activeProjectId ?? '';
+  if (!projectId) return [];
+  let hits;
+  try {
+    hits = await retrieve(question, { activeProjectId: projectId, limit: 8 });
+  } catch {
+    return [];
+  }
+  const seen = new Set<string>();
+  const out: EvidenceItem[] = [];
+  for (const { chunk } of hits) {
+    if (chunk.kind !== 'document' || !chunk.docId) continue;
+    const key = `${chunk.docId}:${chunk.chunkIndex ?? 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      source: 'library',
+      title: chunk.title,
+      authors: chunk.authors ?? [],
+      identifiers: {
+        docId: chunk.docId,
+        ...(chunk.doi ? { doi: chunk.doi } : {}),
+        ...(chunk.page ? { page: String(chunk.page) } : {}),
+      },
+      snippet: chunk.text.slice(0, 600),
+      ...(chunk.year != null ? { year: chunk.year } : {}),
+      ...(chunk.url ? { url: chunk.url } : {}),
+      fetchedAt: chunk.createdAt,
+      provenanceHash: `library:${chunk.docId}:${chunk.chunkIndex ?? 0}`,
+    });
+  }
+  return out;
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const mini = opts.mini ?? false;
@@ -361,10 +407,13 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     ),
   );
 
-  // Merge, de-duplicate, quality-rank, then re-rank by topical relevance to the
+  // Merge specialist findings with any matching passages from the user's
+  // imported PDF library (so the Brain knows and can cite the papers the user
+  // added), de-duplicate, quality-rank, then re-rank by topical relevance to the
   // (context-resolved) question so off-topic records sink or drop out before
   // they can be cited.
-  const merged = rankEvidenceByRelevance(researchQuestion, mergeEvidence(specialists));
+  const fromLibrary = await libraryEvidence(researchQuestion);
+  const merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialists), ...fromLibrary]);
 
   // Honesty gate: name any requested concept with NO direct supporting record,
   // so the answer states the gap plainly instead of implying depth. Surfaced in

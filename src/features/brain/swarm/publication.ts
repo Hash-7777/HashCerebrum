@@ -45,6 +45,7 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   ctgov: 'ClinicalTrials.gov',
   openfda: 'OpenFDA',
   rxnorm: 'RxNorm',
+  library: 'Imported document',
 };
 
 const SECTION_CITATION_EXEMPT = new Set([

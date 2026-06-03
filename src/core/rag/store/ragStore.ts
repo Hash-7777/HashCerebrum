@@ -23,15 +23,70 @@ import {
   migrateV1ToV2,
   normalizeV2,
   quantize,
+  RAG_SCHEMA_VERSION,
   type PersistShapeV2,
   type QuantizedVector,
 } from './persistence';
 
+const STORAGE_KEY_V3 = 'rag.v3';
 const STORAGE_KEY_V2 = 'rag.v2';
 const STORAGE_KEY_V1 = 'rag.v1';
+// Research findings (evidence/answer) are capped and evicted oldest-first.
+// Imported library documents have a much larger, separate budget and are NEVER
+// evicted to make room for findings — the user deliberately added them.
 const MAX_CHUNKS = 5000;
+const MAX_DOCUMENT_CHUNKS = 20000;
 const DEFAULT_SEARCH_LIMIT = 8;
 const BACKFILL_BATCH = 16;
+
+interface LibraryDocument {
+  docId: string;
+  projectId: string;
+  title: string;
+  chunkCount: number;
+  pages: number;
+  importedAt: string;
+  source: string;
+}
+
+/**
+ * Apply the capacity limits without ever discarding a finding to fit a document
+ * or vice-versa: documents keep their own budget (oldest WHOLE documents trimmed
+ * first), findings keep theirs (oldest passages trimmed first). Input is
+ * newest-first; output preserves that order.
+ */
+function capChunks(chunks: RagChunk[]): RagChunk[] {
+  const documents = chunks.filter((c) => c.kind === 'document');
+  const findings = chunks.filter((c) => c.kind !== 'document');
+  const keptFindings = findings.slice(0, MAX_CHUNKS);
+
+  let keptDocs = documents;
+  if (documents.length > MAX_DOCUMENT_CHUNKS) {
+    // Trim whole oldest documents (by docId) until under budget, so we never
+    // leave a half-deleted paper.
+    const order: string[] = [];
+    const byDoc = new Map<string, RagChunk[]>();
+    for (const c of documents) {
+      const key = c.docId ?? c.id;
+      if (!byDoc.has(key)) {
+        byDoc.set(key, []);
+        order.push(key);
+      }
+      byDoc.get(key)!.push(c);
+    }
+    // order is newest-doc-first (documents are newest-first); drop from the end.
+    let total = documents.length;
+    while (total > MAX_DOCUMENT_CHUNKS && order.length > 0) {
+      const oldest = order.pop()!;
+      total -= byDoc.get(oldest)!.length;
+      byDoc.delete(oldest);
+    }
+    keptDocs = order.flatMap((key) => byDoc.get(key)!);
+  }
+  // Preserve the original newest-first interleaving.
+  const keep = new Set([...keptFindings, ...keptDocs]);
+  return chunks.filter((c) => keep.has(c));
+}
 
 export type { RagChunk, NewRagChunk, RagSearchHit } from '../types';
 
@@ -51,6 +106,10 @@ interface RagStore {
   removeChunk: (id: string) => void;
   clearProject: (projectId: string) => void;
   pruneProject: (projectId: string, keep: (chunk: RagChunk) => boolean) => number;
+  /** Imported PDFs grouped into documents (for the Memory library panel). */
+  libraryDocuments: (projectId?: string) => LibraryDocument[];
+  /** Remove every passage (and vector) of an imported document. */
+  removeDocument: (docId: string) => void;
 }
 
 // --- in-memory vector state (module-scoped; mirrors persistence) ---
@@ -83,8 +142,12 @@ function embedTextForChunk(chunk: { title: string; text: string }): string {
 }
 
 // --- persistence ---
+// v3 adds imported-document fields (optional), so v2/v1 blobs migrate forward by
+// simple validation — old chunks just lack the new fields.
 async function loadPersisted(): Promise<PersistShapeV2> {
   try {
+    const v3 = await platform().storage.get<PersistShapeV2>(STORAGE_KEY_V3);
+    if (v3) return normalizeV2(v3);
     const v2 = await platform().storage.get<PersistShapeV2>(STORAGE_KEY_V2);
     if (v2) return normalizeV2(v2);
     const v1 = await platform().storage.get<{ chunks?: unknown }>(STORAGE_KEY_V1);
@@ -92,7 +155,7 @@ async function loadPersisted(): Promise<PersistShapeV2> {
   } catch {
     /* fall through to empty */
   }
-  return { version: 2, chunks: [], vectors: {} };
+  return { version: RAG_SCHEMA_VERSION, chunks: [], vectors: {} };
 }
 
 function persist(chunks: RagChunk[]) {
@@ -102,7 +165,7 @@ function persist(chunks: RagChunk[]) {
     if (qv) vectors[chunk.id] = qv;
   }
   void platform()
-    .storage.set<PersistShapeV2>(STORAGE_KEY_V2, { version: 2, chunks, vectors })
+    .storage.set<PersistShapeV2>(STORAGE_KEY_V3, { version: RAG_SCHEMA_VERSION, chunks, vectors })
     .catch((err: unknown) => console.error('[ragStore] persist failed:', err));
 }
 
@@ -199,7 +262,7 @@ export const useRagStore = create<RagStore>((set, get) => ({
       }
       if (fresh.length === 0 && merges.size === 0) return state;
       const base = merges.size > 0 ? state.chunks.map((c) => merges.get(c.id) ?? c) : state.chunks;
-      const chunks = [...fresh, ...base].slice(0, MAX_CHUNKS);
+      const chunks = capChunks([...fresh, ...base]);
       persist(chunks);
       return { ...state, chunks };
     });
@@ -281,4 +344,44 @@ export const useRagStore = create<RagStore>((set, get) => ({
     }
     return removed;
   },
+
+  libraryDocuments: (projectId) => {
+    const docs = new Map<string, LibraryDocument>();
+    for (const c of get().chunks) {
+      if (c.kind !== 'document' || !c.docId) continue;
+      if (projectId && c.projectId !== projectId) continue;
+      const existing = docs.get(c.docId);
+      if (!existing) {
+        docs.set(c.docId, {
+          docId: c.docId,
+          projectId: c.projectId,
+          title: c.title,
+          chunkCount: 1,
+          pages: c.page ?? 0,
+          importedAt: c.createdAt,
+          source: c.source,
+        });
+      } else {
+        existing.chunkCount += 1;
+        if (c.page && c.page > existing.pages) existing.pages = c.page;
+        if (c.createdAt < existing.importedAt) existing.importedAt = c.createdAt;
+      }
+    }
+    return [...docs.values()].sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+  },
+
+  removeDocument: (docId) =>
+    set((state) => {
+      const removed = state.chunks.filter((c) => c.docId === docId);
+      if (removed.length === 0) return state;
+      for (const c of removed) {
+        quantized.delete(c.id);
+        floatCache.delete(c.id);
+      }
+      const chunks = state.chunks.filter((c) => c.docId !== docId);
+      persist(chunks);
+      return { ...state, chunks };
+    }),
 }));
+
+export type { LibraryDocument };

@@ -25,6 +25,7 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   ctgov: 'ClinicalTrials.gov',
   openfda: 'openFDA',
   rxnorm: 'RxNorm',
+  library: 'Imported document',
 };
 
 interface ParsedName {
@@ -72,6 +73,13 @@ function trailingId(record: EvidenceItem): string {
   return '';
 }
 
+// Page locality for an imported library document, when the extractor provided
+// a page number (e.g. " p. 12.").
+function pageSuffix(record: EvidenceItem): string {
+  const page = record.identifiers?.page;
+  return page ? ` p. ${page}.` : '';
+}
+
 // ── Vancouver (default — preserves the existing output verbatim) ──────────────
 
 function vancouverAuthors(record: EvidenceItem): string {
@@ -87,7 +95,7 @@ function vancouver(record: EvidenceItem): string {
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
   const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
   const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}`
+  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${pageSuffix(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -109,7 +117,7 @@ function apaAuthors(record: EvidenceItem): string {
 
 function apa(record: EvidenceItem): string {
   const year = yearText(record);
-  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${SOURCE_LABELS[record.source]}.${trailingId(record)}`
+  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${SOURCE_LABELS[record.source]}.${trailingId(record)}${pageSuffix(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -138,7 +146,7 @@ function harvard(record: EvidenceItem): string {
       : record.identifiers?.pmid
         ? ` PMID: ${record.identifiers.pmid}.`
         : '';
-  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${SOURCE_LABELS[record.source]}.${avail}`
+  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${SOURCE_LABELS[record.source]}.${avail}${pageSuffix(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
