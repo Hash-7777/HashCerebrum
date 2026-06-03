@@ -991,6 +991,73 @@
 .review-faith-row--warn { border-left-color: #f5a04a; }
 .review-faith-row--bad { border-left-color: #f87171; }
 
+/* ── Ask this paper ───────────────────────────────────────── */
+.review-ask-block {
+  margin-bottom: 12px;
+}
+.review-ask-label {
+  color: var(--accent, #8aa0ff);
+}
+.review-ask-input {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+.review-ask-input textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--ink-2);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 9px;
+  line-height: 1.4;
+}
+.review-ask-input textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.review-ask-send {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--accent-line, rgba(138, 160, 255, 0.3));
+  background: var(--accent-line, rgba(138, 160, 255, 0.16));
+  color: var(--accent, #8aa0ff);
+  cursor: pointer;
+}
+.review-ask-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.review-ask-send[data-busy] svg {
+  animation: pr-spin 0.9s linear infinite;
+}
+.review-ask-entry {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.review-ask-q {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0 0 4px;
+}
+.review-ask-a {
+  font-size: 0.82rem;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 /* ── Actions bar ──────────────────────────────────────────── */
 .review-actions-bar {
   display: flex;
