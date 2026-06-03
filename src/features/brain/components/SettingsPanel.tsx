@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { APP_NAME, APP_VERSION } from '@config/constants';
 import { useThemeStore, THEMES } from '@core/store/themeStore';
+import { useExportSettingsStore } from '@core/store/exportSettingsStore';
+import { CITATION_STYLES } from '@features/brain/export/citationStyles';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
 import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -41,6 +43,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const totalRuns = useResearchRunStore((s) => s.runs.length);
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const citationStyle = useExportSettingsStore((s) => s.citationStyle);
+  const setCitationStyle = useExportSettingsStore((s) => s.setCitationStyle);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -239,6 +243,30 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             />
           ))}
         </div>
+      </section>
+
+      <section className="settings-theme" aria-label="Citation style">
+        <header>
+          <strong>Citation style</strong>
+          <span>{CITATION_STYLES.find((s) => s.value === citationStyle)?.label}</span>
+        </header>
+        <div className="settings-citation-styles">
+          {CITATION_STYLES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              className="settings-citation-style"
+              data-active={citationStyle === s.value}
+              onClick={() => setCitationStyle(s.value)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <p className="field-hint">
+          Applies to the reference list in every export (PDF, Word, LaTeX, Markdown, HTML).
+          In-text citation numbers never change.
+        </p>
       </section>
 
       <div className="settings-model-tools">

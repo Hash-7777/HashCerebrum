@@ -8,6 +8,8 @@ import {
   publicationMarkdown,
   referenceLinesForPublication,
 } from '../swarm/publication';
+import { formatReference, type CitationStyle } from './citationStyles';
+import { currentCitationStyle } from '@core/store/exportSettingsStore';
 
 const MIN_PDF_BYTES = 256;
 
@@ -167,25 +169,11 @@ export function markdownToHtml(markdown: string): string {
   return html.join('\n');
 }
 
-function citationBlock(citations: EvidenceItem[] = []): string {
+function citationBlock(citations: EvidenceItem[] = [], style: CitationStyle = 'vancouver'): string {
   if (citations.length === 0) return '';
   const rows = citations
     .slice(0, 40)
-    .map((item, i) => {
-      const authors = item.authors?.length
-        ? escapeHtml(
-            item.authors.slice(0, 4).join(', ') + (item.authors.length > 4 ? ' et al.' : ''),
-          )
-        : escapeHtml(item.source.toUpperCase());
-      const year = item.year ? ` (${escapeHtml(String(item.year))})` : '';
-      const id = item.identifiers?.pmid
-        ? ` PMID:&nbsp;${escapeHtml(item.identifiers.pmid)}.`
-        : item.identifiers?.doi
-          ? ` doi:&nbsp;${escapeHtml(item.identifiers.doi)}.`
-          : '';
-      const source = escapeHtml(item.source.toUpperCase());
-      return `<li><span class="ref-num">${i + 1}.</span> ${authors}${year}. <em>${escapeHtml(item.title)}</em>. ${source}.${id}</li>`;
-    })
+    .map((item, i) => `<li><span class="ref-num">${i + 1}.</span> ${escapeHtml(formatReference(item, style))}</li>`)
     .join('\n');
   return `<section class="references"><h2>References</h2><ol>${rows}</ol></section>`;
 }
@@ -302,6 +290,7 @@ function dropLeadingTitleHeading(markdown: string): string {
 
 export function buildExportHtml(message: ExportableMessage): string {
   const title = message.title || 'HashCerebrum Export';
+  const style = currentCitationStyle();
   const artifact = message.manuscript
     ? (message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []))
     : null;
@@ -313,6 +302,7 @@ export function buildExportHtml(message: ExportableMessage): string {
       message.manuscript,
       artifact,
       markdownToHtml(manuscriptToReadableText(normalizeManuscriptForPublication(message.manuscript, artifact))),
+      style,
     );
   } else {
     const cleaned = dropLeadingTitleHeading(stripGeneratedReferenceSections(message.content));
@@ -552,7 +542,7 @@ export function buildExportHtml(message: ExportableMessage): string {
         </p>
       </header>
       <main class="content">${body}</main>
-      ${artifact ? '' : citationBlock(referenceCitations)}
+      ${artifact ? '' : citationBlock(referenceCitations, style)}
     </div>
   </article>
 </body>
@@ -560,9 +550,10 @@ export function buildExportHtml(message: ExportableMessage): string {
 }
 
 export function buildMarkdownExport(message: ExportableMessage): string {
+  const style = currentCitationStyle();
   if (message.manuscript) {
     const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
-    return publicationMarkdown(message.manuscript, artifact);
+    return publicationMarkdown(message.manuscript, artifact, style);
   }
   const renumbered = renumberCitations(stripGeneratedReferenceSections(message.content), message.citations ?? []);
   const citations = renumbered.citations.length
@@ -571,7 +562,7 @@ export function buildMarkdownExport(message: ExportableMessage): string {
         '## References',
         ...renumbered.citations
           .slice(0, 40)
-          .map((item, index) => `${index + 1}. ${item.source.toUpperCase()}: ${item.title}`),
+          .map((item, index) => `${index + 1}. ${formatReference(item, style)}`),
       ].join('\n')
     : '';
   return `# ${message.title}\n\n${renumbered.content}${citations}\n`;
@@ -609,6 +600,22 @@ export function exportMessageMarkdown(message: ExportableMessage): void {
 
 export function exportMessageHtml(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.html`, buildExportHtml(message), 'text/html;charset=utf-8');
+}
+
+// Word export. We emit the export HTML wrapped with the Office namespaces so
+// Word opens it as an editable document (a .doc that round-trips through
+// Word/Pages/LibreOffice) — no extra dependency, and the layout, headings and
+// styled reference list carry over from the HTML path.
+export function buildWordDoc(message: ExportableMessage): string {
+  const html = buildExportHtml(message);
+  return html.replace(
+    /<html lang="en">/,
+    `<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
+  );
+}
+
+export function exportMessageDoc(message: ExportableMessage): void {
+  downloadTextFile(`${slugifyFilename(message.title)}.doc`, buildWordDoc(message), 'application/msword');
 }
 
 export function stripGeneratedReferenceSections(markdown: string): string {
@@ -649,7 +656,7 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
       return assertPdfBlob(
         await platform().manuscript.renderPdf(
           typstManuscript,
-          referenceLinesForPublication(artifact),
+          referenceLinesForPublication(artifact, currentCitationStyle()),
           meta,
         ),
         'Typst renderer',

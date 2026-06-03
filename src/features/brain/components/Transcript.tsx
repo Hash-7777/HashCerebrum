@@ -27,12 +27,14 @@ import {
   buildMarkdownExport,
   buildMessagePdfBlob,
   deriveDocumentTitle,
+  exportMessageDoc,
   renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
   stripResidualSourceMarkers,
   type ExportableMessage,
 } from '../export/messageExport';
+import { exportMessageLatex } from '../export/latexExport';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 
 export type { ChatMessage };
@@ -393,6 +395,12 @@ export const Transcript = memo(function Transcript({
                       </button>
                       <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
                         <Icon name="document" size={13} /> MD
+                      </button>
+                      <button type="button" onClick={() => exportMessageDoc(exportableFor(message, actualIndex))} className="action">
+                        <Icon name="document" size={13} /> Word
+                      </button>
+                      <button type="button" onClick={() => exportMessageLatex(exportableFor(message, actualIndex))} className="action">
+                        <Icon name="document" size={13} /> LaTeX
                       </button>
                       {isAi && !message.critiqueOf && onRegenerate && (
                         <>

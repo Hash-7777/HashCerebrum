@@ -635,3 +635,29 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-line);
 }
+
+.settings-citation-styles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.settings-citation-style {
+  padding: 5px 12px;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--line-strong);
+  background: var(--ink-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+}
+.settings-citation-style:hover {
+  color: var(--text-1);
+  border-color: var(--accent-line);
+}
+.settings-citation-style[data-active='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-line);
+}

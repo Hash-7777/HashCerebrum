@@ -28,6 +28,15 @@ import type {
   ValidationIssue,
 } from './publicationTypes';
 import { forestPlotFigure } from './stats/forestPlot';
+import { formatReference, type CitationStyle } from '../export/citationStyles';
+
+// Resolve a reference's display text in the requested style. Vancouver (or no
+// style) returns the text baked at build time verbatim — zero regression — and
+// other styles are re-rendered from the underlying evidence record on demand.
+function referenceText(reference: CanonicalReference, style?: CitationStyle): string {
+  if (!style || style === 'vancouver') return reference.text;
+  return formatReference(reference.evidence, style);
+}
 
 const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   pubmed: 'PubMed',
@@ -1030,8 +1039,14 @@ export function normalizeManuscriptForPublication(
   };
 }
 
-export function referenceLinesForPublication(artifact: PublicationArtifact): { marker: string; text: string }[] {
-  return artifact.references.map((reference) => ({ marker: reference.displayMarker, text: reference.text }));
+export function referenceLinesForPublication(
+  artifact: PublicationArtifact,
+  style?: CitationStyle,
+): { marker: string; text: string }[] {
+  return artifact.references.map((reference) => ({
+    marker: reference.displayMarker,
+    text: referenceText(reference, style),
+  }));
 }
 
 export function assertPublicationReady(artifact: PublicationArtifact): void {
@@ -1040,7 +1055,11 @@ export function assertPublicationReady(artifact: PublicationArtifact): void {
   throw new Error(`Manuscript failed publication validation. ${detail}`);
 }
 
-export function publicationMarkdown(manuscript: Manuscript, artifact: PublicationArtifact): string {
+export function publicationMarkdown(
+  manuscript: Manuscript,
+  artifact: PublicationArtifact,
+  style?: CitationStyle,
+): string {
   const normalized = normalizeManuscriptForPublication(manuscript, artifact);
   const lines: string[] = [`# ${normalized.title}`, '', '## Abstract'];
   const a = normalized.abstract;
@@ -1060,19 +1079,24 @@ export function publicationMarkdown(manuscript: Manuscript, artifact: Publicatio
     });
   }
   if (artifact.references.length > 0) {
-    lines.push('', '## References', ...artifact.references.map((reference) => `${reference.displayMarker} ${reference.text}`));
+    lines.push('', '## References', ...artifact.references.map((reference) => `${reference.displayMarker} ${referenceText(reference, style)}`));
   }
   return `${lines.join('\n')}\n`;
 }
 
-export function publicationHtml(_manuscript: Manuscript, artifact: PublicationArtifact, bodyHtml: string): string {
+export function publicationHtml(
+  _manuscript: Manuscript,
+  artifact: PublicationArtifact,
+  bodyHtml: string,
+  style?: CitationStyle,
+): string {
   const figures = artifact.figures
     .map(
       (figure, index) => `<figure>${sanitizeSvgForHtml(figure.svg)}<figcaption>Figure ${index + 1}. ${escXml(figure.title)}. ${escXml(figure.caption)}</figcaption></figure>`,
     )
     .join('\n');
   const references = artifact.references
-    .map((reference) => `<li>${escXml(reference.displayMarker)} ${escXml(reference.text)}</li>`)
+    .map((reference) => `<li>${escXml(reference.displayMarker)} ${escXml(referenceText(reference, style))}</li>`)
     .join('\n');
   return `${bodyHtml}
 <section class="figures"><h2>Figures</h2>${figures}</section>
