@@ -18,6 +18,7 @@ import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../
 import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
 import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../rewriteSelection';
 import { askPaper, citedPassageNumbers, type PaperPassage } from '../askPaper';
+import { continueWriting } from '../continueWriting';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 
@@ -675,6 +676,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const [showEditor,  setShowEditor]  = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [rewriteBusy, setRewriteBusy] = useState<RewriteRegister | null>(null);
+  const [continueBusy, setContinueBusy] = useState(false);
 
   const liveAgents: AgentReviewResult[] =
     paper.reviewAgents ??
@@ -808,6 +810,61 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       useToastStore.getState().show(`Rewrite failed: ${detail}`, 'error');
     } finally {
       setRewriteBusy(null);
+    }
+  };
+
+  // Continue writing from the cursor (or the end), grounded only in the paper's
+  // own retrieved sources, inserting [n] markers. No sources → nothing to ground
+  // a claim in, so the action is disabled.
+  const continueFromCursor = async () => {
+    const editor = editorRef.current;
+    const citations = paper.citations ?? [];
+    if (!editor) return;
+    if (citations.length === 0) {
+      useToastStore.getState().show('No retrieved sources to ground a continuation.', 'info');
+      return;
+    }
+    const selection = window.getSelection();
+    let savedRange: Range | null = null;
+    let preceding = editor.innerText;
+    if (selection && selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      const caret = selection.getRangeAt(0);
+      savedRange = caret.cloneRange();
+      const pre = document.createRange();
+      pre.setStart(editor, 0);
+      pre.setEnd(caret.endContainer, caret.endOffset);
+      preceding = pre.toString();
+    }
+    setContinueBusy(true);
+    try {
+      const { text } = await continueWriting(agentModelFor('boss'), preceding, citations);
+      if (!text) {
+        useToastStore.getState().show('No grounded continuation could be added.', 'info');
+        return;
+      }
+      const needsSpace = preceding.length > 0 && !/\s$/.test(preceding);
+      const insert = needsSpace ? ` ${text}` : text;
+      const sel = window.getSelection();
+      if (savedRange && sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      } else {
+        editor.focus();
+        const end = document.createRange();
+        end.selectNodeContents(editor);
+        end.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(end);
+      }
+      editor.focus();
+      saveHistory();
+      document.execCommand('insertText', false, insert);
+      persistEditor();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`Continue failed: ${detail}`, 'error');
+    } finally {
+      setContinueBusy(false);
     }
   };
 
@@ -1107,6 +1164,19 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                       {rewriteBusy === r.value ? <Icon name="spinner" size={11} /> : r.label}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className="doc-toolbar-btn doc-toolbar-btn--rewrite"
+                    onClick={() => void continueFromCursor()}
+                    disabled={continueBusy || (paper.citations?.length ?? 0) === 0}
+                    title={
+                      (paper.citations?.length ?? 0) === 0
+                        ? 'No retrieved sources to ground a continuation'
+                        : 'Continue writing from the cursor, grounded in this paper’s sources'
+                    }
+                  >
+                    {continueBusy ? <Icon name="spinner" size={11} /> : 'Continue'}
+                  </button>
                 </div>
                 {pendingCount > 0 && (
                   <span className="doc-editor-count">
