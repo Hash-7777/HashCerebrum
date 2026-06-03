@@ -3,7 +3,7 @@
 // earlier research runs. Saving happens in BrainMode after a research run;
 // this view reads, searches, and prunes the same store.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
@@ -11,6 +11,7 @@ import { Icon } from '@ui/icons';
 import { MemoryCard } from './components/MemoryCard';
 import { MemoryVectorGraph3D } from './graph/MemoryVectorGraph3D';
 import { keepMemoryChunk } from './pruneMemory';
+import { importPdfFiles, summarizeImport } from './import/importPdfs';
 
 const SEARCH_RESULT_LIMIT = 200;
 
@@ -23,6 +24,13 @@ export function MemoryMode() {
   const removeChunk = useRagStore((s) => s.removeChunk);
   const clearProject = useRagStore((s) => s.clearProject);
   const pruneProject = useRagStore((s) => s.pruneProject);
+  const libraryDocuments = useRagStore((s) => s.libraryDocuments);
+  const removeDocument = useRagStore((s) => s.removeDocument);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [showDocs, setShowDocs] = useState(false);
 
   const [search, setSearch] = useState('');
   // Graph is the default view — the topic map is the primary way to read memory.
@@ -32,6 +40,40 @@ export function MemoryMode() {
   const [scope, setScope] = useState<'project' | 'library'>('project');
 
   const projectName = projects.find((p) => p.id === activeProjectId)?.name ?? 'Project';
+
+  // Imported PDF library documents (grouped passages) for the active scope.
+  const documents = useMemo(
+    () => libraryDocuments(scope === 'library' ? undefined : activeProjectId ?? undefined),
+    // chunks in deps so the list refreshes after an import or delete.
+    [libraryDocuments, chunks, scope, activeProjectId],
+  );
+
+  const onFilesChosen = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).filter((f) => /\.pdf$/i.test(f.name));
+    event.target.value = ''; // let the same file be re-picked later
+    if (files.length === 0 || !activeProjectId || importing) return;
+    setImporting(true);
+    setImportStatus(`Importing 0/${files.length}…`);
+    try {
+      const report = await importPdfFiles(files, {
+        projectId: activeProjectId,
+        onProgress: (p) => setImportStatus(`Importing ${p.index}/${p.total} — ${p.name} (${p.phase})`),
+      });
+      useToastStore.getState().show(summarizeImport(report), 'info');
+      if (report.skipped.length > 0) {
+        useToastStore
+          .getState()
+          .show(`Skipped: ${report.skipped.map((s) => `${s.name} (${s.reason})`).join('; ')}`, 'error');
+      }
+      if (report.addedDocuments > 0) setShowDocs(true);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`Import failed: ${detail}`, 'error');
+    } finally {
+      setImporting(false);
+      setImportStatus(null);
+    }
+  };
 
   const scopedChunks = useMemo(
     () => (scope === 'library' ? chunks : chunks.filter((chunk) => chunk.projectId === activeProjectId)),
@@ -143,6 +185,35 @@ export function MemoryMode() {
                 <Icon name="graph" size={13} /> Graph
               </button>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              hidden
+              onChange={(e) => void onFilesChosen(e)}
+            />
+            <button
+              type="button"
+              className="memory-import"
+              disabled={importing || !activeProjectId}
+              title="Add PDF papers from your computer so the Brain knows and can cite them"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon name={importing ? 'spinner' : 'plus'} size={13} />
+              {importing ? 'Importing…' : 'Import papers'}
+            </button>
+            {documents.length > 0 && (
+              <button
+                type="button"
+                className="memory-import"
+                data-active={showDocs}
+                title="Show imported papers"
+                onClick={() => setShowDocs((v) => !v)}
+              >
+                <Icon name="book" size={13} /> {documents.length} {documents.length === 1 ? 'paper' : 'papers'}
+              </button>
+            )}
             <button
               type="button"
               className="memory-prune"
@@ -182,6 +253,41 @@ export function MemoryMode() {
             </button>
           </div>
         </header>
+
+        {importStatus && (
+          <div className="memory-import-status" role="status">
+            <Icon name="spinner" size={13} /> {importStatus}
+          </div>
+        )}
+
+        {showDocs && documents.length > 0 && (
+          <div className="memory-docs" aria-label="Imported papers">
+            {documents.map((doc) => (
+              <div className="memory-doc" key={doc.docId}>
+                <Icon name="book" size={13} />
+                <div className="memory-doc-meta">
+                  <strong>{doc.title}</strong>
+                  <span>
+                    {doc.chunkCount} passage{doc.chunkCount === 1 ? '' : 's'} · imported{' '}
+                    {new Date(doc.importedAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="memory-doc-remove"
+                  title="Remove this paper from memory"
+                  onClick={() => {
+                    if (window.confirm(`Remove "${doc.title}" and all its passages from memory?`)) {
+                      removeDocument(doc.docId);
+                    }
+                  }}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {visible.length === 0 ? (
           <div className="memory-empty">

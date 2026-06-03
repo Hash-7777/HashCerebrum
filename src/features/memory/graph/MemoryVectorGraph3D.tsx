@@ -304,7 +304,9 @@ function Node({
   onSelect: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const r = node.chunk.kind === 'answer' ? 0.16 : 0.12;
+  // Answers and imported library papers render a touch larger than evidence
+  // passages so they stand out as the anchor points of a topic.
+  const r = node.chunk.kind === 'evidence' ? 0.12 : 0.16;
   return (
     <group position={node.pos}>
       <mesh
