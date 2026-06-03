@@ -145,6 +145,7 @@ export const Transcript = memo(function Transcript({
   onCritique,
   onRegenerate,
   onEdit,
+  onDraftOutline,
   onPromptSelect,
   drugFocus,
 }: {
@@ -154,6 +155,7 @@ export const Transcript = memo(function Transcript({
   onCritique?: (messageId: string) => void;
   onRegenerate?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
+  onDraftOutline?: (query: string) => void;
   onPromptSelect?: (prompt: string) => void;
   drugFocus?: boolean;
 }) {
@@ -369,6 +371,15 @@ export const Transcript = memo(function Transcript({
                       {message.content}
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                     </p>
+                  )}
+                  {message.outlineProposal && onDraftOutline && !message.isStreaming && (
+                    <button
+                      type="button"
+                      className="outline-draft-btn"
+                      onClick={() => onDraftOutline(message.outlineProposal!.query)}
+                    >
+                      <Icon name="flask" size={13} /> Draft full paper
+                    </button>
                   )}
                   {message.citations && message.citations.length > 0 && !isDocument && (
                     <div className="inline-citations">

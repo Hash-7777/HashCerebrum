@@ -38,6 +38,8 @@ export function Composer({
   const toggleMemory = useMemorySettingsStore((s) => s.toggle);
   const miniEnabled = useBrainModesStore((s) => s.mini);
   const toggleMini = useBrainModesStore((s) => s.toggleMini);
+  const outlineFirst = useBrainModesStore((s) => s.outlineFirst);
+  const toggleOutlineFirst = useBrainModesStore((s) => s.toggleOutlineFirst);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -147,6 +149,21 @@ export function Composer({
             >
               <Icon name="brain" size={13} />
               Mini {miniEnabled ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              className="memory-toggle-chip"
+              data-on={outlineFirst}
+              onClick={toggleOutlineFirst}
+              aria-pressed={outlineFirst}
+              title={
+                outlineFirst
+                  ? 'Outline-first ON — propose the paper structure for you to approve before drafting. Click to draft directly.'
+                  : 'Outline-first OFF — drafts the full paper immediately. Click to review an outline first.'
+              }
+            >
+              <Icon name="list" size={13} />
+              Outline {outlineFirst ? 'on' : 'off'}
             </button>
           </div>
           <div className="tools-right">

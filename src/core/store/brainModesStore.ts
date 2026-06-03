@@ -3,11 +3,15 @@
 //     set, smaller token budgets, and NO rate-limit pausing — so free models
 //     and small Ollama models produce a usable lighter paper without being
 //     given a hard time.
+//   - outlineFirst: propose the paper's section outline first (deterministic, no
+//     tokens) so the user can review the structure and approve before a full
+//     drafting run is spent.
 // (Drug-Interactions is its own mode/tab, not a composer toggle.)
 
 import { create } from 'zustand';
 
 const MINI_KEY = 'hc.brain.mini.v1';
+const OUTLINE_KEY = 'hc.brain.outlineFirst.v1';
 
 function loadBool(key: string, fallback: boolean): boolean {
   try {
@@ -30,6 +34,9 @@ interface BrainModesStore {
   mini: boolean;
   setMini: (value: boolean) => void;
   toggleMini: () => void;
+  outlineFirst: boolean;
+  setOutlineFirst: (value: boolean) => void;
+  toggleOutlineFirst: () => void;
 }
 
 export const useBrainModesStore = create<BrainModesStore>((set, get) => ({
@@ -39,4 +46,10 @@ export const useBrainModesStore = create<BrainModesStore>((set, get) => ({
     set({ mini: value });
   },
   toggleMini: () => get().setMini(!get().mini),
+  outlineFirst: loadBool(OUTLINE_KEY, false),
+  setOutlineFirst: (value) => {
+    saveBool(OUTLINE_KEY, value);
+    set({ outlineFirst: value });
+  },
+  toggleOutlineFirst: () => get().setOutlineFirst(!get().outlineFirst),
 }));

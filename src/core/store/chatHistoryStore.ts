@@ -30,6 +30,9 @@ export interface ChatMessage {
   // Present on a full-paper assistant message — the structured manuscript
   // the PDF export renders deterministically.
   manuscript?: Manuscript;
+  // Present on an outline-first proposal message — carries the original query so
+  // the "Draft full paper" action can run the real pipeline on approval.
+  outlineProposal?: { query: string };
 }
 
 // Which workspace produced a chat. Brain and Drug-Interactions keep separate

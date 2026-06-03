@@ -36,6 +36,7 @@ import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
+import { buildPaperOutline } from './swarm/paperPipeline';
 import { summarizeDatasetText, summarizeDatasetXlsx } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
 import type { UploadedDatasetSummary } from './swarm/publicationTypes';
@@ -155,7 +156,12 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
       return [];
     });
 
-  const runTurn = async (cleanQuery: string, baseMessages: ChatMessage[], appendUser: boolean) => {
+  const runTurn = async (
+    cleanQuery: string,
+    baseMessages: ChatMessage[],
+    appendUser: boolean,
+    forceDraft = false,
+  ) => {
     if (!cleanQuery || isRunning) return;
 
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: cleanQuery };
@@ -167,6 +173,33 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
     setAgentStatuses(initialAgentStatuses());
     setEvidence([]);
     setMessages(nextMessages);
+
+    // Outline-first: propose the paper's structure (deterministic, no tokens)
+    // and stop — the user approves with "Draft full paper", which re-enters
+    // runTurn with forceDraft so the real pipeline runs.
+    if (!forceDraft && !drugFocus && useBrainModesStore.getState().outlineFirst) {
+      const outline = buildPaperOutline(cleanQuery, useBrainModesStore.getState().mini);
+      const body = [
+        '## Proposed paper outline',
+        '',
+        `**${outline.title}**`,
+        '',
+        ...outline.sections.map((s, i) => `${i + 1}. **${s.heading}** — ${s.intent}`),
+        '',
+        '_Review the structure above, then click **Draft full paper** to generate it — or refine your request and resubmit._',
+      ].join('\n');
+      setMessages([
+        ...nextMessages,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: body,
+          modelLabel,
+          outlineProposal: { query: cleanQuery },
+        },
+      ]);
+      return;
+    }
 
     if (availableModels.length === 0) {
       setMessages([
@@ -460,6 +493,12 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
     await runTurn(cleanQuery, messages, true);
   };
 
+  // Approve an outline proposal: run the real pipeline for the stored query.
+  const draftFromOutline = (query: string) => {
+    if (isRunning) return;
+    void runTurn(query, messages, false, true);
+  };
+
   const editMessage = (messageId: string) => {
     if (isRunning) return;
     const target = messages.find((message) => message.id === messageId && message.role === 'user');
@@ -590,6 +629,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             onCritique={runCritique}
             onRegenerate={regenerateMessage}
             onEdit={editMessage}
+            onDraftOutline={draftFromOutline}
             onPromptSelect={(prompt) => { if (!isRunning) setQuery(prompt); }}
             drugFocus={drugFocus}
           />

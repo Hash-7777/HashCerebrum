@@ -5,12 +5,32 @@ import { buildPublicationArtifact } from '../publication';
 import {
   buildClaimLedger,
   buildPaperBlueprint,
+  buildPaperOutline,
   extractEvidenceFromRecords,
   keywordsFrom,
   parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('buildPaperOutline', () => {
+  const question = 'make a research paper about warfarin and NSAID bleeding risk';
+
+  it('returns a title and a section list with one-line intents', () => {
+    const outline = buildPaperOutline(question);
+    expect(outline.title.length).toBeGreaterThan(0);
+    expect(outline.sections.length).toBeGreaterThan(3);
+    expect(outline.sections[0]!.heading).toBe('Introduction');
+    expect(outline.sections[0]!.intent.length).toBeGreaterThan(0);
+    expect(outline.sections.every((s) => s.intent.length <= 180)).toBe(true);
+  });
+
+  it('uses the reduced section set in mini mode', () => {
+    const full = buildPaperOutline(question, false).sections.length;
+    const mini = buildPaperOutline(question, true).sections.length;
+    expect(mini).toBeLessThan(full);
+  });
+});
 
 describe('title & keyword cleanup', () => {
   const prompt = 'make a full reaserch paper about nsaids use with warfarin and digoxin in young population with statistics';

@@ -389,6 +389,24 @@
 
 .action-divider { width: 1px; height: 14px; background: var(--line); margin: 0 4px; }
 
+/* Outline-first: approve-to-draft button on a proposed outline */
+.outline-draft-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft, rgba(138, 160, 255, 0.14));
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.outline-draft-btn:hover { background: var(--accent); color: #fff; }
+
 /* Citations inline */
 .inline-citations {
   display: flex;

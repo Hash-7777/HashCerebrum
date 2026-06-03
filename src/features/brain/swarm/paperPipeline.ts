@@ -666,6 +666,31 @@ export function buildPaperBlueprint(
   };
 }
 
+export interface PaperOutline {
+  title: string;
+  sections: { heading: string; intent: string; targetWords: string }[];
+}
+
+/**
+ * The section plan a paper WILL follow, derived deterministically (no model
+ * call, no tokens) so the user can preview and steer scope before committing to
+ * a full drafting run. `intent` is a one-line summary of each section's job.
+ */
+export function buildPaperOutline(question: string, mini = false): PaperOutline {
+  const plan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
+  return {
+    title: blueprintTitle(question),
+    sections: plan.map((section) => {
+      const firstSentence = section.instruction.split(/(?<=[.!?])\s/)[0] ?? section.instruction;
+      return {
+        heading: section.heading,
+        intent: firstSentence.trim().slice(0, 180),
+        targetWords: section.targetWords,
+      };
+    }),
+  };
+}
+
 // Keywords are drawn from the SUBJECT (instruction words stripped), with typos
 // corrected and instruction/deliverable words excluded — so a request like
 // "make a full reaserch paper about ..." yields the actual topic terms, never
