@@ -46,8 +46,24 @@ function cosine(a: Float32Array, b: Float32Array): number {
   return na && nb ? d / Math.sqrt(na * nb) : 0;
 }
 
-// Evenly-spaced, high-separation hues so adjacent clusters never blur together.
+// A curated, high-separation palette so each cluster reads as a distinct colour
+// even with only two or three groups. Beyond the palette we fall back to evenly
+// spaced hues so any number of clusters stays legible.
+const CLUSTER_PALETTE = [
+  '#ff6b6b', // red
+  '#4dd2ff', // cyan
+  '#ffd93d', // amber
+  '#6bff95', // green
+  '#c08bff', // violet
+  '#ff9f4d', // orange
+  '#5b9dff', // blue
+  '#ff7bd5', // pink
+  '#7ce0c0', // teal
+  '#d4ff5b', // lime
+];
+
 function clusterColor(index: number, total: number): string {
+  if (index < CLUSTER_PALETTE.length) return CLUSTER_PALETTE[index]!;
   const hue = Math.round((index * 360) / Math.max(1, total));
   return `hsl(${hue} 85% 64%)`;
 }
@@ -101,6 +117,22 @@ function buildGraph(chunks: RagChunk[]): BuiltGraph | null {
     ];
     return { chunk, pos, vector: vectors.get(chunk.id)!, cluster: c };
   });
+
+  // Recentre the whole cloud on the origin so it sits on the axis crosshair and
+  // the orbit target frames it — otherwise the cluster-spread nudge can drift
+  // the centroid off-centre, making the view feel lopsided and "too close".
+  const mean: Vec3 = [0, 0, 0];
+  for (const n of nodes) {
+    mean[0] += n.pos[0];
+    mean[1] += n.pos[1];
+    mean[2] += n.pos[2];
+  }
+  mean[0] /= nodes.length;
+  mean[1] /= nodes.length;
+  mean[2] /= nodes.length;
+  for (const n of nodes) {
+    n.pos = [n.pos[0] - mean[0], n.pos[1] - mean[1], n.pos[2] - mean[2]];
+  }
 
   // Cluster legend: name each group by its most frequent meaningful terms.
   const sizes = new Array<number>(k).fill(0);
@@ -272,7 +304,7 @@ function Node({
   onSelect: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const r = node.chunk.kind === 'answer' ? 0.11 : 0.078;
+  const r = node.chunk.kind === 'answer' ? 0.16 : 0.12;
   return (
     <group position={node.pos}>
       <mesh
@@ -349,7 +381,7 @@ export function MemoryVectorGraph3D({
   return (
     <div className="memory-vec3d">
       <Canvas
-        camera={{ position: [5.5, 3.5, 8.5], fov: 45 }}
+        camera={{ position: [9, 5.5, 14], fov: 45, near: 0.1, far: 200 }}
         dpr={[1, 2]}
         onPointerMissed={() => {
           setSelectedId(null);
@@ -357,7 +389,10 @@ export function MemoryVectorGraph3D({
         }}
       >
         <color attach="background" args={['#070c16']} />
-        <fog attach="fog" args={['#070c16', 11, 22]} />
+        {/* Fog gives depth, but its far plane MUST sit beyond the farthest the
+            user can dolly out (OrbitControls maxDistance below) — otherwise
+            zooming out pushes the cloud past the fog and it vanishes. */}
+        <fog attach="fog" args={['#070c16', 30, 90]} />
         <ambientLight intensity={0.95} />
         <pointLight position={[6, 8, 10]} intensity={1.2} />
         <SceneSpin active={spin && focusCluster === null && !selected} />
@@ -375,11 +410,17 @@ export function MemoryVectorGraph3D({
           />
         ))}
         <OrbitControls
+          makeDefault
           enablePan
           enableZoom
           enableDamping
           dampingFactor={0.12}
           rotateSpeed={0.6}
+          zoomSpeed={0.8}
+          // Clamp the dolly range so the user can neither jam into the cloud nor
+          // zoom out past the fog into an empty void; both ends stay framed.
+          minDistance={5}
+          maxDistance={48}
           onStart={() => {
             dragging.current = true;
             setSpin(false);
