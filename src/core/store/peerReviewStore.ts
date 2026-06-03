@@ -4,6 +4,8 @@
 
 import { create } from 'zustand';
 import { platform } from '@platform/index';
+import type { EvidenceItem } from '@platform/index';
+import type { CitationAudit } from '@features/peer_review/citationGrade';
 
 export interface AgentReviewResult {
   agentId: string;
@@ -51,6 +53,11 @@ export interface ReviewedPaper {
   reviewError?: string;
   /** Live per-agent swarm progress (set before review completes). */
   reviewAgents?: AgentReviewResult[];
+  /** Cited source records (Brain manuscripts) — used to verify each [n] claim
+   *  against the snippet it cites. Absent for uploaded PDFs (no sources). */
+  citations?: EvidenceItem[];
+  /** Result of the citation-faithfulness pass, when sources were available. */
+  citationAudit?: CitationAudit;
 }
 
 interface PeerReviewStore {
@@ -59,12 +66,19 @@ interface PeerReviewStore {
   // Add a paper from a file upload
   addUpload: (file: File) => Promise<string>;
   // Add a paper from a Brain-mode manuscript
-  addManuscript: (title: string, text: string, pdfBlob?: Blob, htmlContent?: string) => string;
+  addManuscript: (
+    title: string,
+    text: string,
+    pdfBlob?: Blob,
+    htmlContent?: string,
+    citations?: EvidenceItem[],
+  ) => string;
   setActive: (id: string | null) => void;
   setReview: (id: string, review: PaperReview) => void;
   setReviewStreaming: (id: string, streaming: boolean) => void;
   setReviewError: (id: string, error: string) => void;
   setReviewAgents: (id: string, agents: AgentReviewResult[]) => void;
+  setCitationAudit: (id: string, audit: CitationAudit) => void;
   patchReviewAgent: (id: string, agentId: string, patch: Partial<AgentReviewResult>) => void;
   setDocumentDraft: (id: string, text: string, html: string) => void;
   removePaper: (id: string) => void;
@@ -146,7 +160,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
     }
   },
 
-  addManuscript: (title, text, pdfBlob, htmlContent) => {
+  addManuscript: (title, text, pdfBlob, htmlContent, citations) => {
     const id = uid();
     const base: ReviewedPaper = {
       id,
@@ -156,6 +170,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       source: 'manuscript',
       text,
       ...(htmlContent ? { htmlContent } : {}),
+      ...(citations && citations.length > 0 ? { citations } : {}),
     };
     const paper: ReviewedPaper = pdfBlob
       ? { ...base, blobUrl: URL.createObjectURL(pdfBlob) }
@@ -190,6 +205,11 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
   setReviewAgents: (id, agents) =>
     set((s) => ({
       papers: s.papers.map((p) => (p.id === id ? { ...p, reviewAgents: agents } : p)),
+    })),
+
+  setCitationAudit: (id, audit) =>
+    set((s) => ({
+      papers: s.papers.map((p) => (p.id === id ? { ...p, citationAudit: audit } : p)),
     })),
 
   patchReviewAgent: (id, agentId, patch) =>

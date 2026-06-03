@@ -849,6 +849,148 @@
   line-height: 1.55;
 }
 
+/* ── Citation faithfulness ────────────────────────────────── */
+.review-faith-block {
+  margin-bottom: 12px;
+}
+.review-faith-label {
+  color: var(--accent, #8aa0ff);
+}
+.review-faith-empty {
+  font-size: 0.8rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0;
+}
+.review-faith-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.review-faith-chip {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.review-faith-checked {
+  font-size: 9.5px;
+  color: var(--text-3);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.review-faith-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.review-faith-row {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left-width: 3px;
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.review-faith-row-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+.review-faith-badge {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.review-faith-markers {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+.review-faith-claim {
+  font-size: 0.82rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin: 0;
+}
+.review-faith-note {
+  font-size: 0.76rem;
+  color: var(--text-3);
+  line-height: 1.45;
+  margin: 3px 0 0;
+  font-style: italic;
+}
+.review-faith-sources {
+  margin-top: 5px;
+}
+.review-faith-sources > summary {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--accent, #8aa0ff);
+  cursor: pointer;
+  user-select: none;
+  text-transform: uppercase;
+}
+.review-faith-source {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+}
+.review-faith-source-title {
+  font-size: 0.78rem;
+  color: var(--text-1);
+  line-height: 1.4;
+  margin: 0;
+}
+.review-faith-source-marker {
+  font-family: var(--f-mono);
+  color: var(--text-3);
+}
+.review-faith-source-snippet {
+  font-size: 0.76rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin: 3px 0 0;
+}
+.review-faith-source-ids {
+  display: flex;
+  gap: 10px;
+  margin: 4px 0 0;
+}
+.review-faith-source-ids a {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  color: var(--accent, #8aa0ff);
+  text-decoration: none;
+}
+.review-faith-source-ids a:hover {
+  text-decoration: underline;
+}
+
+/* Grade tones: green → amber → orange → red */
+.review-faith-chip--ok,
+.review-faith-badge--ok { background: rgba(54, 211, 153, 0.16); color: #5fe0b0; }
+.review-faith-chip--weak,
+.review-faith-badge--weak { background: rgba(240, 200, 80, 0.16); color: #ecc94b; }
+.review-faith-chip--warn,
+.review-faith-badge--warn { background: rgba(245, 158, 66, 0.16); color: #f5a04a; }
+.review-faith-chip--bad,
+.review-faith-badge--bad { background: rgba(245, 90, 90, 0.16); color: #f87171; }
+.review-faith-row--ok { border-left-color: #36d399; }
+.review-faith-row--weak { border-left-color: #ecc94b; }
+.review-faith-row--warn { border-left-color: #f5a04a; }
+.review-faith-row--bad { border-left-color: #f87171; }
+
 /* ── Actions bar ──────────────────────────────────────────── */
 .review-actions-bar {
   display: flex;

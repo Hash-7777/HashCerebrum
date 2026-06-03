@@ -27,6 +27,7 @@ import {
   buildMarkdownExport,
   buildMessagePdfBlob,
   deriveDocumentTitle,
+  renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
   stripResidualSourceMarkers,
@@ -263,9 +264,14 @@ export const Transcript = memo(function Transcript({
 
   const sendToReview = async (message: ChatMessage, index: number) => {
     const exportable = exportableFor(message, index);
-    const text = message.manuscript
+    const rawText = message.manuscript
       ? manuscriptToReadableText(message.manuscript)
       : message.content;
+    // Renumber [S#] → sequential [n] and return the cited records in that same
+    // order, so reviewers read clean markers AND the citation-faithfulness pass
+    // can map each [n] claim to the snippet it cites.
+    const renumbered = renumberCitations(stripGeneratedReferenceSections(rawText), message.citations ?? []);
+    const text = renumbered.content;
     // HTML preview is always available (no async, no failure path).
     const htmlContent = buildExportHtml(exportable);
     // PDF blob is optional — review still works from text alone.
@@ -275,7 +281,7 @@ export const Transcript = memo(function Transcript({
     } catch {
       // PDF optional
     }
-    usePeerReviewStore.getState().addManuscript(exportable.title, text, pdfBlob, htmlContent);
+    usePeerReviewStore.getState().addManuscript(exportable.title, text, pdfBlob, htmlContent, renumbered.citations);
     useModeStore.getState().setMode('peer_review');
   };
 

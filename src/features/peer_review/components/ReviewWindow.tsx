@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 import { usePeerReviewStore, type AgentReviewResult, type ReviewedPaper } from '@core/store/peerReviewStore';
+import type { EvidenceItem } from '@platform/index';
 import { agentModelFor } from '@core/store/agentModelStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
@@ -13,6 +14,8 @@ import {
   type SuggestionType,
 } from '../reviewSwarm';
 import { buildReviewReportPdf } from '../reviewReportPdf';
+import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../citationAudit';
+import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 
@@ -161,6 +164,141 @@ function ScoreRing({ score }: { score: number }) {
 
 function AgentDot({ status }: { status: AgentReviewResult['status'] }) {
   return <span className={`review-agent-dot review-agent-dot--${status}`} aria-hidden="true" />;
+}
+
+// Display metadata for each faithfulness grade. `tone` drives the badge colour
+// (green → red) and `glyph` is a compact one-character cue.
+const FAITH_GRADE_META: Record<FaithfulnessGrade, { label: string; tone: string; glyph: string }> = {
+  supported:    { label: 'Supported',    tone: 'ok',    glyph: '✓' },
+  weak:         { label: 'Weak',         tone: 'weak',  glyph: '~' },
+  overstated:   { label: 'Overstated',   tone: 'warn',  glyph: '↑' },
+  unsupported:  { label: 'Unsupported',  tone: 'bad',   glyph: '?' },
+  contradicted: { label: 'Contradicted', tone: 'bad',   glyph: '✕' },
+};
+
+const FAITH_SUMMARY_ORDER: FaithfulnessGrade[] = [
+  'supported', 'weak', 'overstated', 'unsupported', 'contradicted',
+];
+
+/** One graded claim, with its cited source(s) revealed on click (verify). */
+function FaithfulnessRow({ item, citations }: { item: FaithfulnessItem; citations: EvidenceItem[] }) {
+  const meta = FAITH_GRADE_META[item.grade];
+  const sources = sourcesForMarkers(item.markers, citations);
+  return (
+    <div className={`review-faith-row review-faith-row--${meta.tone}`}>
+      <div className="review-faith-row-head">
+        <span className={`review-faith-badge review-faith-badge--${meta.tone}`} title={meta.label}>
+          <span aria-hidden="true">{meta.glyph}</span> {meta.label}
+        </span>
+        <span className="review-faith-markers">
+          {item.markers.map((n) => `[${n}]`).join(' ')}
+        </span>
+      </div>
+      <p className="review-faith-claim">{item.sentence}</p>
+      {item.note && <p className="review-faith-note">{item.note}</p>}
+      {sources.length > 0 && (
+        <details className="review-faith-sources">
+          <summary>Verify source{sources.length > 1 ? 's' : ''}</summary>
+          {sources.map((s) => (
+            <div className="review-faith-source" key={s.marker}>
+              <p className="review-faith-source-title">
+                <span className="review-faith-source-marker">[{s.marker}]</span> {s.title}
+                {s.year ? ` · ${s.year}` : ''}
+              </p>
+              {s.snippet && <p className="review-faith-source-snippet">{s.snippet}</p>}
+              <p className="review-faith-source-ids">
+                {s.pmid && (
+                  <a
+                    href={`https://pubmed.ncbi.nlm.nih.gov/${s.pmid}/`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    PMID {s.pmid}
+                  </a>
+                )}
+                {s.doi && (
+                  <a href={`https://doi.org/${s.doi}`} target="_blank" rel="noreferrer">
+                    doi:{s.doi}
+                  </a>
+                )}
+                {!s.pmid && !s.doi && s.url && (
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    Source
+                  </a>
+                )}
+              </p>
+            </div>
+          ))}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Citation-faithfulness card. Renders the grading result for a Brain manuscript
+ * (every cited claim checked against the snippet it cites), or a clear
+ * "cannot verify" note for an uploaded document with no source records.
+ */
+function CitationFaithfulnessCard({
+  audit,
+  citations,
+  hasSources,
+  streaming,
+}: {
+  audit?: CitationAudit;
+  citations: EvidenceItem[];
+  hasSources: boolean;
+  streaming: boolean;
+}) {
+  if (!hasSources) {
+    return (
+      <div className="review-faith-block">
+        <p className="review-bullets-label review-faith-label">Citation Faithfulness</p>
+        <p className="review-faith-empty">
+          Citations could not be verified — this document carries no source records to
+          check claims against.
+        </p>
+      </div>
+    );
+  }
+  if (!audit) {
+    if (streaming) {
+      return (
+        <div className="review-faith-block">
+          <p className="review-bullets-label review-faith-label">Citation Faithfulness</p>
+          <p className="review-faith-empty">Checking cited claims against their sources…</p>
+        </div>
+      );
+    }
+    return null;
+  }
+  return (
+    <div className="review-faith-block">
+      <p className="review-bullets-label review-faith-label">Citation Faithfulness</p>
+      <div className="review-faith-summary">
+        {FAITH_SUMMARY_ORDER.filter((g) => audit.counts[g] > 0).map((g) => {
+          const meta = FAITH_GRADE_META[g];
+          return (
+            <span
+              key={g}
+              className={`review-faith-chip review-faith-chip--${meta.tone}`}
+              title={meta.label}
+            >
+              {meta.label} {audit.counts[g]}
+            </span>
+          );
+        })}
+        <span className="review-faith-checked">{audit.checked} claim{audit.checked === 1 ? '' : 's'} checked</span>
+      </div>
+      <div className="review-faith-list">
+        {audit.items.map((item, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: claims are a static, ordered list
+          <FaithfulnessRow key={i} item={item} citations={citations} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function AgentSection({
@@ -431,6 +569,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
   const setReviewError     = usePeerReviewStore((s) => s.setReviewError);
   const setReviewAgents    = usePeerReviewStore((s) => s.setReviewAgents);
   const patchReviewAgent   = usePeerReviewStore((s) => s.patchReviewAgent);
+  const setCitationAudit   = usePeerReviewStore((s) => s.setCitationAudit);
   const setDocumentDraft   = usePeerReviewStore((s) => s.setDocumentDraft);
 
   const abortRef      = useRef<AbortController | null>(null);
@@ -666,6 +805,24 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       );
       setReview(paper.id, review);
       if (review.agentResults) setReviewAgents(paper.id, review.agentResults);
+
+      // Citation-faithfulness pass — verify each [n] claim against the snippet
+      // it cites. Only runs for documents that carry source records (Brain
+      // manuscripts); uploaded PDFs have no snippets, so it is skipped and the
+      // UI shows a "could not verify" note instead.
+      const claims = buildCitedClaims(currentDocumentText(paper), paper.citations ?? []);
+      if (claims.length > 0 && !controller.signal.aborted) {
+        try {
+          const audit = await gradeCitationFaithfulness(model, claims, controller.signal);
+          if (!controller.signal.aborted) setCitationAudit(paper.id, audit);
+        } catch (err) {
+          if ((err as Error)?.name !== 'AbortError') {
+            // Non-fatal: the swarm review still stands without the audit.
+            const detail = err instanceof Error ? err.message : String(err);
+            useToastStore.getState().show(`Citation check skipped: ${detail}`, 'info');
+          }
+        }
+      }
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') return;
       const detail = error instanceof Error ? error.message : String(error);
@@ -972,6 +1129,16 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {/* Citation faithfulness — every cited claim checked against its source */}
+              {review && (
+                <CitationFaithfulnessCard
+                  {...(paper.citationAudit ? { audit: paper.citationAudit } : {})}
+                  citations={paper.citations ?? []}
+                  hasSources={(paper.citations?.length ?? 0) > 0}
+                  streaming={reviewStreaming ?? false}
+                />
               )}
 
               {/* Footer */}

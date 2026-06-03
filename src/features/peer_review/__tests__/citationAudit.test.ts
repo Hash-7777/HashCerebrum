@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { buildCitedClaims, extractCitedClaims, pairClaimsToSources } from '../citationAudit';
+import {
+  buildCitedClaims,
+  extractCitedClaims,
+  pairClaimsToSources,
+  sourcesForMarkers,
+} from '../citationAudit';
 
 function rec(partial: Partial<EvidenceItem> & { title: string }): EvidenceItem {
   return {
@@ -75,6 +80,38 @@ describe('pairClaimsToSources', () => {
   it('caps the number of claims returned', () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ sentence: `Claim ${i} [1].`, markers: [1] }));
     expect(pairClaimsToSources(many, citations, 5)).toHaveLength(5);
+  });
+});
+
+describe('sourcesForMarkers', () => {
+  const citations = [
+    rec({
+      title: 'Warfarin–NSAID meta-analysis',
+      snippet: 'Increased major bleeding.',
+      year: 2020,
+      identifiers: { pmid: '12345' },
+      url: 'https://example.org/a',
+    }),
+    rec({
+      title: 'Mechanism review',
+      snippet: 'CYP2C9 inhibition.',
+      identifiers: { DOI: '10.1/xyz' },
+    }),
+    rec({ title: 'Link-only record', url: 'https://example.org/c' }),
+  ];
+
+  it('resolves markers to display records with year + PMID/DOI/url', () => {
+    const out = sourcesForMarkers([1, 2, 3], citations);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({ marker: 1, year: '2020', pmid: '12345', url: 'https://example.org/a' });
+    expect(out[1]).toMatchObject({ marker: 2, doi: '10.1/xyz' });
+    expect(out[1]!.pmid).toBeUndefined();
+    expect(out[2]).toMatchObject({ marker: 3, url: 'https://example.org/c' });
+    expect(out[2]!.year).toBeUndefined();
+  });
+
+  it('skips markers that point past the citation list', () => {
+    expect(sourcesForMarkers([9], citations)).toEqual([]);
   });
 });
 

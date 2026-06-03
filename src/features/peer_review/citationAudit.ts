@@ -94,3 +94,41 @@ export function pairClaimsToSources(
 export function buildCitedClaims(text: string, citations: EvidenceItem[], maxClaims = 20): CitedClaim[] {
   return pairClaimsToSources(extractCitedClaims(text), citations, maxClaims);
 }
+
+/** A cited source resolved for display (click-to-verify in the review UI). */
+export interface MarkerSource {
+  marker: number;
+  title: string;
+  snippet: string;
+  year?: string;
+  url?: string;
+  pmid?: string;
+  doi?: string;
+}
+
+/**
+ * Resolve `[n]` markers to their source records for the click-to-verify UI.
+ * Pure: looks up `citations[marker-1]` and surfaces the identifiers the user
+ * needs to confirm a claim (title, snippet, year, PMID/DOI, link). Unknown
+ * markers are skipped.
+ */
+export function sourcesForMarkers(markers: number[], citations: EvidenceItem[]): MarkerSource[] {
+  const out: MarkerSource[] = [];
+  for (const marker of markers) {
+    const rec = citations[marker - 1];
+    if (!rec) continue;
+    const ids = rec.identifiers ?? {};
+    const pmid = ids['pmid'] ?? ids['PMID'];
+    const doi = ids['doi'] ?? ids['DOI'];
+    out.push({
+      marker,
+      title: rec.title,
+      snippet: (rec.snippet ?? '').trim(),
+      ...(rec.year != null && rec.year !== '' ? { year: String(rec.year) } : {}),
+      ...(rec.url ? { url: rec.url } : {}),
+      ...(pmid ? { pmid } : {}),
+      ...(doi ? { doi } : {}),
+    });
+  }
+  return out;
+}
