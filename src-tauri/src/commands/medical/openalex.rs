@@ -76,8 +76,8 @@ pub async fn openalex_query(
                 })
                 .unwrap_or_default();
             // Prefer the reconstructed abstract; fall back to the journal name.
-            let snippet = abstract_from_inverted_index(&item["abstract_inverted_index"])
-                .or_else(|| {
+            let snippet =
+                abstract_from_inverted_index(&item["abstract_inverted_index"]).or_else(|| {
                     item["primary_location"]["source"]["display_name"]
                         .as_str()
                         .map(str::to_string)

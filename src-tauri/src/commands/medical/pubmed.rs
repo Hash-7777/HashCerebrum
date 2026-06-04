@@ -2,7 +2,8 @@
 //! Docs: https://www.ncbi.nlm.nih.gov/books/NBK25501/
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, strip_html, truncate_chars, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, strip_html, truncate_chars,
+    EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
@@ -37,14 +38,20 @@ async fn pubmed_abstracts(pmids: &[String]) -> HashMap<String, String> {
         return HashMap::new();
     };
     let mut map = HashMap::new();
-    if let Some(results) = json.pointer("/resultList/result").and_then(|v| v.as_array()) {
+    if let Some(results) = json
+        .pointer("/resultList/result")
+        .and_then(|v| v.as_array())
+    {
         for item in results {
             let pmid = item["pmid"].as_str();
             let abstract_text = item["abstractText"].as_str();
             if let (Some(pmid), Some(text)) = (pmid, abstract_text) {
                 let cleaned = strip_html(text);
                 if !cleaned.is_empty() {
-                    map.insert(pmid.to_string(), truncate_chars(&cleaned, ABSTRACT_CHAR_CAP));
+                    map.insert(
+                        pmid.to_string(),
+                        truncate_chars(&cleaned, ABSTRACT_CHAR_CAP),
+                    );
                 }
             }
         }

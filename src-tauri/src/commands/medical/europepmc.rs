@@ -1,7 +1,8 @@
 //! Europe PMC. Docs: https://europepmc.org/RestfulWebService
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, strip_html, truncate_chars, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, strip_html, truncate_chars,
+    EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;

@@ -311,7 +311,10 @@ mod tests {
 
     #[test]
     fn strip_html_leaves_plain_text_unchanged() {
-        assert_eq!(strip_html("A plain abstract with no markup."), "A plain abstract with no markup.");
+        assert_eq!(
+            strip_html("A plain abstract with no markup."),
+            "A plain abstract with no markup."
+        );
     }
 
     #[test]
