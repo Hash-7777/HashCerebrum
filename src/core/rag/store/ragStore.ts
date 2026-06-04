@@ -106,6 +106,12 @@ interface RagStore {
   removeChunk: (id: string) => void;
   clearProject: (projectId: string) => void;
   pruneProject: (projectId: string, keep: (chunk: RagChunk) => boolean) => number;
+  /** Remove specific findings by id, snapshotting them (and their vectors) so a
+   *  one-click prune can be undone. Returns the number removed. */
+  pruneChunks: (ids: string[]) => number;
+  /** Restore the findings removed by the most recent pruneChunks. Returns the
+   *  number restored (0 if nothing to undo). */
+  undoLastPrune: () => number;
   /** Imported PDFs grouped into documents (for the Memory library panel). */
   libraryDocuments: (projectId?: string) => LibraryDocument[];
   /** Remove every passage (and vector) of an imported document. */
@@ -115,6 +121,11 @@ interface RagStore {
 // --- in-memory vector state (module-scoped; mirrors persistence) ---
 const quantized = new Map<string, QuantizedVector>();
 const floatCache = new Map<string, Float32Array>();
+
+// Snapshot of the most recent pruneChunks call, so it can be undone. Holds the
+// removed chunks and their quantised vectors; replaced on each prune, cleared on
+// undo. Module-scoped because the vectors live here, not in the zustand state.
+let lastPrune: { chunks: RagChunk[]; vectors: Map<string, QuantizedVector> } | null = null;
 
 function vectorFor(id: string): Float32Array | undefined {
   const cached = floatCache.get(id);
@@ -343,6 +354,45 @@ export const useRagStore = create<RagStore>((set, get) => ({
       set({ chunks });
     }
     return removed;
+  },
+
+  pruneChunks: (ids) => {
+    const idSet = new Set(ids);
+    const before = get().chunks;
+    const removed = before.filter((c) => idSet.has(c.id));
+    if (removed.length === 0) return 0;
+    // Snapshot the removed chunks and their vectors for a possible undo.
+    const snapVectors = new Map<string, QuantizedVector>();
+    for (const c of removed) {
+      const qv = quantized.get(c.id);
+      if (qv) snapVectors.set(c.id, qv);
+      quantized.delete(c.id);
+      floatCache.delete(c.id);
+    }
+    lastPrune = { chunks: removed, vectors: snapVectors };
+    const chunks = before.filter((c) => !idSet.has(c.id));
+    persist(chunks);
+    set({ chunks });
+    return removed.length;
+  },
+
+  undoLastPrune: () => {
+    if (!lastPrune) return 0;
+    const { chunks: restored, vectors } = lastPrune;
+    lastPrune = null;
+    // Restore the vectors so the re-added findings keep their embeddings (and
+    // the background embedder does not have to recompute them).
+    for (const [id, qv] of vectors) {
+      quantized.set(id, qv);
+      floatCache.delete(id);
+    }
+    const existing = new Set(get().chunks.map((c) => c.id));
+    const toAdd = restored.filter((c) => !existing.has(c.id));
+    if (toAdd.length === 0) return 0;
+    const chunks = [...get().chunks, ...toAdd];
+    persist(chunks);
+    set({ chunks });
+    return toAdd.length;
   },
 
   libraryDocuments: (projectId) => {
