@@ -1,4 +1,5 @@
 import { Icon } from '@ui/icons';
+import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import type { ReviewedPaper } from '@core/store/peerReviewStore';
 
 function ScoreBadge({ score }: { score: number }) {
@@ -40,7 +41,7 @@ export function PaperCard({
       aria-label={paper.title}
     >
       <div className="paper-card-thumb" aria-hidden="true">
-        <Icon name="filePdf" size={28} />
+        <PdfGlyph size={30} />
         {paper.reviewStreaming && (
           <span className="paper-card-reviewing">
             <Icon name="spinner" size={14} />
