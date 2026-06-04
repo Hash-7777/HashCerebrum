@@ -331,6 +331,7 @@ export async function synthesize(
 
 Hard rules:
 - Use only the retrieved records and specialist findings below. Never add a fact, statistic, drug effect, dose, or citation that is not supported there.
+- NUMBERS RULE (critical): do NOT state any specific figure — percentage, count, mean, score, ratio, odds ratio, sample size, p-value, confidence interval, or effect size — unless that exact figure appears verbatim in a retrieved record below. If a record reports only a qualitative or directional result, describe it in words ("improved", "reduced", "a significant increase") and attach NO invented quantity. Never estimate, approximate, extrapolate, or round a number into existence to make a claim sound precise.
 - Cite every factual claim with the exact [S#] marker of the record it came from (e.g. [S3]). Use the marker exactly as it appears in the retrieved records list — never invent a marker number that is not in that list.
 - [S#] markers are the ONLY valid citation. Never cite a specialist's name or section label and never write tokens like "[Specialist Findings - ...]" or "[Specialist Findings]"; those are internal scaffolding, not sources. The specialist headings below are context for you, not citable references.
 - Always write the marker in brackets, attached to the claim ("...bleeding risk [S2]."). Never write a marker bare or as a list label — do not enumerate the sources as "S1 - ...", "(S2, S3)", or "S1:"; those internal labels must never appear in the prose. Refer to evidence only inline as [S#].

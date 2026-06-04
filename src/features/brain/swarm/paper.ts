@@ -172,6 +172,7 @@ Depth requirements:
 Hard rules:
 - Use only the retrieved records and specialist findings supplied below.
 - Cite every factual claim inline with its [S#] source marker.
+- NUMBERS RULE (critical): do NOT state any specific figure — percentage, count, mean, score, ratio, odds ratio, sample size, p-value, confidence interval, or effect size — unless that exact figure appears verbatim in a retrieved record below. If a record reports only a qualitative or directional result, describe it in words and attach NO invented quantity. Never estimate, approximate, extrapolate, or round a number into existence.
 - Never invent authors, PMIDs, DOIs, years, statistics, trial outcomes, or guidelines.
 - Do NOT write a References or Bibliography section — the application appends the canonical numbered reference list automatically. Inline [S#] citation is all that is required.
 - If the evidence is insufficient for a publishable conclusion, say so plainly.
