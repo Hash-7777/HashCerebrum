@@ -246,6 +246,32 @@ fn paragraph(value: &str) -> String {
     format!("#\"{}\"\n\n", esc(&clean_body_text(value)))
 }
 
+/// Render a data table as a real ruled Typst table — header row tinted and
+/// bold, hairline cell borders, small font — instead of run-on "label: value"
+/// prose. Equal fractional columns keep even a wide supplementary table on the
+/// page; long identifiers are soft-broken so a cell cannot overflow.
+fn render_table(table: &Table) -> String {
+    let col_count = table.columns.len().max(1);
+    let columns_spec = vec!["1fr"; col_count].join(", ");
+    let mut cells = String::new();
+    for col in &table.columns {
+        cells.push_str(&format!("  [#strong[#\"{}\"]],\n", esc(col)));
+    }
+    for row in &table.rows {
+        for index in 0..col_count {
+            let cell = row.get(index).map(String::as_str).unwrap_or("");
+            cells.push_str(&format!(
+                "  [#\"{}\"],\n",
+                esc(&soften_long_tokens(&collapse_ws(cell)))
+            ));
+        }
+    }
+    format!(
+        "#text(size: 8pt)[#table(\n  columns: ({},),\n  inset: (x: 5pt, y: 3.5pt),\n  align: left + top,\n  stroke: 0.4pt + rgb(\"#d4dae3\"),\n  fill: (col, row) => if row == 0 {{ rgb(\"#eef2f7\") }} else {{ none }},\n{})]\n\n",
+        columns_spec, cells
+    )
+}
+
 struct PreparedFigure {
     filename: String,
     title: String,
@@ -522,23 +548,36 @@ fn build_typ(
         "#set document(title: \"{}\")\n",
         esc(&manuscript.title)
     ));
+    // Running header — a short title, right-aligned and muted, like a journal.
+    let short_title = {
+        let collapsed = collapse_ws(&manuscript.title);
+        if collapsed.chars().count() > 70 {
+            let head: String = collapsed.chars().take(68).collect();
+            format!("{}…", head.trim_end())
+        } else {
+            collapsed
+        }
+    };
     doc.push_str(&format!(
-        "#set page(paper: \"a4\", margin: (x: {}, y: {}), numbering: \"1 / 1\", number-align: center)\n",
-        style.margin_x, style.margin_y
+        "#set page(paper: \"a4\", margin: (x: {}, y: {}), numbering: \"1 / 1\", number-align: center, header: align(right, text(size: 8pt, fill: rgb(\"#9aa3b2\"))[#\"{}\"]))\n",
+        style.margin_x, style.margin_y, esc(&short_title)
     ));
     doc.push_str(&format!(
-        "#set text(font: \"Libertinus Serif\", size: {}, lang: \"en\")\n",
+        "#set text(font: \"Libertinus Serif\", size: {}, lang: \"en\", hyphenate: true)\n",
         style.body_size
     ));
+    // Justified body with hyphenation reads like a typeset journal article
+    // rather than a ragged-right draft.
     doc.push_str(&format!(
-        "#set par(justify: false, leading: {})\n",
+        "#set par(justify: true, leading: {})\n",
         style.paragraph_leading
     ));
     doc.push_str("#set heading(numbering: none)\n");
     doc.push_str(&format!(
-        "#show heading.where(level: 1): set text(size: {})\n",
+        "#show heading.where(level: 1): set text(size: {}, weight: \"bold\", fill: rgb(\"#0f1b2d\"))\n",
         style.heading_size
     ));
+    doc.push_str("#show heading.where(level: 2): set text(size: 10.5pt, weight: \"bold\", fill: rgb(\"#1f2c3f\"))\n");
     doc.push_str("#show heading: set block(above: 1.3em, below: 0.7em)\n\n");
 
     // Title block.
@@ -566,15 +605,19 @@ fn build_typ(
     .any(|field| !field.trim().is_empty());
     if has_abstract {
         doc.push_str("= Abstract\n");
+        // Set the abstract apart in a tinted, left-ruled block at a slightly
+        // smaller size — the journal convention that signals "structured
+        // summary" before the body proper begins.
+        doc.push_str(
+            "#block(width: 100%, fill: rgb(\"#f4f7fb\"), inset: (x: 12pt, y: 10pt), radius: 3pt, stroke: (left: 2.5pt + rgb(\"#6e7480\")))[\n",
+        );
+        doc.push_str("#set text(size: 9pt)\n");
+        doc.push_str("#set par(justify: true, leading: 0.6em)\n");
         let field = |label: &str, value: &str| -> String {
             if value.trim().is_empty() {
                 String::new()
             } else {
-                format!(
-                    "#par[*{}.* #\"{}\"]\n\n",
-                    label,
-                    esc(&clean_body_text(value))
-                )
+                format!("#par[*{}.* #\"{}\"]\n", label, esc(&clean_body_text(value)))
             }
         };
         doc.push_str(&field("Background", &a.background));
@@ -582,8 +625,14 @@ fn build_typ(
         doc.push_str(&field("Methods", &a.methods));
         doc.push_str(&field("Results", &a.results));
         doc.push_str(&field("Conclusions", &a.conclusions));
-    }
-    if !manuscript.keywords.is_empty() {
+        if !manuscript.keywords.is_empty() {
+            doc.push_str(&format!(
+                "#v(2pt)\n#par[*Keywords.* #\"{}\"]\n",
+                esc(&manuscript.keywords.join(", "))
+            ));
+        }
+        doc.push_str("]\n\n");
+    } else if !manuscript.keywords.is_empty() {
         doc.push_str(&format!(
             "#par[*Keywords.* #\"{}\"]\n\n",
             esc(&manuscript.keywords.join(", "))
@@ -621,24 +670,12 @@ fn build_typ(
                 let heading = format!("Table {}. {}", index + 1, table.title);
                 doc.push_str(&format!("== {}\n", esc_heading(&heading)));
                 if !table.caption.trim().is_empty() {
-                    doc.push_str(&paragraph(&table.caption));
+                    doc.push_str(&format!(
+                        "#text(size: 8.5pt, style: \"italic\", fill: rgb(\"#5b6472\"))[#\"{}\"]\n\n",
+                        esc(&clean_body_text(&table.caption))
+                    ));
                 }
-                for row in &table.rows {
-                    let cells = row
-                        .iter()
-                        .enumerate()
-                        .map(|(cell_index, cell)| {
-                            let label = table
-                                .columns
-                                .get(cell_index)
-                                .map(String::as_str)
-                                .unwrap_or("Value");
-                            format!("{label}: {cell}")
-                        })
-                        .collect::<Vec<_>>()
-                        .join("; ");
-                    doc.push_str(&paragraph(&cells));
-                }
+                doc.push_str(&render_table(table));
             }
         }
     }
@@ -661,6 +698,51 @@ fn build_typ(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // End-to-end smoke test: a Typst syntax error anywhere in the template would
+    // silently drop every PDF to the jsPDF fallback at runtime, so compile a
+    // representative manuscript (abstract block, justified body, a real ruled
+    // table, references) and assert it yields a valid PDF.
+    #[test]
+    fn build_typ_compiles_a_manuscript_with_a_table_to_pdf() {
+        let manuscript = Manuscript {
+            title: "A Representative Manuscript Title for the Typst Compile Smoke Test".into(),
+            abstract_: Abstract {
+                background: "Background sentence with enough words to justify a line.".into(),
+                conclusions: "A measured concluding sentence.".into(),
+                ..Default::default()
+            },
+            keywords: vec!["alpha".into(), "beta".into()],
+            sections: vec![Section {
+                heading: "Introduction".into(),
+                body: vec![
+                    "An introductory paragraph long enough to wrap and exercise justified \
+                     body text with hyphenation across a full line of output."
+                        .into(),
+                ],
+            }],
+            publication: Some(Publication {
+                standard: "icmje_generic".into(),
+                figures: Vec::new(),
+                tables: vec![Table {
+                    title: "Evidence source summary".into(),
+                    caption: "Retrieved records by source.".into(),
+                    columns: vec!["Source".into(), "Records".into(), "Year range".into()],
+                    rows: vec![
+                        vec!["PubMed".into(), "10".into(), "2001-2025".into()],
+                        vec!["Europe PMC".into(), "1".into(), "2025-2025".into()],
+                    ],
+                }],
+            }),
+        };
+        let references = vec![ReferenceLine {
+            marker: "[1]".into(),
+            text: "Author A, Author B. A study title. 2024. PubMed. PMID:12345.".into(),
+        }];
+        let source = build_typ(&manuscript, &references, "HashCerebrum · smoke test", &[]);
+        let pdf = compile(source, Vec::new()).expect("typst should compile the manuscript");
+        assert!(pdf.starts_with(b"%PDF"), "output must be a PDF");
+    }
 
     #[test]
     fn clean_body_text_soft_breaks_long_tokens() {
