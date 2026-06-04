@@ -19,6 +19,7 @@
 }
 .memory-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
@@ -26,11 +27,13 @@
 }
 .memory-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--hc-border);
+  min-width: 0;
 }
 /* The title/subtitle column must be allowed to shrink so its single-line text
    ellipsises instead of overflowing into the tools or forcing the bar taller. */
@@ -77,7 +80,8 @@
   border-radius: var(--hc-radius-pill);
   background: var(--hc-bg-elev);
   color: var(--hc-fg-muted);
-  min-width: 240px;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 .memory-search input {
   background: transparent;
@@ -203,8 +207,11 @@
 /* --- Toolbar tools + list/graph toggle --- */
 .memory-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 .memory-view-toggle {
   display: inline-flex;
