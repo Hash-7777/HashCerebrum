@@ -383,7 +383,7 @@ export function MemoryVectorGraph3D({
   return (
     <div className="memory-vec3d">
       <Canvas
-        camera={{ position: [9, 5.5, 14], fov: 45, near: 0.1, far: 200 }}
+        camera={{ position: [8, 4.8, 12.5], fov: 45, near: 0.1, far: 200 }}
         dpr={[1, 2]}
         onPointerMissed={() => {
           setSelectedId(null);
@@ -419,6 +419,12 @@ export function MemoryVectorGraph3D({
           dampingFactor={0.12}
           rotateSpeed={0.6}
           zoomSpeed={0.8}
+          // Look at a point right-and-below the origin so the cloud (centred on
+          // the origin) sits a little left and up of screen centre — away from
+          // the top-right cluster legend and into the empty left space. The
+          // idle spin rotates the scene around the origin Y-axis, so the cloud
+          // still turns in place at this offset.
+          target={[2, -0.5, 0]}
           // Clamp the dolly range so the user can neither jam into the cloud nor
           // zoom out past the fog into an empty void; both ends stay framed.
           minDistance={5}
