@@ -52,12 +52,27 @@ function parseScore(text: string): number {
   return Math.max(1, Math.min(10, Number.isNaN(n) ? 5 : n));
 }
 
+// Match a section header anywhere it starts a line: the heading, a colon, then
+// any whitespace (a newline OR a space — models often write "SUMMARY: text" on
+// one line, which the old `${heading}:\n` match missed, dumping the raw reply
+// into the summary). Case-insensitive for resilience.
+function headerMatch(text: string, heading: string, from = 0): { index: number; end: number } | null {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`(?:^|\\n)[ \\t]*${escaped}[ \\t]*:[ \\t]*\\n?`, 'i');
+  const m = rx.exec(text.slice(from));
+  if (!m) return null;
+  return { index: from + m.index, end: from + m.index + m[0].length };
+}
+
 function parseSection(text: string, heading: string, nextHeading: string | null): string {
-  const start = text.indexOf(`${heading}:\n`);
-  if (start === -1) return '';
-  const contentStart = start + heading.length + 2;
-  const end = nextHeading ? text.indexOf(`${nextHeading}:`, contentStart) : text.length;
-  return text.slice(contentStart, end === -1 ? undefined : end).trim();
+  const h = headerMatch(text, heading);
+  if (!h) return '';
+  let end = text.length;
+  if (nextHeading) {
+    const n = headerMatch(text, nextHeading, h.end);
+    if (n) end = n.index;
+  }
+  return text.slice(h.end, end).trim();
 }
 
 function parseBullets(block: string): string[] {
