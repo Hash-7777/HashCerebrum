@@ -143,6 +143,33 @@ pub fn truncate_chars(text: &str, max_chars: usize) -> String {
     out
 }
 
+// Europe PMC's abstractText is served with structural HTML markup
+// (<h4>Background</h4>, <b>, <i>, <sub>…). Strip the tags and decode a few
+// common entities so the abstract reads as clean prose — otherwise the markup
+// leaks into snippets, extracted key findings, tables, and the PDF.
+pub fn strip_html(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_tag = false;
+    for ch in text.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    let decoded = out
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&nbsp;", " ");
+    // Collapse the whitespace runs that removing block tags leaves behind.
+    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 // Exponential backoff between retry attempts: ~300ms, ~600ms. Keeps a
 // transient upstream blip from instantly failing a specialist's source sweep
 // without stalling the swarm for long.
@@ -272,6 +299,20 @@ pub(super) fn compact_query(query: &str, max_terms: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_html_removes_tags_and_collapses_whitespace() {
+        let input = "<h4>Background</h4>We compared <b>543</b> cases\n  with 3,272 controls (OR&nbsp;1.20).";
+        assert_eq!(
+            strip_html(input),
+            "Background We compared 543 cases with 3,272 controls (OR 1.20)."
+        );
+    }
+
+    #[test]
+    fn strip_html_leaves_plain_text_unchanged() {
+        assert_eq!(strip_html("A plain abstract with no markup."), "A plain abstract with no markup.");
+    }
 
     #[test]
     fn compact_query_terms_keep_search_simple_for_upstreams() {

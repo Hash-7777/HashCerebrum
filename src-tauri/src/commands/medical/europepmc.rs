@@ -1,7 +1,7 @@
 //! Europe PMC. Docs: https://europepmc.org/RestfulWebService
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, truncate_chars, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, strip_html, truncate_chars, EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;
@@ -54,7 +54,7 @@ pub async fn europepmc_fetch(
             // has no abstract for the record.
             let snippet = item["abstractText"]
                 .as_str()
-                .map(|s| truncate_chars(s.trim(), 2000))
+                .map(|s| truncate_chars(&strip_html(s), 2000))
                 .filter(|s| !s.is_empty())
                 .or_else(|| item["journalTitle"].as_str().map(str::to_string));
             evidence(
