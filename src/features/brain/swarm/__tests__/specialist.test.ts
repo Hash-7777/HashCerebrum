@@ -147,15 +147,17 @@ describe('runSwarm', () => {
     ]);
     expect(result.evidence.length).toBeGreaterThan(0);
     // A paper request always yields a structured manuscript — even with the
-    // model unavailable, every section is present with an honest placeholder.
+    // model unavailable, every core section is present with an honest
+    // placeholder. The two evidence-gated sections (Mechanistic, Trial and
+    // Registry) are omitted here because the synthetic fixtures carry no
+    // mechanistic text and no trusted registry record to support them — they
+    // appear only when retrieval genuinely supports them.
     expect(result.manuscript).toBeDefined();
     expect(result.manuscript?.sections.map((section) => section.heading)).toEqual([
       'Introduction',
       'Methods',
       'Evidence Base and Search Yield',
-      'Mechanistic and Pharmacologic Evidence',
       'Clinical Evidence and Safety Outcomes',
-      'Trial and Registry Evidence',
       'Discussion',
       'Limitations',
       'Conclusion',

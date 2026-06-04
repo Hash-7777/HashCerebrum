@@ -533,6 +533,13 @@ function strengthFor(extraction: EvidenceExtraction): EvidenceStrength {
 }
 
 function sectionForExtraction(extraction: EvidenceExtraction): string {
+  // Registry records describe themselves as a "clinical trial registry record",
+  // which matches the Clinical section's "clinical" before the Trial section's
+  // "trial" in the keyword sweep below — so route them explicitly first, or the
+  // Trial and Registry section is never genuinely populated.
+  if (extraction.source === 'ctgov' || /\bregistry\b/i.test(extraction.studyDesign)) {
+    return 'Trial and Registry Evidence';
+  }
   const text = [
     extraction.title,
     extraction.studyDesign,
@@ -628,13 +635,33 @@ const MINI_SECTION_HEADINGS = new Set([
   'Declarations',
 ]);
 
+// Topic-specific sections that must be earned by evidence. If the retrieval
+// produced no claim that actually targets one of these, the section is dropped
+// rather than padded with unrelated claims — which is how a pharmacology-free
+// asthma-education topic ended up with a fabricated PK/PD section the model
+// "supported" with citations to pharmacist-intervention papers.
+const EVIDENCE_GATED_HEADINGS = new Set([
+  'Mechanistic and Pharmacologic Evidence',
+  'Trial and Registry Evidence',
+]);
+
 export function buildPaperBlueprint(
   question: string,
   ledger: ClaimLedgerEntry[],
   overrideTitle?: string,
   mini = false,
 ): PaperBlueprint {
-  const plan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
+  const basePlan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
+  // Drop an evidence-gated section when no claim genuinely targets it, so the
+  // model is never asked to write (and fabricate citations for) a section the
+  // retrieval did not support.
+  const plan = basePlan.filter(
+    (section) =>
+      !EVIDENCE_GATED_HEADINGS.has(section.heading) ||
+      ledger.some(
+        (entry) => entry.sectionTarget === section.heading && entry.evidenceStrength !== 'context',
+      ),
+  );
   return {
     title: overrideTitle ?? blueprintTitle(question),
     abstractIntent:

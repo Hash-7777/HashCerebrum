@@ -77,6 +77,41 @@ describe('Brain Mini blueprint', () => {
   });
 });
 
+describe('evidence-gated blueprint sections', () => {
+  it('includes the Mechanistic and Trial sections only when trusted evidence targets them', () => {
+    const trialRecord = record({
+      source: 'ctgov',
+      identifiers: { nctId: 'NCT01234567' },
+      title: 'A randomized trial of anticoagulant management',
+      provenanceHash: 'trial-1',
+    });
+    const mechRecord = record({
+      identifiers: { pmid: '999' },
+      title: 'Pharmacokinetic mechanism of warfarin metabolism',
+      snippet:
+        'This study examined the pharmacokinetic mechanism and drug metabolism of warfarin through the CYP2C9 enzyme pathway.',
+      provenanceHash: 'mech-1',
+    });
+    const ledger = buildClaimLedger(extractEvidenceFromRecords([trialRecord, mechRecord]));
+    const headings = buildPaperBlueprint('warfarin', ledger).sections.map((s) => s.heading);
+    expect(headings).toContain('Trial and Registry Evidence');
+    expect(headings).toContain('Mechanistic and Pharmacologic Evidence');
+  });
+
+  it('omits the Mechanistic and Trial sections when no evidence supports them', () => {
+    const plainRecord = record({
+      identifiers: { pmid: '1' },
+      title: 'A cross-sectional survey of patient adherence',
+      snippet: 'A cross-sectional survey of 100 patients assessed adherence to prescribed therapy.',
+      provenanceHash: 'plain-1',
+    });
+    const ledger = buildClaimLedger(extractEvidenceFromRecords([plainRecord]));
+    const headings = buildPaperBlueprint('adherence', ledger).sections.map((s) => s.heading);
+    expect(headings).not.toContain('Trial and Registry Evidence');
+    expect(headings).not.toContain('Mechanistic and Pharmacologic Evidence');
+  });
+});
+
 function record(partial: Partial<EvidenceItem> & { source?: EvidenceItem['source'] } = {}): EvidenceItem {
   return {
     source: 'pubmed',
