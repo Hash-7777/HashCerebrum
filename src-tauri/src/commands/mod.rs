@@ -9,6 +9,7 @@
 
 pub mod audit;
 pub mod cache;
+pub mod files;
 pub mod keychain;
 pub mod llm;
 pub mod manuscript;

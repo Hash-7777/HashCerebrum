@@ -109,6 +109,21 @@ export const browserPlatform: Platform = {
       throw new Error('Typst manuscript rendering needs the desktop app');
     },
   },
+  files: {
+    // Browser dev: the classic anchor download works here.
+    save: async (filename: string, blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.rel = 'noopener';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return true;
+    },
+  },
   cache: {
     stats: async () => ({ rows: 0, bytes: 0, hosts: [] }),
     clear: async () => 0,

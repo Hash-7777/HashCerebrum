@@ -31,6 +31,7 @@ mod security;
 use commands::{
     audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
     cache::{cache_clear, cache_clear_expired, cache_stats},
+    files::write_file_bytes,
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
@@ -93,6 +94,7 @@ pub fn run() {
             semantic_scholar_search,
             pdf_extract_text_bytes,
             pdf_extract_pages_bytes,
+            write_file_bytes,
             render_manuscript_pdf,
             cache_stats,
             cache_clear,

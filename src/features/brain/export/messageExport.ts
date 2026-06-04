@@ -569,15 +569,15 @@ export function buildMarkdownExport(message: ExportableMessage): string {
 }
 
 export function downloadBlob(filename: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.rel = 'noopener';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // Route through the platform: a native save dialog + write on the desktop
+  // (WKWebView ignores <a download> for blob URLs), the anchor download in the
+  // browser. Fire-and-forget; surface a failure but never a cancel.
+  void platform()
+    .files.save(filename, blob)
+    .catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error('[downloadBlob] save failed:', detail);
+    });
 }
 
 export function downloadTextFile(filename: string, body: string, mime: string): void {

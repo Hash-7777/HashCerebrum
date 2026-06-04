@@ -141,6 +141,20 @@ export const tauriPlatform: Platform = {
     },
   },
 
+  files: {
+    // Native save: pick a destination with the OS save dialog, then write the
+    // bytes from Rust. WKWebView can't save blob downloads, so this is the
+    // reliable desktop export path.
+    save: async (filename, blob) => {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const path = await save({ defaultPath: filename });
+      if (!path) return false;
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      await invoke('write_file_bytes', { path, bytes });
+      return true;
+    },
+  },
+
   cache: {
     stats: () => invoke<CacheStats>('cache_stats'),
     clear: () => invoke<number>('cache_clear'),

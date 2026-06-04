@@ -35,6 +35,9 @@ pub enum AppError {
 
     #[error("pdf error: {0}")]
     Pdf(String),
+
+    #[error("file error: {0}")]
+    File(String),
 }
 
 impl Serialize for AppError {
