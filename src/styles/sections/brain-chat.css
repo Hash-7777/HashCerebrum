@@ -849,24 +849,32 @@
 .di-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   height: 100%;
   min-height: 0;
-  padding: 18px;
+  padding: 20px 18px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 4px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 220px);
+  border-radius: 10px;
+  background: var(--surface-1, rgba(255, 255, 255, 0.012));
 }
-.di-panel-head { display: flex; align-items: flex-start; gap: 11px; }
+
+/* ── Header ─────────────────────────────────────────────────── */
+.di-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
 .di-panel-mark {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   flex: none;
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -875,51 +883,58 @@
   font-family: var(--f-serif, var(--hc-font-serif));
   font-size: 17px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-1);
 }
-.di-panel-head p { margin: 3px 0 0; font-size: 12px; color: var(--text-3); line-height: 1.45; }
+.di-panel-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
 
-.di-grades { display: flex; flex-direction: column; gap: 7px; }
+/* ── Severity grade key ─────────────────────────────────────── */
+.di-grades { display: flex; flex-direction: column; gap: 6px; }
 .di-grade {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  background: rgba(255, 255, 255, 0.02);
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--sev) 16%, var(--line));
+  background: color-mix(in srgb, var(--sev) 5%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 .di-grade-badge {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   flex: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font: 700 13px var(--f-mono);
-  color: #06121a;
+  color: #07151d;
+  background: var(--sev);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .di-grade-text { display: grid; gap: 1px; min-width: 0; }
-.di-grade-text strong { font-size: 12.5px; color: var(--text-1); }
-.di-grade-text span { font-size: 11px; color: var(--text-3); }
-/* Severity colours, A (safe) → X (contraindicated). */
-.di-grade-a { border-left-color: #3ddc97; }
-.di-grade-a .di-grade-badge { background: #3ddc97; }
-.di-grade-b { border-left-color: #5fd0b0; }
-.di-grade-b .di-grade-badge { background: #5fd0b0; }
-.di-grade-c { border-left-color: #e9c46a; }
-.di-grade-c .di-grade-badge { background: #e9c46a; }
-.di-grade-d { border-left-color: #f4a261; }
-.di-grade-d .di-grade-badge { background: #f4a261; }
-.di-grade-x { border-left-color: #e76f73; }
-.di-grade-x .di-grade-badge { background: #e76f73; color: #fff; }
+.di-grade-text strong { font-size: 12.5px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
+.di-grade-text span { font-size: 11px; color: var(--text-3); line-height: 1.4; }
 
+/* One severity hue per row drives the badge, wash, and border — A (safe) → X. */
+.di-grade-a { --sev: #44c98b; }
+.di-grade-b { --sev: #62c2a6; }
+.di-grade-c { --sev: #e3bd63; }
+.di-grade-d { --sev: #ec9a5a; }
+.di-grade-x { --sev: #e2696e; }
+.di-grade-x .di-grade-badge { color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+
+/* ── Footnote ───────────────────────────────────────────────── */
 .di-panel-note {
-  margin: auto 0 0;
-  padding-top: 12px;
+  margin: 2px 0 0;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-4, var(--text-3));
 }
