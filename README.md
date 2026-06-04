@@ -6,6 +6,7 @@
 
 ### A private, local-first agentic desktop app for medical research
 
+[![Website](https://img.shields.io/badge/website-hashcerebrum.com-14a89a?style=flat-square)](https://hashcerebrum.com)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-333333?style=flat-square)](LICENSE)
 [![Local-first](https://img.shields.io/badge/local--first-on--device-333333?style=flat-square)](#privacy--data-locality)
 [![No telemetry](https://img.shields.io/badge/telemetry-none-333333?style=flat-square)](#privacy--data-locality)
@@ -212,7 +213,7 @@ The audit log is readable and verifiable from Settings → Audit log.
 | PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
-| Testing | Vitest (283 tests) + `cargo test` (31 tests) |
+| Testing | Vitest (362 tests) + `cargo test` (31 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -240,7 +241,7 @@ npm run build          # macOS .app
 npm run build:dmg      # macOS .dmg
 
 # Checks
-npm test               # Vitest — 283 unit tests
+npm test               # Vitest — 362 unit tests
 npm run typecheck      # tsc strict — app + node configs
 npm run build:web      # tsc over app + tests, then Vite build
 ```
