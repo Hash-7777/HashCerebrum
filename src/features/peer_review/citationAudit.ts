@@ -8,13 +8,17 @@
 
 import type { EvidenceItem } from '@platform/index';
 
-/** How well a cited source supports the claim that cites it. */
+/** How well a cited source supports the claim that cites it. `unassessed` is a
+ *  neutral non-verdict for claims the grader could not reach (e.g. a rate-limited
+ *  batch on a free tier) — kept distinct from `weak` so it never reads as a
+ *  quality judgement. */
 export type FaithfulnessGrade =
   | 'supported'
   | 'weak'
   | 'overstated'
   | 'unsupported'
-  | 'contradicted';
+  | 'contradicted'
+  | 'unassessed';
 
 export interface ClaimSource {
   /** The citation number as it appears in the body, e.g. 3 for `[3]`. */

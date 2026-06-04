@@ -177,10 +177,11 @@ const FAITH_GRADE_META: Record<FaithfulnessGrade, { label: string; tone: string;
   overstated:   { label: 'Overstated',   tone: 'warn',  glyph: '↑' },
   unsupported:  { label: 'Unsupported',  tone: 'bad',   glyph: '?' },
   contradicted: { label: 'Contradicted', tone: 'bad',   glyph: '✕' },
+  unassessed:   { label: 'Not assessed', tone: 'muted', glyph: '·' },
 };
 
 const FAITH_SUMMARY_ORDER: FaithfulnessGrade[] = [
-  'supported', 'weak', 'overstated', 'unsupported', 'contradicted',
+  'supported', 'weak', 'overstated', 'unsupported', 'contradicted', 'unassessed',
 ];
 
 /** One graded claim, with its cited source(s) revealed on click (verify). */

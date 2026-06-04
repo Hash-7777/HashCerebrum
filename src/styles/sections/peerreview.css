@@ -986,10 +986,13 @@
 .review-faith-badge--warn { background: rgba(245, 158, 66, 0.16); color: #f5a04a; }
 .review-faith-chip--bad,
 .review-faith-badge--bad { background: rgba(245, 90, 90, 0.16); color: #f87171; }
+.review-faith-chip--muted,
+.review-faith-badge--muted { background: rgba(148, 163, 184, 0.14); color: #94a3b8; }
 .review-faith-row--ok { border-left-color: #36d399; }
 .review-faith-row--weak { border-left-color: #ecc94b; }
 .review-faith-row--warn { border-left-color: #f5a04a; }
 .review-faith-row--bad { border-left-color: #f87171; }
+.review-faith-row--muted { border-left-color: #94a3b8; }
 
 /* ── Ask this paper ───────────────────────────────────────── */
 .review-ask-block {

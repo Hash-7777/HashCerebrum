@@ -49,14 +49,14 @@ const GRADE_WORDS: Record<string, FaithfulnessGrade> = {
 };
 
 function emptyCounts(): Record<FaithfulnessGrade, number> {
-  return { supported: 0, weak: 0, overstated: 0, unsupported: 0, contradicted: 0 };
+  return { supported: 0, weak: 0, overstated: 0, unsupported: 0, contradicted: 0, unassessed: 0 };
 }
 
 /**
  * Parse the model reply for ONE batch into per-claim items. `batch` is the set
  * of claims sent (1-based `CLAIM n` lines map to batch[n-1]). Any claim the
- * model failed to grade is returned as `weak` ("not assessed") so it is never
- * silently dropped.
+ * model failed to grade is returned as `unassessed` ("not assessed") — a neutral
+ * non-verdict, never silently dropped and never miscounted as a quality grade.
  */
 export function parseFaithfulnessReply(text: string, batch: CitedClaim[]): FaithfulnessItem[] {
   const byIndex = new Map<number, { grade: FaithfulnessGrade; note: string }>();
@@ -74,7 +74,7 @@ export function parseFaithfulnessReply(text: string, batch: CitedClaim[]): Faith
     return {
       sentence: claim.sentence,
       markers: claim.markers,
-      grade: parsed?.grade ?? 'weak',
+      grade: parsed?.grade ?? 'unassessed',
       note: parsed?.note || 'Not assessed.',
     };
   });

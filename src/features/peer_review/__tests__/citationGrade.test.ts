@@ -28,17 +28,17 @@ describe('parseFaithfulnessReply', () => {
     expect(items[1]!.grade).toBe('unsupported');
   });
 
-  it('marks any claim the model did not grade as weak / not assessed', () => {
+  it('marks any claim the model did not grade as unassessed / not assessed', () => {
     const items = parseFaithfulnessReply('CLAIM 1: SUPPORTED — ok', batch);
     expect(items).toHaveLength(3);
-    expect(items[1]!.grade).toBe('weak');
+    expect(items[1]!.grade).toBe('unassessed');
     expect(items[1]!.note).toBe('Not assessed.');
     expect(items[2]!.note).toBe('Not assessed.');
   });
 
   it('ignores out-of-range or unknown-grade lines', () => {
     const items = parseFaithfulnessReply('CLAIM 9: SUPPORTED — x\nCLAIM 1: BANANA — y', batch);
-    // Neither line grades a real claim → all fall back to weak/not assessed.
-    expect(items.every((i) => i.grade === 'weak')).toBe(true);
+    // Neither line grades a real claim → all fall back to unassessed/not assessed.
+    expect(items.every((i) => i.grade === 'unassessed')).toBe(true);
   });
 });
