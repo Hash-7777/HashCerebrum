@@ -74,6 +74,8 @@ export interface Platform {
   // PDF extraction (bytes-based only — path-based command removed)
   pdf: {
     extractTextBytes(filename: string, bytes: Uint8Array): Promise<string>;
+    /** One string per page, in page order — for page-accurate citations. */
+    extractPagesBytes(filename: string, bytes: Uint8Array): Promise<string[]>;
   };
 
   // Manuscript typesetting — a structured manuscript rendered to a PDF by

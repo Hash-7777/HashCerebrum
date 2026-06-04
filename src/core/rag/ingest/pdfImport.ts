@@ -129,6 +129,8 @@ export function deriveDocMeta(
 export interface DocChunk {
   text: string;
   chunkIndex: number;
+  /** 1-based source page, when the document was extracted page by page. */
+  page?: number;
 }
 
 export interface ChunkOptions {
@@ -174,6 +176,25 @@ export function chunkDocument(text: string, opts: ChunkOptions = {}): DocChunk[]
     }
   }
   return passages.map((p, i) => ({ text: p.trim(), chunkIndex: i }));
+}
+
+/**
+ * Page-aware chunking: clean and chunk each page independently, tagging every
+ * passage with its 1-based page number and a document-global chunk index. Used
+ * when the PDF was extracted page by page so a citation can name the exact page.
+ */
+export function chunkPages(rawPages: string[], opts: ChunkOptions = {}): DocChunk[] {
+  const out: DocChunk[] = [];
+  let globalIndex = 0;
+  rawPages.forEach((raw, pageIdx) => {
+    const cleaned = cleanPdfText(raw);
+    if (!cleaned.trim()) return;
+    for (const c of chunkDocument(cleaned, opts)) {
+      out.push({ text: c.text, chunkIndex: globalIndex, page: pageIdx + 1 });
+      globalIndex += 1;
+    }
+  });
+  return out;
 }
 
 /** Split into paragraph units, hard-splitting any paragraph longer than the

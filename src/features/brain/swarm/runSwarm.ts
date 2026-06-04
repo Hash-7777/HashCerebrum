@@ -263,7 +263,10 @@ function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null 
 // Brain can cite the specific papers the user added — exactly like an external
 // database record. Gated by the memory toggle; deduped by document+passage.
 async function libraryEvidence(question: string): Promise<EvidenceItem[]> {
-  if (!useMemorySettingsStore.getState().enabled) return [];
+  const memory = useMemorySettingsStore.getState();
+  // Needs memory on AND the library toggle on — so a clean from-scratch run, or
+  // a run where the user excluded their imported papers, cites neither.
+  if (!memory.enabled || !memory.libraryEnabled) return [];
   const projectId = useProjectStore.getState().activeProjectId ?? '';
   if (!projectId) return [];
   let hits;

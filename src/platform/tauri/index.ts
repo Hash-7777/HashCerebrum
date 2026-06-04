@@ -130,6 +130,8 @@ export const tauriPlatform: Platform = {
     // Array.from() would create a redundant number[] copy (~2× memory).
     extractTextBytes: (filename, bytes) =>
       invoke<string>('pdf_extract_text_bytes', { filename, bytes }),
+    extractPagesBytes: (filename, bytes) =>
+      invoke<string[]>('pdf_extract_pages_bytes', { filename, bytes }),
   },
 
   manuscript: {

@@ -6,12 +6,24 @@
 import { create } from 'zustand';
 
 const STORAGE_KEY = 'hc.memory.useEnabled.v1';
+// Whether imported PDF-library passages may be cited by the Brain. Separate from
+// the memory toggle so the user can keep using saved findings while excluding
+// (or including) their own imported papers. Defaults ON.
+const LIBRARY_KEY = 'hc.memory.useLibrary.v1';
 
-function load(): boolean {
+function load(key: string): boolean {
   try {
-    return window.localStorage.getItem(STORAGE_KEY) !== 'false';
+    return window.localStorage.getItem(key) !== 'false';
   } catch {
     return true;
+  }
+}
+
+function save(key: string, value: boolean): void {
+  try {
+    window.localStorage.setItem(key, value ? 'true' : 'false');
+  } catch {
+    /* storage may be unavailable; the in-memory flag still works */
   }
 }
 
@@ -19,17 +31,22 @@ interface MemorySettingsStore {
   enabled: boolean;
   setEnabled: (value: boolean) => void;
   toggle: () => void;
+  libraryEnabled: boolean;
+  setLibraryEnabled: (value: boolean) => void;
+  toggleLibrary: () => void;
 }
 
 export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => ({
-  enabled: load(),
+  enabled: load(STORAGE_KEY),
   setEnabled: (value) => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
-    } catch {
-      /* storage may be unavailable; the in-memory flag still works */
-    }
+    save(STORAGE_KEY, value);
     set({ enabled: value });
   },
   toggle: () => get().setEnabled(!get().enabled),
+  libraryEnabled: load(LIBRARY_KEY),
+  setLibraryEnabled: (value) => {
+    save(LIBRARY_KEY, value);
+    set({ libraryEnabled: value });
+  },
+  toggleLibrary: () => get().setLibraryEnabled(!get().libraryEnabled),
 }));

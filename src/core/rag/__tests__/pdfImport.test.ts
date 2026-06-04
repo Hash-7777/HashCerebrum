@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   chunkDocument,
+  chunkPages,
   cleanPdfText,
   deriveDocMeta,
   hashBytes,
@@ -78,6 +79,25 @@ describe('chunkDocument', () => {
 
   it('returns a single chunk for short text', () => {
     expect(chunkDocument('Just a short note about a drug interaction.')).toHaveLength(1);
+  });
+});
+
+describe('chunkPages', () => {
+  it('tags passages with their 1-based page and a document-global index', () => {
+    const page1 = 'Page one sentence about anticoagulation. '.repeat(8);
+    const page2 = 'Page two sentence about bleeding outcomes. '.repeat(8);
+    const chunks = chunkPages([page1, page2], { targetChars: 200, minChars: 50 });
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
+    expect(chunks[0]!.page).toBe(1);
+    expect(chunks.at(-1)!.page).toBe(2);
+    // Global indices are sequential across pages.
+    expect(chunks.map((c) => c.chunkIndex)).toEqual(chunks.map((_, i) => i));
+  });
+
+  it('skips empty pages without breaking page numbers', () => {
+    const chunks = chunkPages(['', 'Real content on the second page. '.repeat(10)], { targetChars: 300 });
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.every((c) => c.page === 2)).toBe(true);
   });
 });
 

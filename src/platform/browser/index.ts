@@ -100,6 +100,9 @@ export const browserPlatform: Platform = {
     extractTextBytes: async () => {
       throw new Error('PDF text extraction requires the desktop app');
     },
+    extractPagesBytes: async () => {
+      throw new Error('PDF text extraction requires the desktop app');
+    },
   },
   manuscript: {
     renderPdf: async () => {

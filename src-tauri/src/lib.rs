@@ -40,7 +40,7 @@ use commands::{
         semantic_scholar::semantic_scholar_search,
     },
     net::net_get,
-    pdf::pdf_extract_text_bytes,
+    pdf::{pdf_extract_pages_bytes, pdf_extract_text_bytes},
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -92,6 +92,7 @@ pub fn run() {
             rxnorm_lookup,
             semantic_scholar_search,
             pdf_extract_text_bytes,
+            pdf_extract_pages_bytes,
             render_manuscript_pdf,
             cache_stats,
             cache_clear,

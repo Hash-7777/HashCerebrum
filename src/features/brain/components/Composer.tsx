@@ -36,6 +36,8 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement>(null);
   const memoryEnabled = useMemorySettingsStore((s) => s.enabled);
   const toggleMemory = useMemorySettingsStore((s) => s.toggle);
+  const libraryEnabled = useMemorySettingsStore((s) => s.libraryEnabled);
+  const toggleLibrary = useMemorySettingsStore((s) => s.toggleLibrary);
   const miniEnabled = useBrainModesStore((s) => s.mini);
   const toggleMini = useBrainModesStore((s) => s.toggleMini);
   const outlineFirst = useBrainModesStore((s) => s.outlineFirst);
@@ -133,7 +135,22 @@ export function Composer({
               }
             >
               <Icon name="database" size={13} />
-              Memory {memoryEnabled ? 'on' : 'off'}
+              Memory
+            </button>
+            <button
+              type="button"
+              className="memory-toggle-chip"
+              data-on={libraryEnabled}
+              onClick={toggleLibrary}
+              aria-pressed={libraryEnabled}
+              title={
+                libraryEnabled
+                  ? 'Library ON — the Brain may cite the PDF papers you imported. Click to exclude them.'
+                  : 'Library OFF — imported papers are not cited. Click to let the Brain cite them.'
+              }
+            >
+              <Icon name="book" size={13} />
+              Library
             </button>
             <button
               type="button"
@@ -148,7 +165,7 @@ export function Composer({
               }
             >
               <Icon name="brain" size={13} />
-              Mini {miniEnabled ? 'on' : 'off'}
+              Mini
             </button>
             <button
               type="button"
@@ -163,7 +180,7 @@ export function Composer({
               }
             >
               <Icon name="list" size={13} />
-              Outline {outlineFirst ? 'on' : 'off'}
+              Outline
             </button>
           </div>
           <div className="tools-right">

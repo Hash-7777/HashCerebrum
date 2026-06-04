@@ -8,11 +8,13 @@
 import { platform } from '@platform/index';
 import {
   chunkDocument,
+  chunkPages,
   cleanPdfText,
   deriveDocMeta,
   hashBytes,
   textQuality,
   useRagStore,
+  type DocChunk,
   type NewRagChunk,
 } from '@core/rag';
 
@@ -83,23 +85,40 @@ export async function importPdfFiles(files: File[], opts: ImportOptions): Promis
       seenThisBatch.add(docId);
 
       emit('extracting');
-      let raw: string;
+      // Prefer page-by-page extraction (page-accurate citations); fall back to
+      // flat extraction if the page-aware command is unavailable or yields
+      // nothing usable.
+      let pages: string[] = [];
       try {
-        raw = await platform().pdf.extractTextBytes(file.name, bytes);
+        pages = await platform().pdf.extractPagesBytes(file.name, bytes);
       } catch {
-        report.skipped.push({ name: file.name, reason: 'could not be read — it may be encrypted or corrupt' });
-        continue;
+        pages = [];
+      }
+      let passages: DocChunk[];
+      let cleanedForMeta: string;
+      if (pages.length > 0 && pages.some((p) => p.trim().length > 0)) {
+        const cleanedPages = pages.map(cleanPdfText);
+        cleanedForMeta = cleanedPages.join('\n\n');
+        passages = chunkPages(pages);
+      } else {
+        let raw: string;
+        try {
+          raw = await platform().pdf.extractTextBytes(file.name, bytes);
+        } catch {
+          report.skipped.push({ name: file.name, reason: 'could not be read — it may be encrypted or corrupt' });
+          continue;
+        }
+        cleanedForMeta = cleanPdfText(raw);
+        passages = chunkDocument(cleanedForMeta);
       }
 
-      const cleaned = cleanPdfText(raw);
-      const quality = textQuality(cleaned);
+      const quality = textQuality(cleanedForMeta);
       if (!quality.ok) {
         report.skipped.push({ name: file.name, reason: quality.reason ?? 'no readable text' });
         continue;
       }
 
-      const meta = deriveDocMeta(file.name, cleaned);
-      const passages = chunkDocument(cleaned);
+      const meta = deriveDocMeta(file.name, cleanedForMeta);
       const newChunks: NewRagChunk[] = passages.map((p) => ({
         kind: 'document',
         title: meta.title,
@@ -109,6 +128,7 @@ export async function importPdfFiles(files: File[], opts: ImportOptions): Promis
         docId,
         chunkIndex: p.chunkIndex,
         evidenceStrength: 'moderate',
+        ...(p.page ? { page: p.page } : {}),
         ...(meta.year ? { year: meta.year } : {}),
         ...(meta.doi ? { doi: meta.doi } : {}),
       }));

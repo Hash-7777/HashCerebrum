@@ -23,6 +23,7 @@ export { getEmbeddingProvider } from './embeddings/workerClient';
 export { classifyEvidenceStrength } from './search/ranking';
 export {
   chunkDocument,
+  chunkPages,
   cleanPdfText,
   deriveDocMeta,
   hashBytes,
