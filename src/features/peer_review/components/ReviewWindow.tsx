@@ -392,7 +392,12 @@ function PdfCanvasPreview({ url, paper }: { url: string; paper: ReviewedPaper })
   }, [url]);
 
   if (status === 'error') {
-    // Rendering failed — show the extracted text so the paper is still usable.
+    // Rendering failed — fall back to the pre-built HTML preview (manuscripts,
+    // in a sandboxed iframe) or the extracted text (uploaded PDFs), so the paper
+    // is still usable.
+    if (paper.htmlContent) {
+      return <iframe srcDoc={paper.htmlContent} title={paper.title} className="review-pdf-frame" sandbox="" />;
+    }
     return (
       <div className="review-document-preview">
         <article
@@ -426,8 +431,18 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
     );
   }
 
-  // Brain-generated manuscripts carry both htmlContent and a blobUrl. WKWebView
-  // cannot render PDF blobs inline, so always prefer the HTML route when available.
+  // Prefer the real typeset PDF so the in-app preview matches Brain mode and the
+  // downloaded file exactly — both come from this same blob. WKWebView cannot
+  // render a PDF blob inline in an iframe (it shows blank), so rasterise the pages
+  // to canvases with pdf.js, the same renderer the Brain document preview uses.
+  // Brain manuscripts carry both a blobUrl and htmlContent; uploaded PDFs carry
+  // only a blobUrl. Either way the PDF is the source of truth here.
+  if (paper.blobUrl) {
+    return <PdfCanvasPreview url={paper.blobUrl} paper={paper} />;
+  }
+
+  // Fallback only when no PDF blob was produced (e.g. the manuscript's PDF build
+  // failed): the pre-built HTML preview in a sandboxed iframe.
   if (paper.htmlContent) {
     return (
       <iframe
@@ -437,13 +452,6 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
         sandbox=""
       />
     );
-  }
-
-  // Uploaded user PDFs have only a blobUrl (no htmlContent). WKWebView cannot
-  // render a PDF blob inline in an iframe (it shows blank), so rasterise the
-  // pages to canvases with pdf.js instead.
-  if (paper.blobUrl) {
-    return <PdfCanvasPreview url={paper.blobUrl} paper={paper} />;
   }
 
   return (
