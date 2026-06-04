@@ -128,6 +128,11 @@ const TYPO_FIXES: Record<string, string> = {
   pharmacolgy: 'pharmacology',
   warafin: 'warfarin',
   digoxine: 'digoxin',
+  cardiovascual: 'cardiovascular',
+  cardiovasclar: 'cardiovascular',
+  cardivascular: 'cardiovascular',
+  diabetis: 'diabetes',
+  hypertention: 'hypertension',
 };
 
 const STRUCTURAL_WORDS = new Set(['a', 'an', 'the', 'me', 'on', 'of', 'for', 'to', 'with', 'in']);

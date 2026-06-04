@@ -7,6 +7,7 @@ import {
   isMetaOrAppQuestion,
   isPriorWorkReviewRequest,
   manuscriptStandardForQuestion,
+  paperSystemInstruction,
 } from '../paper';
 
 const evidence: EvidenceItem[] = [
@@ -93,6 +94,14 @@ describe('paper request helpers', () => {
       'pharmacology',
       'drug_interactions',
     ]);
+  });
+
+  it('instructs the model not to fabricate databases, screening tools, or record counts', () => {
+    const instruction = paperSystemInstruction({ standard: 'imrad_review', label: 'IMRaD review' });
+    expect(instruction).toMatch(/PIPELINE HONESTY/);
+    expect(instruction).toMatch(/never Embase, Scopus, Cochrane/i);
+    expect(instruction).toMatch(/RECORD-COUNT RULE/);
+    expect(instruction).toMatch(/never reuse it as the pipeline's record/i);
   });
 
   it('recognises a follow-up that appraises prior work, not a fresh research request', () => {

@@ -58,6 +58,16 @@ describe('title & keyword cleanup', () => {
   it('leaves an already-clean topic intact', () => {
     expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
   });
+
+  it('corrects common medical typos in the topic and keywords', () => {
+    expect(titleTopic('MICA gene and cardiovascual disease in type 1 diabetis').toLowerCase()).toContain(
+      'cardiovascular',
+    );
+    const keywords = keywordsFrom('cardiovascual risk in diabetis patients');
+    expect(keywords).toContain('cardiovascular');
+    expect(keywords).toContain('diabetes');
+    expect(keywords).not.toContain('cardiovascual');
+  });
 });
 
 describe('Brain Mini blueprint', () => {
