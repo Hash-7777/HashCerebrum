@@ -44,7 +44,14 @@ export interface CitationMapEntry {
 
 export interface ManuscriptFigure {
   id: string;
-  kind: 'source_yield' | 'prisma_flow' | 'evidence_years' | 'topic_map' | 'forest_plot';
+  kind:
+    | 'source_yield'
+    | 'prisma_flow'
+    | 'evidence_years'
+    | 'evidence_strength'
+    | 'numeric_yield'
+    | 'topic_map'
+    | 'forest_plot';
   title: string;
   caption: string;
   alt: string;

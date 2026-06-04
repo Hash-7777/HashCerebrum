@@ -278,10 +278,68 @@ function yearsSvg(years: number[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
 }
 
+const STRENGTH_STYLE: Array<[EvidenceStrength, string, string]> = [
+  ['strong', 'Strong — RCT / review / meta-analysis', '#3dd1bf'],
+  ['moderate', 'Moderate — cohort / registry', '#8b9eff'],
+  ['weak', 'Weak — cross-sectional / indexed record', '#e3bd63'],
+  ['context', 'Context — regulatory / terminology', '#7f8ea8'],
+];
+
+function evidenceStrengthSvg(counts: Record<EvidenceStrength, number>): string {
+  const rows = STRENGTH_STYLE.filter(([key]) => counts[key] > 0);
+  const max = Math.max(1, ...rows.map(([key]) => counts[key]));
+  const rowH = 30;
+  const width = 760;
+  const height = Math.max(120, 56 + rows.length * rowH);
+  const bars = rows
+    .map(([key, label, color], index) => {
+      const y = 48 + index * rowH;
+      const barW = Math.round((counts[key] / max) * 330);
+      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="12">${escXml(label)}</text><rect x="356" y="${y}" width="${barW}" height="18" rx="4" fill="${color}"/><text x="${376 + barW}" y="${y + 14}" fill="#9fb0c7" font-size="12">${counts[key]}</text>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence strength distribution</text>${bars}</svg>`;
+}
+
+// Count each kind of statistic extracted from source text — so the figure shows
+// the actual quantitative yield of the retrieval, not a fabricated estimate.
+function numericYieldCounts(extractions: EvidenceExtraction[]): Array<[string, number]> {
+  const counts = new Map<string, number>();
+  let sampleSizes = 0;
+  for (const item of extractions) {
+    if (item.sampleSize) sampleSizes += 1;
+    for (const effect of item.effectValues) {
+      counts.set(effect.label, (counts.get(effect.label) ?? 0) + 1);
+    }
+  }
+  const rows: Array<[string, number]> = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sampleSizes > 0) rows.unshift(['sample size', sampleSizes]);
+  return rows;
+}
+
+function numericYieldSvg(rows: Array<[string, number]>): string {
+  const max = Math.max(1, ...rows.map(([, count]) => count));
+  const rowH = 26;
+  const width = 760;
+  const height = Math.max(120, 52 + rows.length * rowH);
+  const bars = rows
+    .map(([label, count], index) => {
+      const y = 42 + index * rowH;
+      const barW = Math.round((count / max) * 380);
+      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(label)}</text><rect x="240" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${260 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Extracted statistics by type</text>${bars}</svg>`;
+}
+
 function buildFigures(
   evidence: EvidenceItem[],
   referenceCount: number,
   dataset?: UploadedDatasetSummary,
+  pipeline?: {
+    evidenceExtractions?: EvidenceExtraction[];
+    claimLedger?: ClaimLedgerEntry[];
+  },
 ): ManuscriptFigure[] {
   const counts = sourceCounts(evidence);
   const years = evidenceYears(evidence);
@@ -318,6 +376,40 @@ function buildFigures(
       svg: yearsSvg(years),
       data: { years },
     });
+  }
+
+  // Evidence-strength distribution — a quantitative view of the quality mix the
+  // synthesis is built on. Always available once the claim ledger exists.
+  const strengthCounts = evidenceStrengthCounts(pipeline?.claimLedger);
+  if (strengthCounts && Object.values(strengthCounts).some((count) => count > 0)) {
+    figures.push({
+      id: 'fig-evidence-strength',
+      kind: 'evidence_strength',
+      title: 'Evidence strength distribution',
+      caption:
+        'Claim-level evidence-strength counts derived from study design. Strong = RCT / systematic review / meta-analysis; moderate = cohort / registry; weak = cross-sectional / indexed record; context = regulatory / terminology.',
+      alt: 'Bar chart showing the count of claims at each evidence-strength tier.',
+      svg: evidenceStrengthSvg(strengthCounts),
+      data: { evidenceStrengthCounts: strengthCounts },
+    });
+  }
+
+  // Extracted-statistics yield — how many quantitative results (sample sizes,
+  // effect estimates, CIs, p-values) were copied from source text.
+  if (pipeline?.evidenceExtractions?.length) {
+    const numericRows = numericYieldCounts(pipeline.evidenceExtractions);
+    if (numericRows.length > 0) {
+      figures.push({
+        id: 'fig-numeric-yield',
+        kind: 'numeric_yield',
+        title: 'Extracted statistics by type',
+        caption:
+          'Count of numeric statistics copied verbatim from retrieved source text, by type. No pooled estimates or new statistics are computed in evidence-review mode.',
+        alt: 'Bar chart showing the count of extracted statistics by type.',
+        svg: numericYieldSvg(numericRows),
+        data: { numericYield: Object.fromEntries(numericRows) },
+      });
+    }
   }
 
   // Forest plot of the computed Mantel–Haenszel subgroup analysis.
@@ -399,16 +491,34 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
   };
 }
 
+// A transparent, design-based bias-risk signal. This is a deterministic
+// heuristic from study design — NOT a formal Cochrane RoB or GRADE appraisal
+// (which needs full text) — and is labelled as such so it informs without
+// overclaiming. The Limitations section states the absence of a formal RoB.
+function designBiasRisk(studyDesign: string): string {
+  const design = studyDesign.toLowerCase();
+  if (/meta-analysis|systematic review/.test(design)) return 'lower — synthesis design (inherits source bias)';
+  if (/randomi[sz]ed|\brct\b/.test(design)) return 'lower — randomized design';
+  if (/\bcohort\b/.test(design)) return 'moderate — confounding, selection';
+  if (/case[- ]control/.test(design)) return 'moderate — recall, selection';
+  if (/registry/.test(design)) return 'moderate — confounding by indication';
+  if (/cross[- ]sectional/.test(design)) return 'higher — no temporality, selection';
+  if (/case (report|series)/.test(design)) return 'higher — no comparator';
+  if (/narrative review/.test(design)) return 'higher — non-systematic selection';
+  return 'unrated — design not classified from retrieved text';
+}
+
 function evidenceExtractionTable(extractions: EvidenceExtraction[]): ManuscriptTable {
   return {
     id: 'table-evidence-extraction',
     title: 'Structured evidence extraction',
     caption:
-      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet.',
-    columns: ['Source', 'Design', 'Population', 'Exposure/intervention', 'Outcomes', 'Numeric support', 'Key finding'],
+      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet. The bias-risk column is a design-based heuristic, not a formal Cochrane risk-of-bias or GRADE appraisal.',
+    columns: ['Source', 'Design', 'Bias-risk (design-based)', 'Population', 'Exposure/intervention', 'Outcomes', 'Numeric support', 'Key finding'],
     rows: extractions.map((item) => [
       `${item.sourceMarker} ${SOURCE_LABELS[item.source]}`,
       item.studyDesign,
+      designBiasRisk(item.studyDesign),
       item.population,
       item.exposureOrIntervention,
       item.outcomes.join('; ') || 'not reported in retrieved record',
@@ -942,7 +1052,7 @@ export function buildPublicationArtifact(
     standard,
     references,
     citationMap,
-    figures: buildFigures(evidence, references.length, options.dataset),
+    figures: buildFigures(evidence, references.length, options.dataset, pipeline),
     tables: buildTables(evidence, options.dataset, pipeline),
     statistics,
     ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),

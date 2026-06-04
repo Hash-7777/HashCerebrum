@@ -10,6 +10,7 @@ import {
   referenceLinesForPublication,
   sanitizeSvgForHtml,
 } from '../publication';
+import { buildClaimLedger, extractEvidenceFromRecords } from '../paperPipeline';
 
 const evidence: EvidenceItem[] = [
   {
@@ -151,6 +152,32 @@ describe('publication artifact contract', () => {
     expect(markdown).toContain('## References');
     expect(markdown).toContain('[1] A Researcher, B Clinician');
     expect(markdown).not.toContain('[S2]');
+  });
+
+  it('adds evidence-strength and extracted-statistics figures and a bias-risk column from the pipeline', () => {
+    const extractions = extractEvidenceFromRecords([
+      {
+        source: 'pubmed',
+        title: 'A randomized controlled trial of anticoagulant safety',
+        year: 2024,
+        authors: ['A Researcher'],
+        identifiers: { pmid: '999' },
+        snippet:
+          'A randomized controlled trial enrolled 320 patients and reported an odds ratio of 1.8 (95% CI 1.2-2.6, p=0.004).',
+        fetchedAt: new Date(0).toISOString(),
+        provenanceHash: 'rct-1',
+      },
+    ]);
+    const claimLedger = buildClaimLedger(extractions);
+    const artifact = buildPublicationArtifact(manuscript, evidence, {
+      evidenceExtractions: extractions,
+      claimLedger,
+    });
+    const kinds = artifact.figures.map((figure) => figure.kind);
+    expect(kinds).toContain('evidence_strength');
+    expect(kinds).toContain('numeric_yield');
+    const extractionTable = artifact.tables.find((table) => table.id === 'table-evidence-extraction');
+    expect(extractionTable?.columns).toContain('Bias-risk (design-based)');
   });
 
   it('cleans stale prompt leakage during export normalization', () => {
