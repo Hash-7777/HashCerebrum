@@ -722,6 +722,15 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
 // corrected and instruction/deliverable words excluded — so a request like
 // "make a full reaserch paper about ..." yields the actual topic terms, never
 // "full" or "reaserch".
+// Generic academic connective nouns that carry no indexing value on their own
+// — dropped so the keyword list reads as real subject terms ("asthma",
+// "pharmacist", "inhaler") rather than "role" / "approach" / "use".
+const GENERIC_KEYWORDS = new Set([
+  'role', 'roles', 'approach', 'approaches', 'overview', 'use', 'uses', 'using',
+  'toward', 'towards', 'various', 'based', 'study', 'studies', 'paper', 'report',
+  'general', 'related', 'among', 'within',
+]);
+
 export function keywordsFrom(question: string): string[] {
   return [
     ...new Set(
@@ -730,10 +739,14 @@ export function keywordsFrom(question: string): string[] {
         .split(/[^a-z0-9]+/)
         .map((word) => TYPO_FIXES[word] ?? word)
         .filter(
-          (word) => word.length >= 4 && !STOPWORDS.has(word) && !META_INSTRUCTION_WORDS.has(word),
+          (word) =>
+            word.length >= 4 &&
+            !STOPWORDS.has(word) &&
+            !META_INSTRUCTION_WORDS.has(word) &&
+            !GENERIC_KEYWORDS.has(word),
         ),
     ),
-  ].slice(0, 7);
+  ].slice(0, 8);
 }
 
 function wordCount(value: string): number {

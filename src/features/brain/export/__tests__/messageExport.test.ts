@@ -30,6 +30,17 @@ describe('deriveDocumentTitle', () => {
     expect(deriveDocumentTitle('\n\n   \n', 'HashCerebrum message 1')).toBe('HashCerebrum message 1');
     expect(deriveDocumentTitle('**Title:**', 'fb')).toBe('fb');
   });
+
+  it('truncates a long title at a word boundary, never mid-phrase', () => {
+    const long =
+      '# Community Pharmacist-Led Interventions in Asthma Management and Inhaler Technique Education: An Evidence Review of Clinical Outcomes';
+    const title = deriveDocumentTitle(long, 'fb');
+    expect(title.length).toBeLessThanOrEqual(131); // 130 + ellipsis
+    expect(title.endsWith('…')).toBe(true);
+    expect(title).not.toMatch(/\s$/); // no trailing space before the ellipsis
+    // The cut lands on a whole word, not a sliced fragment.
+    expect(title).toContain('Inhaler Technique Education');
+  });
 });
 
 const citations: EvidenceItem[] = [

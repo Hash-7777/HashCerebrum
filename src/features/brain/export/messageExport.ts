@@ -26,6 +26,17 @@ export interface ExportableMessage {
 // the export filename). Skips a bare label line like "Title:" or "**Title:**",
 // strips markdown (bold/italic/code/heading marks), and drops a leading "Title:"
 // label — so the title never renders as the literal "**Title:**".
+// Cut a long title at the last word boundary before `max` rather than mid-word,
+// appending an ellipsis only when the title was actually shortened — so a full
+// "…Inhaler Technique Education: An Evidence Review" is never sliced to "…An".
+function truncateAtWord(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  const base = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${base.trimEnd()}…`;
+}
+
 export function deriveDocumentTitle(content: string, fallback: string): string {
   for (const raw of content.split('\n')) {
     let line = raw.trim();
@@ -38,7 +49,7 @@ export function deriveDocumentTitle(content: string, fallback: string): string {
       .replace(/^[*_>\s-]+/, '') // stray leading markers
       .trim();
     line = line.replace(/^title\s*[:：\-—]\s*/i, '').trim(); // drop a "Title:" label
-    if (line) return line.slice(0, 96);
+    if (line) return truncateAtWord(line, 130);
   }
   return fallback;
 }
