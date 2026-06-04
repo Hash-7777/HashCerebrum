@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import { downloadBlob } from '../export/messageExport';
@@ -184,7 +185,10 @@ export function DocumentPreviewWindow({
     window.setTimeout(() => setCopied(false), 1200);
   };
 
-  return (
+  // Portal to <body> so the window escapes the deep transcript stacking context
+  // (an ancestor's transform/backdrop-filter would otherwise trap its z-index
+  // and render it behind the app chrome). At body level it sits above everything.
+  return createPortal(
     <div
       className="document-preview-layer"
       onPointerDown={(event) => {
@@ -254,7 +258,9 @@ export function DocumentPreviewWindow({
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    // `document` is the prop name here, so reach the DOM via globalThis.
+    globalThis.document.body,
   );
 }
 

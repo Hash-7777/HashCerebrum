@@ -704,8 +704,12 @@
 .document-preview-layer {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(0, 0, 0, 0.18);
+  /* Above all app chrome (top bar 999, boot 1000) — the window is portaled to
+     <body> so this z-index is global, not trapped in the transcript context. */
+  z-index: 1200;
+  background: rgba(2, 4, 8, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 .document-preview-window {
   position: fixed;
@@ -716,12 +720,13 @@
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 12px;
+  /* Near-solid surface so the document reads with full contrast against the
+     dimmed backdrop instead of letting the app bleed through the blur. */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
-    color-mix(in srgb, var(--ink-0) 96%, transparent);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46), var(--hc-shadow-inset);
-  backdrop-filter: blur(18px) saturate(130%);
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
+    var(--ink-0, #0a0e14);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06),
+    var(--hc-shadow-inset);
 }
 .document-preview-titlebar {
   display: grid;
