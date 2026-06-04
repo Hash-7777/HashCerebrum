@@ -45,6 +45,14 @@ export async function renderPdfToCanvases(
   const scale = options.scale ?? DEFAULT_RENDER_SCALE;
   const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
 
+  // Rasterise the backing store at the device pixel ratio so the page is not
+  // upscaled (and blurred) on a Retina/HiDPI display, where one CSS pixel maps
+  // to two or more device pixels. The canvas is displayed at a CSS size set by
+  // the stylesheet (responsive width), so we only need to give it enough device
+  // pixels; DPR is capped at 2 so a 3x display does not create enormous canvases.
+  const dpr = Math.min(Math.max(globalThis.devicePixelRatio || 1, 1), 2);
+  const renderScale = scale * dpr;
+
   const doc = await pdfjsLib.getDocument({ url }).promise;
   try {
     const pageCount = doc.numPages;
@@ -53,7 +61,7 @@ export async function renderPdfToCanvases(
     for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
       if (isCancelled()) break;
       const page = await doc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale: renderScale });
       const canvas = document.createElement('canvas');
       canvas.className = canvasClassName;
       canvas.width = Math.ceil(viewport.width);
