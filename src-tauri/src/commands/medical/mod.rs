@@ -152,7 +152,14 @@ pub fn strip_html(text: &str) -> String {
     let mut in_tag = false;
     for ch in text.chars() {
         match ch {
-            '<' => in_tag = true,
+            // Emit a space where each tag was so a block tag like </h4> cannot
+            // weld the words on either side together ("Background</h4>We" must
+            // not become "BackgroundWe"); the whitespace collapse below tidies
+            // the extra spaces an inline tag leaves around a word.
+            '<' => {
+                in_tag = true;
+                out.push(' ');
+            }
             '>' => in_tag = false,
             _ if !in_tag => out.push(ch),
             _ => {}
