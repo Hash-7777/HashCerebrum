@@ -99,7 +99,7 @@ export function forestPlotFigure(subgroup: SubgroupAnalysis): ManuscriptFigure {
   );
 
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif">` +
     `<rect width="${width}" height="${height}" rx="14" fill="#08111d"/>` +
     `<text x="24" y="32" fill="#f1f6fc" font-size="16" font-weight="700">Subgroup odds ratios: ${escXml(subgroup.outcome)} by ${escXml(subgroup.exposure)}</text>` +
     `<text x="24" y="50" fill="#9fb0c7" font-size="11">Stratified by ${escXml(subgroup.stratifier)}. Odds ratio (95% CI), log scale.</text>` +

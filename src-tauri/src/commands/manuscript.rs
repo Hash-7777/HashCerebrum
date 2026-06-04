@@ -326,10 +326,13 @@ const SVG_ALLOWLIST: &[&str] = &[
     "tspan",
     "defs",
     "use",
-    "clipPath",
+    // Lowercased: the scan compares against the lowercased tag name, so a
+    // mixed-case entry (clipPath / linearGradient / radialGradient) could never
+    // match and silently dropped any figure that used a gradient or clip path.
+    "clippath",
     "mask",
-    "linearGradient",
-    "radialGradient",
+    "lineargradient",
+    "radialgradient",
     "stop",
     "title",
     "desc",

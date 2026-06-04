@@ -253,13 +253,13 @@ function sourceYieldSvg(counts: Record<string, number>): string {
       return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(source)}</text><rect x="190" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${210 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
 }
 
 function prismaSvg(total: number, unique: number, cited: number): string {
   const box = (x: number, y: number, label: string, value: string) =>
     `<rect x="${x}" y="${y}" width="250" height="58" rx="10" fill="#111c2b" stroke="#2a3951"/><text x="${x + 125}" y="${y + 24}" text-anchor="middle" fill="#f1f6fc" font-size="13" font-weight="700">${escXml(label)}</text><text x="${x + 125}" y="${y + 44}" text-anchor="middle" fill="#3dd1bf" font-size="14">${escXml(value)}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img"><rect width="720" height="310" rx="14" fill="#08111d"/>${box(235, 28, 'Records identified', String(total))}<path d="M360 86 L360 118" stroke="#7f8ea8" stroke-width="2"/>${box(235, 118, 'Unique source records', String(unique))}<path d="M360 176 L360 208" stroke="#7f8ea8" stroke-width="2"/>${box(235, 208, 'Records cited in draft', String(cited))}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="720" height="310" rx="14" fill="#08111d"/>${box(235, 28, 'Records identified', String(total))}<path d="M360 86 L360 118" stroke="#7f8ea8" stroke-width="2"/>${box(235, 118, 'Unique source records', String(unique))}<path d="M360 176 L360 208" stroke="#7f8ea8" stroke-width="2"/>${box(235, 208, 'Records cited in draft', String(cited))}</svg>`;
 }
 
 function yearsSvg(years: number[]): string {
@@ -275,7 +275,7 @@ function yearsSvg(years: number[]): string {
       return `<rect x="${x}" y="${y}" width="20" height="${h}" rx="4" fill="#8b9eff"/><text x="${x + 10}" y="192" text-anchor="middle" fill="#9fb0c7" font-size="10" transform="rotate(45 ${x + 10} 192)">${year}</text>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
 }
 
 const STRENGTH_STYLE: Array<[EvidenceStrength, string, string]> = [
@@ -298,7 +298,7 @@ function evidenceStrengthSvg(counts: Record<EvidenceStrength, number>): string {
       return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="12">${escXml(label)}</text><rect x="356" y="${y}" width="${barW}" height="18" rx="4" fill="${color}"/><text x="${376 + barW}" y="${y + 14}" fill="#9fb0c7" font-size="12">${counts[key]}</text>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence strength distribution</text>${bars}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence strength distribution</text>${bars}</svg>`;
 }
 
 // Count each kind of statistic extracted from source text — so the figure shows
@@ -329,7 +329,7 @@ function numericYieldSvg(rows: Array<[string, number]>): string {
       return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(label)}</text><rect x="240" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${260 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
     })
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Extracted statistics by type</text>${bars}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Extracted statistics by type</text>${bars}</svg>`;
 }
 
 function buildFigures(
