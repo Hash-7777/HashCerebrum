@@ -1,10 +1,46 @@
 //! OpenAlex. Docs: https://docs.openalex.org/
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, truncate_chars, EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;
+
+/// OpenAlex serves abstracts as an inverted index ({word: [positions]}) to
+/// sidestep publisher copyright on the contiguous text. Rebuild the prose by
+/// placing each token at its positions, so downstream extraction has real
+/// abstract text to read instead of only the journal name.
+fn abstract_from_inverted_index(value: &serde_json::Value) -> Option<String> {
+    let map = value.as_object()?;
+    if map.is_empty() {
+        return None;
+    }
+    let mut tokens: Vec<(u64, &str)> = Vec::new();
+    for (word, positions) in map {
+        if let Some(arr) = positions.as_array() {
+            for pos in arr {
+                if let Some(p) = pos.as_u64() {
+                    tokens.push((p, word.as_str()));
+                }
+            }
+        }
+    }
+    if tokens.is_empty() {
+        return None;
+    }
+    tokens.sort_by_key(|(pos, _)| *pos);
+    let text = tokens
+        .into_iter()
+        .map(|(_, word)| word)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(truncate_chars(trimmed, 2000))
+    }
+}
 
 #[tauri::command]
 pub async fn openalex_query(
@@ -39,6 +75,13 @@ pub async fn openalex_query(
                         .collect()
                 })
                 .unwrap_or_default();
+            // Prefer the reconstructed abstract; fall back to the journal name.
+            let snippet = abstract_from_inverted_index(&item["abstract_inverted_index"])
+                .or_else(|| {
+                    item["primary_location"]["source"]["display_name"]
+                        .as_str()
+                        .map(str::to_string)
+                });
             evidence(
                 "openalex",
                 title,
@@ -46,9 +89,7 @@ pub async fn openalex_query(
                 authors,
                 serde_json::json!({ "openalex": item["id"].as_str(), "doi": item["doi"].as_str() }),
                 item["id"].as_str().map(str::to_string),
-                item["primary_location"]["source"]["display_name"]
-                    .as_str()
-                    .map(str::to_string),
+                snippet,
             )
         })
         .collect())

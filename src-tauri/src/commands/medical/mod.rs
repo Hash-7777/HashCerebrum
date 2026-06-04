@@ -131,6 +131,18 @@ pub fn evidence(
     }
 }
 
+// Bound an abstract to a character budget so a long full-text abstract cannot
+// blow up the evidence block fed to the synthesis model. Counts by char (not
+// byte) so a multibyte boundary is never split.
+pub fn truncate_chars(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max_chars).collect();
+    out.push('…');
+    out
+}
+
 // Exponential backoff between retry attempts: ~300ms, ~600ms. Keeps a
 // transient upstream blip from instantly failing a specialist's source sweep
 // without stalling the swarm for long.

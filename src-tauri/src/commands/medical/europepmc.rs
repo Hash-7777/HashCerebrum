@@ -1,7 +1,7 @@
 //! Europe PMC. Docs: https://europepmc.org/RestfulWebService
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, truncate_chars, EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;
@@ -17,6 +17,9 @@ pub async fn europepmc_fetch(
     url.query_pairs_mut()
         .append_pair("query", &query)
         .append_pair("format", "json")
+        // `core` adds abstractText (and full metadata) — without it the search
+        // returns only titles/journals, starving downstream extraction.
+        .append_pair("resultType", "core")
         .append_pair("pageSize", &limit.to_string());
     let json = fetch_json(url, Some(86400)).await?;
     let results = json
@@ -47,6 +50,13 @@ pub async fn europepmc_fetch(
             let url = item["pmid"]
                 .as_str()
                 .map(|id| format!("https://europepmc.org/article/MED/{id}"));
+            // Prefer the abstract; fall back to the journal name when Europe PMC
+            // has no abstract for the record.
+            let snippet = item["abstractText"]
+                .as_str()
+                .map(|s| truncate_chars(s.trim(), 2000))
+                .filter(|s| !s.is_empty())
+                .or_else(|| item["journalTitle"].as_str().map(str::to_string));
             evidence(
                 "europepmc",
                 title,
@@ -54,7 +64,7 @@ pub async fn europepmc_fetch(
                 authors,
                 serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str() }),
                 url,
-                item["journalTitle"].as_str().map(str::to_string),
+                snippet,
             )
         })
         .collect())

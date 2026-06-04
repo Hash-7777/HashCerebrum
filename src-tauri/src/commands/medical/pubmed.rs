@@ -2,10 +2,55 @@
 //! Docs: https://www.ncbi.nlm.nih.gov/books/NBK25501/
 
 use crate::commands::medical::{
-    evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+    evidence, fetch_json, max_results as clamp_max_results, truncate_chars, EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
+use std::collections::HashMap;
 use url::Url;
+
+/// Abstract text is the fuel for evidence extraction (sample sizes, effect
+/// estimates, populations). NCBI's esummary returns only metadata, and its
+/// abstract endpoint (efetch) is XML-only — so we enrich PubMed hits with
+/// abstracts from Europe PMC, which mirrors PubMed (SRC:MED) and serves
+/// `abstractText` as JSON. One batched lookup covers every PMID in the page.
+const ABSTRACT_CHAR_CAP: usize = 2000;
+
+async fn pubmed_abstracts(pmids: &[String]) -> HashMap<String, String> {
+    if pmids.is_empty() {
+        return HashMap::new();
+    }
+    let ext_ids = pmids
+        .iter()
+        .map(|id| format!("EXT_ID:{id}"))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let Ok(mut url) = Url::parse("https://www.ebi.ac.uk/europepmc/webservices/rest/search") else {
+        return HashMap::new();
+    };
+    url.query_pairs_mut()
+        .append_pair("query", &format!("({ext_ids}) AND SRC:MED"))
+        .append_pair("resultType", "core")
+        .append_pair("format", "json")
+        .append_pair("pageSize", &pmids.len().to_string());
+    // A failed enrichment must never fail the search — fall back to metadata.
+    let Ok(json) = fetch_json(url, Some(86400)).await else {
+        return HashMap::new();
+    };
+    let mut map = HashMap::new();
+    if let Some(results) = json.pointer("/resultList/result").and_then(|v| v.as_array()) {
+        for item in results {
+            let pmid = item["pmid"].as_str();
+            let abstract_text = item["abstractText"].as_str();
+            if let (Some(pmid), Some(text)) = (pmid, abstract_text) {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    map.insert(pmid.to_string(), truncate_chars(trimmed, ABSTRACT_CHAR_CAP));
+                }
+            }
+        }
+    }
+    map
+}
 
 #[tauri::command]
 pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<EvidenceItem>> {
@@ -44,6 +89,9 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
         .append_pair("retmode", "json")
         .append_pair("id", &ids.join(","));
     let summary = fetch_json(summary_url, Some(86400)).await?;
+    // Enrich with real abstracts so downstream extraction has populations,
+    // sample sizes, and effect estimates to read — not just a journal name.
+    let abstracts = pubmed_abstracts(&ids).await;
     let mut out = Vec::new();
     for id in ids {
         let item = &summary["result"][&id];
@@ -65,7 +113,12 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
             })
             .unwrap_or_default();
         let url = Some(format!("https://pubmed.ncbi.nlm.nih.gov/{id}/"));
-        let snippet = item["fulljournalname"].as_str().map(str::to_string);
+        // Prefer the abstract; fall back to the journal name when no abstract
+        // was indexed for this record.
+        let snippet = abstracts
+            .get(&id)
+            .cloned()
+            .or_else(|| item["fulljournalname"].as_str().map(str::to_string));
         out.push(evidence(
             "pubmed",
             title,
