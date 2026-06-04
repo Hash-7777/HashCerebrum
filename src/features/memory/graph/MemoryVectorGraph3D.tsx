@@ -445,7 +445,7 @@ export function MemoryVectorGraph3D({
             title={`${cl.label} — ${cl.size} findings`}
           >
             <span className="memory-vec3d-swatch" style={{ background: cl.color }} />
-            {cl.label}
+            <span className="memory-vec3d-cluster-label">{cl.label}</span>
             <span className="memory-vec3d-cluster-count">{cl.size}</span>
           </button>
         ))}
