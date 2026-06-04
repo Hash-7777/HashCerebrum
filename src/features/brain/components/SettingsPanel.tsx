@@ -396,6 +396,43 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         })}
       </div>
 
+      <section className="settings-disclaimer" aria-label="Disclaimer and terms of use">
+        <header>
+          <strong>
+            <Icon name="alert" size={12} /> Disclaimer &amp; Terms of Use
+          </strong>
+        </header>
+        <div className="settings-disclaimer-grid">
+          <div className="settings-disclaimer-item">
+            <h4>Not a Medical Device</h4>
+            <p>For research and education only. Not a medical device, no FDA/EMA approval, not intended to diagnose, treat, or prevent any condition. Not for users under 18. By using this software you represent that you are of legal age and have sufficient training to evaluate its outputs. LLMs can hallucinate — always verify independently.</p>
+          </div>
+          <div className="settings-disclaimer-item">
+            <h4>Consult a Professional</h4>
+            <p>Never disregard professional medical advice or delay seeking it because of something you read or generated here. Always consult your physician, pharmacist, or qualified healthcare provider for questions about a medical condition, medication, or treatment.</p>
+          </div>
+          <div className="settings-disclaimer-item">
+            <h4>No Warranties</h4>
+            <p>Provided "as is" without warranties of any kind. As open-source software it has not undergone professional clinical validation or heavy-load testing. Authors have no obligation to provide updates, support, or bug fixes. You are responsible for your own data backups.</p>
+          </div>
+          <div className="settings-disclaimer-item">
+            <h4>No Liability</h4>
+            <p>To the fullest extent permitted by law, the authors are not liable for damages, wrong results, data-privacy issues, or data loss arising from your use. You agree to indemnify the authors from any claims arising from your use, modification, or distribution of the software.</p>
+          </div>
+          <div className="settings-disclaimer-item">
+            <h4>Data &amp; Third Parties</h4>
+            <p>HashCerebrum is software, not a HIPAA-covered entity or GDPR controller. Your data stays on your device; you are responsible for its security. Retrieved evidence comes from public databases and LLM providers — we do not control, guarantee, or endorse their accuracy. References to drugs or treatments do not constitute endorsement.</p>
+          </div>
+          <div className="settings-disclaimer-item">
+            <h4>License</h4>
+            <p>Licensed under GNU AGPL-3.0-or-later. You may use, modify, and distribute the software under those terms. You are responsible for any modifications you make. Third-party trademarks belong to their owners. Your generated manuscripts remain your intellectual property.</p>
+          </div>
+        </div>
+        <p className="settings-disclaimer-footer">
+          By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
+        </p>
+      </section>
+
       <section className="settings-danger" aria-label="Reset all data">
         <header>
           <strong>

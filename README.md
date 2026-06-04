@@ -373,6 +373,23 @@ vector map, the 3D anatomical workspace, and a peer-review swarm.
 
 ---
 
+## Disclaimer
+
+> **HashCerebrum is for research and education only. It is not a medical device and carries no FDA, EMA, or equivalent regulatory approval. It is not intended to diagnose, treat, cure, or prevent any medical condition.**
+
+| Topic | Terms |
+|---|---|
+| **Not a medical device** | For research and education only. No regulatory approval. Not intended to diagnose, treat, or prevent any condition. Not for users under 18. LLMs can hallucinate — always verify outputs independently. |
+| **Consult a professional** | Never disregard professional medical advice or delay seeking it because of something you read or generated here. Always consult your physician, pharmacist, or qualified healthcare provider for questions about a medical condition, medication, or treatment. |
+| **No warranties** | Provided "as is" without warranties of any kind. As open-source software it has not undergone professional clinical validation or heavy-load testing. Authors have no obligation to provide updates, support, or bug fixes. You are responsible for your own data backups. |
+| **No liability** | To the fullest extent permitted by law, the authors are not liable for damages, wrong results, data-privacy issues, or data loss arising from your use. You agree to indemnify the authors from any claims arising from your use, modification, or distribution of the software. |
+| **Data & third parties** | HashCerebrum is software, not a HIPAA-covered entity or GDPR controller. Your data stays on your device; you are responsible for its security. Retrieved evidence comes from public databases and LLM providers — we do not control, guarantee, or endorse their accuracy. References to drugs or treatments do not constitute endorsement. |
+| **License** | GNU AGPL-3.0-or-later. You may use, modify, and distribute the software under those terms. You are responsible for any modifications you make. Third-party trademarks belong to their owners. Your generated manuscripts remain your intellectual property. |
+
+By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
+
+---
+
 ## License
 
 [GNU AGPL-3.0-or-later](LICENSE) — © 2026 Seif Hashish.

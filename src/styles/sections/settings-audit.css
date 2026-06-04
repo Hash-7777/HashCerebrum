@@ -37,6 +37,50 @@
   background: rgba(11, 17, 26, 0.55);
 }
 
+/* ── Disclaimer & Terms of Use ───────────────────────────────── */
+.settings-disclaimer {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, #d97706 28%, var(--hc-border));
+  border-radius: var(--hc-radius);
+  background: color-mix(in srgb, #d97706 5%, rgba(11, 17, 26, 0.55));
+}
+.settings-disclaimer header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: color-mix(in srgb, #d97706 90%, #fff);
+}
+.settings-disclaimer-grid {
+  display: grid;
+  gap: 8px;
+}
+.settings-disclaimer-item h4 {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--hc-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+.settings-disclaimer-item p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--hc-fg-muted);
+}
+.settings-disclaimer-footer {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: color-mix(in srgb, #d97706 80%, var(--hc-fg-muted));
+  font-style: italic;
+  border-top: 1px solid color-mix(in srgb, #d97706 20%, var(--hc-border));
+  padding-top: 8px;
+}
+
 /* ── Reset all data (danger zone) ────────────────────────────── */
 .settings-danger {
   display: grid;
