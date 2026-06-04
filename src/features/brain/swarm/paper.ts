@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '@platform/index';
 import type { SpecialistResult, SpecialistTask } from './types';
 import type { ManuscriptStandard } from './publicationTypes';
+import { titleTopic } from './paperPipeline';
 
 export type PaperStandard = 'imrad_review' | 'prisma_review' | 'consort_trial' | 'strobe_observational' | 'care_case';
 
@@ -100,46 +101,53 @@ export function manuscriptStandardForQuestion(question: string): ManuscriptStand
 }
 
 export function fallbackPaperTasks(question: string): SpecialistTask[] {
+  // The sub-query is sent verbatim to the source databases as the search term,
+  // so it must be the clean TOPIC (instruction words like "make a full research
+  // paper about" stripped), not an instruction sentence — otherwise the search
+  // matches on "extract / sample / estimates" and returns nothing. The lean
+  // toward a study type (reviews / trials / quantitative outcomes) is expressed
+  // with real searchable terms that bias relevance without burying the topic.
+  const topic = titleTopic(question) || question;
   const tasks: SpecialistTask[] = [
     {
       agentId: 'literature',
-      subQuery: `Summarize peer-reviewed evidence for this manuscript topic: ${question}`,
+      subQuery: `${topic} — systematic review and meta-analysis evidence`,
     },
     {
       agentId: 'trials',
-      subQuery: `Find clinical trials, large cohorts, and registered studies relevant to: ${question}`,
+      subQuery: `${topic} — randomized controlled trial, cohort, and registered studies`,
     },
     {
       agentId: 'data_scientist',
-      subQuery: `Extract sample sizes, effect estimates, confidence intervals, p-values, study-count statistics, and quantitative limitations for: ${question}`,
+      subQuery: `${topic} — controlled trials reporting clinical outcomes, adherence, and effect sizes`,
     },
   ];
 
   if (/\b(drug|medication|medicine|dose|dosage|pharmacolog|pharmacokinetic|pharmacodynamic|toxicity|adverse|warfarin|nsaid|opioid|antibiotic|anticoagulant|statin|insulin)\b/i.test(question)) {
     tasks.push({
       agentId: 'pharmacology',
-      subQuery: `Explain pharmacology, mechanisms, adverse effects, and drug-safety signals for: ${question}`,
+      subQuery: `${topic} — pharmacology, mechanism of action, pharmacokinetics, and adverse effects`,
     });
   }
 
   if (/\b(interaction|interactions|contraindicat|polypharmacy|co[-\s]?admin|combined with|warfarin.*nsaid|nsaid.*warfarin)\b/i.test(question)) {
     tasks.push({
       agentId: 'drug_interactions',
-      subQuery: `Find drug-drug interaction, contraindication, and adverse-event evidence relevant to: ${question}`,
+      subQuery: `${topic} — drug-drug interactions, contraindications, and adverse events`,
     });
   }
 
   if (/\b(dental|dentistry|oral|periodontal|teeth|gum)\b/i.test(question)) {
     tasks.push({
       agentId: 'dentistry',
-      subQuery: `Summarize dental and oral-health evidence relevant to: ${question}`,
+      subQuery: `${topic} — dental and oral-health evidence`,
     });
   }
 
   if (/\b(epidemiolog|public health|population|prevention|vaccine|screening|incidence|prevalence|risk factor|burden|outbreak)\b/i.test(question)) {
     tasks.push({
       agentId: 'public_health',
-      subQuery: `Summarize epidemiology, population risk, clinical impact, and prevention guidance for: ${question}`,
+      subQuery: `${topic} — epidemiology, population impact, hospitalization, and prevention`,
     });
   }
   return tasks;
