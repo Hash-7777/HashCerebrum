@@ -36,6 +36,8 @@ import {
 } from '../export/messageExport';
 import { exportMessageLatex } from '../export/latexExport';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
+import { InteractionMatrix } from './InteractionMatrix';
+import { interactionMatrixFromReport } from '../swarm/interactionMatrix';
 
 export type { ChatMessage };
 
@@ -367,10 +369,16 @@ export const Transcript = memo(function Transcript({
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                     </div>
                   ) : (
-                    <p>
-                      {message.content}
-                      {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
-                    </p>
+                    <>
+                      {drugFocus && !message.isStreaming && (() => {
+                        const matrix = interactionMatrixFromReport(message.content);
+                        return matrix ? <InteractionMatrix matrix={matrix} /> : null;
+                      })()}
+                      <p>
+                        {message.content}
+                        {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
+                      </p>
+                    </>
                   )}
                   {message.outlineProposal && onDraftOutline && !message.isStreaming && (
                     <button
