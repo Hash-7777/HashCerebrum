@@ -47,7 +47,7 @@ export function Composer({
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 48), 180)}px`;
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), 180)}px`;
     // When the box is filled programmatically (a ready-prompt chip or an
     // edit-message action) rather than by typing, focus it and drop the
     // cursor at the end so the user can refine the text before sending.
@@ -66,6 +66,69 @@ export function Composer({
 
   return (
     <div className="composer-wrap">
+      <div className="composer-modes" role="group" aria-label="Research toggles">
+        <button
+          type="button"
+          className="memory-toggle-chip"
+          data-on={memoryEnabled}
+          onClick={toggleMemory}
+          aria-pressed={memoryEnabled}
+          title={
+            memoryEnabled
+              ? 'Memory ON — research may reuse saved findings. Click to research from scratch.'
+              : 'Memory OFF — researching from fresh sources only. Click to reuse saved findings.'
+          }
+        >
+          <Icon name="database" size={13} />
+          Memory
+        </button>
+        <button
+          type="button"
+          className="memory-toggle-chip"
+          data-on={libraryEnabled}
+          onClick={toggleLibrary}
+          aria-pressed={libraryEnabled}
+          title={
+            libraryEnabled
+              ? 'Library ON — the Brain may cite the PDF papers you imported. Click to exclude them.'
+              : 'Library OFF — imported papers are not cited. Click to let the Brain cite them.'
+          }
+        >
+          <Icon name="book" size={13} />
+          Library
+        </button>
+        <button
+          type="button"
+          className="memory-toggle-chip"
+          data-on={miniEnabled}
+          onClick={toggleMini}
+          aria-pressed={miniEnabled}
+          title={
+            miniEnabled
+              ? 'Brain Mini ON — lighter, faster papers on fewer agents and no rate-limit waiting. Best for free / small Ollama models. Click for the full pipeline.'
+              : 'Brain Mini OFF — full-depth pipeline. Click for a lighter, low-quota run.'
+          }
+        >
+          <Icon name="brain" size={13} />
+          Mini
+        </button>
+        <button
+          type="button"
+          className="memory-toggle-chip"
+          data-on={outlineFirst}
+          onClick={toggleOutlineFirst}
+          aria-pressed={outlineFirst}
+          title={
+            outlineFirst
+              ? 'Outline-first ON — propose the paper structure for you to approve before drafting. Click to draft directly.'
+              : 'Outline-first OFF — drafts the full paper immediately. Click to review an outline first.'
+          }
+        >
+          <Icon name="list" size={13} />
+          Outline
+        </button>
+      </div>
+
       <form className="composer" onSubmit={onSubmit}>
         {editing && (
           <div className="composer-editing">
@@ -121,66 +184,6 @@ export function Composer({
             </button>
             <button type="button" className="icon-btn" title="Search">
               <Icon name="search" size={15} />
-            </button>
-            <button
-              type="button"
-              className="memory-toggle-chip"
-              data-on={memoryEnabled}
-              onClick={toggleMemory}
-              aria-pressed={memoryEnabled}
-              title={
-                memoryEnabled
-                  ? 'Memory ON — research may reuse saved findings. Click to research from scratch.'
-                  : 'Memory OFF — researching from fresh sources only. Click to reuse saved findings.'
-              }
-            >
-              <Icon name="database" size={13} />
-              Memory
-            </button>
-            <button
-              type="button"
-              className="memory-toggle-chip"
-              data-on={libraryEnabled}
-              onClick={toggleLibrary}
-              aria-pressed={libraryEnabled}
-              title={
-                libraryEnabled
-                  ? 'Library ON — the Brain may cite the PDF papers you imported. Click to exclude them.'
-                  : 'Library OFF — imported papers are not cited. Click to let the Brain cite them.'
-              }
-            >
-              <Icon name="book" size={13} />
-              Library
-            </button>
-            <button
-              type="button"
-              className="memory-toggle-chip"
-              data-on={miniEnabled}
-              onClick={toggleMini}
-              aria-pressed={miniEnabled}
-              title={
-                miniEnabled
-                  ? 'Brain Mini ON — lighter, faster papers on fewer agents and no rate-limit waiting. Best for free / small Ollama models. Click for the full pipeline.'
-                  : 'Brain Mini OFF — full-depth pipeline. Click for a lighter, low-quota run.'
-              }
-            >
-              <Icon name="brain" size={13} />
-              Mini
-            </button>
-            <button
-              type="button"
-              className="memory-toggle-chip"
-              data-on={outlineFirst}
-              onClick={toggleOutlineFirst}
-              aria-pressed={outlineFirst}
-              title={
-                outlineFirst
-                  ? 'Outline-first ON — propose the paper structure for you to approve before drafting. Click to draft directly.'
-                  : 'Outline-first OFF — drafts the full paper immediately. Click to review an outline first.'
-              }
-            >
-              <Icon name="list" size={13} />
-              Outline
             </button>
           </div>
           <div className="tools-right">

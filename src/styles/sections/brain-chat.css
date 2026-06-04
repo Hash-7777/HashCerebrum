@@ -523,6 +523,17 @@
   background: linear-gradient(180deg, transparent, var(--ink-2));
 }
 
+/* Mode toggles (Memory / Library / Mini / Outline) sit in their own slim row
+   above the input box so the box itself stays compact. */
+.composer-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+  padding-left: 2px;
+}
+
 .composer {
   display: flex;
   flex-direction: column;
@@ -552,10 +563,10 @@
   color: var(--text-1);
   font-size: 14.5px;
   line-height: 1.55;
-  padding: 14px 16px 6px;
+  padding: 12px 16px 4px;
   outline: none;
   resize: none;
-  min-height: 48px;
+  min-height: 44px;
   max-height: 180px;
   width: 100%;
   font-family: inherit;
@@ -566,7 +577,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px 10px;
+  padding: 6px 10px 8px;
   /* Wrap to a second row on narrow widths instead of clipping the Send button. */
   flex-wrap: wrap;
   row-gap: 6px;
