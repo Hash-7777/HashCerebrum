@@ -7,7 +7,10 @@
 import { createPortal } from 'react-dom';
 import { Icon } from '@ui/icons';
 
-const ACK_KEY = 'hc.drugInteractions.disclaimerAck.v1';
+// v2: the v1 gate could fire on app launch (the mode mounts hidden) and may
+// already have been acknowledged there; bumping the key makes it appear fresh
+// on the first real entry into Drug-Interactions mode.
+const ACK_KEY = 'hc.drugInteractions.disclaimerAck.v2';
 
 export function hasAckedDiDisclaimer(): boolean {
   try {

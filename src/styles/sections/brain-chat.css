@@ -957,46 +957,45 @@
   color: var(--text-4, var(--text-3));
 }
 
-/* ── Critical safety disclaimer — prominent, pinned to the foot ── */
+/* ── Safety disclaimer — a soft amber note pinned to the foot ───── */
 .di-disclaimer {
   margin-top: auto;
   display: grid;
-  gap: 7px;
-  padding: 13px 14px;
-  border: 1px solid color-mix(in srgb, #e0a23a 48%, var(--line));
-  border-left: 3px solid #e0a23a;
-  border-radius: 9px;
-  background: color-mix(in srgb, #e0a23a 9%, transparent);
+  gap: 9px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, #d9a14a 28%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, #d9a14a 6%, transparent);
 }
-.di-disclaimer-head {
+.di-disclaimer-text {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #f0b352;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.di-disclaimer-head svg { flex: none; }
-.di-disclaimer p {
+  gap: 9px;
   margin: 0;
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--text-2);
 }
+.di-disclaimer-text svg { flex: none; margin-top: 1px; color: #e6b65f; }
+.di-disclaimer-text strong { color: var(--text-1); font-weight: 700; }
 .di-disclaimer-link {
   justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: #f0b352;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, #d9a14a 34%, var(--line));
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: #e6b65f;
   font-size: 11px;
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
   cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
-.di-disclaimer-link:hover { color: #f6c878; }
+.di-disclaimer-link:hover {
+  background: color-mix(in srgb, #d9a14a 12%, transparent);
+  border-color: #d9a14a;
+}
 
 /* ── Full safety disclaimer modal (first-run gate + re-openable) ── */
 .di-disc-layer {

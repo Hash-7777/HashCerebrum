@@ -55,17 +55,15 @@ export function DrugInteractionPanel() {
       </p>
 
       <div className="di-disclaimer" role="note">
-        <div className="di-disclaimer-head">
-          <Icon name="alert" size={15} />
-          <strong>Not medical advice — verify before any decision</strong>
-        </div>
-        <p>
-          This is automated informational triage, not a diagnosis and not a substitute for professional
-          judgement. Grades may be incomplete or wrong. Always confirm with a licensed pharmacist or
-          physician before prescribing, dispensing, or combining medications — never act on this alone.
+        <p className="di-disclaimer-text">
+          <Icon name="alert" size={13} />
+          <span>
+            <strong>Not medical advice.</strong> Automated triage that can be wrong — always confirm with a
+            licensed pharmacist or physician before any decision.
+          </span>
         </p>
         <button type="button" className="di-disclaimer-link" onClick={() => setDisclaimer('review')}>
-          Read full disclaimer
+          Read full disclaimer →
         </button>
       </div>
 
