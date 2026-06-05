@@ -2,7 +2,9 @@
 // with a clinical interaction-grade key (A–X) and a safety note, so the mode
 // reads as a focused interaction checker rather than the general research team.
 
+import { useEffect, useState } from 'react';
 import { Icon } from '@ui/icons';
+import { DrugInteractionDisclaimer, hasAckedDiDisclaimer } from './DrugInteractionDisclaimer';
 
 const GRADES: Array<{ grade: string; label: string; detail: string; cls: string }> = [
   { grade: 'A', label: 'None', detail: 'No known interaction', cls: 'a' },
@@ -13,6 +15,12 @@ const GRADES: Array<{ grade: string; label: string; detail: string; cls: string 
 ];
 
 export function DrugInteractionPanel() {
+  // Gate first use behind the full disclaimer; allow re-opening it any time.
+  const [disclaimer, setDisclaimer] = useState<'gate' | 'review' | null>(null);
+  useEffect(() => {
+    if (!hasAckedDiDisclaimer()) setDisclaimer('gate');
+  }, []);
+
   return (
     <aside className="di-panel" aria-label="Drug interaction grading">
       <header className="di-panel-head">
@@ -52,7 +60,14 @@ export function DrugInteractionPanel() {
           judgement. Grades may be incomplete or wrong. Always confirm with a licensed pharmacist or
           physician before prescribing, dispensing, or combining medications — never act on this alone.
         </p>
+        <button type="button" className="di-disclaimer-link" onClick={() => setDisclaimer('review')}>
+          Read full disclaimer
+        </button>
       </div>
+
+      {disclaimer && (
+        <DrugInteractionDisclaimer mode={disclaimer} onClose={() => setDisclaimer(null)} />
+      )}
     </aside>
   );
 }

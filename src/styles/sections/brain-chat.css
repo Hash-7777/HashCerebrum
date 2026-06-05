@@ -984,6 +984,116 @@
   line-height: 1.55;
   color: var(--text-2);
 }
+.di-disclaimer-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #f0b352;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.di-disclaimer-link:hover { color: #f6c878; }
+
+/* ── Full safety disclaimer modal (first-run gate + re-openable) ── */
+.di-disc-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.di-disc-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(84vh, 720px);
+  border: 1px solid color-mix(in srgb, #e0a23a 40%, var(--line-strong, var(--line)));
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(224, 162, 58, 0.06), transparent 120px), var(--ink-0, #0a0e14);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.66), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.di-disc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  color: #f0b352;
+}
+.di-disc-head svg { flex: none; }
+.di-disc-head h2 {
+  margin: 0;
+  font-family: var(--f-serif, var(--hc-font-serif));
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.di-disc-body { padding: 16px 18px; overflow-y: auto; }
+.di-disc-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.di-disc-point { margin-bottom: 13px; }
+.di-disc-point strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 12.5px;
+  color: #f0b352;
+}
+.di-disc-point p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.di-disc-accept-line {
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.di-disc-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+}
+.di-disc-accept,
+.di-disc-dismiss {
+  height: 36px;
+  padding: 0 20px;
+  border-radius: var(--r-pill, 999px);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.di-disc-accept {
+  border: 1px solid #e0a23a;
+  background: #e0a23a;
+  color: #1a1206;
+}
+.di-disc-accept:hover { background: #ecb456; }
+.di-disc-dismiss {
+  border: 1px solid var(--line-strong, var(--line));
+  background: transparent;
+  color: var(--text-2);
+}
+.di-disc-dismiss:hover { color: var(--text-1); border-color: var(--hc-border-accent, var(--line-strong)); }
 
 /* ── Interaction matrix (shown above the cards for 3+ drugs) ──── */
 .di-matrix {
