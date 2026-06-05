@@ -64,3 +64,18 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </RootErrorBoundary>
   </React.StrictMode>,
 );
+
+// The native window is created hidden (tauri.conf.json) to avoid the WebView's
+// white default flashing before the dark UI paints. Reveal it only after the
+// first frame has rendered — so the dark boot splash is the first thing seen.
+if (isTauri) {
+  const reveal = () =>
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().show())
+      .catch(() => {
+        /* show unavailable — the window simply stays as created */
+      });
+  requestAnimationFrame(() => requestAnimationFrame(() => void reveal()));
+  // Safety net: never leave the window hidden if the paint path is starved.
+  setTimeout(() => void reveal(), 1500);
+}
