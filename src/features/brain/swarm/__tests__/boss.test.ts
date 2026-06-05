@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { isConfidentInteractionReport, stripLeakedSpecialistLabels } from '../boss';
+import {
+  ensureInteractionDisclaimer,
+  isConfidentInteractionReport,
+  stripLeakedSpecialistLabels,
+} from '../boss';
+
+describe('ensureInteractionDisclaimer', () => {
+  it('appends the safety footer when the report has no verify-clinician line', () => {
+    const out = ensureInteractionDisclaimer('**A ↔ B**\n**Grade: C — Moderate**');
+    expect(out.toLowerCase()).toContain('verify every result');
+    expect(out.toLowerCase()).toContain('pharmacist or physician');
+  });
+
+  it('does not duplicate when the model already closed with a verify-clinician line', () => {
+    const withLine =
+      '**A ↔ B**\n**Grade: C**\n\n*Informational triage only — verify with a licensed pharmacist or physician before any medication decision.*';
+    const out = ensureInteractionDisclaimer(withLine);
+    expect(out).toBe(withLine.trimEnd());
+    expect(out.toLowerCase().match(/verify/g)?.length).toBe(1);
+  });
+});
 
 describe('isConfidentInteractionReport', () => {
   it('keeps a clear verdict (including a confident "no interaction")', () => {

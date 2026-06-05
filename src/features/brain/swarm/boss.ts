@@ -219,6 +219,23 @@ export function isConfidentInteractionReport(text: string): boolean {
   return !UNSURE_INTERACTION_RX.test(text);
 }
 
+// The interaction report's safety footer. Appended deterministically so the
+// disclaimer travels with the document on copy / export / print — never relying
+// on the model to remember it.
+export const INTERACTION_DISCLAIMER =
+  'Not medical advice. This is automated triage that can be wrong or incomplete — verify every result with a licensed pharmacist or physician before any prescribing, dispensing, or medication decision.';
+
+export function ensureInteractionDisclaimer(content: string): string {
+  const trimmed = content.trimEnd();
+  const lower = trimmed.toLowerCase();
+  // Keep the model's own verify-with-clinician closing line if it wrote one;
+  // otherwise guarantee the footer is present.
+  const hasVerifyLine =
+    /\bverif/.test(lower) &&
+    (lower.includes('pharmacist') || lower.includes('physician') || lower.includes('clinician'));
+  return hasVerifyLine ? trimmed : `${trimmed}\n\n*⚠ ${INTERACTION_DISCLAIMER}*`;
+}
+
 // Focused drug-interaction report — streamed. Used by the Brain "Interactions"
 // toggle: a single specialist gathered interaction evidence and this writes a
 // clinician-facing report from it. Strictly grounded in the retrieved records.
@@ -272,7 +289,7 @@ After all cards, add:
 **Confidence:** <one sentence on how well the retrieved sources support the grades and any gaps.>
 
 End with this exact line:
-*Informational triage only — verify with a licensed pharmacist or physician before any medication decision.*`,
+*⚠ ${INTERACTION_DISCLAIMER}*`,
     },
     {
       role: 'user',
@@ -293,7 +310,10 @@ Produce the graded interaction card(s) now, citing [S#] markers exactly as shown
     { onToken, signal },
     emitFailover,
   );
-  return { content: stripLeakedSpecialistLabels(res.content), modelUsed: res.modelUsed };
+  return {
+    content: ensureInteractionDisclaimer(stripLeakedSpecialistLabels(res.content)),
+    modelUsed: res.modelUsed,
+  };
 }
 
 // Synthesize the specialists' findings into the final answer — streamed.
