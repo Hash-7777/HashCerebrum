@@ -25,6 +25,7 @@ export function DrugInteractionPanel() {
         </div>
       </header>
 
+      <p className="di-grades-cap">Interaction grade</p>
       <div className="di-grades">
         {GRADES.map((g) => (
           <div key={g.grade} className={`di-grade di-grade-${g.cls}`}>
@@ -37,10 +38,21 @@ export function DrugInteractionPanel() {
         ))}
       </div>
 
-      <p className="di-panel-note">
-        When evidence is thin or conflicting the checker errs toward the more serious grade.
-        Informational triage only — verify with a licensed pharmacist or physician.
+      <p className="di-grade-bias">
+        When evidence is thin or conflicting, the grade is set to the more serious level.
       </p>
+
+      <div className="di-disclaimer" role="note">
+        <div className="di-disclaimer-head">
+          <Icon name="alert" size={15} />
+          <strong>Not medical advice — verify before any decision</strong>
+        </div>
+        <p>
+          This is automated informational triage, not a diagnosis and not a substitute for professional
+          judgement. Grades may be incomplete or wrong. Always confirm with a licensed pharmacist or
+          physician before prescribing, dispensing, or combining medications — never act on this alone.
+        </p>
+      </div>
     </aside>
   );
 }

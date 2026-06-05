@@ -865,7 +865,7 @@
 .di-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 13px;
   height: 100%;
   min-height: 0;
   padding: 20px 18px;
@@ -909,50 +909,80 @@
   line-height: 1.45;
 }
 
-/* ── Severity grade key ─────────────────────────────────────── */
-.di-grades { display: flex; flex-direction: column; gap: 6px; }
+/* ── Interaction grade key — a dense clinical legend, not cards ── */
+.di-grades-cap {
+  margin: 2px 0 -4px;
+  font: 600 9.5px var(--f-mono);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.di-grades { display: flex; flex-direction: column; }
 .di-grade {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--sev) 16%, var(--line));
-  background: color-mix(in srgb, var(--sev) 5%, transparent);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  gap: 11px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--line);
 }
+.di-grade:last-child { border-bottom: 0; }
 .di-grade-badge {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 23px;
+  height: 23px;
   flex: none;
-  border-radius: 8px;
-  font: 700 13px var(--f-mono);
+  border-radius: 5px;
+  font: 700 12px var(--f-mono);
   color: #07151d;
   background: var(--sev);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .di-grade-text { display: grid; gap: 1px; min-width: 0; }
 .di-grade-text strong { font-size: 12.5px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
 .di-grade-text span { font-size: 11px; color: var(--text-3); line-height: 1.4; }
 
-/* One severity hue per row drives the badge, wash, and border — A (safe) → X. */
+/* One severity hue per row, carried only on the grade badge — A (safe) → X. */
 .di-grade-a { --sev: #44c98b; }
 .di-grade-b { --sev: #62c2a6; }
 .di-grade-c { --sev: #e3bd63; }
 .di-grade-d { --sev: #ec9a5a; }
 .di-grade-x { --sev: #e2696e; }
-.di-grade-x .di-grade-badge { color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+.di-grade-x .di-grade-badge { color: #fff; }
 
-/* ── Footnote ───────────────────────────────────────────────── */
-.di-panel-note {
-  margin: 2px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  font-size: 11px;
-  line-height: 1.55;
+.di-grade-bias {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  font-style: italic;
+  line-height: 1.5;
   color: var(--text-4, var(--text-3));
+}
+
+/* ── Critical safety disclaimer — prominent, pinned to the foot ── */
+.di-disclaimer {
+  margin-top: auto;
+  display: grid;
+  gap: 7px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, #e0a23a 48%, var(--line));
+  border-left: 3px solid #e0a23a;
+  border-radius: 9px;
+  background: color-mix(in srgb, #e0a23a 9%, transparent);
+}
+.di-disclaimer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f0b352;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.di-disclaimer-head svg { flex: none; }
+.di-disclaimer p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
 }
 
 /* ── Interaction matrix (shown above the cards for 3+ drugs) ──── */
