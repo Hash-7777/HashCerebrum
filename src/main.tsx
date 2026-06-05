@@ -4,6 +4,7 @@ import { AppShell } from '@ui/shell/AppShell';
 import { BootSplash } from '@ui/shell/BootSplash';
 import { RootErrorBoundary } from '@ui/errors/RootErrorBoundary';
 import { setPlatform } from '@platform/index';
+import { revealWindow } from '@platform/revealWindow';
 import { tauriPlatform } from '@platform/tauri';
 import { browserPlatform } from '@platform/browser';
 import { registerMedicalTools } from '@core/tools/medical';
@@ -65,17 +66,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// The native window is created hidden (tauri.conf.json) to avoid the WebView's
-// white default flashing before the dark UI paints. Reveal it only after the
-// first frame has rendered — so the dark boot splash is the first thing seen.
-if (isTauri) {
-  const reveal = () =>
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().show())
-      .catch(() => {
-        /* show unavailable — the window simply stays as created */
-      });
-  requestAnimationFrame(() => requestAnimationFrame(() => void reveal()));
-  // Safety net: never leave the window hidden if the paint path is starved.
-  setTimeout(() => void reveal(), 1500);
-}
+// The native window is created hidden (tauri.conf.json) so the WebView's white
+// default never flashes on launch. The boot splash reveals it once it has
+// actually painted (reliable timing); this is only a safety net so the window
+// can never be left hidden if that path is somehow starved.
+if (isTauri) setTimeout(revealWindow, 2500);

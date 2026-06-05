@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import logoMark from '@/assets/logo-mark.png';
 import { APP_VERSION } from '@config/constants';
+import { revealWindow } from '@platform/revealWindow';
 
 const DURATION = 3.0; // seconds
 
@@ -28,6 +29,14 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
   const [ready, setReady] = useState(reduced);
   const [exiting, setExiting] = useState(false);
   const fieldRef = useRef<HTMLCanvasElement>(null);
+
+  // The native window is created hidden to avoid a white launch flash; reveal it
+  // now that the dark splash has committed and painted (effect runs post-paint),
+  // after one more frame for safety.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => requestAnimationFrame(revealWindow));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   // NeuroGenetic background (ported from the HashCerebrum website): a slow DNA
   // double-helix sweeping across the screen with drifting gene base-pair
