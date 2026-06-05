@@ -4,13 +4,15 @@
 // this view reads, searches, and prunes the same store.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
+import { getChunkVectors, lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
+import { getEmbeddingProvider } from '@core/rag/embeddings/workerClient';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
 import { MemoryCard } from './components/MemoryCard';
+import { PrunePreview } from './components/PrunePreview';
 import { MemoryVectorGraph3D } from './graph/MemoryVectorGraph3D';
-import { keepMemoryChunk } from './pruneMemory';
+import { planPrune } from './pruneMemory';
 import { importPdfFiles, summarizeImport } from './import/importPdfs';
 
 const SEARCH_RESULT_LIMIT = 200;
@@ -23,7 +25,8 @@ export function MemoryMode() {
   const chunks = useRagStore((s) => s.chunks);
   const removeChunk = useRagStore((s) => s.removeChunk);
   const clearProject = useRagStore((s) => s.clearProject);
-  const pruneProject = useRagStore((s) => s.pruneProject);
+  const pruneChunks = useRagStore((s) => s.pruneChunks);
+  const undoLastPrune = useRagStore((s) => s.undoLastPrune);
   const libraryDocuments = useRagStore((s) => s.libraryDocuments);
   const removeDocument = useRagStore((s) => s.removeDocument);
 
@@ -85,6 +88,91 @@ export function MemoryMode() {
     () => chunks.filter((chunk) => chunk.projectId === activeProjectId).length,
     [chunks, activeProjectId],
   );
+  const activeChunks = useMemo(
+    () => chunks.filter((chunk) => chunk.projectId === activeProjectId),
+    [chunks, activeProjectId],
+  );
+
+  // ── Prune (preview + undo) ──────────────────────────────────────────────
+  // Computing the plan embeds each topic once so the relevance gate is semantic.
+  // The vectors are cached so toggling "aggressive" re-plans without re-embedding.
+  const [pruneCtx, setPruneCtx] = useState<{
+    vectors: Map<string, Float32Array>;
+    queryVectors: Map<string, Float32Array>;
+  } | null>(null);
+  const [pruneAggressive, setPruneAggressive] = useState(false);
+  const [pruneComputing, setPruneComputing] = useState(false);
+  const [pruneBusy, setPruneBusy] = useState(false);
+  const [undoCount, setUndoCount] = useState<number | null>(null);
+
+  const prunePlan = useMemo(
+    () =>
+      pruneCtx
+        ? planPrune(activeChunks, {
+            vectors: pruneCtx.vectors,
+            queryVectors: pruneCtx.queryVectors,
+            aggressive: pruneAggressive,
+          })
+        : null,
+    [pruneCtx, activeChunks, pruneAggressive],
+  );
+
+  // The undo offer auto-expires so it never lingers as stale state.
+  useEffect(() => {
+    if (undoCount === null) return;
+    const timer = window.setTimeout(() => setUndoCount(null), 12000);
+    return () => window.clearTimeout(timer);
+  }, [undoCount]);
+
+  const openPrune = async () => {
+    if (!activeProjectId || activeProjectCount === 0 || pruneComputing) return;
+    setPruneComputing(true);
+    setUndoCount(null);
+    try {
+      const vectors = getChunkVectors(activeChunks.map((c) => c.id));
+      const queryVectors = new Map<string, Float32Array>();
+      const queries = [
+        ...new Set(activeChunks.map((c) => c.query?.trim()).filter((q): q is string => !!q)),
+      ];
+      if (queries.length > 0) {
+        try {
+          const provider = getEmbeddingProvider();
+          await provider.warmup();
+          if (provider.ready) {
+            const vecs = await provider.embed(queries);
+            queries.forEach((q, i) => {
+              const v = vecs[i];
+              if (v) queryVectors.set(q, v);
+            });
+          }
+        } catch {
+          // Embedder unavailable — planPrune falls back to the lexical gate.
+        }
+      }
+      setPruneAggressive(false);
+      setPruneCtx({ vectors, queryVectors });
+    } finally {
+      setPruneComputing(false);
+    }
+  };
+
+  const confirmPrune = (ids: string[]) => {
+    setPruneBusy(true);
+    const removed = pruneChunks(ids);
+    setPruneBusy(false);
+    setPruneCtx(null);
+    if (removed > 0) setUndoCount(removed);
+    else useToastStore.getState().show('Nothing was pruned', 'info');
+  };
+
+  const handleUndo = () => {
+    const restored = undoLastPrune();
+    setUndoCount(null);
+    useToastStore.getState().show(
+      restored > 0 ? `Restored ${restored} ${restored === 1 ? 'finding' : 'findings'}` : 'Nothing to restore',
+      'info',
+    );
+  };
 
   // A query paints lexical results instantly, then refines to the semantic
   // (meaning-based) hybrid ranking once the embedder is ready — scoped to the
@@ -217,22 +305,11 @@ export function MemoryMode() {
             <button
               type="button"
               className="memory-prune"
-              disabled={activeProjectCount === 0}
-              title="Remove non-medical and off-topic findings, keeping the rest"
-              onClick={() => {
-                if (!activeProjectId || activeProjectCount === 0) return;
-                const removed = pruneProject(activeProjectId, keepMemoryChunk);
-                useToastStore
-                  .getState()
-                  .show(
-                    removed > 0
-                      ? `Pruned ${removed} non-medical / off-topic ${removed === 1 ? 'finding' : 'findings'}`
-                      : 'Nothing to prune — memory is already clean',
-                    'info',
-                  );
-              }}
+              disabled={activeProjectCount === 0 || pruneComputing}
+              title="Review off-topic, duplicate, and meta findings before removing them"
+              onClick={() => void openPrune()}
             >
-              <Icon name="refresh" size={13} /> Prune
+              <Icon name="refresh" size={13} /> {pruneComputing ? 'Analyzing…' : 'Prune'}
             </button>
             <button
               type="button"
@@ -315,6 +392,28 @@ export function MemoryMode() {
           </div>
         )}
       </section>
+
+      {prunePlan && (
+        <PrunePreview
+          plan={prunePlan}
+          aggressive={pruneAggressive}
+          busy={pruneBusy}
+          onAggressiveChange={setPruneAggressive}
+          onConfirm={confirmPrune}
+          onClose={() => setPruneCtx(null)}
+        />
+      )}
+
+      {undoCount !== null && (
+        <div className="memory-undo" role="status">
+          <span>
+            Pruned {undoCount} {undoCount === 1 ? 'finding' : 'findings'}
+          </span>
+          <button type="button" onClick={handleUndo}>
+            <Icon name="refresh" size={12} /> Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

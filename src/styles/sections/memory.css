@@ -1017,3 +1017,187 @@
   }
   .memory-graph-topics { top: 96px; }
 }
+
+/* ── Prune preview modal ─────────────────────────────────────── */
+.prune-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 4, 8, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.prune-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 100%);
+  max-height: min(82vh, 760px);
+  border: 1px solid var(--hc-border-strong);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.008)), var(--hc-bg-elev, #0e1420);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.prune-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--hc-border);
+}
+.prune-head-lead { display: inline-flex; align-items: center; gap: 8px; color: var(--hc-fg-strong); font-size: 14px; }
+.prune-head-lead svg { color: var(--hc-accent-strong); }
+.prune-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hc-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--hc-fg-muted);
+  cursor: pointer;
+}
+.prune-close:hover { color: var(--hc-fg); border-color: var(--hc-border-strong); }
+
+.prune-summary { display: flex; flex-wrap: wrap; gap: 7px; padding: 13px 16px 4px; }
+.prune-chip {
+  font: 600 11px var(--hc-font-mono);
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--hc-border);
+  color: var(--hc-fg-muted);
+}
+.prune-chip--off-topic { color: #e7c069; border-color: color-mix(in srgb, #e7c069 40%, var(--hc-border)); }
+.prune-chip--duplicate { color: #8fa6ff; border-color: color-mix(in srgb, #8fa6ff 40%, var(--hc-border)); }
+.prune-chip--low-value { color: var(--hc-fg-dim); }
+.prune-chip--meta { color: #ef7d80; border-color: color-mix(in srgb, #ef7d80 40%, var(--hc-border)); }
+.prune-chip--clean { color: #58c79a; border-color: color-mix(in srgb, #58c79a 40%, var(--hc-border)); }
+
+.prune-aggressive {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--hc-fg-muted);
+  cursor: pointer;
+}
+.prune-aggressive input { accent-color: var(--accent); }
+
+.prune-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 2px 8px 8px;
+  list-style: none;
+}
+.prune-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.prune-item:hover { background: rgba(255, 255, 255, 0.03); }
+.prune-item[data-keep='true'] { opacity: 0.4; }
+.prune-item input { margin-top: 3px; flex: none; accent-color: var(--accent); }
+.prune-reason {
+  flex: none;
+  margin-top: 1px;
+  font: 700 9px var(--hc-font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--hc-fg-muted);
+}
+.prune-reason--off-topic { color: #1a130a; background: #e7c069; }
+.prune-reason--duplicate { color: #0c1430; background: #8fa6ff; }
+.prune-reason--low-value { color: var(--hc-fg); background: rgba(255, 255, 255, 0.1); }
+.prune-reason--meta { color: #2a0c0d; background: #ef7d80; }
+.prune-item-text { display: grid; gap: 2px; min-width: 0; }
+.prune-item-text strong { font-size: 12.5px; color: var(--hc-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prune-item-text span { font-size: 11px; color: var(--hc-fg-dim); line-height: 1.4; }
+
+.prune-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 44px 24px;
+  color: var(--hc-fg-muted);
+  text-align: center;
+}
+.prune-empty svg { color: #58c79a; }
+.prune-empty p { margin: 0; max-width: 320px; font-size: 12.5px; line-height: 1.5; }
+
+.prune-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--hc-border);
+}
+.prune-count { font-size: 12px; color: var(--hc-fg-muted); }
+.prune-actions { display: flex; gap: 8px; }
+.prune-cancel,
+.prune-confirm {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--hc-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.prune-cancel { border: 1px solid var(--hc-border); background: transparent; color: var(--hc-fg-muted); }
+.prune-cancel:hover:not(:disabled) { color: var(--hc-fg); border-color: var(--hc-border-strong); }
+.prune-confirm {
+  border: 1px solid color-mix(in srgb, var(--hc-danger) 55%, transparent);
+  background: color-mix(in srgb, var(--hc-danger) 16%, transparent);
+  color: var(--hc-danger);
+}
+.prune-confirm:hover:not(:disabled) { background: color-mix(in srgb, var(--hc-danger) 26%, transparent); border-color: var(--hc-danger); }
+.prune-cancel:disabled,
+.prune-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Undo strip (after a prune) ──────────────────────────────── */
+.memory-undo {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--hc-border-strong);
+  border-radius: var(--hc-radius-pill);
+  background: var(--hc-bg-elev, #0e1420);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  font-size: 12.5px;
+  color: var(--hc-fg);
+}
+.memory-undo button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hc-border));
+  border-radius: var(--hc-radius-pill);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.memory-undo button:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
