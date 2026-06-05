@@ -325,9 +325,14 @@ export const Transcript = memo(function Transcript({
           const isAi = message.role === 'assistant';
           const isUser = message.role === 'user';
           const isSystem = message.role === 'system';
+          // A Drug-Interactions report carries cited evidence too, but it is a
+          // clinical answer to be read inline (graded cards + the interaction
+          // matrix), not a manuscript to open as a document — so never treat it
+          // as a document, or the inline matrix branch is skipped.
           const isDocument =
             isAi &&
             !message.isStreaming &&
+            !drugFocus &&
             (!!message.manuscript || (message.citations?.length ?? 0) > 0);
           const who = isAi ? (message.modelLabel ?? modelLabel) : isUser ? 'Researcher' : 'Workspace';
           const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
