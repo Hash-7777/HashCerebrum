@@ -65,7 +65,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            // Restore size/position/maximised, but NOT visibility: the window is
+            // created hidden (tauri.conf.json) and the frontend reveals it only
+            // after the dark UI has painted. Without excluding VISIBLE here, this
+            // plugin re-shows the window on launch, flashing the blank WebView
+            // white before the page renders.
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
+                )
+                .build(),
+        )
         .setup(|app| {
             security::guard::init(app.handle())?;
             audit::init(app.handle())?;
