@@ -7,6 +7,16 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <!-- Fonts are self-hosted via @fontsource; no external network requests -->
     <title>HashCerebrum</title>
+    <!-- Paint the dark base on the very first frame so the WebView never flashes
+         white before the app CSS / boot splash loads. Matches the boot bg. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #070a0c;
+        color-scheme: dark;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

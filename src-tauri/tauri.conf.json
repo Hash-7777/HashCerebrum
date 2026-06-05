@@ -29,7 +29,8 @@
         "hiddenTitle": true,
         "acceptFirstMouse": true,
         "center": true,
-        "visible": true
+        "visible": true,
+        "backgroundColor": "#070a0c"
       }
     ],
 
