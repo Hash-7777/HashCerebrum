@@ -251,6 +251,28 @@
 
 @keyframes boot-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
+/* Small safety disclaimer box, pinned to the foot of the loading screen. */
+.boot-disclaimer {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: min(560px, calc(100% - 40px));
+  padding: 9px 16px;
+  border: 1px solid var(--b-line-strong);
+  border-radius: 10px;
+  background: rgba(7, 12, 14, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--b-ink-dim);
+  animation: boot-rise 0.8s 0.5s both;
+}
+.boot-disclaimer strong { color: var(--b-ink); font-weight: 600; }
+
 @media (prefers-reduced-motion: reduce) {
   .boot *, .boot::before, .boot::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.12s !important; }
 }

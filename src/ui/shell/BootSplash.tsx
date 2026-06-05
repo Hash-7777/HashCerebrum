@@ -29,51 +29,118 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
   const [exiting, setExiting] = useState(false);
   const fieldRef = useRef<HTMLCanvasElement>(null);
 
-  // Ambient drifting particle field (very subtle — adds depth, not noise).
+  // NeuroGenetic background (ported from the HashCerebrum website): a slow DNA
+  // double-helix sweeping across the screen with drifting gene base-pair
+  // particles, tuned for the dark boot screen. Coordinates are in CSS pixels
+  // (the context is scaled by the device pixel ratio so it stays crisp).
   useEffect(() => {
     const cv = fieldRef.current;
     if (!cv) return;
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     let raf = 0;
-    let w = 0;
-    let h = 0;
-    let dpr = 1;
-    let seeds: Array<{ x: number; y: number; s: number; vx: number; vy: number; a: number; tw: number }> = [];
+    let W = 0;
+    let H = 0;
+    // Gene base colours: emerald, rose, blue, amber.
+    const geneColors = ['#10b981', '#fb5d76', '#5b9dff', '#f0a94e'];
+    const helixPoints = 55;
+    const helixAmp = 55;
+    const helixFreq = 0.018;
+    let helixOffset = 0;
+    let particles: Array<{ x: number; y: number; vx: number; vy: number; color: string; radius: number; pulse: number }> = [];
+
     const resize = () => {
-      dpr = Math.min(2, devicePixelRatio || 1);
-      w = cv.width = innerWidth * dpr;
-      h = cv.height = innerHeight * dpr;
-      cv.style.width = `${innerWidth}px`;
-      cv.style.height = `${innerHeight}px`;
-      const n = Math.round((innerWidth * innerHeight) / 60000);
-      seeds = Array.from({ length: n }, () => ({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        s: (1 + Math.random() * 1.4) * dpr,
-        vx: (Math.random() - 0.5) * 0.04 * dpr,
-        vy: (Math.random() * 0.05 + 0.015) * dpr,
-        a: 0.03 + Math.random() * 0.05,
-        tw: Math.random() * Math.PI * 2,
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      W = innerWidth;
+      H = innerHeight;
+      cv.width = W * dpr;
+      cv.height = H * dpr;
+      cv.style.width = `${W}px`;
+      cv.style.height = `${H}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const count = Math.min(44, Math.round((W * H) / 38000));
+      particles = Array.from({ length: count }, (_, i) => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        color: geneColors[i % 4]!,
+        radius: 1.5 + Math.random() * 2,
+        pulse: Math.random() * Math.PI * 2,
       }));
     };
-    const draw = () => {
-      ctx.clearRect(0, 0, w, h);
-      for (const p of seeds) {
+
+    const drawHelix = () => {
+      const cy = H * 0.5;
+      const startX = -30;
+      const endX = W + 30;
+      for (let s = 0; s < 2; s += 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = s === 0 ? 'rgba(40, 168, 154, 0.16)' : 'rgba(70, 210, 188, 0.12)';
+        ctx.lineWidth = 2;
+        for (let x = startX; x <= endX; x += 3) {
+          const phase = s * Math.PI + x * helixFreq - helixOffset;
+          const y = cy + Math.sin(phase) * helixAmp;
+          if (x === startX) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      for (let i = 0; i < helixPoints; i += 1) {
+        const x = startX + (i / helixPoints) * (endX - startX);
+        const phase = i * 0.4 - helixOffset;
+        const y1 = cy + Math.sin(phase) * helixAmp;
+        const y2 = cy + Math.sin(phase + Math.PI) * helixAmp;
+        const color = geneColors[i % 4]!;
+        const opacity = 0.5 + 0.5 * Math.sin(phase * 0.5);
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = opacity * 0.42;
+        ctx.lineWidth = 1.8;
+        ctx.moveTo(x, y1);
+        ctx.lineTo(x, y2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        for (const y of [y1, y2]) {
+          ctx.beginPath();
+          ctx.fillStyle = color;
+          ctx.globalAlpha = opacity * 0.7;
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+    };
+
+    const drawParticles = () => {
+      for (const p of particles) {
         if (!reduced) {
           p.x += p.vx;
           p.y += p.vy;
-          p.tw += 0.008;
-          if (p.y > h + 4) p.y = -4;
-          if (p.x < -4) p.x = w + 4;
-          if (p.x > w + 4) p.x = -4;
+          p.pulse += 0.02;
+          if (p.x < 0) p.x = W;
+          if (p.x > W) p.x = 0;
+          if (p.y < 0) p.y = H;
+          if (p.y > H) p.y = 0;
         }
-        const a = p.a * (0.6 + 0.4 * Math.sin(p.tw));
-        ctx.fillStyle = `rgba(95,227,192,${a.toFixed(3)})`;
-        ctx.fillRect(p.x, p.y, p.s, p.s);
+        const opacity = Math.max(0, 0.22 + Math.sin(p.pulse) * 0.16);
+        ctx.beginPath();
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = opacity;
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      drawHelix();
+      drawParticles();
+      if (!reduced) helixOffset += 0.006;
       raf = requestAnimationFrame(draw);
     };
+
     resize();
     addEventListener('resize', resize);
     draw();
@@ -179,6 +246,11 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
           </div>
         </div>
       </main>
+
+      <div className="boot-disclaimer" role="note">
+        <strong>For research &amp; education only.</strong> Not a medical device and not medical advice —
+        always verify outputs with a qualified healthcare professional.
+      </div>
     </div>
   );
 }
