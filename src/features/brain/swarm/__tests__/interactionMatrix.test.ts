@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildInteractionMatrix,
   interactionMatrixFromReport,
+  interactionMatrixMarkdown,
   parseInteractionPairs,
 } from '../interactionMatrix';
 
@@ -88,5 +89,16 @@ describe('buildInteractionMatrix', () => {
     const a = matrix!.drugs.indexOf('A');
     const c = matrix!.drugs.indexOf('C');
     expect(matrix!.cells[a]![c]).toBeNull();
+  });
+});
+
+describe('interactionMatrixMarkdown', () => {
+  it('renders a numbered Markdown table of the grades for exports', () => {
+    const matrix = buildInteractionMatrix(parseInteractionPairs(report))!;
+    const md = interactionMatrixMarkdown(matrix);
+    expect(md).toContain('### Interaction overview');
+    expect(md).toContain('| Drug | 1 | 2 | 3 |');
+    expect(md).toContain('| 1. Warfarin | — | D | C |');
+    expect(md).toContain('| 2. Aspirin | D | — | B |');
   });
 });

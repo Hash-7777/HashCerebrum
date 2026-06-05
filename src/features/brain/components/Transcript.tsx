@@ -37,7 +37,8 @@ import {
 import { exportMessageLatex } from '../export/latexExport';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 import { InteractionMatrix } from './InteractionMatrix';
-import { interactionMatrixFromReport } from '../swarm/interactionMatrix';
+import { InteractionReportBody } from './InteractionReportBody';
+import { interactionMatrixFromReport, interactionMatrixMarkdown } from '../swarm/interactionMatrix';
 
 export type { ChatMessage };
 
@@ -228,14 +229,24 @@ export const Transcript = memo(function Transcript({
   const titleFor = (message: ChatMessage, index: number) =>
     deriveDocumentTitle(message.content, `HashCerebrum message ${index + 1}`);
 
-  const exportableFor = (message: ChatMessage, index: number): ExportableMessage => ({
-    title: titleFor(message, index),
-    role: message.role,
-    content: message.content,
-    modelLabel: message.modelLabel ?? modelLabel,
-    ...(message.citations ? { citations: message.citations } : {}),
-    ...(message.manuscript ? { manuscript: message.manuscript } : {}),
-  });
+  const exportableFor = (message: ChatMessage, index: number): ExportableMessage => {
+    // In Drug-Interactions mode, prepend the interaction-overview matrix as a
+    // Markdown table so the exported PDF / Word / Markdown carries the table as
+    // well as the cards — the same "table + report" the user sees on screen.
+    let content = message.content;
+    if (drugFocus) {
+      const matrix = interactionMatrixFromReport(message.content);
+      if (matrix) content = `${interactionMatrixMarkdown(matrix)}\n${content}`;
+    }
+    return {
+      title: titleFor(message, index),
+      role: message.role,
+      content,
+      modelLabel: message.modelLabel ?? modelLabel,
+      ...(message.citations ? { citations: message.citations } : {}),
+      ...(message.manuscript ? { manuscript: message.manuscript } : {}),
+    };
+  };
 
   const openPdfPreview = async (message: ChatMessage, index: number) => {
     const exportable = exportableFor(message, index);
@@ -373,17 +384,21 @@ export const Transcript = memo(function Transcript({
                       {message.content}
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                     </div>
-                  ) : (
+                  ) : drugFocus && !message.isStreaming ? (
+                    // Drug-Interactions report: colour-coded matrix (3+ drugs)
+                    // above formatted clinical cards — never raw markdown.
                     <>
-                      {drugFocus && !message.isStreaming && (() => {
+                      {(() => {
                         const matrix = interactionMatrixFromReport(message.content);
                         return matrix ? <InteractionMatrix matrix={matrix} /> : null;
                       })()}
-                      <p>
-                        {message.content}
-                        {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
-                      </p>
+                      <InteractionReportBody content={message.content} />
                     </>
+                  ) : (
+                    <p>
+                      {message.content}
+                      {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
+                    </p>
                   )}
                   {message.outlineProposal && onDraftOutline && !message.isStreaming && (
                     <button
