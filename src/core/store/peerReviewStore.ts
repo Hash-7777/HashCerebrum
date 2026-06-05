@@ -63,6 +63,9 @@ export interface ReviewedPaper {
 interface PeerReviewStore {
   papers: ReviewedPaper[];
   activePaperId: string | null;
+  hydrated: boolean;
+  /** Restore persisted papers and their reviews from durable storage. */
+  hydrate: () => Promise<void>;
   // Add a paper from a file upload
   addUpload: (file: File) => Promise<string>;
   // Add a paper from a Brain-mode manuscript
@@ -86,6 +89,30 @@ interface PeerReviewStore {
 
 function uid(): string {
   return `pr-${crypto.randomUUID()}`;
+}
+
+// --- persistence ---
+// Papers and their reviews survive an app restart. The session-only object URL
+// (blobUrl) and transient live-review state (reviewStreaming / reviewAgents /
+// reviewError) are dropped — on restore, a manuscript previews from its stored
+// htmlContent and an upload from its extracted text, while the completed review,
+// edits, citations, and audit are all kept.
+const STORAGE_KEY = 'peerReview.v1';
+
+interface PersistShape {
+  papers: ReviewedPaper[];
+  activePaperId: string | null;
+}
+
+function serializePaper(paper: ReviewedPaper): ReviewedPaper {
+  const { blobUrl: _b, reviewStreaming: _s, reviewAgents: _a, reviewError: _e, ...rest } = paper;
+  return rest;
+}
+
+function persist(papers: ReviewedPaper[], activePaperId: string | null) {
+  void platform()
+    .storage.set<PersistShape>(STORAGE_KEY, { papers: papers.map(serializePaper), activePaperId })
+    .catch((err: unknown) => console.error('[peerReviewStore] persist failed:', err));
 }
 
 async function readFileBytes(file: File): Promise<Uint8Array> {
@@ -127,9 +154,23 @@ export function normalizeExtractedPdfText(text: string): string {
   return paragraphs.join('\n\n').trim();
 }
 
-export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
+export const usePeerReviewStore = create<PeerReviewStore>((set, get) => {
+  const save = () => persist(get().papers, get().activePaperId);
+  return {
   papers: [],
   activePaperId: null,
+  hydrated: false,
+
+  hydrate: async () => {
+    if (get().hydrated) return;
+    try {
+      const stored = await platform().storage.get<PersistShape>(STORAGE_KEY);
+      const papers = Array.isArray(stored?.papers) ? stored.papers : [];
+      set({ papers, activePaperId: stored?.activePaperId ?? papers[papers.length - 1]?.id ?? null, hydrated: true });
+    } catch {
+      set({ hydrated: true });
+    }
+  },
 
   addUpload: async (file) => {
     const id = uid();
@@ -152,6 +193,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
         blobUrl,
       };
       set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
+      save();
       return id;
     } catch (err) {
       URL.revokeObjectURL(blobUrl);
@@ -176,19 +218,25 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       ? { ...base, blobUrl: URL.createObjectURL(pdfBlob) }
       : base;
     set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
+    save();
     return id;
   },
 
-  setActive: (id) => set({ activePaperId: id }),
+  setActive: (id) => {
+    set({ activePaperId: id });
+    save();
+  },
 
-  setReview: (id, review) =>
+  setReview: (id, review) => {
     set((s) => ({
       papers: s.papers.map((p) => {
         if (p.id !== id) return p;
         const { reviewStreaming: _s, reviewError: _e, ...rest } = p;
         return { ...rest, review };
       }),
-    })),
+    }));
+    save();
+  },
 
   setReviewStreaming: (id, streaming) =>
     set((s) => ({
@@ -207,10 +255,12 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       papers: s.papers.map((p) => (p.id === id ? { ...p, reviewAgents: agents } : p)),
     })),
 
-  setCitationAudit: (id, audit) =>
+  setCitationAudit: (id, audit) => {
     set((s) => ({
       papers: s.papers.map((p) => (p.id === id ? { ...p, citationAudit: audit } : p)),
-    })),
+    }));
+    save();
+  },
 
   patchReviewAgent: (id, agentId, patch) =>
     set((s) => ({
@@ -223,12 +273,14 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
       }),
     })),
 
-  setDocumentDraft: (id, text, html) =>
+  setDocumentDraft: (id, text, html) => {
     set((s) => ({
       papers: s.papers.map((p) => (p.id === id ? { ...p, editedText: text, editedHtml: html } : p)),
-    })),
+    }));
+    save();
+  },
 
-  removePaper: (id) =>
+  removePaper: (id) => {
     set((s) => {
       const paper = s.papers.find((p) => p.id === id);
       if (paper?.blobUrl) URL.revokeObjectURL(paper.blobUrl);
@@ -237,5 +289,8 @@ export const usePeerReviewStore = create<PeerReviewStore>((set) => ({
         ? (papers[papers.length - 1]?.id ?? null)
         : s.activePaperId;
       return { papers, activePaperId };
-    }),
-}));
+    });
+    save();
+  },
+  };
+});

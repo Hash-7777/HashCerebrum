@@ -7,6 +7,7 @@ import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useRagStore } from '@core/store/ragStore';
+import { usePeerReviewStore } from '@core/store/peerReviewStore';
 import { warmupEmbeddings } from '@core/rag';
 import { useAgentModelStore } from '@core/store/agentModelStore';
 import { useAgentStore } from '@core/store/agentStore';
@@ -46,6 +47,7 @@ export function AppShell() {
   const hydrateChats = useChatHistoryStore((s) => s.hydrate);
   const hydrateProjects = useProjectStore((s) => s.hydrate);
   const hydrateRag = useRagStore((s) => s.hydrate);
+  const hydratePeerReview = usePeerReviewStore((s) => s.hydrate);
   const hydrateAgentModels = useAgentModelStore((s) => s.hydrate);
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export function AppShell() {
     void refreshModels();
     void hydrateResearchRuns();
     void hydrateRag();
+    void hydratePeerReview();
     void warmupEmbeddings(); // begin loading the local embedding model early
     void hydrateAgentModels();
     // Projects must hydrate before chats so legacy chats with no projectId
@@ -69,6 +72,7 @@ export function AppShell() {
     hydrateChats,
     hydrateProjects,
     hydrateRag,
+    hydratePeerReview,
     hydrateResearchRuns,
     refreshModels,
   ]);

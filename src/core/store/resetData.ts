@@ -16,6 +16,8 @@ const USER_DATA_KEYS = [
   'research.runs.v1', // researchRunStore
   'rag.v2', // ragStore — memory + int8 vectors
   'rag.v1', // legacy pre-vector memory (discard any leftover)
+  'rag.v3', // ragStore — imported-document schema
+  'peerReview.v1', // peerReviewStore — reviewed papers + reviews
 ];
 
 /** Wipe all saved data and reload into a clean state. */
