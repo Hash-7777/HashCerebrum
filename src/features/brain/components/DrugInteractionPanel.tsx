@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { Icon } from '@ui/icons';
+import { useModeStore } from '@core/store/modeStore';
 import { DrugInteractionDisclaimer, hasAckedDiDisclaimer } from './DrugInteractionDisclaimer';
 
 const GRADES: Array<{ grade: string; label: string; detail: string; cls: string }> = [
@@ -16,10 +17,13 @@ const GRADES: Array<{ grade: string; label: string; detail: string; cls: string 
 
 export function DrugInteractionPanel() {
   // Gate first use behind the full disclaimer; allow re-opening it any time.
+  // The panel is mounted (hidden) at app start, so only raise the gate once the
+  // Drug-Interactions mode is actually active — not on launch.
+  const isActive = useModeStore((s) => s.mode === 'drug_interactions');
   const [disclaimer, setDisclaimer] = useState<'gate' | 'review' | null>(null);
   useEffect(() => {
-    if (!hasAckedDiDisclaimer()) setDisclaimer('gate');
-  }, []);
+    if (isActive && !hasAckedDiDisclaimer()) setDisclaimer('gate');
+  }, [isActive]);
 
   return (
     <aside className="di-panel" aria-label="Drug interaction grading">
