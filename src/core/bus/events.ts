@@ -44,9 +44,20 @@ export interface ModeChangeEvent {
   to: ModeId;
 }
 
+export interface BlackboardUpdateEvent {
+  runId: string;
+  entry: { id: string; type: string; title: string };
+}
+
+export interface BlackboardClearedEvent {
+  runId: string;
+}
+
 export type EventMap = {
   'region:light': RegionLightEvent;
   'agent:activity': AgentActivityEvent;
   'topic:detected': TopicEvent;
   'mode:change': ModeChangeEvent;
+  'blackboard:updated': BlackboardUpdateEvent;
+  'blackboard:cleared': BlackboardClearedEvent;
 };
