@@ -98,6 +98,7 @@ export const tauriPlatform: Platform = {
     pubmed: mkMedical('pubmed', 'pubmed_search'),
     europepmc: mkMedical('europepmc', 'europepmc_fetch'),
     openalex: mkMedical('openalex', 'openalex_query'),
+    semantic_scholar: mkMedical('semantic_scholar', 'semantic_scholar_search'),
     ctgov: mkMedical('ctgov', 'ctgov_search'),
     openfda: async (endpoint, q) => {
       const results = await invoke<EvidenceItem[]>('openfda_query', {

@@ -55,6 +55,7 @@ const SOURCE_SCORE: Record<EvidenceItem['source'], number> = {
   ctgov: 6,
   europepmc: 5,
   openalex: 4,
+  semantic_scholar: 4,
   openfda: 3,
   rxnorm: 2,
 };

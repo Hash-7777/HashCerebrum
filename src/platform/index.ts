@@ -15,7 +15,7 @@ export interface MedicalSourceQuery {
 }
 
 export interface EvidenceItem {
-  source: 'pubmed' | 'europepmc' | 'openalex' | 'ctgov' | 'openfda' | 'rxnorm' | 'library';
+  source: 'pubmed' | 'europepmc' | 'openalex' | 'ctgov' | 'openfda' | 'rxnorm' | 'semantic_scholar' | 'library';
   title: string;
   year?: number | string | null;
   authors: string[];
@@ -66,6 +66,7 @@ export interface Platform {
     pubmed(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     europepmc(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     openalex(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
+    semantic_scholar(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     ctgov(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     openfda(endpoint: string, q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     rxnorm(drug: string): Promise<MedicalSourceResult>;

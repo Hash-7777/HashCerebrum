@@ -10,6 +10,7 @@ const sourceUrl: Record<EvidenceItem['source'], string> = {
   ctgov: 'https://clinicaltrials.gov/',
   openfda: 'https://open.fda.gov/',
   rxnorm: 'https://rxnav.nlm.nih.gov/',
+  semantic_scholar: 'https://www.semanticscholar.org/',
   library: '',
 };
 
@@ -95,6 +96,7 @@ export const browserPlatform: Platform = {
     ctgov: async () => mocked('ctgov', 'Mock ClinicalTrials.gov study result'),
     openfda: async () => mocked('openfda', 'Mock OpenFDA safety signal result'),
     rxnorm: async () => mocked('rxnorm', 'Mock RxNorm concept result'),
+    semantic_scholar: async () => mocked('semantic_scholar', 'Mock Semantic Scholar result'),
   },
   pdf: {
     extractTextBytes: async () => {

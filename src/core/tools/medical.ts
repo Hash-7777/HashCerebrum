@@ -79,6 +79,13 @@ export function registerMedicalTools() {
   });
 
   tools.register({
+    name: 'semantic_scholar_search',
+    description: 'Search Semantic Scholar for academic papers with citation context through the Rust network guard.',
+    parameters: sourceQuerySchema,
+    execute: (args) => platform().medical.semantic_scholar(cleanQuery(args)),
+  });
+
+  tools.register({
     name: 'ctgov_search',
     description: 'Search ClinicalTrials.gov studies through the Rust network guard.',
     parameters: sourceQuerySchema,

@@ -56,6 +56,7 @@ const MEDICAL_TOOLS = [
   'ctgov_search',
   'openfda_query',
   'rxnorm_lookup',
+  'semantic_scholar_search',
 ];
 const SPECIALIST_TOOLS = ['rag_search', ...MEDICAL_TOOLS];
 

@@ -26,6 +26,7 @@ function directSearchPlan(query: string, agent: AgentDef): DirectSearchPlan[] {
     { name: 'pubmed_search', args: { query, maxResults } },
     { name: 'europepmc_fetch', args: { query, maxResults } },
     { name: 'openalex_query', args: { query, maxResults } },
+    { name: 'semantic_scholar_search', args: { query, maxResults } },
     { name: 'ctgov_search', args: { query, maxResults } },
     { name: 'openfda_query', args: { endpoint: 'drug/event', query, maxResults: 10 } },
     { name: 'rxnorm_lookup', args: { drug: query } },

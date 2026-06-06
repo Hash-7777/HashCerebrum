@@ -25,6 +25,7 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   ctgov: 'ClinicalTrials.gov',
   openfda: 'openFDA',
   rxnorm: 'RxNorm',
+  semantic_scholar: 'Semantic Scholar',
   library: 'Imported document',
 };
 
