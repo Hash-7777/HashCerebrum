@@ -34,23 +34,26 @@ interface RegionMapShape {
   parts: BrainModelPart[];
 }
 
+function isRegionMapShape(value: unknown): value is RegionMapShape {
+  if (!value || typeof value !== 'object') return false;
+  const m = value as Record<string, unknown>;
+  if (!m.model || typeof m.model !== 'object') return false;
+  if (!Array.isArray(m.parts)) return false;
+  for (const part of m.parts) {
+    if (!part || typeof part !== 'object') return false;
+    const p = part as Record<string, unknown>;
+    if (!p.nodeName || !p.id || !p.label) return false;
+    if (!Array.isArray(p.regionIds) || p.regionIds.length === 0) return false;
+  }
+  return true;
+}
+
 // Light validation — fail loud if someone edits the JSON into a bad
 // shape. We do not silently fall back to a default, because that would
 // hide the bug behind an empty brain.
 function validate(map: unknown): RegionMapShape {
-  if (!map || typeof map !== 'object') throw new Error('region-map.json is not an object');
-  const m = map as Partial<RegionMapShape>;
-  if (!m.model || typeof m.model !== 'object') throw new Error('region-map.json.model is missing');
-  if (!Array.isArray(m.parts)) throw new Error('region-map.json.parts is not an array');
-  for (const part of m.parts) {
-    if (!part.nodeName || !part.id || !part.label) {
-      throw new Error(`region-map.json.parts entry missing id/nodeName/label: ${JSON.stringify(part)}`);
-    }
-    if (!Array.isArray(part.regionIds) || part.regionIds.length === 0) {
-      throw new Error(`region-map.json part ${part.id} has no regionIds`);
-    }
-  }
-  return m as RegionMapShape;
+  if (!isRegionMapShape(map)) throw new Error('region-map.json failed validation');
+  return map;
 }
 
 const map = validate(rawMap);

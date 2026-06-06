@@ -36,10 +36,15 @@ interface AgentModelStore {
 // connected this means each specialist runs on a different provider, so a swarm
 // no longer burns one key into rate limits — the cause of the cascading 429s in
 // long runs. When only one provider is connected they all share it as before.
+function isCompleteAgentMap(map: Partial<Record<AgentId, string>>): map is Record<AgentId, string> {
+  return AGENTS.every((agent) => typeof map[agent.id] === 'string');
+}
+
 export function autoAssignModels(models: ModelOption[]): Record<AgentId, string> {
-  const result = {} as Record<AgentId, string>;
+  const result: Partial<Record<AgentId, string>> = {};
   if (models.length === 0) {
     for (const agent of AGENTS) result[agent.id] = DEFAULT_MODEL;
+    if (!isCompleteAgentMap(result)) throw new Error('autoAssignModels failed to populate all agents');
     return result;
   }
   const ranked = [...models].sort(
@@ -75,6 +80,7 @@ export function autoAssignModels(models: ModelOption[]): Record<AgentId, string>
       provIdx += 1;
     }
   }
+  if (!isCompleteAgentMap(result)) throw new Error('autoAssignModels failed to populate all agents');
   return result;
 }
 

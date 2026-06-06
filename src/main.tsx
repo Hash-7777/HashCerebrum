@@ -38,6 +38,12 @@ import '@fontsource/source-serif-4/300-italic.css';
 import '@fontsource/source-serif-4/400-italic.css';
 import './styles/globals.css';
 
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
 // Detect runtime. The Tauri global is injected by the runtime when running
 // under the desktop shell. In `vite dev` (browser) we fall back to mock.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
