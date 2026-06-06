@@ -58,6 +58,7 @@ pub struct TraceSpan {
     pub attributes: Option<String>,
 }
 
+#[allow(dead_code)]
 pub fn start_span(
     trace_id: String,
     parent_id: Option<i64>,
@@ -85,6 +86,7 @@ pub fn start_span(
     Ok(conn.last_insert_rowid())
 }
 
+#[allow(dead_code)]
 pub fn end_span(span_id: i64, status: String) -> AppResult<()> {
     let mut guard = DB
         .lock()

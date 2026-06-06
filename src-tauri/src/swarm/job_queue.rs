@@ -156,6 +156,7 @@ pub fn list_by_project(conn: &Connection, project_id: &str) -> AppResult<Vec<Job
     Ok(rows)
 }
 
+#[allow(dead_code)]
 pub fn list_pending(conn: &Connection) -> AppResult<Vec<Job>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, query, mode, config, status, created_at,
@@ -168,6 +169,7 @@ pub fn list_pending(conn: &Connection) -> AppResult<Vec<Job>> {
     Ok(rows)
 }
 
+#[allow(dead_code)]
 pub fn delete(conn: &Connection, job_id: &str) -> AppResult<()> {
     conn.execute("DELETE FROM jobs WHERE id = ?1", params![job_id])?;
     Ok(())

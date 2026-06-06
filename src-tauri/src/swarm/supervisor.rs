@@ -38,6 +38,7 @@ pub enum SupervisorCmd {
         project_id: String,
         respond_to: tokio::sync::oneshot::Sender<AppResult<Vec<Job>>>,
     },
+    #[allow(dead_code)]
     Shutdown,
 }
 
