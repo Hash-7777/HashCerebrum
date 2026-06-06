@@ -53,6 +53,13 @@ export interface BlackboardClearedEvent {
   runId: string;
 }
 
+export interface ConsensusVoteEvent {
+  runId: string;
+  agentId: string;
+  evidenceHash: string;
+  confidence: number;
+}
+
 export type EventMap = {
   'region:light': RegionLightEvent;
   'agent:activity': AgentActivityEvent;
@@ -60,4 +67,5 @@ export type EventMap = {
   'mode:change': ModeChangeEvent;
   'blackboard:updated': BlackboardUpdateEvent;
   'blackboard:cleared': BlackboardClearedEvent;
+  'consensus:vote': ConsensusVoteEvent;
 };
