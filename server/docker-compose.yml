@@ -1,0 +1,63 @@
+# HashCerebrum Cloud Server — Local development stack
+# ==============================================================
+#   docker compose up -d
+#
+# Services:
+#   - db:      PostgreSQL 16
+#   - qdrant:  Vector database for RAG embeddings
+#   - server:  Axum backend (builds from Dockerfile)
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hashcerebrum
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/hashcerebrum
+      BIND_ADDR: 0.0.0.0:3000
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URL: ${OAUTH_REDIRECT_URL:-http://localhost:3000/auth/callback}
+      QDRANT_URL: http://qdrant:6334
+      RUST_LOG: hashcerebrum_server=debug,tower_http=debug
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  qdrant_data:
