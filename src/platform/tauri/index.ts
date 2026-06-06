@@ -124,6 +124,7 @@ export const tauriPlatform: Platform = {
         provenanceHash: first?.provenanceHash ?? '',
       };
     },
+    crossref_lookup: (doi) => invoke('crossref_lookup', { doi }),
   },
 
   pdf: {
@@ -133,6 +134,7 @@ export const tauriPlatform: Platform = {
       invoke<string>('pdf_extract_text_bytes', { filename, bytes }),
     extractPagesBytes: (filename, bytes) =>
       invoke<string[]>('pdf_extract_pages_bytes', { filename, bytes }),
+    fetchOpenAccessPdf: (url) => invoke<string>('fetch_open_access_pdf', { url }),
   },
 
   manuscript: {

@@ -36,12 +36,13 @@ use commands::{
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
+        crossref::crossref_lookup,
         ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
         openfda::openfda_query, pubmed::pubmed_search, rxnorm::rxnorm_lookup,
         semantic_scholar::semantic_scholar_search,
     },
-    net::net_get,
-    pdf::{pdf_extract_pages_bytes, pdf_extract_text_bytes},
+    net::{net_get, net_get_bytes},
+    pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -93,6 +94,7 @@ pub fn run() {
             audit_log_count,
             audit_log_verify,
             net_get,
+            net_get_bytes,
             llm_http_get,
             llm_http_post,
             llm_chat_stream,
@@ -104,8 +106,10 @@ pub fn run() {
             openfda_query,
             rxnorm_lookup,
             semantic_scholar_search,
+            crossref_lookup,
             pdf_extract_text_bytes,
             pdf_extract_pages_bytes,
+            fetch_open_access_pdf,
             write_file_bytes,
             render_manuscript_pdf,
             cache_stats,

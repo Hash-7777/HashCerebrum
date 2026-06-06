@@ -97,6 +97,16 @@ export const browserPlatform: Platform = {
     openfda: async () => mocked('openfda', 'Mock OpenFDA safety signal result'),
     rxnorm: async () => mocked('rxnorm', 'Mock RxNorm concept result'),
     semantic_scholar: async () => mocked('semantic_scholar', 'Mock Semantic Scholar result'),
+    crossref_lookup: async (doi: string) => ({
+      doi,
+      title: 'Mock Crossref title',
+      containerTitle: 'Mock Journal',
+      publishedDate: '2025-01-01',
+      citationCount: 42,
+      referenceCount: 30,
+      authors: ['Browser mock'],
+      url: `https://doi.org/${doi}`,
+    }),
   },
   pdf: {
     extractTextBytes: async () => {
@@ -104,6 +114,9 @@ export const browserPlatform: Platform = {
     },
     extractPagesBytes: async () => {
       throw new Error('PDF text extraction requires the desktop app');
+    },
+    fetchOpenAccessPdf: async () => {
+      throw new Error('Open-access PDF fetching requires the desktop app');
     },
   },
   manuscript: {

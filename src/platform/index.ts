@@ -33,6 +33,17 @@ export interface MedicalSourceResult {
   provenanceHash: string;
 }
 
+export interface CrossrefMeta {
+  doi: string;
+  title: string;
+  containerTitle?: string | null;
+  publishedDate?: string | null;
+  citationCount?: number | null;
+  referenceCount?: number | null;
+  authors: string[];
+  url: string;
+}
+
 export interface CacheHostStat {
   host: string;
   rows: number;
@@ -70,6 +81,7 @@ export interface Platform {
     ctgov(q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     openfda(endpoint: string, q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     rxnorm(drug: string): Promise<MedicalSourceResult>;
+    crossref_lookup(doi: string): Promise<CrossrefMeta>;
   };
 
   // PDF extraction (bytes-based only — path-based command removed)
@@ -77,6 +89,8 @@ export interface Platform {
     extractTextBytes(filename: string, bytes: Uint8Array): Promise<string>;
     /** One string per page, in page order — for page-accurate citations. */
     extractPagesBytes(filename: string, bytes: Uint8Array): Promise<string[]>;
+    /** Download an open-access PDF by URL and extract its text. */
+    fetchOpenAccessPdf(url: string): Promise<string>;
   };
 
   // Manuscript typesetting — a structured manuscript rendered to a PDF by

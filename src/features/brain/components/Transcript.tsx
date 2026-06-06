@@ -46,6 +46,10 @@ function evidenceKey(item: EvidenceItem, index: number) {
   return item.provenanceHash || `${item.source}-${item.title}-${index}`;
 }
 
+function isRetracted(item: EvidenceItem): boolean {
+  return item.identifiers?.retracted === 'true';
+}
+
 function DocumentArtifactCard({
   title,
   typeLabel,
@@ -412,8 +416,16 @@ export const Transcript = memo(function Transcript({
                   {message.citations && message.citations.length > 0 && !isDocument && (
                     <div className="inline-citations">
                       {message.citations.slice(0, 6).map((item, i) => (
-                        <a key={evidenceKey(item, i)} href={isSafeUrl(item.url) ? item.url : undefined} target="_blank" rel="noreferrer">
+                        <a
+                          key={evidenceKey(item, i)}
+                          href={isSafeUrl(item.url) ? item.url : undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={isRetracted(item) ? 'citation-retracted' : ''}
+                          title={isRetracted(item) ? 'This paper has been retracted' : undefined}
+                        >
                           <Icon name="quote" size={10} /> [{i + 1}] {item.source}
+                          {isRetracted(item) && <span className="retraction-badge">RETRACTED</span>}
                         </a>
                       ))}
                     </div>

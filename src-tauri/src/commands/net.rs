@@ -50,6 +50,18 @@ pub(crate) async fn read_body_capped(mut resp: reqwest::Response, max: usize) ->
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
+/// Raw-byte variant of [`read_body_capped`] for binary downloads (e.g. PDFs).
+pub(crate) async fn read_body_bytes_capped(mut resp: reqwest::Response, max: usize) -> AppResult<Vec<u8>> {
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp.chunk().await? {
+        if buf.len() + chunk.len() > max {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpResponse {
     pub status: u16,
@@ -101,6 +113,56 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     );
 
     Ok(HttpResponse { status, body })
+}
+
+/// Fetch a URL and return raw bytes. Used for binary downloads (open-access PDFs).
+/// Same guard, audit, rate-limit, and size-cap protections as [`net_get`].
+#[tauri::command]
+pub async fn net_get_bytes(url: String) -> AppResult<Vec<u8>> {
+    let parsed = Url::parse(&url).map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| AppError::InvalidInput("no host".into()))?;
+    check(Action::Net {
+        host,
+        port: parsed.port(),
+    })?;
+
+    crate::ratelimit::acquire(host).await;
+
+    let resp = http_client()?.get(&url).send().await?;
+    let status = resp.status().as_u16();
+
+    if !(200..300).contains(&status) {
+        return Err(AppError::Network(format!(
+            "upstream returned HTTP {} for {}",
+            status, host
+        )));
+    }
+
+    if let Some(len) = resp.content_length() {
+        if len > MAX_BODY_BYTES as u64 {
+            return Err(AppError::InvalidInput("response exceeds 50 MB".into()));
+        }
+    }
+    let bytes = read_body_bytes_capped(resp, MAX_BODY_BYTES).await?;
+    let mut redacted = parsed.clone();
+    redacted.set_query(None);
+    let _ = redacted.set_username("");
+    let _ = redacted.set_password(None);
+
+    let _ = audit::append(
+        "net",
+        host,
+        "get_bytes",
+        &serde_json::json!({
+            "url": redacted.as_str(),
+            "status": status,
+            "bytes": bytes.len()
+        }),
+    );
+
+    Ok(bytes)
 }
 
 #[cfg(test)]

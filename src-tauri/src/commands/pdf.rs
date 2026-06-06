@@ -5,6 +5,7 @@
 //! lopdf is pure-Rust (no native deps) so we don't drag in a toolchain
 //! requirement on every CI image.
 
+use crate::commands::net::net_get_bytes;
 use crate::error::{AppError, AppResult};
 use lopdf::Document;
 
@@ -103,4 +104,35 @@ pub async fn pdf_extract_pages_bytes(filename: String, bytes: Vec<u8>) -> AppRes
     );
 
     Ok(pages)
+}
+
+/// Download an open-access PDF by URL and extract its text. Used when Semantic
+/// Scholar (or another source) provides a direct PDF link so the Brain can
+/// synthesise from full-text rather than abstracts only.
+#[tauri::command]
+pub async fn fetch_open_access_pdf(url: String) -> AppResult<String> {
+    let bytes = net_get_bytes(url.clone()).await?;
+    if bytes.len() < 4 || &bytes[0..4] != b"%PDF" {
+        return Err(AppError::InvalidInput(
+            "downloaded file is not a valid PDF (missing %PDF header)".into(),
+        ));
+    }
+    let byte_len = bytes.len();
+    let fingerprint = crate::crypto::sha256_hex(&bytes);
+    let extracted = tokio::task::spawn_blocking(move || -> Result<String, lopdf::Error> {
+        let doc = Document::load_mem(&bytes)?;
+        Ok(extract_text_from_document(doc))
+    })
+    .await
+    .map_err(|e| AppError::Pdf(format!("join: {e}")))?
+    .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
+
+    let _ = crate::audit::store::append(
+        "net",
+        &url,
+        "fetch_open_access_pdf",
+        &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "chars": extracted.len() }),
+    );
+
+    Ok(extracted)
 }

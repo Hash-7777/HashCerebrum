@@ -4,6 +4,7 @@
 //! All implementations route through commands::net::net_get and inherit
 //! its guard + audit guarantees.
 
+pub mod crossref;
 pub mod ctgov;
 pub mod europepmc;
 pub mod openalex;
