@@ -89,7 +89,7 @@ export class WebRTCMesh {
     const pc = new RTCPeerConnection({ iceServers: this._iceServers });
     const channel = pc.createDataChannel('hashcerebrum', { ordered: true });
 
-    this.peers.set(tempPeerId, { pc, channel: null, name: '', approved: true });
+    this.peers.set(tempPeerId, { pc, channel, name: '', approved: true });
     this._setupPeerConnection(tempPeerId, pc);
     this._setupDataChannel(tempPeerId, channel);
 
@@ -223,10 +223,13 @@ export class WebRTCMesh {
   }
 
   private _setupDataChannel(peerId: string, channel: RTCDataChannel): void {
+    const pc = this.peers.get(peerId)?.pc;
     channel.onopen = () => {
-      const info = this.peers.get(peerId);
-      if (info) {
-        info.channel = channel;
+      for (const [, info] of this.peers) {
+        if (info.pc === pc) {
+          info.channel = channel;
+          break;
+        }
       }
     };
     channel.onmessage = (event) => {
@@ -238,9 +241,11 @@ export class WebRTCMesh {
       }
     };
     channel.onclose = () => {
-      const info = this.peers.get(peerId);
-      if (info) {
-        info.channel = null;
+      for (const [, info] of this.peers) {
+        if (info.pc === pc) {
+          info.channel = null;
+          break;
+        }
       }
     };
   }
@@ -255,6 +260,10 @@ export class WebRTCMesh {
   private _gatherIceCandidates(pc: RTCPeerConnection): Promise<RTCIceCandidateInit[]> {
     return new Promise((resolve) => {
       const candidates: RTCIceCandidateInit[] = [];
+      if (pc.iceGatheringState === 'complete') {
+        resolve(candidates);
+        return;
+      }
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           candidates.push(event.candidate.toJSON());
