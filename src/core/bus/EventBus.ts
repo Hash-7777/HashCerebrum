@@ -4,10 +4,9 @@
 import type { EventMap } from './events';
 
 type Handler<K extends keyof EventMap> = (payload: EventMap[K]) => void;
-type AnyHandler = (payload: unknown) => void;
 
 class EventBus {
-  private handlers = new Map<keyof EventMap, Set<AnyHandler>>();
+  private handlers = new Map<keyof EventMap, Set<Handler<keyof EventMap>>>();
 
   on<K extends keyof EventMap>(event: K, handler: Handler<K>): () => void {
     let set = this.handlers.get(event);
@@ -15,8 +14,8 @@ class EventBus {
       set = new Set();
       this.handlers.set(event, set);
     }
-    set.add(handler as AnyHandler);
-    return () => set!.delete(handler as AnyHandler);
+    set.add(handler as Handler<keyof EventMap>);
+    return () => set!.delete(handler as Handler<keyof EventMap>);
   }
 
   emit<K extends keyof EventMap>(event: K, payload: EventMap[K]): void {
