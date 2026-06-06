@@ -60,6 +60,12 @@ export interface ConsensusVoteEvent {
   confidence: number;
 }
 
+export interface TelemetrySpanEvent {
+  traceId: string;
+  name: string;
+  status: string;
+}
+
 export type EventMap = {
   'region:light': RegionLightEvent;
   'agent:activity': AgentActivityEvent;
@@ -68,4 +74,5 @@ export type EventMap = {
   'blackboard:updated': BlackboardUpdateEvent;
   'blackboard:cleared': BlackboardClearedEvent;
   'consensus:vote': ConsensusVoteEvent;
+  'telemetry:span': TelemetrySpanEvent;
 };

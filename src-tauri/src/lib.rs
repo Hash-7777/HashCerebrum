@@ -27,6 +27,7 @@ mod crypto;
 mod error;
 mod ratelimit;
 mod security;
+mod telemetry;
 
 use commands::{
     audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
@@ -84,6 +85,7 @@ pub fn run() {
             security::guard::init(app.handle())?;
             audit::init(app.handle())?;
             cache::init(app.handle())?;
+            telemetry::init(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -117,6 +119,7 @@ pub fn run() {
             cache_clear,
             cache_clear_expired,
             purge_project_data,
+            telemetry::trace_read,
             app_relaunch,
         ])
         .build(tauri::generate_context!())
