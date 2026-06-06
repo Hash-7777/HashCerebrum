@@ -86,7 +86,8 @@ function loadLegacyLocalStorage(): PersistShape | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistShape>;
     return normalizeShape(parsed);
-  } catch {
+  } catch (error) {
+    console.warn('[resourcesStore] Failed to load legacy localStorage:', error);
     return null;
   }
 }
@@ -96,7 +97,8 @@ async function loadPersisted(): Promise<PersistShape> {
     const stored = await platform().storage.get<PersistShape>(STORAGE_KEY);
     if (stored) return normalizeShape(stored);
     return loadLegacyLocalStorage() ?? emptyShape();
-  } catch {
+  } catch (error) {
+    console.warn('[resourcesStore] Failed to load persisted resources:', error);
     return loadLegacyLocalStorage() ?? emptyShape();
   }
 }

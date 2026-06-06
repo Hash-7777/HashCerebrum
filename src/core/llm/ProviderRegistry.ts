@@ -27,6 +27,11 @@ import type { LlmProvider, LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, 
 
 export { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from './providerSettings';
 
+interface ProviderResponse<T = unknown> {
+  choices?: Array<{ message?: { content?: string; tool_calls?: T[] } }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
 function asOpenAiTools(tools: LlmToolSpec[] = []) {
   return tools.map((tool) => ({
     type: 'function',
@@ -113,10 +118,7 @@ async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmReque
     body.tools = asOpenAiTools(req.tools);
     body.tool_choice = 'auto';
   }
-  const data = await postJson<{
-    choices?: Array<{ message?: { content?: string; tool_calls?: unknown[] } }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  }>(providerId, url, headers, body);
+  const data = await postJson<ProviderResponse<unknown>>(providerId, url, headers, body);
   const message = data.choices?.[0]?.message ?? {};
   const result: LlmResponse = {
     content: message.content || '',
@@ -562,7 +564,7 @@ export async function streamWithModelChain(
       const retries = providerRetries.get(parsed.provider) ?? 0;
       if (shouldRetrySameProvider(error) && retries < 1) {
         providerRetries.set(parsed.provider, retries + 1);
-        await delay(RETRY_WAIT_MS);
+        await delay(RETRY_WAIT_MS, opts.signal);
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
@@ -614,11 +616,15 @@ export async function resolveDefaultModel(): Promise<string> {
   try {
     const { status, body } = await platform().llm.httpGet('ollama', `${getOllamaHost()}/api/ps`, {});
     if (status >= 200 && status < 300) {
-      const data = JSON.parse(body);
-      const loaded = Array.isArray(data?.models) ? data.models : Array.isArray(data?.processes) ? data.processes : [];
-      const first: unknown = loaded[0]?.model ?? loaded[0]?.name;
-      if (typeof first === 'string' && first.length > 0) {
-        return `local:ollama:${first}`;
+      try {
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const loaded = Array.isArray(data.models) ? data.models : Array.isArray(data.processes) ? data.processes : [];
+        const first: unknown = loaded[0]?.model ?? loaded[0]?.name;
+        if (typeof first === 'string' && first.length > 0) {
+          return `local:ollama:${first}`;
+        }
+      } catch {
+        /* Ollama returned non-JSON — fall through */
       }
     }
   } catch {
@@ -669,8 +675,14 @@ const MAX_FAILOVERS = 4;
 const MAX_LENGTH_CONTINUATIONS = 4;
 const RETRY_WAIT_MS = 2000;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new Error('Stream aborted'));
+    }, { once: true });
+  });
 }
 
 async function hasStoredKey(provider: LlmProviderId): Promise<boolean> {

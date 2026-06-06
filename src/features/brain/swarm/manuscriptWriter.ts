@@ -5,6 +5,7 @@
 
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import type { EvidenceItem } from '@platform/index';
+import { showToast } from '@core/store/toastStore';
 import {
   containsPromptLeakage,
   parseAbstract,
@@ -266,8 +267,10 @@ export async function draftManuscript(opts: DraftManuscriptOptions): Promise<Man
       120,
     );
     title = cleanTitle(reply, question, dataset);
-  } catch {
-    /* keep the fallback title */
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn('[manuscriptWriter] Title generation failed:', detail);
+    showToast('Title generation failed — using fallback', 'error');
   }
 
   // Sections — one focused call each; a failed section degrades to a note.
@@ -362,8 +365,10 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
             priorDigest,
           }),
         };
-      } catch {
-        /* keep the previous section; final validation will block export if needed */
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn('[manuscriptWriter] Section repair failed:', detail);
+        showToast('Section repair failed — keeping previous draft', 'error');
       }
     }
   }
@@ -383,8 +388,10 @@ Rewrite the complete ${spec.heading} section as a full replacement. Target ${spe
       1100,
     );
     abstract = parseAbstract(reply);
-  } catch {
-    /* keep the empty abstract */
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn('[manuscriptWriter] Abstract generation failed:', detail);
+    showToast('Abstract generation failed — leaving empty', 'error');
   }
 
   const manuscript: Manuscript = { title, abstract, keywords: keywordsFrom(question), sections };

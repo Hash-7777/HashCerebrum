@@ -135,7 +135,7 @@ export const browserPlatform: Platform = {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      setTimeout(() => URL.revokeObjectURL(url), 6000);
       return true;
     },
   },
@@ -198,6 +198,10 @@ export const browserPlatform: Platform = {
       let buffer = '';
       try {
         for (;;) {
+          if (signal?.aborted) {
+            await reader.cancel();
+            return;
+          }
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -213,6 +217,8 @@ export const browserPlatform: Platform = {
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         throw err;
+      } finally {
+        reader.releaseLock();
       }
     },
   },

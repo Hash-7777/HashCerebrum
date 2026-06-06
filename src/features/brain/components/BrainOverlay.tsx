@@ -76,11 +76,12 @@ export function BrainOverlay({ cameraRef, containerRef, groupRef, hoveredRegion,
   }, [hoveredRegion]);
 
   const visibleId = delayedHover ?? selectedRegion;
+
   const region = visibleId ? regionById(visibleId) : null;
 
   // Track the camera without forcing React to repaint every animation frame.
   useEffect(() => {
-    if (!visibleId || !region) return;
+    if (!region) return;
     let raf = 0;
     const loop = () => {
       const camera = cameraRef.current;
@@ -120,7 +121,7 @@ export function BrainOverlay({ cameraRef, containerRef, groupRef, hoveredRegion,
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [cameraRef, containerRef, groupRef, region, visibleId]);
+  }, [cameraRef, containerRef, groupRef, visibleId]);
 
   if (!region || !visibleId) return null;
 

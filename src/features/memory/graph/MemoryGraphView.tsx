@@ -181,13 +181,16 @@ export function MemoryGraphView({
 
   // Addressing a finding in the diagram lights its anatomical region on the
   // 3D brain — the memory diagram and the brain model are one brain.
-  useEffect(() => {
-    const node = selectedId ? graph.nodes.find((n) => n.id === selectedId) : null;
-    useBrainStore.getState().setFocusRegion(node ? regionForChunk(node.chunk) : null);
-  }, [selectedId, graph.nodes]);
+  const graphRef = useRef(graph);
+  graphRef.current = graph;
 
-  // Clear the focused region when the diagram unmounts.
-  useEffect(() => () => useBrainStore.getState().setFocusRegion(null), []);
+  useEffect(() => {
+    const node = selectedId ? graphRef.current.nodes.find((n) => n.id === selectedId) : null;
+    useBrainStore.getState().setFocusRegion(node ? regionForChunk(node.chunk) : null);
+    return () => {
+      useBrainStore.getState().setFocusRegion(null);
+    };
+  }, [selectedId]);
 
   // Non-passive wheel listener so zoom can preventDefault the page scroll.
   const zoomAt = useCallback((px: number, py: number, factor: number) => {

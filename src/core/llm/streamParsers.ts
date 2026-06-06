@@ -21,12 +21,19 @@ export function parseToolArgs(args: unknown): Record<string, unknown> {
   if (!args) return {};
   if (typeof args === 'string') {
     try {
-      return JSON.parse(args) as Record<string, unknown>;
+      const parsed = JSON.parse(args) as unknown;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return {};
     } catch {
       return {};
     }
   }
-  return args as Record<string, unknown>;
+  if (typeof args === 'object' && !Array.isArray(args)) {
+    return args as Record<string, unknown>;
+  }
+  return {};
 }
 
 export function normalizeOpenAiToolCalls(calls: unknown[] | undefined): LlmToolCall[] {
@@ -162,13 +169,20 @@ function parseGeminiParts(parts: unknown[]): StreamParseResult {
   let delta = '';
 
   parts.forEach((part, index) => {
-    const p = part as { text?: string; functionCall?: { name?: string; args?: Record<string, unknown> } };
-    if (p.text) delta += p.text;
-    if (p.functionCall?.name) {
+    if (!part || typeof part !== 'object') return;
+    const p = part as Record<string, unknown>;
+    const text = typeof p.text === 'string' ? p.text : '';
+    if (text) delta += text;
+    const functionCall =
+      p.functionCall && typeof p.functionCall === 'object' && !Array.isArray(p.functionCall)
+        ? (p.functionCall as Record<string, unknown>)
+        : null;
+    const name = functionCall && typeof functionCall.name === 'string' ? functionCall.name : '';
+    if (name && functionCall) {
       toolCalls.push({
-        id: `call_gemini_${index}_${p.functionCall.name}`,
-        name: p.functionCall.name,
-        args: p.functionCall.args ?? {},
+        id: `call_gemini_${index}_${name}`,
+        name,
+        args: parseToolArgs(functionCall.args),
       });
     }
   });

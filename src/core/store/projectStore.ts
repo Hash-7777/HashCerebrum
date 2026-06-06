@@ -78,7 +78,8 @@ function ensureSeeded(shape: PersistShape): PersistShape {
 async function loadPersisted(): Promise<PersistShape> {
   try {
     return normalizeShape(await platform().storage.get<PersistShape>(STORAGE_KEY));
-  } catch {
+  } catch (error) {
+    console.warn('[projectStore] Failed to load persisted projects:', error);
     return emptyShape();
   }
 }

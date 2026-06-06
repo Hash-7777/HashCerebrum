@@ -583,14 +583,17 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         },
         {
           onToken: (delta) => {
+            if (!isMounted.current) return;
             buffer += delta;
             setMessages((current) =>
               current.map((m) => (m.id === critiqueId ? { ...m, content: buffer } : m)),
             );
             lightRegion('amygdala', 'topic', 0.48, 900);
           },
+          signal: abortRef.current?.signal,
         },
       );
+      if (!isMounted.current) return;
       setMessages((current) =>
         current.map((m) =>
           m.id === critiqueId
@@ -601,6 +604,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
       bus.emit('agent:activity', { agentId: 'boss', phase: 'done' });
       lightRegion('amygdala', 'topic', 0.62, 1500);
     } catch (error) {
+      if (!isMounted.current) return;
       const detail = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
         current.map((m) =>

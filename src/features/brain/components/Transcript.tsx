@@ -170,6 +170,7 @@ export const Transcript = memo(function Transcript({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewDocument | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whether the view is "pinned" to the bottom. We only auto-follow new
   // content while pinned, so scrolling up to read scrollback is never
   // interrupted by an incoming answer.
@@ -210,6 +211,10 @@ export const Transcript = memo(function Transcript({
     [],
   );
 
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
+
   const copyMessage = async (message: ChatMessage) => {
     // Never put internal source markers ([S#], 【S#】) on the clipboard.
     const text = stripResidualSourceMarkers(message.content);
@@ -224,7 +229,7 @@ export const Transcript = memo(function Transcript({
         document.body.removeChild(textarea);
       }
       setCopiedId(message.id);
-      window.setTimeout(() => setCopiedId((current) => (current === message.id ? null : current)), 1200);
+      copyTimerRef.current = setTimeout(() => setCopiedId((current) => (current === message.id ? null : current)), 1200);
     } catch {
       setCopiedId(null);
     }

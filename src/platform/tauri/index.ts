@@ -203,6 +203,7 @@ export const tauriPlatform: Platform = {
         await invoke('llm_chat_stream', { provider, url, headers, body, streamId, onEvent: channel });
       } finally {
         signal?.removeEventListener('abort', doAbort);
+        channel.onmessage = () => {};
       }
       if (streamError) throw new Error(streamError);
     },

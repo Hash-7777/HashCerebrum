@@ -13,18 +13,23 @@ interface ToastStore {
   show: (message: string, tone?: ToastTone) => void;
 }
 
-let timer: ReturnType<typeof setTimeout> | null = null;
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export const useToastStore = create<ToastStore>((set) => ({
+export const useToastStore = create<ToastStore>((set, get) => ({
   message: null,
   tone: 'info',
   show: (message, tone = 'info') => {
-    if (timer) clearTimeout(timer);
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
     set({ message, tone });
-    timer = setTimeout(() => {
-      timer = null;
-      set({ message: null });
+    const id = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      timers.delete(id);
+      if (get().message === message && get().tone === tone) {
+        set({ message: null });
+      }
     }, TOAST_MS);
+    timers.set(id, timer);
   },
 }));
 

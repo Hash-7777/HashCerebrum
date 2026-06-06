@@ -9,6 +9,7 @@ import { AGENTS, type AgentId } from '@config/agents';
 import { modelStrengthScore } from '@core/llm/modelRanking';
 import { DEFAULT_MODEL, parseModelRef, type ModelOption } from '@core/llm/modelCatalog';
 import { platform } from '@platform/index';
+import { showToast } from './toastStore';
 import { allDiscoveredModels } from './modelCatalogStore';
 
 const STORAGE_KEY = 'agentModels.v1';
@@ -87,7 +88,9 @@ export const useAgentModelStore = create<AgentModelStore>((set) => ({
       const overrides =
         stored?.overrides && typeof stored.overrides === 'object' ? stored.overrides : {};
       set({ overrides, hydrated: true });
-    } catch {
+    } catch (error) {
+      console.warn('[agentModelStore] Failed to load persisted overrides:', error);
+      showToast('Failed to load model assignments', 'error');
       set({ hydrated: true });
     }
   },

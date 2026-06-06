@@ -179,10 +179,20 @@ export function DocumentPreviewWindow({
     window.addEventListener('pointercancel', up);
   };
 
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
+
   const copyDocument = async () => {
-    await navigator.clipboard?.writeText(document.copyText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    try {
+      await navigator.clipboard?.writeText(document.copyText);
+      setCopied(true);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
   };
 
   // Portal to <body> so the window escapes the deep transcript stacking context

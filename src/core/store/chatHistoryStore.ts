@@ -95,7 +95,8 @@ async function loadPersisted(): Promise<SavedChat[]> {
   try {
     const stored = await platform().storage.get<PersistShape>(STORAGE_KEY);
     return Array.isArray(stored?.chats) ? stored.chats : [];
-  } catch {
+  } catch (error) {
+    console.warn('[chatHistoryStore] Failed to load persisted chats:', error);
     return [];
   }
 }
