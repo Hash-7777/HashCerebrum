@@ -20,6 +20,7 @@ import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../re
 import { askPaper, citedPassageNumbers, type PaperPassage } from '../askPaper';
 import { continueWriting } from '../continueWriting';
 import { downloadBlob } from '@features/brain/export/messageExport';
+import { notify } from '@platform/notify';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 
 // ── Editor helpers ────────────────────────────────────────────────────────
@@ -1028,6 +1029,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
       );
       setReview(paper.id, review);
       if (review.agentResults) setReviewAgents(paper.id, review.agentResults);
+      void notify('Peer review complete', `"${paper.title.slice(0, 60)}" is ready for review.`);
 
       // Citation-faithfulness pass — verify each [n] claim against the snippet
       // it cites. Only runs for documents that carry source records (Brain

@@ -13,6 +13,7 @@ import { streamWithModelChain } from '@core/llm/ProviderRegistry';
 import type { LlmMessage } from '@core/llm/types';
 import { agentModelFor } from '@core/store/agentModelStore';
 import { useBrainModesStore } from '@core/store/brainModesStore';
+import { notify } from '@platform/notify';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -31,6 +32,8 @@ import { isConfidentInteractionReport } from './swarm/boss';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { DrugInteractionPanel } from './components/DrugInteractionPanel';
+import { ClaimLedgerPanel } from './components/ClaimLedgerPanel';
+import type { ClaimLedgerEntry } from './swarm/publicationTypes';
 import { Transcript, type ChatMessage } from './components/Transcript';
 import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
@@ -64,6 +67,10 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [claimLedgerOpen, setClaimLedgerOpen] = useState(false);
+  const [pendingClaims, setPendingClaims] = useState<ClaimLedgerEntry[] | null>(null);
+  const claimLedgerResolve = useRef<((ledger: ClaimLedgerEntry[]) => void) | null>(null);
+  const claimLedgerReject = useRef<(() => void) | null>(null);
   const canSubmit = query.trim().length > 0;
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
@@ -361,6 +368,13 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         signal: abortRef.current?.signal,
         mini: useBrainModesStore.getState().mini,
         drugFocus,
+        onClaimLedger: (ledger) =>
+          new Promise((resolve, reject) => {
+            claimLedgerResolve.current = resolve;
+            claimLedgerReject.current = reject;
+            setPendingClaims(ledger);
+            setClaimLedgerOpen(true);
+          }),
       });
 
       flushTopicHits(result.answer || streamedContent);
@@ -447,6 +461,9 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             : m,
         ),
       );
+      if (result.manuscript) {
+        void notify('Manuscript complete', 'Your research paper is ready for review and export.');
+      }
       updateAgentStatus('boss', {
         state: 'done',
         detail: result.kind === 'research' ? 'synthesis complete' : 'reply complete',
@@ -692,6 +709,28 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
           </>
         )}
       </section>
+
+      {claimLedgerOpen && pendingClaims && (
+        <div className="claim-ledger-overlay">
+          <ClaimLedgerPanel
+            ledger={pendingClaims}
+            onSubmit={(ledger) => {
+              setClaimLedgerOpen(false);
+              setPendingClaims(null);
+              claimLedgerResolve.current?.(ledger);
+              claimLedgerResolve.current = null;
+              claimLedgerReject.current = null;
+            }}
+            onCancel={() => {
+              setClaimLedgerOpen(false);
+              setPendingClaims(null);
+              claimLedgerReject.current?.();
+              claimLedgerResolve.current = null;
+              claimLedgerReject.current = null;
+            }}
+          />
+        </div>
+      )}
 
     </div>
   );
