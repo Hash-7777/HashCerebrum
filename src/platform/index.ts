@@ -153,6 +153,11 @@ export interface Platform {
     relaunch(): Promise<void>;
   };
 
+  // Compliance
+  compliance: {
+    purgeProjectData(projectId: string): Promise<Record<string, number>>;
+  };
+
   // File saving. WKWebView ignores `<a download>` for blob URLs, so the desktop
   // path goes through a native save dialog + write; the browser keeps the
   // anchor download. Resolves true when a file was written, false if cancelled.

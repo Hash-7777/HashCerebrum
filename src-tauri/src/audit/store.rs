@@ -247,6 +247,11 @@ pub fn verify() -> AppResult<Option<u64>> {
     Ok(None)
 }
 
+pub fn connection() -> AppResult<std::sync::MutexGuard<'static, Option<Connection>>> {
+    DB.lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))
+}
+
 pub fn close_connection() -> AppResult<()> {
     let mut guard = DB
         .lock()

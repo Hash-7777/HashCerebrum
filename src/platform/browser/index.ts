@@ -220,6 +220,10 @@ export const browserPlatform: Platform = {
     relaunch: async () => { window.location.reload(); },
   },
 
+  compliance: {
+    purgeProjectData: async () => ({ audit_redacted: 0 }),
+  },
+
   env: {
     isTauri: false,
     platform: 'browser',

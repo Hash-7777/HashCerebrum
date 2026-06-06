@@ -43,6 +43,7 @@ use commands::{
     },
     net::{net_get, net_get_bytes},
     pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
+    purge::purge_project_data,
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -115,6 +116,7 @@ pub fn run() {
             cache_stats,
             cache_clear,
             cache_clear_expired,
+            purge_project_data,
             app_relaunch,
         ])
         .build(tauri::generate_context!())

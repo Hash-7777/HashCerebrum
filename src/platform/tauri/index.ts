@@ -212,6 +212,11 @@ export const tauriPlatform: Platform = {
     relaunch: () => invoke<void>('app_relaunch'),
   },
 
+  compliance: {
+    purgeProjectData: (projectId: string) =>
+      invoke<Record<string, number>>('purge_project_data', { projectId }),
+  },
+
   env: {
     isTauri: true,
     platform: detectPlatform(),
