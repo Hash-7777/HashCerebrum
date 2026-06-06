@@ -34,7 +34,9 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
         .map_err(|e| AppError::Cache(format!("pool build: {e}")))?;
 
     // Validate first connection
-    let conn = pool.get().map_err(|e| AppError::Cache(format!("pool get: {e}")))?;
+    let conn = pool
+        .get()
+        .map_err(|e| AppError::Cache(format!("pool get: {e}")))?;
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .unwrap_or_else(|_| "unknown".into());
@@ -87,14 +89,20 @@ pub struct HostStat {
 }
 
 fn with_conn<T>(f: impl FnOnce(&rusqlite::Connection) -> AppResult<T>) -> AppResult<T> {
-    let pool = POOL.get().ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
-    let conn = pool.get().map_err(|e| AppError::Cache(format!("pool: {e}")))?;
+    let pool = POOL
+        .get()
+        .ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
+    let conn = pool
+        .get()
+        .map_err(|e| AppError::Cache(format!("pool: {e}")))?;
     f(&conn)
 }
 
 /// Like `with_conn` but returns `Ok(None)` when the cache is unavailable.
 /// Used for `get` and `set` so a cache miss never fails a network call.
-fn with_conn_opt<T>(f: impl FnOnce(&rusqlite::Connection) -> AppResult<Option<T>>) -> AppResult<Option<T>> {
+fn with_conn_opt<T>(
+    f: impl FnOnce(&rusqlite::Connection) -> AppResult<Option<T>>,
+) -> AppResult<Option<T>> {
     let pool = match POOL.get() {
         Some(p) => p,
         None => return Ok(None),

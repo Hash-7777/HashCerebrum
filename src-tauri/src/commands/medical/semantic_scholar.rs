@@ -59,9 +59,8 @@ pub async fn semantic_scholar_search(
                             pmid.as_ref()
                                 .map(|p| format!("https://pubmed.ncbi.nlm.nih.gov/{p}/"))
                         });
-                    let open_access_pdf = paper["openAccessPdf"]["url"]
-                        .as_str()
-                        .map(str::to_string);
+                    let open_access_pdf =
+                        paper["openAccessPdf"]["url"].as_str().map(str::to_string);
                     let is_retracted = paper["isRetracted"].as_bool().unwrap_or(false);
                     let snippet = paper["abstract"]
                         .as_str()

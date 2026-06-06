@@ -83,7 +83,9 @@ fn row_to_job(r: &rusqlite::Row) -> rusqlite::Result<Job> {
                 .ok()
                 .map(|d| d.with_timezone(&chrono::Utc))
         }),
-        result: r.get::<_, Option<String>>(9)?.and_then(|s| serde_json::from_str(&s).ok()),
+        result: r
+            .get::<_, Option<String>>(9)?
+            .and_then(|s| serde_json::from_str(&s).ok()),
         error: r.get(10)?,
     })
 }

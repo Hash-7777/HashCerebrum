@@ -119,7 +119,12 @@ fn row_to_entry(r: &rusqlite::Row) -> rusqlite::Result<AuditEntry> {
     let enc_data: Option<Vec<u8>> = r.get(8)?;
 
     let (category, subject, action, data_hash) = if let Some(bundle) = decrypt_bundle(enc_data) {
-        (bundle.category, bundle.subject, bundle.action, bundle.data_hash)
+        (
+            bundle.category,
+            bundle.subject,
+            bundle.action,
+            bundle.data_hash,
+        )
     } else {
         // Fallback: plaintext columns (old entries or decryption failure)
         (r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)

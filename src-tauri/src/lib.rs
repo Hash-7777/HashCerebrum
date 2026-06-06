@@ -40,17 +40,14 @@ use commands::{
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
-        crossref::crossref_lookup,
-        ctgov::ctgov_search, europepmc::europepmc_fetch, openalex::openalex_query,
-        openfda::openfda_query, pubmed::pubmed_search, rxnorm::rxnorm_lookup,
-        semantic_scholar::semantic_scholar_search,
+        crossref::crossref_lookup, ctgov::ctgov_search, europepmc::europepmc_fetch,
+        openalex::openalex_query, openfda::openfda_query, pubmed::pubmed_search,
+        rxnorm::rxnorm_lookup, semantic_scholar::semantic_scholar_search,
     },
     net::{net_get, net_get_bytes},
     pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
     purge::purge_project_data,
-    swarm::{
-        swarm_cancel_job, swarm_get_job, swarm_list_jobs, swarm_start_job,
-    },
+    swarm::{swarm_cancel_job, swarm_get_job, swarm_list_jobs, swarm_start_job},
 };
 
 /// Restart the application. Invoked from the titlebar restart button.

@@ -51,7 +51,10 @@ pub(crate) async fn read_body_capped(mut resp: reqwest::Response, max: usize) ->
 }
 
 /// Raw-byte variant of [`read_body_capped`] for binary downloads (e.g. PDFs).
-pub(crate) async fn read_body_bytes_capped(mut resp: reqwest::Response, max: usize) -> AppResult<Vec<u8>> {
+pub(crate) async fn read_body_bytes_capped(
+    mut resp: reqwest::Response,
+    max: usize,
+) -> AppResult<Vec<u8>> {
     let mut buf: Vec<u8> = Vec::new();
     while let Some(chunk) = resp.chunk().await? {
         if buf.len() + chunk.len() > max {

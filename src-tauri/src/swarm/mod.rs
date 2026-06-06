@@ -20,7 +20,10 @@ impl SupervisorHandle {
     pub async fn start_job(&self, job: types::Job) -> AppResult<String> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.tx
-            .send(supervisor::SupervisorCmd::StartJob { job, respond_to: tx })
+            .send(supervisor::SupervisorCmd::StartJob {
+                job,
+                respond_to: tx,
+            })
             .await
             .map_err(|e| crate::error::AppError::Audit(format!("supervisor send: {e}")))?;
         rx.await
@@ -30,7 +33,10 @@ impl SupervisorHandle {
     pub async fn cancel_job(&self, job_id: String) -> AppResult<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.tx
-            .send(supervisor::SupervisorCmd::CancelJob { job_id, respond_to: tx })
+            .send(supervisor::SupervisorCmd::CancelJob {
+                job_id,
+                respond_to: tx,
+            })
             .await
             .map_err(|e| crate::error::AppError::Audit(format!("supervisor send: {e}")))?;
         rx.await
@@ -40,7 +46,10 @@ impl SupervisorHandle {
     pub async fn get_job(&self, job_id: String) -> AppResult<Option<types::Job>> {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.tx
-            .send(supervisor::SupervisorCmd::GetJob { job_id, respond_to: tx })
+            .send(supervisor::SupervisorCmd::GetJob {
+                job_id,
+                respond_to: tx,
+            })
             .await
             .map_err(|e| crate::error::AppError::Audit(format!("supervisor send: {e}")))?;
         rx.await
@@ -62,9 +71,7 @@ impl SupervisorHandle {
 }
 
 /// Initialise the supervisor and return a handle for commands.
-pub fn init(
-    app: &tauri::AppHandle,
-) -> AppResult<SupervisorHandle> {
+pub fn init(app: &tauri::AppHandle) -> AppResult<SupervisorHandle> {
     let conn = job_queue::init(app)?;
     let db = Arc::new(Mutex::new(conn));
     let app_handle = app.clone();

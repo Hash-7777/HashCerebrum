@@ -93,11 +93,7 @@ impl SupervisorState {
 ///   2. Extract evidence
 ///   3. Run consensus voting
 ///   4. Synthesize a manuscript via the boss agent
-async fn run_job(
-    db: &Arc<Mutex<Connection>>,
-    app: &tauri::AppHandle,
-    job: Job,
-) -> AppResult<()> {
+async fn run_job(db: &Arc<Mutex<Connection>>, app: &tauri::AppHandle, job: Job) -> AppResult<()> {
     let job_id = job.id.clone();
 
     // Mark as running.
