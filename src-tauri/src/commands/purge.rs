@@ -67,7 +67,7 @@ fn redact_audit_for_project(_app: &AppHandle, project_id: &str) -> AppResult<u64
     let redacted = "[REDACTED]";
     let pattern = format!("%{}%", project_id);
     let count = conn.execute(
-        "UPDATE audit SET subject = ?1, action = ?1 WHERE subject LIKE ?2 OR action LIKE ?2",
+        "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL WHERE subject LIKE ?2 OR action LIKE ?2 OR category LIKE ?2",
         params![redacted, pattern],
     )?;
     Ok(count as u64)

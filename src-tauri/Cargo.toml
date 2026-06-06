@@ -66,6 +66,10 @@ dashmap     = "6"
 sha2 = "0.10"
 hex  = "0.4"
 
+# Encryption — audit log at rest (AES-256-GCM)
+aes-gcm = "0.10"
+rand = "0.8"
+
 # Logging — structured, never prints secrets
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
