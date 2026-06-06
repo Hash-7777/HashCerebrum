@@ -4,6 +4,16 @@
 import type { RagChunk } from '@core/store/ragStore';
 import { Icon } from '@ui/icons';
 
+function isSafeUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 const EXCERPT_CHARS = 360;
 
 function formatDate(iso: string): string {
@@ -42,7 +52,7 @@ export function MemoryCard({
       <h4>{chunk.title}</h4>
       <p className="memory-excerpt">{shown}</p>
       <footer>
-        {chunk.url ? (
+        {chunk.url && isSafeUrl(chunk.url) ? (
           <a
             className="memory-link"
             href={chunk.url}

@@ -34,6 +34,16 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function isSafeUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 function currentDocumentText(paper: ReviewedPaper): string {
   return paper.editedText ?? paper.text;
 }
@@ -225,7 +235,7 @@ function FaithfulnessRow({ item, citations }: { item: FaithfulnessItem; citation
                     doi:{s.doi}
                   </a>
                 )}
-                {!s.pmid && !s.doi && s.url && (
+                {!s.pmid && !s.doi && s.url && isSafeUrl(s.url) && (
                   <a href={s.url} target="_blank" rel="noreferrer">
                     Source
                   </a>
