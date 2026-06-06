@@ -17,3 +17,4 @@ pub mod medical;
 pub mod net;
 pub mod pdf;
 pub mod purge;
+pub mod swarm;

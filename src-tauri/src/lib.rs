@@ -27,7 +27,10 @@ mod crypto;
 mod error;
 mod ratelimit;
 mod security;
+mod swarm;
 mod telemetry;
+
+use tauri::Manager;
 
 use commands::{
     audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
@@ -45,6 +48,9 @@ use commands::{
     net::{net_get, net_get_bytes},
     pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
     purge::purge_project_data,
+    swarm::{
+        swarm_cancel_job, swarm_get_job, swarm_list_jobs, swarm_start_job,
+    },
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -86,6 +92,8 @@ pub fn run() {
             audit::init(app.handle())?;
             cache::init(app.handle())?;
             telemetry::init(app.handle())?;
+            let supervisor = swarm::init(app.handle())?;
+            app.manage(supervisor);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -120,6 +128,10 @@ pub fn run() {
             cache_clear_expired,
             purge_project_data,
             telemetry::trace_read,
+            swarm_start_job,
+            swarm_cancel_job,
+            swarm_get_job,
+            swarm_list_jobs,
             app_relaunch,
         ])
         .build(tauri::generate_context!())
