@@ -629,6 +629,25 @@ export function exportMessageDoc(message: ExportableMessage): void {
   downloadTextFile(`${slugifyFilename(message.title)}.doc`, buildWordDoc(message), 'application/msword');
 }
 
+export async function exportMessageDocx(message: ExportableMessage): Promise<void> {
+  if (!message.manuscript) {
+    // Fallback to the legacy HTML-wrapped doc for non-manuscript messages
+    exportMessageDoc(message);
+    return;
+  }
+  const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+  const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact, {
+    includeSupplementalSection: false,
+  });
+  const { buildDocxBlob } = await import('./docxExport');
+  const blob = await buildDocxBlob(
+    exportManuscript,
+    artifact.references.map((r) => r.evidence),
+    currentCitationStyle(),
+  );
+  downloadBlob(`${slugifyFilename(message.title)}.docx`, blob);
+}
+
 export function stripGeneratedReferenceSections(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];

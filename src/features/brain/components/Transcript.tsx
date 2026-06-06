@@ -27,7 +27,7 @@ import {
   buildMarkdownExport,
   buildMessagePdfBlob,
   deriveDocumentTitle,
-  exportMessageDoc,
+  exportMessageDocx,
   renumberCitations,
   slugifyFilename,
   stripGeneratedReferenceSections,
@@ -435,7 +435,7 @@ export const Transcript = memo(function Transcript({
                       <button type="button" onClick={() => openMarkdownPreview(message, actualIndex)} className="action">
                         <Icon name="document" size={13} /> MD
                       </button>
-                      <button type="button" onClick={() => exportMessageDoc(exportableFor(message, actualIndex))} className="action">
+                      <button type="button" onClick={() => void exportMessageDocx(exportableFor(message, actualIndex))} className="action">
                         <Icon name="document" size={13} /> Word
                       </button>
                       <button type="button" onClick={() => exportMessageLatex(exportableFor(message, actualIndex))} className="action">
