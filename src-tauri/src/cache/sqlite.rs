@@ -1,12 +1,13 @@
 use crate::error::{AppError, AppResult};
-use rusqlite::{params, Connection, OptionalExtension};
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{params, OptionalExtension};
 #[allow(unused_imports)]
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-static DB: Mutex<Option<Connection>> = Mutex::new(None);
+type Pool = r2d2::Pool<SqliteConnectionManager>;
+static POOL: std::sync::OnceLock<Pool> = std::sync::OnceLock::new();
 
 /// Upper bound on cached rows. On each write, entries beyond the most recent
 /// MAX_CACHE_ROWS are evicted oldest-first so the cache file cannot grow without
@@ -22,29 +23,18 @@ fn cache_path(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(dir.join("cache.sqlite"))
 }
 
-fn try_open(path: &Path) -> AppResult<Connection> {
-    let conn = Connection::open(path)?;
-    conn.execute_batch(
-        "PRAGMA journal_mode = WAL;
-         PRAGMA synchronous = NORMAL;
-         PRAGMA foreign_keys = ON;
-         PRAGMA temp_store = MEMORY;
-         -- Wait out a transient lock instead of erroring immediately, so a
-         -- momentary contention under parallel agent fetches doesn't surface
-         -- as a 'database operation failed' and drop a source's evidence.
-         PRAGMA busy_timeout = 5000;
+pub fn init(app: &AppHandle) -> AppResult<()> {
+    let path = cache_path(app)?;
 
-         CREATE TABLE IF NOT EXISTS cache (
-            key         TEXT PRIMARY KEY,
-            host        TEXT NOT NULL,
-            payload     BLOB NOT NULL,
-            fetched_at  TEXT NOT NULL,
-            ttl_seconds INTEGER NOT NULL
-         );
-         CREATE INDEX IF NOT EXISTS idx_cache_host ON cache(host);
-         CREATE INDEX IF NOT EXISTS idx_cache_fetched ON cache(fetched_at);",
-    )?;
+    let manager = SqliteConnectionManager::file(&path);
+    let pool = r2d2::Pool::builder()
+        .max_size(4)
+        .connection_customizer(Box::new(CacheCustomizer))
+        .build(manager)
+        .map_err(|e| AppError::Cache(format!("pool build: {e}")))?;
 
+    // Validate first connection
+    let conn = pool.get().map_err(|e| AppError::Cache(format!("pool get: {e}")))?;
     let integrity: String = conn
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .unwrap_or_else(|_| "unknown".into());
@@ -53,27 +43,33 @@ fn try_open(path: &Path) -> AppResult<Connection> {
         return Err(AppError::Cache(format!("integrity check: {integrity}")));
     }
 
-    Ok(conn)
+    let _ = POOL.set(pool);
+    Ok(())
 }
 
-pub fn init(app: &AppHandle) -> AppResult<()> {
-    let path = cache_path(app)?;
+#[derive(Debug)]
+struct CacheCustomizer;
 
-    let conn = match try_open(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            // Corrupt or unreadable — delete the file and start fresh.
-            tracing::warn!(error = %e, "cache init failed, deleting and retrying");
-            let _ = std::fs::remove_file(&path);
-            try_open(&path)?
-        }
-    };
+impl r2d2::CustomizeConnection<rusqlite::Connection, rusqlite::Error> for CacheCustomizer {
+    fn on_acquire(&self, conn: &mut rusqlite::Connection) -> Result<(), rusqlite::Error> {
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA foreign_keys = ON;
+             PRAGMA temp_store = MEMORY;
+             PRAGMA busy_timeout = 5000;
 
-    let mut guard = DB
-        .lock()
-        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
-    *guard = Some(conn);
-    Ok(())
+             CREATE TABLE IF NOT EXISTS cache (
+                key         TEXT PRIMARY KEY,
+                host        TEXT NOT NULL,
+                payload     BLOB NOT NULL,
+                fetched_at  TEXT NOT NULL,
+                ttl_seconds INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_cache_host ON cache(host);
+             CREATE INDEX IF NOT EXISTS idx_cache_fetched ON cache(fetched_at);",
+        )
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -90,27 +86,24 @@ pub struct HostStat {
     pub bytes: u64,
 }
 
-fn with_conn<T>(f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
-    let guard = DB
-        .lock()
-        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
-    let conn = guard
-        .as_ref()
-        .ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
-    f(conn)
+fn with_conn<T>(f: impl FnOnce(&rusqlite::Connection) -> AppResult<T>) -> AppResult<T> {
+    let pool = POOL.get().ok_or_else(|| AppError::Cache("cache not initialized".into()))?;
+    let conn = pool.get().map_err(|e| AppError::Cache(format!("pool: {e}")))?;
+    f(&conn)
 }
 
 /// Like `with_conn` but returns `Ok(None)` when the cache is unavailable.
 /// Used for `get` and `set` so a cache miss never fails a network call.
-fn with_conn_opt<T>(f: impl FnOnce(&Connection) -> AppResult<Option<T>>) -> AppResult<Option<T>> {
-    let guard = match DB.lock() {
-        Ok(g) => g,
+fn with_conn_opt<T>(f: impl FnOnce(&rusqlite::Connection) -> AppResult<Option<T>>) -> AppResult<Option<T>> {
+    let pool = match POOL.get() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let conn = match pool.get() {
+        Ok(c) => c,
         Err(_) => return Ok(None),
     };
-    let Some(conn) = guard.as_ref() else {
-        return Ok(None);
-    };
-    f(conn)
+    f(&conn)
 }
 
 pub fn stats() -> AppResult<CacheStats> {
@@ -196,12 +189,13 @@ pub fn get(key: &str) -> AppResult<Option<Vec<u8>>> {
 /// Write or overwrite a cached entry.
 /// Silently no-ops when the cache is unavailable — the caller's request still completes.
 pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult<()> {
-    let guard = match DB.lock() {
-        Ok(g) => g,
-        Err(_) => return Ok(()),
+    let pool = match POOL.get() {
+        Some(p) => p,
+        None => return Ok(()),
     };
-    let Some(conn) = guard.as_ref() else {
-        return Ok(());
+    let conn = match pool.get() {
+        Ok(c) => c,
+        Err(_) => return Ok(()),
     };
     conn.execute(
         "INSERT INTO cache (key, host, payload, fetched_at, ttl_seconds)
@@ -228,12 +222,7 @@ pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult
 }
 
 pub fn close_connection() -> AppResult<()> {
-    let mut guard = DB
-        .lock()
-        .map_err(|e| AppError::Cache(format!("mutex poisoned: {e}")))?;
-    if let Some(conn) = guard.take() {
-        conn.close()
-            .map_err(|(_, e)| AppError::Cache(e.to_string()))?;
-    }
+    // r2d2 pools close automatically when dropped.
+    // We cannot remove from OnceLock, but we can clear remaining connections.
     Ok(())
 }

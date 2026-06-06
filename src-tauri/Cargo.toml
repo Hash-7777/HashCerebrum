@@ -53,6 +53,8 @@ tokio   = { version = "1", features = ["full"] }
 
 # SQLite — source cache, audit log, future RAG store
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+r2d2 = "0.8"
+r2d2_sqlite = { version = "0.25", features = ["bundled"] }
 
 # Async helpers
 async-trait = "0.1"
