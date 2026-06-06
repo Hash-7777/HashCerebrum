@@ -1467,6 +1467,9 @@ export async function runPaperPipeline(opts: {
   onStage?: (stage: string) => void;
   evidenceGap?: string;
   mini?: boolean;
+  /** If provided, the pipeline pauses after building the claim ledger and
+   *  awaits the callback, allowing the user to curate claims before drafting. */
+  onClaimLedger?: (ledger: ClaimLedgerEntry[]) => Promise<ClaimLedgerEntry[]>;
 }): Promise<Manuscript> {
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
@@ -1501,7 +1504,11 @@ export async function runPaperPipeline(opts: {
   opts.onStage?.('Extracting');
   const evidenceExtractions = extractEvidenceFromRecords(opts.evidence);
   opts.onStage?.('Building claims');
-  const claimLedger = buildClaimLedger(evidenceExtractions);
+  let claimLedger = buildClaimLedger(evidenceExtractions);
+  if (opts.onClaimLedger) {
+    opts.onStage?.('Awaiting claim review');
+    claimLedger = await opts.onClaimLedger(claimLedger);
+  }
   const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger, overrideTitle, opts.mini ?? false);
   return compileManuscriptFromLedger({
     question: opts.question,

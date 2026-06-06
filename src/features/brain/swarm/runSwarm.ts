@@ -444,6 +444,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       ...(gap.note ? { evidenceGap: gap.note } : {}),
       mini,
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
+      ...(opts.onClaimLedger ? { onClaimLedger: opts.onClaimLedger } : {}),
     });
     return {
       kind: 'research',
