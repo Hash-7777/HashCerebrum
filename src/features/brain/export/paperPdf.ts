@@ -325,17 +325,24 @@ const fontBase64Cache = new Map<string, string>();
 async function fetchFontBase64(url: string): Promise<string> {
   const cached = fontBase64Cache.get(url);
   if (cached) return cached;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`font fetch failed (${res.status})`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`font fetch failed (${res.status})`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    const base64 = btoa(binary);
+    fontBase64Cache.set(url, base64);
+    return base64;
+  } finally {
+    clearTimeout(timer);
   }
-  const base64 = btoa(binary);
-  fontBase64Cache.set(url, base64);
-  return base64;
 }
 
 // Register the embedded Unicode font on the document. Returns true on success;

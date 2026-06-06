@@ -349,18 +349,24 @@ function useModelPresence() {
   });
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
     (async () => {
       try {
-        const res = await fetch(BRAIN_MODEL.path, { method: 'HEAD' });
+        const res = await fetch(BRAIN_MODEL.path, { method: 'HEAD', signal: controller.signal });
+        clearTimeout(timer);
         if (cancelled) return;
         setState({ ready: res.ok, missing: !res.ok, error: res.ok ? null : `HTTP ${res.status}` });
       } catch (err) {
+        clearTimeout(timer);
         if (cancelled) return;
         setState({ ready: false, missing: true, error: err instanceof Error ? err.message : 'fetch failed' });
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, []);
   return state;
