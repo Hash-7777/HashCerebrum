@@ -59,7 +59,13 @@ function lexicalOffTopic(chunk: RagChunk, query: string): boolean {
   const terms = topicTerms(query);
   if (terms.length === 0) return false;
   const hay = `${chunk.title} ${chunk.text}`.toLowerCase();
-  return !terms.some((term) => hay.includes(term));
+  return !terms.some((term) => {
+    try {
+      return new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(hay);
+    } catch {
+      return hay.includes(term);
+    }
+  });
 }
 
 /** True when the chunk should stay in memory; false marks it for pruning.

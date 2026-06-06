@@ -110,7 +110,16 @@ export function chunkDocument(text: string, size: number = CHUNK_CHARS): string[
         chunks.push(current);
         current = '';
       }
-      for (let i = 0; i < para.length; i += size) chunks.push(para.slice(i, i + size));
+      let idx = 0;
+      while (idx < para.length) {
+        let end = Math.min(idx + size, para.length);
+        if (end < para.length) {
+          const lastSpace = para.lastIndexOf(' ', end);
+          if (lastSpace > idx) end = lastSpace;
+        }
+        chunks.push(para.slice(idx, end));
+        idx = end;
+      }
       continue;
     }
     if (current && current.length + para.length + 2 > size) {
