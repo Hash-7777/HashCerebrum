@@ -30,12 +30,19 @@ describe('kaplanMeier', () => {
 describe('logRankTest', () => {
   it('matches a hand-computed two-group example', () => {
     const result = logRankTest([1, 2, 3], [1, 1, 1], [4, 5, 6], [1, 1, 1]);
-    expect(result.observedA).toBe(3);
-    expect(result.expectedA).toBeCloseTo(1.15, 9);
-    expect(result.chiSquare).toBeCloseTo(5.051661, 5);
-    expect(result.hazardRatio).toBeCloseTo(4.217391, 5);
-    expect(result.pValue).toBeGreaterThan(0.02);
-    expect(result.pValue).toBeLessThan(0.03);
+    expect(result).not.toHaveProperty('error');
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).observedA).toBe(3);
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).expectedA).toBeCloseTo(1.15, 9);
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).chiSquare).toBeCloseTo(5.051661, 5);
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).hazardRatio).toBeCloseTo(4.217391, 5);
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).pValue).toBeGreaterThan(0.02);
+    expect((result as ReturnType<typeof logRankTest> & { error?: undefined }).pValue).toBeLessThan(0.03);
+  });
+
+  it('returns a structured error when expected events are zero', () => {
+    const result = logRankTest([1, 2, 3], [0, 0, 0], [4, 5, 6], [0, 0, 0]);
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toContain('zero expected');
   });
 });
 

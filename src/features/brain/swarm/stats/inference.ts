@@ -69,13 +69,13 @@ export interface TTestResult {
 }
 
 /** Welch's unequal-variance two-sample t-test on the difference meanA - meanB. */
-export function welchTTest(groupA: number[], groupB: number[]): TTestResult {
+export function welchTTest(groupA: number[], groupB: number[]): TTestResult | { error: string } {
   const nA = groupA.length;
   const nB = groupB.length;
   if (nA < 2 || nB < 2) {
-    throw new Error(
-      `Welch t-test requires at least 2 observations per group (got ${nA} and ${nB})`,
-    );
+    return {
+      error: `Welch t-test requires at least 2 observations per group (got ${nA} and ${nB})`,
+    };
   }
   const meanA = mean(groupA);
   const meanB = mean(groupB);
@@ -196,7 +196,7 @@ export interface CorrelationResult {
 }
 
 /** Pearson product-moment correlation with a Fisher z-transform 95% CI. */
-export function pearson(x: number[], y: number[]): CorrelationResult {
+export function pearson(x: number[], y: number[]): CorrelationResult | { error: string } {
   const n = Math.min(x.length, y.length);
   const meanX = mean(x);
   const meanY = mean(y);
@@ -211,9 +211,9 @@ export function pearson(x: number[], y: number[]): CorrelationResult {
     syy += dy * dy;
   }
   if (sxx === 0 || syy === 0) {
-    throw new Error(
-      'Pearson correlation requires non-zero variance in both variables',
-    );
+    return {
+      error: 'Pearson correlation requires non-zero variance in both variables',
+    };
   }
   const r = sxy / Math.sqrt(sxx * syy);
   const df = n - 2;
@@ -246,9 +246,9 @@ export interface ChiSquareResult {
 }
 
 /** Pearson chi-square test of independence for an r×c table of counts. */
-export function chiSquareTest(table: number[][]): ChiSquareResult {
+export function chiSquareTest(table: number[][]): ChiSquareResult | { error: string } {
   if (table.length === 0 || !table[0]) {
-    throw new Error('Chi-square test requires a non-empty contingency table');
+    return { error: 'Chi-square test requires a non-empty contingency table' };
   }
   const rows = table.length;
   const cols = table[0].length;
@@ -257,6 +257,9 @@ export function chiSquareTest(table: number[][]): ChiSquareResult {
     table.reduce((sum, row) => sum + row[j]!, 0),
   );
   const total = rowSums.reduce((sum, value) => sum + value, 0);
+  if (total === 0) {
+    return { error: 'Chi-square test requires a non-empty contingency table' };
+  }
   let chiSquare = 0;
   let minExpected = Infinity;
   for (let i = 0; i < rows; i += 1) {

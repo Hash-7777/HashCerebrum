@@ -13,19 +13,28 @@ import {
 describe('welchTTest', () => {
   it('computes the mean difference, t, and Welch df', () => {
     const result = welchTTest([1, 2, 3, 4, 5], [2, 4, 6, 8, 10]);
-    expect(result.meanDifference).toBeCloseTo(-3, 9);
-    expect(result.t).toBeCloseTo(-1.8973666, 6);
-    expect(result.df).toBeCloseTo(5.882353, 5);
-    expect(result.ciLow).toBeLessThan(result.meanDifference);
-    expect(result.ciHigh).toBeGreaterThan(result.meanDifference);
+    expect(result).not.toHaveProperty('error');
+    expect((result as ReturnType<typeof welchTTest> & { error?: undefined }).meanDifference).toBeCloseTo(-3, 9);
+    expect((result as ReturnType<typeof welchTTest> & { error?: undefined }).t).toBeCloseTo(-1.8973666, 6);
+    expect((result as ReturnType<typeof welchTTest> & { error?: undefined }).df).toBeCloseTo(5.882353, 5);
+    expect((result as ReturnType<typeof welchTTest> & { error?: undefined }).ciLow).toBeLessThan((result as ReturnType<typeof welchTTest> & { error?: undefined }).meanDifference);
+    expect((result as ReturnType<typeof welchTTest> & { error?: undefined }).ciHigh).toBeGreaterThan((result as ReturnType<typeof welchTTest> & { error?: undefined }).meanDifference);
   });
 
   it('gives p ≈ 1 for identical groups and a tiny p for well-separated groups', () => {
     const same = welchTTest([4, 5, 6, 5, 4], [4, 5, 6, 5, 4]);
-    expect(same.t).toBeCloseTo(0, 9);
-    expect(same.pValue).toBeCloseTo(1, 6);
+    expect(same).not.toHaveProperty('error');
+    expect((same as ReturnType<typeof welchTTest> & { error?: undefined }).t).toBeCloseTo(0, 9);
+    expect((same as ReturnType<typeof welchTTest> & { error?: undefined }).pValue).toBeCloseTo(1, 6);
     const apart = welchTTest([1, 2, 1, 2, 1, 2], [50, 51, 50, 51, 50, 51]);
-    expect(apart.pValue).toBeLessThan(1e-6);
+    expect(apart).not.toHaveProperty('error');
+    expect((apart as ReturnType<typeof welchTTest> & { error?: undefined }).pValue).toBeLessThan(1e-6);
+  });
+
+  it('returns a structured error when either group has fewer than 2 observations', () => {
+    const result = welchTTest([1], [2, 3, 4]);
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toContain('at least 2 observations');
   });
 });
 
@@ -56,11 +65,18 @@ describe('mannWhitneyU', () => {
 describe('pearson', () => {
   it('matches a hand-computed correlation', () => {
     const result = pearson([1, 2, 3, 4], [2, 1, 4, 3]);
-    expect(result.r).toBeCloseTo(0.6, 9);
-    expect(result.df).toBe(2);
-    expect(result.t).toBeCloseTo(1.0606602, 6);
-    expect(result.ciLow).toBeLessThan(0.6);
-    expect(result.ciHigh).toBeGreaterThan(0.6);
+    expect(result).not.toHaveProperty('error');
+    expect((result as ReturnType<typeof pearson> & { error?: undefined }).r).toBeCloseTo(0.6, 9);
+    expect((result as ReturnType<typeof pearson> & { error?: undefined }).df).toBe(2);
+    expect((result as ReturnType<typeof pearson> & { error?: undefined }).t).toBeCloseTo(1.0606602, 6);
+    expect((result as ReturnType<typeof pearson> & { error?: undefined }).ciLow).toBeLessThan(0.6);
+    expect((result as ReturnType<typeof pearson> & { error?: undefined }).ciHigh).toBeGreaterThan(0.6);
+  });
+
+  it('returns a structured error when either variable has zero variance', () => {
+    const result = pearson([1, 1, 1], [2, 3, 4]);
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toContain('zero variance');
   });
 });
 
@@ -70,11 +86,12 @@ describe('chiSquareTest', () => {
       [10, 20],
       [30, 40],
     ]);
-    expect(result.chiSquare).toBeCloseTo(0.793651, 5);
-    expect(result.df).toBe(1);
-    expect(result.n).toBe(100);
-    expect(result.minExpected).toBeCloseTo(12, 9);
-    expect(result.lowExpectedWarning).toBe(false);
+    expect(result).not.toHaveProperty('error');
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).chiSquare).toBeCloseTo(0.793651, 5);
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).df).toBe(1);
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).n).toBe(100);
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).minExpected).toBeCloseTo(12, 9);
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).lowExpectedWarning).toBe(false);
   });
 
   it('flags low expected counts', () => {
@@ -82,7 +99,21 @@ describe('chiSquareTest', () => {
       [1, 2],
       [3, 4],
     ]);
-    expect(result.lowExpectedWarning).toBe(true);
+    expect(result).not.toHaveProperty('error');
+    expect((result as ReturnType<typeof chiSquareTest> & { error?: undefined }).lowExpectedWarning).toBe(true);
+  });
+
+  it('returns a structured error for an empty table', () => {
+    const result = chiSquareTest([]);
+    expect(result).toHaveProperty('error');
+  });
+
+  it('returns a structured error when the table has no data', () => {
+    const result = chiSquareTest([
+      [0, 0],
+      [0, 0],
+    ]);
+    expect(result).toHaveProperty('error');
   });
 });
 

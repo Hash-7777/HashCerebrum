@@ -102,6 +102,7 @@ function buildTwoByTwo(outcome: Column, exposure: Column): AnalysisResult | null
     [a, b],
     [c, d],
   ]);
+  if ('error' in chi) return null;
   const useFisher = chi.lowExpectedWarning;
   const fisher = useFisher ? fisherExact2x2(a, b, c, d) : null;
   const pValue = fisher ? fisher.pValue : chi.pValue;
@@ -144,14 +145,9 @@ function buildGroupComparison(outcome: Column, group: Column): AnalysisResult[] 
   }
   if (valuesA.length < MIN_GROUP_N || valuesB.length < MIN_GROUP_N) return [];
 
-  let t: ReturnType<typeof welchTTest>;
-  let mw: ReturnType<typeof mannWhitneyU>;
-  try {
-    t = welchTTest(valuesA, valuesB);
-    mw = mannWhitneyU(valuesA, valuesB);
-  } catch {
-    return [];
-  }
+  const t = welchTTest(valuesA, valuesB);
+  if ('error' in t) return [];
+  const mw = mannWhitneyU(valuesA, valuesB);
   return [
     {
       id: 'analysis-welch-t',
@@ -225,12 +221,8 @@ function buildPearson(x: Column, y: Column): AnalysisResult | null {
   const varianceY = ys.reduce((sum, v) => sum + (v - ys.reduce((s, y) => s + y, 0) / ys.length) ** 2, 0);
   if (varianceX === 0 || varianceY === 0) return null;
 
-  let r: ReturnType<typeof pearson>;
-  try {
-    r = pearson(xs, ys);
-  } catch {
-    return null;
-  }
+  const r = pearson(xs, ys);
+  if ('error' in r) return null;
   return {
     id: 'analysis-pearson',
     kind: 'pearson',
@@ -346,8 +338,8 @@ function buildSurvival(
       }
     }
     if (tA.length >= MIN_GROUP_N && tB.length >= MIN_GROUP_N) {
-      try {
-        const lr = logRankTest(tA, eA, tB, eB);
+      const lr = logRankTest(tA, eA, tB, eB);
+      if (!('error' in lr)) {
         logRank = {
           chiSquare: lr.chiSquare,
           pValue: lr.pValue,
@@ -355,8 +347,6 @@ function buildSurvival(
           ciLow: lr.hrCiLow,
           ciHigh: lr.hrCiHigh,
         };
-      } catch {
-        // Zero expected events — skip log-rank for this grouping.
       }
     }
   }

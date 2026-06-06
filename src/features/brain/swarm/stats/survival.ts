@@ -91,7 +91,7 @@ export function logRankTest(
   eventsA: number[],
   timesB: number[],
   eventsB: number[],
-): LogRankResult {
+): LogRankResult | { error: string } {
   const groupA = timesA.map((time, i) => ({ time, event: eventsA[i] === 1 ? 1 : 0 }));
   const groupB = timesB.map((time, i) => ({ time, event: eventsB[i] === 1 ? 1 : 0 }));
   const eventTimes = [
@@ -118,9 +118,9 @@ export function logRankTest(
   const observedB = totalEvents - observedA;
   const expectedB = totalEvents - expectedA;
   if (expectedA <= 0 || expectedB <= 0) {
-    throw new Error(
-      `Log-rank hazard ratio undefined: zero expected events in a group (expectedA=${expectedA}, expectedB=${expectedB})`,
-    );
+    return {
+      error: `Log-rank hazard ratio undefined: zero expected events in a group (expectedA=${expectedA}, expectedB=${expectedB})`,
+    };
   }
   const chiSquare = variance > 0 ? (observedA - expectedA) ** 2 / variance : 0;
   const hazardRatio = (observedA / expectedA) / (observedB / expectedB);
