@@ -1288,3 +1288,158 @@
   line-height: 1.5;
   color: var(--text-4, var(--text-3));
 }
+
+/* ===========================================================================
+   Genetics mode — futuristic helix theme. A neon cyan→violet→magenta accent,
+   an animated double-helix empty-state mark, and a confidence-band side panel.
+   No second WebGL scene; the helix is pure CSS/SVG.
+   =========================================================================== */
+.brain-mode--genetics {
+  --accent: #43e0d0;
+  --accent-strong: #7af0ff;
+  --accent-soft: rgba(67, 224, 208, 0.13);
+  --accent-ink: #04121a;
+}
+
+/* Genetics home-screen mark — the DNA glyph on a glowing ring that slowly
+   rotates, reading as a living double helix. */
+.gene-empty .gene-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    conic-gradient(from 0deg, color-mix(in srgb, #43e0d0 40%, transparent), color-mix(in srgb, #8a6bff 40%, transparent), color-mix(in srgb, #ff5cc8 40%, transparent), color-mix(in srgb, #43e0d0 40%, transparent));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.gene-empty .gene-empty-mark svg {
+  animation: gene-helix-spin 7s linear infinite;
+}
+@keyframes gene-helix-spin {
+  to { transform: rotateY(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gene-empty .gene-empty-mark svg { animation: none; }
+}
+
+/* ── Genetics side panel (replaces the agent swarm in this mode) ── */
+.gene-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  height: 100%;
+  min-height: 0;
+  padding: 20px 18px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, transparent), transparent 40%),
+    var(--surface-1, rgba(255, 255, 255, 0.012));
+}
+.gene-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.gene-panel-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.gene-panel-head h2 {
+  margin: 0;
+  font-family: var(--f-serif, var(--hc-font-serif));
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+.gene-panel-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+/* ── Confidence-band key ── */
+.gene-bands-cap {
+  margin: 2px 0 -4px;
+  font: 600 9.5px var(--f-mono);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.gene-bands { display: flex; flex-direction: column; }
+.gene-band {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.gene-band:last-child { border-bottom: 0; }
+.gene-band-range {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  flex: none;
+  padding: 3px 0;
+  border-radius: 5px;
+  font: 700 10.5px var(--f-mono);
+  color: #04121a;
+  background: var(--sev);
+}
+.gene-band-text { display: grid; gap: 1px; min-width: 0; }
+.gene-band-text strong { font-size: 12.5px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
+.gene-band-text span { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+
+/* Confidence hue ramp — insufficient (cool grey) → very strong (mint). */
+.gene-band-vstrong { --sev: #43e0d0; }
+.gene-band-strong { --sev: #5fd3b0; }
+.gene-band-moderate { --sev: #e3bd63; }
+.gene-band-weak { --sev: #ec9a5a; }
+.gene-band-insufficient { --sev: #8c93a6; }
+
+.gene-band-note {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--text-4, var(--text-3));
+}
+.gene-band-note strong { color: var(--text-2); font-style: normal; }
+
+/* ── Safety disclaimer — soft amber note pinned to the foot ── */
+.gene-disclaimer {
+  margin-top: auto;
+  display: grid;
+  gap: 9px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, #d9a14a 28%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, #d9a14a 6%, transparent);
+}
+.gene-disclaimer-text {
+  display: flex;
+  gap: 9px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.gene-disclaimer-text svg { flex: none; margin-top: 1px; color: #e6b65f; }
+.gene-disclaimer-text strong { color: var(--text-1); font-weight: 700; }
