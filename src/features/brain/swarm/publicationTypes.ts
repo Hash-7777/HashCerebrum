@@ -51,7 +51,8 @@ export interface ManuscriptFigure {
     | 'evidence_strength'
     | 'numeric_yield'
     | 'topic_map'
-    | 'forest_plot';
+    | 'forest_plot'
+    | 'meta_analysis';
   title: string;
   caption: string;
   alt: string;

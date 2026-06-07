@@ -16,7 +16,7 @@ fn sanitize_term(query: &str) -> String {
 
 #[tauri::command]
 pub async fn ctgov_search(query: String, max_results: Option<u32>) -> AppResult<Vec<EvidenceItem>> {
-    let limit = clamp_max_results(max_results.unwrap_or(8), 8, 20);
+    let limit = clamp_max_results(max_results.unwrap_or(10), 10, 30);
     let term = sanitize_term(&query);
     let mut url = Url::parse("https://clinicaltrials.gov/api/v2/studies")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;

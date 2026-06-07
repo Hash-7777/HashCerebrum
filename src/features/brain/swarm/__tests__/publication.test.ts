@@ -177,7 +177,7 @@ describe('publication artifact contract', () => {
     expect(kinds).toContain('evidence_strength');
     expect(kinds).toContain('numeric_yield');
     const extractionTable = artifact.tables.find((table) => table.id === 'table-evidence-extraction');
-    expect(extractionTable?.columns).toContain('Bias-risk (design-based)');
+    expect(extractionTable?.columns).toContain('RoB / GRADE (heuristic)');
   });
 
   it('cleans stale prompt leakage during export normalization', () => {

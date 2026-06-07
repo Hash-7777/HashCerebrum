@@ -108,6 +108,20 @@ const MEDICAL_SYNONYMS: Record<string, string[]> = {
   lung: ['pulmonary'],
   gastric: ['stomach', 'gastrointestinal'],
   gastrointestinal: ['gastric', 'gi'],
+  statin: ['hmg-coa reductase inhibitor', 'simvastatin', 'atorvastatin', 'rosuvastatin', 'pravastatin', 'lovastatin', 'fluvastatin', 'pitavastatin'],
+  statins: ['hmg-coa reductase inhibitors', 'simvastatin', 'atorvastatin', 'rosuvastatin', 'pravastatin', 'lovastatin', 'fluvastatin', 'pitavastatin'],
+  simvastatin: ['statin', 'hmg-coa reductase inhibitor'],
+  atorvastatin: ['statin', 'hmg-coa reductase inhibitor'],
+  rosuvastatin: ['statin', 'hmg-coa reductase inhibitor'],
+  asthma: ['airway inflammation', 'bronchial hyperresponsiveness', 'airway remodeling', 'chronic airway disease'],
+  copd: ['chronic obstructive pulmonary disease', 'emphysema', 'chronic bronchitis'],
+  diabetes: ['diabetic', 'hyperglycemia', 'type 1 diabetes', 'type 2 diabetes', 't1dm', 't2dm'],
+  hypertension: ['high blood pressure', 'elevated blood pressure', 'arterial hypertension'],
+  obesity: ['overweight', 'bmi', 'body mass index', 'adiposity'],
+  warfarin: ['vitamin k antagonist', 'coumarin', 'anticoagulant'],
+  aspirin: ['acetylsalicylic acid', 'antiplatelet', 'nsaid'],
+  nsaid: ['nonsteroidal anti-inflammatory', 'ibuprofen', 'naproxen', 'diclofenac'],
+  nsaids: ['nonsteroidal anti-inflammatory drugs', 'ibuprofen', 'naproxen', 'diclofenac'],
 };
 
 // Build concept groups from the question: each significant term plus its known
@@ -166,6 +180,28 @@ export function assessEvidenceSufficiency(
   return { uncovered, note };
 }
 
+/**
+ * Identify "core" medical subject terms in the question — terms that are
+ * specific enough that an off-topic paper will not match them. Generic words
+ * like "effect", "impact", "patients" are excluded.
+ */
+function coreConceptGroups(question: string): string[][] {
+  const generic = new Set([
+    'effect', 'effects', 'impact', 'impacts', 'influence', 'role', 'use', 'using',
+    'long', 'term', 'short', 'run', 'time', 'duration', 'patient', 'patients',
+    'people', 'individual', 'individuals', 'population', 'populations',
+    'treatment', 'treatments', 'therapy', 'therapies', 'intervention',
+    'disease', 'diseases', 'condition', 'conditions', 'disorder', 'disorders',
+    'outcome', 'outcomes', 'result', 'results', 'finding', 'findings',
+    'association', 'associations', 'relationship', 'relationships',
+    'comparison', 'comparisons', 'versus', 'vs', 'compared', 'compare',
+    'safety', 'efficacy', 'efficacious', 'effective', 'effectiveness',
+    'clinical', 'medical', 'health', 'healthcare',
+  ]);
+  const all = conceptGroups(question);
+  return all.filter((group) => !generic.has(group[0]!));
+}
+
 // Re-rank merged evidence by how many of the question's CONCEPTS each record
 // covers (conjunctive relevance), so multi-concept records lead and
 // single-concept noise sinks or drops. When the question spans ≥3 concepts a
@@ -175,14 +211,20 @@ export function assessEvidenceSufficiency(
 // never gutted. Equal coverage preserves the prior quality/recency order.
 export function rankEvidenceByRelevance(question: string, evidence: EvidenceItem[]): EvidenceItem[] {
   const groups = conceptGroups(question);
+  const coreGroups = coreConceptGroups(question);
   if (groups.length === 0) return evidence;
   const scored = evidence
-    .map((record, index) => ({ record, index, m: conceptCoverage(record, groups) }))
-    .sort((a, b) => b.m - a.m || a.index - b.index);
+    .map((record, index) => ({ record, index, m: conceptCoverage(record, groups), core: conceptCoverage(record, coreGroups) }))
+    .sort((a, b) => b.m - a.m || b.core - a.core || a.index - b.index);
   const minConcepts = groups.length >= 3 ? 2 : 1;
   const strong = scored.filter((s) => s.m >= minConcepts);
   const loose = scored.filter((s) => s.m > 0);
-  const kept = strong.length >= 6 ? strong : loose.length >= 6 ? loose : scored;
+  // Core-concept gate: if we have core groups, require at least 1 core match
+  // for a record to be considered on-topic. This drops off-topic noise like
+  // the Romania aging paper on a statin+asthma query.
+  const coreGated = coreGroups.length > 0 ? scored.filter((s) => s.core >= 1) : scored;
+  const candidate = strong.length >= 6 ? strong : loose.length >= 6 ? loose : scored;
+  const kept = coreGated.length >= 6 ? coreGated.filter((s) => candidate.includes(s)) : candidate;
   return kept.map((s) => s.record);
 }
 

@@ -13,7 +13,7 @@ pub async fn semantic_scholar_search(
     query: String,
     max_results: u32,
 ) -> AppResult<Vec<EvidenceItem>> {
-    let limit = clamp_max_results(max_results, 8, 20);
+    let limit = clamp_max_results(max_results, 12, 40);
     let mut url = Url::parse("https://api.semanticscholar.org/graph/v1/paper/search")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut()

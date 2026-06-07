@@ -29,6 +29,9 @@ import type {
 } from './publicationTypes';
 import { forestPlotFigure } from './stats/forestPlot';
 import { formatReference, type CitationStyle } from '../export/citationStyles';
+import type { MetaAnalysisResult } from './metaAnalysis';
+import { assessRiskOfBias } from './riskOfBias';
+import { buildSmdMeta, formatMetaResult } from './metaAnalysis';
 
 // Resolve a reference's display text in the requested style. Vancouver (or no
 // style) returns the text baked at build time verbatim — zero regression — and
@@ -92,9 +95,13 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function normalizeDoi(doi: string): string {
+  return doi.trim().toLowerCase().replace(/^https?:\/\/doi\.org\//, '').replace(/^doi:/, '');
+}
+
 function evidenceIdentity(record: EvidenceItem): string {
   const doi = record.identifiers?.doi?.trim().toLowerCase();
-  if (doi) return `doi:${doi}`;
+  if (doi) return `doi:${normalizeDoi(doi)}`;
   const pmid = record.identifiers?.pmid?.trim().toLowerCase();
   if (pmid) return `pmid:${pmid}`;
   const url = record.url?.trim().toLowerCase();
@@ -318,6 +325,55 @@ function numericYieldCounts(extractions: EvidenceExtraction[]): Array<[string, n
   return rows;
 }
 
+function metaAnalysisSvg(meta: MetaAnalysisResult): string {
+  const width = 760;
+  const rowH = 28;
+  const headerH = 56;
+  const footerH = 40;
+  const studyRows = meta.studyEffects;
+  const height = headerH + studyRows.length * rowH + footerH + 24;
+  const maxW = 420;
+  const x0 = 180;
+  const range = Math.max(0.001, meta.ciHigh - meta.ciLow);
+  const scale = (v: number) => {
+    const t = (v - (meta.pooledPoint - range * 1.2)) / (range * 2.4);
+    return x0 + Math.max(0, Math.min(maxW, t * maxW));
+  };
+  const pooledX = scale(meta.pooledPoint);
+  const pooledLow = scale(meta.ciLow);
+  const pooledHigh = scale(meta.ciHigh);
+  const predLow = scale(meta.predictionCiLow);
+  const predHigh = scale(meta.predictionCiHigh);
+
+  let rows = '';
+  for (let i = 0; i < studyRows.length; i += 1) {
+    const y = headerH + i * rowH;
+    const e = studyRows[i]!;
+    const cx = scale(e.point);
+    const low = scale(e.ciLow);
+    const high = scale(e.ciHigh);
+    rows += `<text x="12" y="${y + 18}" fill="#dce7f7" font-size="11">${escXml(e.sourceMarker)}</text>`;
+    rows += `<text x="72" y="${y + 18}" fill="#9fb0c7" font-size="11">${e.point.toFixed(2)}</text>`;
+    rows += `<line x1="${low}" y1="${y + 14}" x2="${high}" y2="${y + 14}" stroke="#7f8ea8" stroke-width="1"/>`;
+    rows += `<rect x="${cx - 3}" y="${y + 10}" width="6" height="8" rx="2" fill="#3dd1bf"/>`;
+  }
+
+  const yPooled = headerH + studyRows.length * rowH + 4;
+  const i2Pct = Math.round(meta.i2 * 100);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif">
+<rect width="${width}" height="${height}" rx="14" fill="#08111d"/>
+<text x="28" y="26" fill="#f1f6fc" font-size="14" font-weight="700">Random-effects meta-analysis (${meta.kind.toUpperCase()})</text>
+<text x="28" y="46" fill="#9fb0c7" font-size="11">Pooled ${meta.pooledPoint.toFixed(2)} (95% CI ${meta.ciLow.toFixed(2)}–${meta.ciHigh.toFixed(2)}); I²=${i2Pct}%; τ²=${meta.tau2.toFixed(3)}</text>
+<line x1="${x0}" y1="${headerH - 4}" x2="${x0 + maxW}" y2="${headerH - 4}" stroke="#2a3951"/>
+${rows}
+<line x1="${pooledLow}" y1="${yPooled + 14}" x2="${pooledHigh}" y2="${yPooled + 14}" stroke="#8b9eff" stroke-width="3"/>
+<rect x="${pooledX - 4}" y="${yPooled + 10}" width="8" height="8" rx="3" fill="#8b9eff"/>
+<line x1="${predLow}" y1="${yPooled + 26}" x2="${predHigh}" y2="${yPooled + 26}" stroke="#7f8ea8" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="12" y="${yPooled + 18}" fill="#f1f6fc" font-size="11" font-weight="700">Pooled</text>
+<text x="12" y="${yPooled + 36}" fill="#9fb0c7" font-size="10">Prediction interval</text>
+</svg>`;
+}
+
 function numericYieldSvg(rows: Array<[string, number]>): string {
   const max = Math.max(1, ...rows.map(([, count]) => count));
   const rowH = 26;
@@ -418,6 +474,35 @@ function buildFigures(
     figures.push(forestPlotFigure(dataset.inferential.subgroups));
   }
 
+  // Meta-analysis forest plot when ≥2 studies have comparable continuous outcomes.
+  if (pipeline?.evidenceExtractions) {
+    const meta = buildSmdMeta(pipeline.evidenceExtractions);
+    if (meta?.interpretable) {
+      figures.push({
+        id: 'fig-meta-analysis',
+        kind: 'meta_analysis',
+        title: 'Pooled quantitative synthesis',
+        caption: formatMetaResult(meta),
+        alt: 'Forest plot summary of inverse-variance random-effects meta-analysis.',
+        svg: metaAnalysisSvg(meta),
+        data: {
+          studies: meta.studies,
+          pooledPoint: meta.pooledPoint,
+          ciLow: meta.ciLow,
+          ciHigh: meta.ciHigh,
+          pValue: meta.pValue,
+          i2: meta.i2,
+          tau2: meta.tau2,
+          qStatistic: meta.qStatistic,
+          qDf: meta.qDf,
+          qPValue: meta.qPValue,
+          predictionCiLow: meta.predictionCiLow,
+          predictionCiHigh: meta.predictionCiHigh,
+        },
+      });
+    }
+  }
+
   return figures;
 }
 
@@ -492,43 +577,30 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
   };
 }
 
-// A transparent, design-based bias-risk signal. This is a deterministic
-// heuristic from study design — NOT a formal Cochrane RoB or GRADE appraisal
-// (which needs full text) — and is labelled as such so it informs without
-// overclaiming. The Limitations section states the absence of a formal RoB.
-function designBiasRisk(studyDesign: string): string {
-  const design = studyDesign.toLowerCase();
-  if (/meta-analysis|systematic review/.test(design)) return 'lower — synthesis design (inherits source bias)';
-  if (/randomi[sz]ed|\brct\b/.test(design)) return 'lower — randomized design';
-  if (/\bcohort\b/.test(design)) return 'moderate — confounding, selection';
-  if (/case[- ]control/.test(design)) return 'moderate — recall, selection';
-  if (/registry/.test(design)) return 'moderate — confounding by indication';
-  if (/cross[- ]sectional/.test(design)) return 'higher — no temporality, selection';
-  if (/case (report|series)/.test(design)) return 'higher — no comparator';
-  if (/narrative review/.test(design)) return 'higher — non-systematic selection';
-  return 'unrated — design not classified from retrieved text';
-}
-
 function evidenceExtractionTable(extractions: EvidenceExtraction[]): ManuscriptTable {
   return {
     id: 'table-evidence-extraction',
     title: 'Structured evidence extraction',
     caption:
-      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet. The bias-risk column is a design-based heuristic, not a formal Cochrane risk-of-bias or GRADE appraisal.',
-    columns: ['Source', 'Design', 'Bias-risk (design-based)', 'Population', 'Exposure/intervention', 'Outcomes', 'Numeric support', 'Key finding'],
-    rows: extractions.map((item) => [
-      `${item.sourceMarker} ${SOURCE_LABELS[item.source]}`,
-      item.studyDesign,
-      designBiasRisk(item.studyDesign),
-      item.population,
-      item.exposureOrIntervention,
-      item.outcomes.join('; ') || 'not reported in retrieved record',
-      [
-        item.sampleSize ? `sample ${item.sampleSize}` : '',
-        ...item.effectValues.map((effect) => `${effect.label} ${effect.value}`),
-      ].filter(Boolean).join('; ') || 'none extracted',
-      item.keyFinding,
-    ]),
+      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet. The RoB/GRADE column is a design-based heuristic (no model calls), not a formal full-text appraisal.',
+    columns: ['Source', 'Design', 'RoB / GRADE (heuristic)', 'Population', 'Exposure', 'Outcomes', 'Numeric support', 'Key finding'],
+    rows: extractions.map((item) => {
+      const rob = assessRiskOfBias(item);
+      const robSummary = `${rob.tool}: ${rob.overall.replace(/_/g, ' ')}${rob.gradeCertainty ? ` | GRADE ${rob.gradeCertainty}` : ''}`;
+      return [
+        `${item.sourceMarker} ${SOURCE_LABELS[item.source]}`,
+        item.studyDesign,
+        robSummary,
+        item.population,
+        item.exposureOrIntervention,
+        item.outcomes.join('; ') || 'not reported',
+        [
+          item.sampleSize ? `sample ${item.sampleSize}` : '',
+          ...item.effectValues.map((effect) => `${effect.label} ${effect.value}`),
+        ].filter(Boolean).join('; ') || 'none extracted',
+        item.keyFinding,
+      ];
+    }),
   };
 }
 
@@ -601,6 +673,27 @@ function buildTables(
     tables.push(evidenceExtractionTable(pipeline.evidenceExtractions));
     const numericTable = extractedNumericStatisticsTable(pipeline.evidenceExtractions);
     if (numericTable) tables.push(numericTable);
+    // Add meta-analysis table if computable
+    const meta = buildSmdMeta(pipeline.evidenceExtractions);
+    if (meta && meta.interpretable) {
+      tables.push({
+        id: 'table-meta-analysis',
+        title: 'Pooled quantitative synthesis',
+        caption:
+          'Inverse-variance random-effects meta-analysis computed in-app from extracted statistics. This is NOT a replacement for a full Cochrane review; it is a rapid quantitative summary when ≥2 studies report comparable continuous outcomes.',
+        columns: ['Parameter', 'Value'],
+        rows: [
+          ['Studies pooled', String(meta.studies)],
+          ['Pooled estimate', `${meta.pooledPoint.toFixed(2)} (95% CI ${meta.ciLow.toFixed(2)} to ${meta.ciHigh.toFixed(2)})`],
+          ['p-value', meta.pValue < 0.001 ? '<0.001' : meta.pValue.toFixed(3)],
+          ['I² (heterogeneity)', `${Math.round(meta.i2 * 100)}%`],
+          ['τ²', meta.tau2.toFixed(3)],
+          ['Q statistic', `${meta.qStatistic.toFixed(2)} (df=${meta.qDf}, p=${meta.qPValue < 0.001 ? '<0.001' : meta.qPValue.toFixed(3)})`],
+          ['Prediction interval', `${meta.predictionCiLow.toFixed(2)} to ${meta.predictionCiHigh.toFixed(2)}`],
+          ['Study effects', meta.studyEffects.map((e) => `${e.sourceMarker}: ${e.point.toFixed(2)} (SE ${e.se.toFixed(2)})`).join('; ')],
+        ],
+      });
+    }
   }
   if (pipeline?.claimLedger?.length) tables.push(claimLedgerTable(pipeline.claimLedger));
   if (dataset) tables.push(datasetTable(dataset));
@@ -650,6 +743,10 @@ function statisticsPayload(
   if (pipeline?.evidenceExtractions?.length) computedAnalyses.push('evidence_extraction', 'source_yield');
   if (pipeline?.claimLedger?.length) computedAnalyses.push('claim_ledger', 'evidence_strength_counts');
   if (numericCount && numericCount > 0) computedAnalyses.push('extracted_numeric_statistics');
+  // Check if meta-analysis is computable
+  if (pipeline?.evidenceExtractions && buildSmdMeta(pipeline.evidenceExtractions)?.interpretable) {
+    computedAnalyses.push('inverse_variance_meta_analysis');
+  }
   if (inferential?.generated) {
     for (const analysis of inferential.analyses) computedAnalyses.push(analysis.kind);
     if (inferential.subgroups) computedAnalyses.push('mantel_haenszel_subgroups');
@@ -659,15 +756,21 @@ function statisticsPayload(
     }
   }
 
+  const metaResult = pipeline?.evidenceExtractions ? buildSmdMeta(pipeline.evidenceExtractions) : undefined;
   const safeguards = inferential?.generated
     ? [
         'Inferential statistics (p-values, confidence intervals, odds and risk ratios, hazard ratios, and survival estimates) were computed in-app by the validated analysis engine directly from the uploaded dataset.',
         'The language model narrates only these computed values and never invents a numerical statistical result.',
       ]
-    : [
-        'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
-        'The language model may narrate retrieved evidence and extracted source statistics, but may not invent numerical statistical results or pooled estimates.',
-      ];
+    : metaResult?.interpretable
+      ? [
+          'Pooled estimates, confidence intervals, and heterogeneity metrics (I², τ², Q) were computed in-app by inverse-variance random-effects meta-analysis from extracted source statistics.',
+          'The language model narrates only these computed values and extracted source statistics; it does not invent numerical results.',
+        ]
+      : [
+          'No p-values, confidence intervals, hazard ratios, odds ratios, or survival curves are generated without an uploaded dataset or extracted effect-size table.',
+          'The language model may narrate retrieved evidence and extracted source statistics, but may not invent numerical statistical results or pooled estimates.',
+        ];
 
   return {
     mode: dataset ? 'original_dataset' : 'evidence_review',
@@ -752,6 +855,19 @@ function unsupportedStatisticIssues(
   extractions?: EvidenceExtraction[],
 ): ValidationIssue[] {
   const supportedText = evidenceText(evidence, dataset, extractions);
+  // Also include meta-analysis computed values as supported
+  const meta = extractions ? buildSmdMeta(extractions) : undefined;
+  const metaText = meta?.interpretable
+    ? [
+        String(meta.pooledPoint),
+        String(meta.ciLow),
+        String(meta.ciHigh),
+        String(meta.i2),
+        String(meta.tau2),
+        String(meta.qStatistic),
+      ].join(' ')
+    : '';
+  const fullSupported = `${supportedText} ${metaText}`;
   const rx =
     /\b(?:p\s*[<=>]\s*0?\.\d+|(?:hazard ratio|odds ratio|risk ratio|relative risk|hr|or|rr)\s*(?:=|of|:)?\s*\d+(?:\.\d+)?|95%\s*ci\s*[:(]?\s*\d+(?:\.\d+)?\s*(?:-|–|to|,)\s*\d+(?:\.\d+)?)/gi;
   const issues: ValidationIssue[] = [];
@@ -759,7 +875,7 @@ function unsupportedStatisticIssues(
     for (const match of section.body.join(' ').matchAll(rx)) {
       const claim = match[0];
       const numbers = claim.match(/\d+(?:\.\d+)?/g) ?? [];
-      const supported = numbers.length > 0 && numbers.every((n) => supportedText.includes(n.toLowerCase()));
+      const supported = numbers.length > 0 && numbers.every((n) => fullSupported.includes(n.toLowerCase()));
       if (!supported) {
         issues.push({
           severity: 'blocker',

@@ -14,7 +14,7 @@ use url::Url;
 /// abstract endpoint (efetch) is XML-only — so we enrich PubMed hits with
 /// abstracts from Europe PMC, which mirrors PubMed (SRC:MED) and serves
 /// `abstractText` as JSON. One batched lookup covers every PMID in the page.
-const ABSTRACT_CHAR_CAP: usize = 2000;
+const ABSTRACT_CHAR_CAP: usize = 3000;
 
 async fn pubmed_abstracts(pmids: &[String]) -> HashMap<String, String> {
     if pmids.is_empty() {
@@ -61,7 +61,7 @@ async fn pubmed_abstracts(pmids: &[String]) -> HashMap<String, String> {
 
 #[tauri::command]
 pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<EvidenceItem>> {
-    let limit = clamp_max_results(max_results, 8, 20);
+    let limit = clamp_max_results(max_results, 12, 40);
     let mut search_url = Url::parse("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     search_url

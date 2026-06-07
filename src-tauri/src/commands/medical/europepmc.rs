@@ -12,7 +12,7 @@ pub async fn europepmc_fetch(
     query: String,
     max_results: Option<u32>,
 ) -> AppResult<Vec<EvidenceItem>> {
-    let limit = clamp_max_results(max_results.unwrap_or(8), 8, 20);
+    let limit = clamp_max_results(max_results.unwrap_or(12), 12, 40);
     let mut url = Url::parse("https://www.ebi.ac.uk/europepmc/webservices/rest/search")
         .map_err(|e| AppError::InvalidInput(e.to_string()))?;
     url.query_pairs_mut()
