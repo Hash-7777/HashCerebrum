@@ -9,6 +9,7 @@ import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
 import { BRAIN_MODEL, PARTS_BY_NODE, primaryRegionForPart, type BrainModelPart } from '../data/modelParts';
 import { regionById } from '../data/regions';
+import { useWindowActive } from '@ui/hooks/useWindowActive';
 import { BrainOverlay } from './BrainOverlay';
 
 interface BrainCanvasProps {
@@ -25,8 +26,7 @@ interface BrainMeshPart {
 }
 
 const PERFORMANCE_STORAGE_KEY = 'hc.brain.performanceMode.v1';
-const PERFORMANCE_TICK_MS = 80;
-// Radians per second for the continuous idle auto-rotation.
+// Radians per second for the auto-rotation that runs only during an active run.
 const AUTO_ROTATE_SPEED = 0.25;
 // Idle surface tone — a deeper, more saturated anatomical tan so the brain
 // reads with colour instead of washing out toward grey-white.
@@ -40,6 +40,7 @@ function readPerformancePreference() {
     return false;
   }
 }
+
 
 function cloneMaterial(source: THREE.Material | THREE.Material[]): THREE.MeshStandardMaterial {
   const material = Array.isArray(source) ? source[0] : source;
@@ -249,28 +250,40 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
   const lastTickRef = useRef(0);
   const parts = useBrainMeshParts();
 
-  useEffect(() => {
-    if (!performanceMode || !hasActiveGlow) return;
-    const interval = window.setInterval(() => {
-      tick(PERFORMANCE_TICK_MS);
-      invalidate();
-    }, PERFORMANCE_TICK_MS);
-    return () => window.clearInterval(interval);
-  }, [hasActiveGlow, invalidate, performanceMode, tick]);
+  const active = useWindowActive();
 
-  // Continuous slow auto-rotation, paused only while the user is dragging
-  // the model with the mouse (rotateEnabled flips off on OrbitControls drag).
+  // Efficiency model: the brain is STATIC by default and only animates while a
+  // run is in progress — agent activity lights regions (hasActiveGlow), which is
+  // our "a run is working" signal. While glowing AND the window is focused, we
+  // drive frames on demand (the canvas is in 'demand' frameloop); the moment the
+  // run finishes and the glow fades, the driver stops and the scene renders no
+  // more frames, so an idle brain costs no GPU. User interaction (orbit/zoom)
+  // still renders on demand via OrbitControls.
+  useEffect(() => {
+    if (!hasActiveGlow || !active) return;
+    let raf = 0;
+    const loop = () => {
+      invalidate();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [hasActiveGlow, active, invalidate]);
+
   useFrame((state, delta) => {
-    if (!performanceMode) {
+    // Fade the agent glow only while it is active.
+    if (hasActiveGlow) {
       const elapsedMs = state.clock.elapsedTime * 1000;
       const last = lastTickRef.current || elapsedMs;
-      const deltaMs = Math.min(80, Math.max(1, elapsedMs - last));
-      if (hasActiveGlow) tick(deltaMs);
+      tick(Math.min(80, Math.max(1, elapsedMs - last)));
       lastTickRef.current = elapsedMs;
+    } else {
+      lastTickRef.current = 0;
     }
     if (!groupRef.current) return;
     groupRef.current.rotation.x = 0.12;
-    if (!performanceMode && rotateEnabled) {
+    // Auto-rotate only during a run (active glow) and not while the user drags.
+    if (hasActiveGlow && rotateEnabled) {
       groupRef.current.rotation.y += delta * AUTO_ROTATE_SPEED;
     }
   });
@@ -475,7 +488,7 @@ function BrainCanvasInner(props: BrainCanvasProps) {
       <Canvas
         camera={{ position: INITIAL_CAMERA, fov: 32 }}
         dpr={canvasDpr}
-        frameloop={!visible ? 'never' : performanceMode ? 'demand' : 'always'}
+        frameloop={visible ? 'demand' : 'never'}
         gl={glOptions}
         shadows={!performanceMode}
         onPointerMissed={() => props.onSelectRegion(null)}

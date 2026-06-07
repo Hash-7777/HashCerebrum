@@ -8,8 +8,9 @@
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useWindowActive } from '@ui/hooks/useWindowActive';
 import { getChunkVectors, type RagChunk } from '@core/rag';
 import { Icon } from '@ui/icons';
 import { pca3, type Vec3 } from './pca3';
@@ -282,11 +283,25 @@ function Axes3D() {
 }
 
 // Idle auto-rotation that conveys depth, paused whenever the user is dragging.
+// The canvas runs in 'demand' frameloop, so while spinning (and the window is
+// focused) we drive frames ourselves; when the spin stops or the window is
+// backgrounded, no frames render and the graph costs no GPU.
 function SceneSpin({ active }: { active: boolean }) {
-  const { scene } = useThree();
+  const { scene, invalidate } = useThree();
+  const focused = useWindowActive();
   useFrame((_, delta) => {
     if (active) scene.rotation.y += delta * 0.08;
   });
+  useEffect(() => {
+    if (!active || !focused) return;
+    let raf = 0;
+    const loop = () => {
+      invalidate();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active, focused, invalidate]);
   return null;
 }
 
@@ -384,7 +399,8 @@ export function MemoryVectorGraph3D({
     <div className="memory-vec3d">
       <Canvas
         camera={{ position: [8, 4.8, 12.5], fov: 45, near: 0.1, far: 200 }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
+        frameloop="demand"
         onPointerMissed={() => {
           setSelectedId(null);
           setFocusCluster(null);
