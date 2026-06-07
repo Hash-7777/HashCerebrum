@@ -28,9 +28,9 @@ export function ChatHistoryPanel() {
 
   const setMode = useModeStore((s) => s.setMode);
   const mode = useModeStore((s) => s.mode);
-  // Brain and Drug-Interactions keep separate chat lists; every other mode
-  // shows the Brain history.
-  const chatMode = mode === 'drug_interactions' ? 'drug_interactions' : 'brain';
+  // Brain, Drug-Interactions and Genetics each keep their own chat list; every
+  // other mode shows the Brain history.
+  const chatMode = mode === 'drug_interactions' || mode === 'genetics' ? mode : 'brain';
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -92,7 +92,7 @@ export function ChatHistoryPanel() {
                   onClick={() => {
                     if (editingId !== chat.id) {
                       selectChat(chat.id);
-                      setMode((chat.mode ?? 'brain') === 'drug_interactions' ? 'drug_interactions' : 'brain');
+                      setMode(chat.mode ?? 'brain');
                     }
                   }}
                 >
