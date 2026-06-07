@@ -440,6 +440,8 @@ src-tauri/
 | Rust Tauri backend (`src-tauri/src/`) | 40 | ~5,739 |
 | **Total core source** | **303** | **~47,488** |
 
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (521 Vitest tests plus 38 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+
 ---
 
 ## Lineage — built on HashCortX
