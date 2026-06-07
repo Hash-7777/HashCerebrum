@@ -7,6 +7,7 @@
 pub mod crossref;
 pub mod ctgov;
 pub mod europepmc;
+pub mod gwas_catalog;
 pub mod openalex;
 pub mod openfda;
 pub mod pubmed;
@@ -304,6 +305,36 @@ pub(super) fn compact_query(query: &str, max_terms: usize) -> String {
     compact_query_terms(query, max_terms).join(" ")
 }
 
+/// Extract a dbSNP rsID (e.g. "rs1051792") from a free-text genetics query, if
+/// one is present. Lets the genetic-database sources look a variant up directly
+/// rather than via its gene.
+pub(super) fn rs_id(query: &str) -> Option<String> {
+    query
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .map(str::to_ascii_lowercase)
+        .find(|tok| {
+            tok.len() >= 3 && tok.starts_with("rs") && tok[2..].chars().all(|c| c.is_ascii_digit())
+        })
+}
+
+/// Best-effort gene-symbol guess from a free-text query. Gene symbols are short
+/// upper-case tokens (MICA, TP53, BRCA1, HLA-DRB1) — pick the first token that
+/// looks like one. Heuristic only; the literature agents do not depend on it.
+pub(super) fn gene_symbol(query: &str) -> Option<String> {
+    query
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .map(|t| t.trim_matches('-'))
+        .find(|t| {
+            let len = t.chars().count();
+            (2..=12).contains(&len)
+                && t.chars().any(|c| c.is_ascii_uppercase())
+                && t.chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-')
+                && t.chars().any(|c| c.is_ascii_alphabetic())
+        })
+        .map(|t| t.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +384,25 @@ mod tests {
             compact_query_terms("Please retrieve trial nct01234567 details", 8),
             ["NCT01234567"]
         );
+    }
+
+    #[test]
+    fn rs_id_is_extracted_when_present() {
+        assert_eq!(
+            rs_id("association of rs1051792 with diabetes"),
+            Some("rs1051792".to_string())
+        );
+        assert_eq!(rs_id("MICA TT genotype and diabetes"), None);
+    }
+
+    #[test]
+    fn gene_symbol_picks_the_uppercase_token() {
+        assert_eq!(
+            gene_symbol("MICA polymorphism and cardiovascular disease"),
+            Some("MICA".to_string())
+        );
+        assert_eq!(gene_symbol("BRCA1 and breast cancer risk"), Some("BRCA1".to_string()));
+        // No uppercase gene-like token → None (lowercase prose is not a symbol).
+        assert_eq!(gene_symbol("does the variant affect diabetes"), None);
     }
 }

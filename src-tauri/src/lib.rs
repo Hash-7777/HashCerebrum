@@ -41,8 +41,8 @@ use commands::{
     manuscript::render_manuscript_pdf,
     medical::{
         crossref::crossref_lookup, ctgov::ctgov_search, europepmc::europepmc_fetch,
-        openalex::openalex_query, openfda::openfda_query, pubmed::pubmed_search,
-        rxnorm::rxnorm_lookup, semantic_scholar::semantic_scholar_search,
+        gwas_catalog::gwas_catalog_search, openalex::openalex_query, openfda::openfda_query,
+        pubmed::pubmed_search, rxnorm::rxnorm_lookup, semantic_scholar::semantic_scholar_search,
     },
     net::{net_get, net_get_bytes},
     pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
@@ -115,6 +115,7 @@ pub fn run() {
             rxnorm_lookup,
             semantic_scholar_search,
             crossref_lookup,
+            gwas_catalog_search,
             pdf_extract_text_bytes,
             pdf_extract_pages_bytes,
             fetch_open_access_pdf,
