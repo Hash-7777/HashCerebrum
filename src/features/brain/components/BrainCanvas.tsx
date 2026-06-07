@@ -385,7 +385,7 @@ function useModelPresence() {
   return state;
 }
 
-const INITIAL_CAMERA: [number, number, number] = [0, 0.18, 5.6];
+const INITIAL_CAMERA: [number, number, number] = [0, 0.18, 7.2];
 
 function BrainCanvasInner(props: BrainCanvasProps) {
   const presence = useModelPresence();

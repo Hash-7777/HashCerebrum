@@ -149,6 +149,23 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  /* Thin, subtle scrollbar that matches the dark panel (Firefox + WebKit). */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+.swarm-table::-webkit-scrollbar { width: 8px; }
+.swarm-table::-webkit-scrollbar-track { background: transparent; }
+.swarm-table::-webkit-scrollbar-thumb {
+  /* Inset with a transparent border so the thumb reads as a slim pill rather
+     than the default full-width chunky bar. */
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+.swarm-table::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: padding-box;
 }
 
 .swarm-row {
