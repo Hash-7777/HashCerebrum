@@ -148,6 +148,43 @@ describe('paper pipeline evidence extraction', () => {
     expect(extraction?.trusted).toBe(true);
   });
 
+  it('does not parse the English word "or" as an odds ratio', () => {
+    // The real-run misparse: "stroke or 150 events" became "odds ratio 150".
+    const [extraction] = extractEvidenceFromRecords([
+      record({
+        snippet: 'Patients had a stroke or 150 events during follow-up; mortality or = 65 was noted.',
+      }),
+    ]);
+    expect(extraction?.effectValues.some((e) => e.label === 'odds ratio')).toBe(false);
+  });
+
+  it('rejects implausible integer ratios but keeps decimal ratios', () => {
+    const [extraction] = extractEvidenceFromRecords([
+      record({
+        snippet: 'The analysis reported OR 150 for one comparison and HR 3.75 for another endpoint.',
+      }),
+    ]);
+    const labels = extraction?.effectValues ?? [];
+    expect(labels.some((e) => e.label === 'odds ratio' && e.value === '150')).toBe(false);
+    expect(labels.some((e) => e.label === 'hazard ratio' && e.value === '3.75')).toBe(true);
+  });
+
+  it('drops a reversed or degenerate confidence interval', () => {
+    const [extraction] = extractEvidenceFromRecords([
+      record({ snippet: 'The estimate had 95% CI 1.84-1.10 reported in the abstract.' }),
+    ]);
+    expect(extraction?.effectValues.some((e) => e.label === 'confidence interval')).toBe(false);
+  });
+
+  it('still extracts a valid hazard ratio with a proper CI', () => {
+    const [extraction] = extractEvidenceFromRecords([
+      record({ snippet: 'Heart failure risk was lower with HR = 0.80 (95% CI 0.74-0.86).' }),
+    ]);
+    const values = extraction?.effectValues ?? [];
+    expect(values.some((e) => e.label === 'hazard ratio' && e.value === '0.80')).toBe(true);
+    expect(values.some((e) => e.label === 'confidence interval' && e.value === '0.74-0.86')).toBe(true);
+  });
+
   it('accepts valid structured JSON and rejects unsupported statistics', () => {
     const source = record();
     const valid = parseEvidenceExtractionJson(

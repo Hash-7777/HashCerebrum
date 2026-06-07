@@ -373,38 +373,72 @@ function extractSampleSize(text: string): string | null {
   return null;
 }
 
+// A ratio estimate (OR/RR/HR) is implausible as an integer ≥ 10: real ratios are
+// reported with a decimal (0.68, 1.21, 3.75). A bare integer like "150" or "65"
+// is almost always a misparse — typically the English word "or" followed by a
+// count ("stroke or 150 events"). Reject those, plus anything non-positive or
+// absurdly large.
+function isPlausibleRatio(value: string): boolean {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > 100) return false;
+  if (Number.isInteger(n) && n >= 10) return false;
+  return true;
+}
+
+// A 95% CI is valid only when it is a proper interval: two finite, positive
+// bounds with the lower strictly below the upper. A reversed or degenerate pair
+// is a misparse.
+function isPlausibleInterval(range: string): boolean {
+  const parts = range.split(/\s*(?:-|to|,|–|—)\s*/).map(Number);
+  if (parts.length !== 2) return false;
+  const [lo, hi] = parts;
+  if (lo === undefined || hi === undefined) return false;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return false;
+  return lo > 0 && hi > 0 && lo < hi;
+}
+
+// Ratio matchers capture the keyword (group 1) and the estimate (group 2) so we
+// can reject the English word "or" (lowercase) masquerading as the OR
+// abbreviation — the cause of phantom "odds ratio 150" / "odds ratio 65" rows.
+const RATIO_PATTERNS: Array<{ label: string; rx: RegExp }> = [
+  { label: 'odds ratio', rx: /\b(odds ratio|OR)\b\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)/gi },
+  { label: 'risk ratio', rx: /\b(risk ratio|relative risk|RR)\b\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)/gi },
+  { label: 'hazard ratio', rx: /\b(hazard ratio|HR)\b\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)/gi },
+];
+
+// A two-letter ratio abbreviation must be UPPERCASE in the source. Lowercase
+// "or" / "rr" / "hr" is ordinary prose, not a statistic.
+function isLowercaseWordAbbrev(keyword: string): boolean {
+  return /^(or|rr|hr)$/i.test(keyword) && keyword !== keyword.toUpperCase();
+}
+
 function extractEffectValues(text: string): ExtractedEffectValue[] {
   const effects: ExtractedEffectValue[] = [];
-  const patterns: Array<{ label: string; rx: RegExp }> = [
-    {
-      label: 'odds ratio',
-      rx: /\b(?:odds ratio|OR)\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)(?:[^.;]{0,80}?(?:95%\s*CI\s*[:(]?\s*[0-9]+(?:\.[0-9]+)?\s*(?:-|to|,)\s*[0-9]+(?:\.[0-9]+)?\)?))?/gi,
-    },
-    {
-      label: 'risk ratio',
-      rx: /\b(?:risk ratio|relative risk|RR)\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)(?:[^.;]{0,80}?(?:95%\s*CI\s*[:(]?\s*[0-9]+(?:\.[0-9]+)?\s*(?:-|to|,)\s*[0-9]+(?:\.[0-9]+)?\)?))?/gi,
-    },
-    {
-      label: 'hazard ratio',
-      rx: /\b(?:hazard ratio|HR)\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)(?:[^.;]{0,80}?(?:95%\s*CI\s*[:(]?\s*[0-9]+(?:\.[0-9]+)?\s*(?:-|to|,)\s*[0-9]+(?:\.[0-9]+)?\)?))?/gi,
-    },
-    {
-      label: 'confidence interval',
-      rx: /\b95%\s*CI\s*[:(]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:-|to|,)\s*[0-9]+(?:\.[0-9]+)?)\)?/gi,
-    },
-    {
-      label: 'p-value',
-      rx: /\bp\s*(?:=|<|>)\s*(0?\.[0-9]+)/gi,
-    },
-  ];
-  for (const { label, rx } of patterns) {
+
+  for (const { label, rx } of RATIO_PATTERNS) {
     for (const match of text.matchAll(rx)) {
-      const sourceText = clean(match[0]);
-      const value = clean(match[1] ?? match[0]);
-      if (!value) continue;
-      effects.push({ label, value, sourceText });
+      const keyword = match[1] ?? '';
+      const value = clean(match[2] ?? '');
+      if (!value || isLowercaseWordAbbrev(keyword) || !isPlausibleRatio(value)) continue;
+      effects.push({ label, value, sourceText: clean(match[0]) });
     }
   }
+
+  const ciRx = /\b95%\s*CI\s*[:(]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:-|to|,|–|—)\s*[0-9]+(?:\.[0-9]+)?)\)?/gi;
+  for (const match of text.matchAll(ciRx)) {
+    const value = clean(match[1] ?? '');
+    if (!value || !isPlausibleInterval(value)) continue;
+    effects.push({ label: 'confidence interval', value, sourceText: clean(match[0]) });
+  }
+
+  const pRx = /\bp\s*(?:=|<|>)\s*(0?\.[0-9]+)/gi;
+  for (const match of text.matchAll(pRx)) {
+    const value = clean(match[1] ?? '');
+    const n = Number(value);
+    if (!value || !Number.isFinite(n) || n <= 0 || n > 1) continue;
+    effects.push({ label: 'p-value', value, sourceText: clean(match[0]) });
+  }
+
   const seen = new Set<string>();
   return effects.filter((effect) => {
     const key = `${effect.label}:${effect.value}:${effect.sourceText}`;
