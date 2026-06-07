@@ -1,9 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ensureGeneDisclaimer,
   ensureInteractionDisclaimer,
+  geneConfidenceHeader,
+  isConfidentGeneReport,
   isConfidentInteractionReport,
   stripLeakedSpecialistLabels,
 } from '../boss';
+import type { AssociationConfidence } from '../genetics/associationConfidence';
+
+describe('genetics report helpers', () => {
+  const conf = (over: Partial<AssociationConfidence>): AssociationConfidence => ({
+    score: 72,
+    band: 'strong',
+    supportCount: 4,
+    refuteCount: 0,
+    totalCount: 5,
+    pooledDirection: 'risk',
+    rationale: 'test',
+    ...over,
+  });
+
+  it('builds a deterministic confidence header', () => {
+    expect(geneConfidenceHeader(conf({ score: 72, band: 'strong' }))).toBe(
+      '**Association confidence: 72% — strong**',
+    );
+  });
+
+  it('treats a non-insufficient header as confident', () => {
+    expect(isConfidentGeneReport(geneConfidenceHeader(conf({ band: 'moderate', score: 50 })))).toBe(true);
+    expect(isConfidentGeneReport(geneConfidenceHeader(conf({ band: 'very strong', score: 90 })))).toBe(true);
+  });
+
+  it('treats an insufficient header as not confident', () => {
+    expect(isConfidentGeneReport(geneConfidenceHeader(conf({ band: 'insufficient', score: 0 })))).toBe(false);
+    expect(isConfidentGeneReport('')).toBe(false);
+  });
+
+  it('appends the genetics disclaimer once', () => {
+    const out = ensureGeneDisclaimer('Gene report body.');
+    expect(out.toLowerCase()).toContain('not medical advice');
+    expect(ensureGeneDisclaimer(out).toLowerCase().match(/not medical advice/g)?.length).toBe(1);
+  });
+});
 
 describe('ensureInteractionDisclaimer', () => {
   it('appends the safety footer when the report has no verify-clinician line', () => {

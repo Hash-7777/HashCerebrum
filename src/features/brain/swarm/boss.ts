@@ -13,6 +13,7 @@ import { bus } from '@core/bus/EventBus';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
+import type { AssociationConfidence } from './genetics/associationConfidence';
 import { paperSystemInstruction, type PaperRequest } from './paper';
 import type { SpecialistResult, SpecialistTask } from './types';
 
@@ -314,6 +315,117 @@ Produce the graded interaction card(s) now, citing [S#] markers exactly as shown
     content: ensureInteractionDisclaimer(stripLeakedSpecialistLabels(res.content)),
     modelUsed: res.modelUsed,
   };
+}
+
+// ── Genetics mode: gene-variant ↔ disease correlation report ──────────────────
+
+// The genetics safety footer — appended deterministically so it travels with the
+// document on copy / export, never relying on the model to remember it.
+export const GENE_DISCLAIMER =
+  'Not medical advice. This reports the strength of PUBLISHED gene–disease associations, not a personal risk estimate — verify every finding against the cited sources and a qualified clinician or geneticist before any clinical or personal decision.';
+
+/** Deterministic, code-generated confidence header line (the score is never
+ *  written by the model). Prefixed to the report so the number is authoritative. */
+export function geneConfidenceHeader(confidence: AssociationConfidence): string {
+  return `**Association confidence: ${confidence.score}% — ${confidence.band}**`;
+}
+
+const CONFIDENT_GENE_RX = /association confidence:\s*\d+%\s*—\s*(weak|moderate|strong|very strong)/i;
+
+/** A report is "confident" (and may feed shared memory) when the deterministic
+ *  confidence header shows a band above "insufficient". */
+export function isConfidentGeneReport(text: string): boolean {
+  return CONFIDENT_GENE_RX.test(text);
+}
+
+export function ensureGeneDisclaimer(content: string): string {
+  const trimmed = content.trimEnd();
+  return /not medical advice/i.test(trimmed) ? trimmed : `${trimmed}\n\n*⚠ ${GENE_DISCLAIMER}*`;
+}
+
+/**
+ * Gene-variant ↔ disease correlation report — streamed. Strictly grounded in the
+ * retrieved records; the association-confidence score is computed by the app and
+ * passed in, and the model must report it verbatim (never invent a number).
+ */
+export async function synthesizeGeneCorrelationReport(
+  model: string,
+  question: string,
+  specialists: SpecialistResult[],
+  evidence: EvidenceItem[],
+  confidence: AssociationConfidence,
+  onToken: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<{ content: string; modelUsed: string }> {
+  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
+  const findings = specialists
+    .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
+    .join('\n\n');
+  const header = geneConfidenceHeader(confidence);
+  const messages: LlmMessage[] = [
+    {
+      role: 'system',
+      content: `You are HashCerebrum's gene-expert. You report the correlation between a gene variant and a disease, grounded ONLY in the retrieved records (GWAS Catalog associations, ClinVar clinical significance, and genetics literature).
+
+Hard rules:
+- Use ONLY the retrieved records and findings. Never invent an association, gene, variant, effect size, p-value, PMID, allele frequency, or population.
+- The app has ALREADY computed the Association Confidence score deterministically from the structured evidence. Report it EXACTLY as given in the header — never recompute, round, or change it.
+- The score is the STRENGTH OF THE PUBLISHED ASSOCIATION, not a personal clinical risk. Say so plainly.
+- Cite every factual claim inline with the exact [S#] marker of the record it came from. Never write a bare or list-style marker.
+- If the confidence band is "insufficient", state that the published evidence is insufficient to quantify the association and do NOT present it as established.
+
+Output EXACTLY this Markdown structure, starting with the provided header line verbatim:
+
+${header}
+
+**Gene / variant:** <gene symbol and variant/rsID/genotype as named in the records>
+**Disease / phenotype:** <the disease asked about>
+
+**Interpretation:** <one or two sentences on what the confidence band means here — strength of published association, not personal risk>
+
+**Quantitative evidence:** <representative odds ratios / betas with 95% CI and p-values, each cited [S#]; say "none reported" if absent>
+
+**Supporting studies:**
+- <one bullet per key record: what it found, cited [S#]>
+
+**Population context:** <ancestry/cohort if the records mention it; otherwise "not specified in retrieved records">
+
+**Caveats & gaps:** <conflicting or benign records, small samples, missing direct evidence>
+
+End with this exact line:
+*⚠ ${GENE_DISCLAIMER}*`,
+    },
+    {
+      role: 'user',
+      content: `Genetics question: ${question}
+
+App-computed association confidence (report verbatim, do not change):
+- Score: ${confidence.score}% (${confidence.band})
+- Significant supporting records: ${confidence.supportCount}; non-associating records: ${confidence.refuteCount}; pooled direction: ${confidence.pooledDirection}
+- Basis: ${confidence.rationale}
+
+Retrieved records:
+${evidenceBlock}
+
+Specialist findings:
+${findings}
+
+Write the correlation report now, beginning with the header line exactly as given and citing [S#] markers.`,
+    },
+  ];
+  const res = await streamWithModelChain(
+    model,
+    { messages, temperature: 0.2, maxTokens: 2000 },
+    { onToken, signal },
+    emitFailover,
+  );
+  // Guarantee the deterministic header and disclaimer are present even if the
+  // model dropped them.
+  let content = stripLeakedSpecialistLabels(res.content);
+  if (!CONFIDENT_GENE_RX.test(content) && !/association confidence:/i.test(content)) {
+    content = `${header}\n\n${content}`;
+  }
+  return { content: ensureGeneDisclaimer(content), modelUsed: res.modelUsed };
 }
 
 // Synthesize the specialists' findings into the final answer — streamed.
