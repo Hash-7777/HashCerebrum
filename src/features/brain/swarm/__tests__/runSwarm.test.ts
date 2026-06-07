@@ -173,6 +173,34 @@ describe('concept-conjunctive ranking', () => {
   });
 });
 
+describe('intervention relevance gate', () => {
+  const titled = (title: string, snippet = '') => makeRecord({ source: 'pubmed', title, snippet });
+  // The real failing query: an anticoagulant review pulled in diabetes+elderly
+  // noise that shares the population but never mentions the drug.
+  const q = 'anticoagulant effect on diabetes in elderly patients';
+
+  it('drops population-only noise when enough anticoagulant records exist', () => {
+    const onDrug = [1, 2, 3, 4, 5, 6].map((n) =>
+      titled(`Anticoagulant study ${n}`, 'oral anticoagulant warfarin in elderly diabetic patients'),
+    );
+    const noise = [
+      titled('Corneal edema after cataract surgery', 'elderly diabetic cataract patients corneal edema'),
+      titled('Emphysematous cystitis in the elderly', 'elderly diabetic bladder infection'),
+    ];
+    const ranked = rankEvidenceByRelevance(q, [...onDrug, ...noise]);
+    expect(ranked.some((r) => r.title.includes('Corneal'))).toBe(false);
+    expect(ranked.some((r) => r.title.includes('cystitis'))).toBe(false);
+    expect(ranked).toHaveLength(onDrug.length);
+  });
+
+  it('does not gate when too few intervention records exist (sparse safety)', () => {
+    const onDrug = titled('Warfarin in elderly diabetics', 'oral anticoagulant elderly diabetic');
+    const noise = titled('Corneal edema in elderly diabetics', 'elderly diabetic cataract');
+    const ranked = rankEvidenceByRelevance(q, [onDrug, noise]);
+    expect(ranked).toHaveLength(2); // not enough drug records to safely gate
+  });
+});
+
 describe('assessEvidenceSufficiency', () => {
   const titled = (title: string, snippet = '') => makeRecord({ source: 'pubmed', title, snippet });
   const q = 'NSAIDs use with warfarin and digoxin in young population';

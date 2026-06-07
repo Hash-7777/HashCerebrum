@@ -212,6 +212,32 @@ function coreConceptGroups(question: string): string[][] {
   return all.filter((group) => !generic.has(group[0]!));
 }
 
+// Drug / drug-class indicator terms. A question concept built from one of these
+// (or matching a common drug-name suffix) is treated as an INTERVENTION — the
+// thing the review is actually about — as opposed to the population or setting.
+const DRUG_CONCEPT_TERMS = new Set([
+  'anticoagulant', 'anticoagulants', 'anticoagulation', 'antiplatelet', 'antidiabetic',
+  'antihypertensive', 'antibiotic', 'antibiotics', 'warfarin', 'heparin', 'enoxaparin',
+  'rivaroxaban', 'apixaban', 'edoxaban', 'dabigatran', 'noac', 'doac', 'aspirin', 'nsaid',
+  'nsaids', 'statin', 'statins', 'metformin', 'insulin', 'digoxin', 'clopidogrel',
+  'sertraline', 'tramadol', 'ibuprofen', 'naproxen', 'diclofenac', 'lisinopril',
+  'hydrochlorothiazide', 'amoxicillin', 'atorvastatin', 'simvastatin', 'dapagliflozin',
+  'ipragliflozin', 'pioglitazone', 'acetaminophen', 'paracetamol',
+]);
+
+// Common drug-name suffixes so an un-listed agent is still recognised as a drug
+// (rivaroxaban→xaban, atorvastatin→statin, lisinopril→pril, metoprolol→olol …).
+const DRUG_SUFFIX_RX = /(?:statin|sartan|pril|olol|azepam|cycline|micin|mycin|floxacin|tinib|mab|gliflozin|gliptin|parin|xaban|caine|prazole|coxib)$/;
+
+function isDrugTerm(term: string): boolean {
+  return DRUG_CONCEPT_TERMS.has(term) || DRUG_SUFFIX_RX.test(term);
+}
+
+// Concept groups that name a drug or drug-class — the intervention(s) under study.
+function interventionConceptGroups(question: string): string[][] {
+  return conceptGroups(question).filter((group) => group.some(isDrugTerm));
+}
+
 // Re-rank merged evidence by how many of the question's CONCEPTS each record
 // covers (conjunctive relevance), so multi-concept records lead and
 // single-concept noise sinks or drops. When the question spans ≥3 concepts a
@@ -222,6 +248,7 @@ function coreConceptGroups(question: string): string[][] {
 export function rankEvidenceByRelevance(question: string, evidence: EvidenceItem[]): EvidenceItem[] {
   const groups = conceptGroups(question);
   const coreGroups = coreConceptGroups(question);
+  const interventionGroups = interventionConceptGroups(question);
   if (groups.length === 0) return evidence;
   const scored = evidence
     .map((record, index) => ({ record, index, m: conceptCoverage(record, groups), core: conceptCoverage(record, coreGroups) }))
@@ -235,6 +262,17 @@ export function rankEvidenceByRelevance(question: string, evidence: EvidenceItem
   const coreGated = coreGroups.length > 0 ? scored.filter((s) => s.core >= 1) : scored;
   const candidate = strong.length >= 6 ? strong : loose.length >= 6 ? loose : scored;
   const kept = coreGated.length >= 6 ? coreGated.filter((s) => candidate.includes(s)) : candidate;
+  // Intervention gate: when the question names a drug / drug-class, an on-topic
+  // record must actually mention that intervention. This drops records that
+  // share only the population/setting — e.g. "corneal edema in elderly diabetic
+  // cataract patients" on an *anticoagulant* in elderly diabetics question —
+  // which the concept-conjunctive bar alone keeps (it matches diabetes+elderly).
+  // Applied only when ≥6 intervention-bearing records survive, so a sparse topic
+  // is never gutted.
+  if (interventionGroups.length > 0) {
+    const onIntervention = kept.filter((s) => conceptCoverage(s.record, interventionGroups) >= 1);
+    if (onIntervention.length >= 6) return onIntervention.map((s) => s.record);
+  }
   return kept.map((s) => s.record);
 }
 
