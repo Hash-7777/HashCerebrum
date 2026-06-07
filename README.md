@@ -18,11 +18,11 @@
 
 </div>
 
-> **Built on [HashCortX](#lineage--built-on-hashcortx).** HashCerebrum is built
-> using the author's earlier local-first agentic desktop app, **HashCortX**, as
-> its building blocks — its multi-provider failover chain, guarded/audited
-> network core, swarm + tool-registry orchestration, and the "Medical
-> Lexi-Check" drug-interaction grader — then extends them for medicine with a
+> **Built on [HashCortX](#lineage--built-on-hashcortx).** I built HashCerebrum
+> using my earlier local-first agentic desktop app, **HashCortX**, as its
+> foundation — its multi-provider failover chain, guarded/audited network core,
+> swarm + tool-registry orchestration, and the "Medical Lexi-Check"
+> drug-interaction grader — then extended it for medicine with a
 > hallucination-gated paper pipeline, on-device semantic memory, Smart Agentic
 > RAG with a true learning layer, and a 3D anatomical workspace.
 
@@ -47,6 +47,29 @@ In medicine, two things matter more than anything else: **where your data goes**
 The result is an answer where **every sentence has a chain of custody back to a real publication** — and a clear record of exactly which databases were contacted to produce it.
 
 **Learning by design.** With Smart RAG enabled (default ON), retrieval is not a one-shot search. The agent decomposes the query, measures coverage, extracts claims, detects contradictions, follows citations, and persists what it learns across sessions. It accumulates beliefs, tracks how consensus shifts, builds a knowledge graph of entities and relations, scores source reliability, records episodes, and flags semantic drift. Everything is local and user-controlled.
+
+---
+
+## How HashCerebrum compares
+
+I built HashCerebrum because existing tools retrieve or summarise, but none of them actually *learn*. Here is how the approach differs:
+
+| Capability | Perplexity | Elicit | Consensus | Scite | **HashCerebrum** |
+|---|---|---|---|---|---|
+| Real-time web search | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) — deliberate; only authoritative biomedical databases |
+| Systematic-review automation | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) | ![partial](https://img.shields.io/badge/-partial-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![partial](https://img.shields.io/badge/-partial-999999?style=flat-square) — agent-guided, not exhaustive |
+| Persistent cross-project memory | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — on-device, de-duplicated |
+| Belief updating per claim | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — Bayesian-lite confidence with revision history |
+| Automatic conflict detection | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — citation context | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — claim-level contradictions |
+| Consensus evolution timeline | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — voting view | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — year-by-year directional flips |
+| Knowledge graph extraction | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — drugs, conditions, outcomes, relations |
+| Source reliability scoring | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![partial](https://img.shields.io/badge/-partial-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — journal/author + retraction tracking |
+| Active learning queue | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — identifies and prioritises gaps |
+| Episodic memory of sessions | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — queryable research history |
+| Semantic drift detection | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — per-year embedding snapshots |
+| Fully offline option | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![no](https://img.shields.io/badge/-no-999999?style=flat-square) | ![yes](https://img.shields.io/badge/-yes-14a89a?style=flat-square) — Ollama, zero egress |
+
+The gap I am targeting is simple: every other tool in this table is a retriever, an extractor, or a summariser. None of them accumulates structured knowledge across sessions, updates beliefs when evidence contradicts earlier findings, or tracks how a field's consensus *evolves* over time. HashCerebrum does — and it does so without sending your data anywhere.
 
 ---
 
@@ -149,7 +172,7 @@ The **Drug Interactions** mode is a focused interaction checker rather than the 
 
 Its confirmed findings are saved to the shared memory (tagged `drug_interactions`) so ordinary Brain research benefits from them — but the checker itself only draws on its **own trusted interaction findings**, never the other modes' general research.
 
-This grading model and the failover chain are adapted from patterns in the author's prior desktop app, **HashCortX** (see *Lineage* below).
+This grading model and the failover chain are adapted from patterns in my prior desktop app, **HashCortX** (see *Lineage* below).
 
 ---
 
@@ -355,7 +378,7 @@ src-tauri/
 
 ## Lineage — built on HashCortX
 
-HashCerebrum is built using the author's earlier local-first agentic desktop app, **HashCortX**, as its building blocks — its multi-provider failover chain, guarded/audited network core, swarm + tool-registry orchestration, and the "Medical Lexi-Check" drug-interaction grader — then extends them for medicine with a hallucination-gated paper pipeline, on-device semantic memory, Smart Agentic RAG with true learning agents, and a 3D anatomical workspace.
+I built HashCerebrum on top of my earlier local-first agentic desktop app, **HashCortX** — using its multi-provider failover chain, guarded/audited network core, swarm + tool-registry orchestration, and the "Medical Lexi-Check" drug-interaction grader — then extended it for medicine with a hallucination-gated paper pipeline, on-device semantic memory, Smart Agentic RAG with true learning agents, and a 3D anatomical workspace.
 
 ---
 
