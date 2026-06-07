@@ -214,4 +214,17 @@ describe('assessEvidenceSufficiency', () => {
     // Every concept uncovered → total miss, left to the low-evidence floor.
     expect(assessEvidenceSufficiency(q, evidence).note).toBeNull();
   });
+
+  it('treats anticoagulant as a drug class — NOAC/warfarin records cover it (no false gap)', () => {
+    // The real-run failure: an "anticoagulant" question reported as an evidence
+    // gap even though the corpus was full of warfarin / edoxaban / NOAC studies.
+    const aq = 'anticoagulant effect on diabetes in elderly patients';
+    const evidence = [
+      titled('Edoxaban in elderly atrial fibrillation', 'very low dose edoxaban stroke prevention'),
+      titled('Warfarin vs NOAC in diabetic patients', 'rivaroxaban diabetes elderly oral anticoagulation'),
+    ];
+    const { uncovered, note } = assessEvidenceSufficiency(aq, evidence);
+    expect(uncovered).not.toContain('anticoagulant');
+    expect(note).toBeNull();
+  });
 });

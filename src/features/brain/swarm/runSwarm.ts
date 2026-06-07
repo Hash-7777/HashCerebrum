@@ -30,6 +30,7 @@ import {
 } from './paper';
 import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
+import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, runPaperPipeline } from './paperPipeline';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SpecialistTask, SwarmOptions, SwarmResult } from './types';
@@ -121,6 +122,13 @@ const MEDICAL_SYNONYMS: Record<string, string[]> = {
   hypertension: ['high blood pressure', 'elevated blood pressure', 'arterial hypertension'],
   obesity: ['overweight', 'bmi', 'body mass index', 'adiposity'],
   warfarin: ['vitamin k antagonist', 'coumarin', 'anticoagulant'],
+  // Anticoagulant is a drug CLASS: a record naming any member (warfarin, a NOAC/
+  // DOAC, heparin) covers the "anticoagulant" concept. Without this, an
+  // anticoagulant question wrongly reads as an evidence gap even when the corpus
+  // is full of warfarin / edoxaban / rivaroxaban studies.
+  anticoagulant: ['anticoagulation', 'anticoagulants', 'oral anticoagulant', 'noac', 'doac', 'vitamin k antagonist', 'warfarin', 'rivaroxaban', 'apixaban', 'edoxaban', 'dabigatran', 'heparin', 'enoxaparin'],
+  anticoagulants: ['anticoagulation', 'anticoagulant', 'oral anticoagulant', 'noac', 'doac', 'vitamin k antagonist', 'warfarin', 'rivaroxaban', 'apixaban', 'edoxaban', 'dabigatran', 'heparin', 'enoxaparin'],
+  anticoagulation: ['anticoagulant', 'anticoagulants', 'oral anticoagulant', 'noac', 'doac', 'vitamin k antagonist', 'warfarin', 'rivaroxaban', 'apixaban', 'edoxaban', 'dabigatran'],
   aspirin: ['acetylsalicylic acid', 'antiplatelet', 'nsaid'],
   nsaid: ['nonsteroidal anti-inflammatory', 'ibuprofen', 'naproxen', 'diclofenac'],
   nsaids: ['nonsteroidal anti-inflammatory drugs', 'ibuprofen', 'naproxen', 'diclofenac'],
@@ -387,7 +395,13 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // literal pronoun string. The paper-vs-answer decision stays on the user's
   // original phrasing.
   const paperRequest = detectPaperRequest(question);
-  const researchQuestion = await contextualizeQuestion(bossModel, question, conversation);
+  // Repair common biomedical misspellings (e.g. "anticouagulant" → "anticoagulant")
+  // before the question drives search, concept coverage, the title and keywords —
+  // a typo here otherwise cascades into a false "no direct evidence" gap and a
+  // misspelled title.
+  const researchQuestion = normalizeMedicalSpelling(
+    await contextualizeQuestion(bossModel, question, conversation),
+  );
 
   // Drug-Interactions focus: a single specialist gathers interaction evidence
   // from trusted sources and the boss writes a focused interaction report —
