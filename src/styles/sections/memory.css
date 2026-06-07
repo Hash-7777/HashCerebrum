@@ -270,8 +270,14 @@
 .memory-prune {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   flex: none;
+  /* Fixed width sized for the longer "Analyzing…" label so swapping
+     "Prune" -> "Analyzing…" never resizes the button and pushes the toolbar
+     onto a second row. */
+  min-width: 104px;
+  white-space: nowrap;
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--hc-border);
