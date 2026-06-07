@@ -38,7 +38,7 @@ export interface ChatMessage {
 // Which workspace produced a chat. Brain and Drug-Interactions keep separate
 // histories so an interaction report never lands among research papers.
 // Absent on chats saved before this field existed — treated as 'brain'.
-export type ChatMode = 'brain' | 'drug_interactions';
+export type ChatMode = 'brain' | 'drug_interactions' | 'genetics';
 
 export interface SavedChat {
   id: string;

@@ -28,10 +28,11 @@ import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
-import { isConfidentInteractionReport } from './swarm/boss';
+import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
 import { BrainCanvas } from './components/BrainCanvas';
 import { Composer } from './components/Composer';
 import { DrugInteractionPanel } from './components/DrugInteractionPanel';
+import { GeneticsPanel } from './components/GeneticsPanel';
 import { ClaimLedgerPanel } from './components/ClaimLedgerPanel';
 import type { ClaimLedgerEntry } from './swarm/publicationTypes';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -51,9 +52,16 @@ const WELCOME_MESSAGE: ChatMessage = {
     'Ask the boss anything. It routes plain questions to a quick chat reply, and research questions to a swarm of medical specialists that fetch guarded evidence and answer with citations.',
 };
 
-// `drugFocus` is set by the Drug-Interactions mode/tab, which reuses this same
-// chat experience but routes every question to the dedicated interaction report.
-export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
+// `drugFocus` / `geneticsFocus` are set by the Drug-Interactions and Genetics
+// modes, which reuse this same chat experience but route every question to a
+// dedicated report (interaction grading / gene-variant correlation).
+export function BrainMode({
+  drugFocus = false,
+  geneticsFocus = false,
+}: { drugFocus?: boolean; geneticsFocus?: boolean } = {}) {
+  // Both reuse the solo (no 3D brain, no swarm panel) layout and a single
+  // specialist pipeline.
+  const soloFocus = drugFocus || geneticsFocus;
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const modelGroups = useModelCatalogStore((s) => s.groups);
@@ -131,7 +139,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   // saved turn, so this never clobbers an in-progress conversation.
   // Brain and Drug-Interactions are separate histories. Both instances stay
   // mounted, so each only loads the active chat when it belongs to ITS mode.
-  const chatMode = drugFocus ? 'drug_interactions' : 'brain';
+  const chatMode = drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : 'brain';
   useEffect(() => {
     if (!activeChatId) return;
     const chat = useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId);
@@ -184,7 +192,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
     // Outline-first: propose the paper's structure (deterministic, no tokens)
     // and stop — the user approves with "Draft full paper", which re-enters
     // runTurn with forceDraft so the real pipeline runs.
-    if (!forceDraft && !drugFocus && useBrainModesStore.getState().outlineFirst) {
+    if (!forceDraft && !soloFocus && useBrainModesStore.getState().outlineFirst) {
       const outline = buildPaperOutline(cleanQuery, useBrainModesStore.getState().mini);
       const body = [
         '## Proposed paper outline',
@@ -368,6 +376,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         signal: abortRef.current?.signal,
         mini: useBrainModesStore.getState().mini,
         drugFocus,
+        geneticsFocus,
         onClaimLedger: (ledger) =>
           new Promise((resolve, reject) => {
             claimLedgerResolve.current = resolve;
@@ -403,14 +412,21 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
         // it reached a confident verdict (so the app is fed sure answers, not
         // "insufficient evidence" reports), and tags its findings so its own
         // retrieval stays isolated to this trusted domain.
-        const diTag = drugFocus ? 'drug_interactions' : undefined;
-        const diConfident = !drugFocus || isConfidentInteractionReport(finalContent);
+        // Tag findings to the mode's domain so its retrieval stays isolated,
+        // and only feed shared memory on a confident result (drug interactions:
+        // a clear verdict; genetics: a non-insufficient association band).
+        const memoryTag = drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : undefined;
+        const soloConfident = drugFocus
+          ? isConfidentInteractionReport(finalContent)
+          : geneticsFocus
+            ? isConfidentGeneReport(finalContent)
+            : true;
         if (
           activeProjectId &&
           memoryTopic &&
           citableForMemory.length > 0 &&
           !isMetaOrAppQuestion(cleanQuery) &&
-          diConfident
+          soloConfident
         ) {
           const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
             const strength = classifyEvidenceStrength(
@@ -432,7 +448,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
               ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
               ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
               ...(strength ? { evidenceStrength: strength } : {}),
-              ...(diTag ? { tag: diTag } : {}),
+              ...(memoryTag ? { tag: memoryTag } : {}),
             };
           });
           const answerChunk: NewRagChunk = {
@@ -442,7 +458,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             source: 'answer',
             runId,
             query: memoryTopic,
-            ...(diTag ? { tag: diTag } : {}),
+            ...(memoryTag ? { tag: memoryTag } : {}),
           };
           useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
         }
@@ -619,7 +635,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
   };
 
   return (
-    <div className={`mode brain-mode brain-workspace${drugFocus ? ' brain-mode--drug' : ''}`}>
+    <div className={`mode brain-mode brain-workspace${drugFocus ? ' brain-mode--drug' : ''}${geneticsFocus ? ' brain-mode--genetics' : ''}`}>
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">
@@ -653,6 +669,7 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             onDraftOutline={draftFromOutline}
             onPromptSelect={(prompt) => { if (!isRunning) setQuery(prompt); }}
             drugFocus={drugFocus}
+            geneticsFocus={geneticsFocus}
           />
         </FeatureBoundary>
 
@@ -676,16 +693,25 @@ export function BrainMode({ drugFocus = false }: { drugFocus?: boolean } = {}) {
             {...(drugFocus
               ? { placeholder: 'Ask about a drug interaction — e.g. “warfarin and grapefruit”. Get a cited interaction report.' }
               : {})}
+            {...(geneticsFocus
+              ? { placeholder: 'Name a gene variant and a disease — e.g. “MICA TT genotype and cardiovascular complications”.' }
+              : {})}
           />
         </FeatureBoundary>
       </section>
 
-      <section className={`brain-side${drugFocus ? ' brain-side--solo' : ''}`}>
+      <section className={`brain-side${soloFocus ? ' brain-side--solo' : ''}`}>
         {drugFocus ? (
           // Specialised layout for Drug-Interactions: no 3D brain and no agent
           // swarm panel — just the interaction-grade key beside the report.
           <FeatureBoundary name="Drug interaction panel">
             <DrugInteractionPanel />
+          </FeatureBoundary>
+        ) : geneticsFocus ? (
+          // Specialised layout for Genetics: no 3D brain — the confidence-band
+          // key beside the correlation report.
+          <FeatureBoundary name="Genetics panel">
+            <GeneticsPanel />
           </FeatureBoundary>
         ) : (
           <>

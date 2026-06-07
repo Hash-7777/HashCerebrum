@@ -101,7 +101,46 @@ const DI_PROMPTS = [
   'Clopidogrel and omeprazole',
 ];
 
-function EmptyState({ onSelect, drugFocus }: { onSelect: (prompt: string) => void; drugFocus?: boolean }) {
+const GENE_PROMPTS = [
+  'MICA TT genotype and cardiovascular complications in type 1 diabetes',
+  'APOE e4 allele and Alzheimer disease',
+  'Factor V Leiden and venous thromboembolism',
+  'rs1051792 and autoimmune disease',
+  'TCF7L2 variant and type 2 diabetes',
+  'HLA-B27 and ankylosing spondylitis',
+];
+
+function EmptyState({
+  onSelect,
+  drugFocus,
+  geneticsFocus,
+}: {
+  onSelect: (prompt: string) => void;
+  drugFocus?: boolean;
+  geneticsFocus?: boolean;
+}) {
+  if (geneticsFocus) {
+    return (
+      <div className="brain-empty-state gene-empty">
+        <div className="brain-empty-brand">
+          <span className="gene-empty-mark" aria-hidden="true">
+            <Icon name="dna" size={30} />
+          </span>
+          <h2 className="brain-empty-title">Genetics</h2>
+          <p className="brain-empty-sub">
+            Gene variant × disease → an association-confidence score from trusted genetic databases
+          </p>
+        </div>
+        <div className="brain-empty-prompts">
+          {GENE_PROMPTS.map((prompt) => (
+            <button key={prompt} type="button" className="brain-prompt-chip" onClick={() => onSelect(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (drugFocus) {
     return (
       <div className="brain-empty-state di-empty">
@@ -155,6 +194,7 @@ export const Transcript = memo(function Transcript({
   onDraftOutline,
   onPromptSelect,
   drugFocus,
+  geneticsFocus,
 }: {
   messages: ChatMessage[];
   modelLabel: string;
@@ -165,6 +205,7 @@ export const Transcript = memo(function Transcript({
   onDraftOutline?: (query: string) => void;
   onPromptSelect?: (prompt: string) => void;
   drugFocus?: boolean;
+  geneticsFocus?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -328,7 +369,7 @@ export const Transcript = memo(function Transcript({
     <>
       <div className="transcript chat-scroll" aria-live="polite" ref={scrollRef} onScroll={handleScroll}>
         {!hasUserMessage && onPromptSelect && (
-          <EmptyState onSelect={onPromptSelect} drugFocus={drugFocus ?? false} />
+          <EmptyState onSelect={onPromptSelect} drugFocus={drugFocus ?? false} geneticsFocus={geneticsFocus ?? false} />
         )}
         {capped && (
           <button

@@ -10,6 +10,7 @@ export type IconName =
   | 'agent'
   | 'flask'
   | 'pill'
+  | 'dna'
   | 'book'
   | 'quote'
   | 'shield'
@@ -81,6 +82,14 @@ const PATHS: Record<IconName, ComponentType<SVGProps<SVGSVGElement>>> = {
       <path d="M4 4.5C4 3.7 4.7 3 5.5 3H11v15H5.5C4.7 18 4 18.7 4 19.5V4.5Z" />
       <path d="M20 4.5C20 3.7 19.3 3 18.5 3H13v15h5.5c.8 0 1.5.7 1.5 1.5V4.5Z" />
       <path d="M4 19.5C4 20.3 4.7 21 5.5 21h13c.8 0 1.5-.7 1.5-1.5" />
+    </svg>
+  ),
+  dna: (p) => (
+    <svg viewBox="0 0 24 24" {...p}>
+      {/* Two sine-like strands with base-pair rungs — a compact double helix. */}
+      <path d="M8 3c0 4.5 8 4.5 8 9s-8 4.5-8 9" />
+      <path d="M16 3c0 4.5-8 4.5-8 9s8 4.5 8 9" />
+      <path d="M9.2 6h5.6M9.2 18h5.6M7.7 9.5h8.6M7.7 14.5h8.6" />
     </svg>
   ),
   quote: (p) => (
