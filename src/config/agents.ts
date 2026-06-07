@@ -13,7 +13,8 @@ export type AgentId =
   | 'dentistry'
   | 'public_health'
   | 'drug_interactions'
-  | 'data_scientist';
+  | 'data_scientist'
+  | 'genetics';
 
 // Maps to anatomical regions in modes/brain/regions.ts. Each agent claims
 // one base region for its glow. Topic detection adds accents.
@@ -59,6 +60,16 @@ const MEDICAL_TOOLS = [
   'semantic_scholar_search',
 ];
 const SPECIALIST_TOOLS = ['rag_search', ...MEDICAL_TOOLS];
+// The gene-expert specialist leans on the curated genetic databases plus
+// literature and project memory — not the full medical toolset.
+const GENETICS_TOOLS = [
+  'rag_search',
+  'gwas_catalog_search',
+  'clinvar_search',
+  'pubmed_search',
+  'europepmc_fetch',
+  'openalex_query',
+];
 
 export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
   {
@@ -137,6 +148,17 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
       'statistics, data analysis, effect sizes, confidence intervals, p-values, sample size, hazard ratios, meta-analysis, figures, tables, quantitative results',
     tools: SPECIALIST_TOOLS,
     regionBinding: 'thalamus', // data relay and integration
+  },
+  {
+    id: 'genetics',
+    label: 'Genetics',
+    kind: 'specialist',
+    specialty:
+      'Gene/variant–disease associations from curated genetic databases (GWAS Catalog, ClinVar) and genetics literature, with quantitative effect sizes.',
+    topicHint:
+      'gene, variant, SNP, rsID, allele, genotype, polymorphism, mutation, GWAS, ClinVar, heritability, gene-disease association, pharmacogenomics',
+    tools: GENETICS_TOOLS,
+    regionBinding: 'cerebellum', // previously ambient; bound to the gene expert
   },
 ];
 
