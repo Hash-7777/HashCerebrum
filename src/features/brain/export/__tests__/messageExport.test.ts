@@ -154,6 +154,17 @@ describe('message export helpers', () => {
     expect(content).not.toMatch(/S\d/);
   });
 
+  it('renumbers a multi-source group ([S25, S27]) instead of leaking it raw', () => {
+    const pool = [...Array(30)].map((_, i) => ({ ...citations[0]!, title: `Source ${i + 1}` }));
+    const { content, citations: cited } = renumberCitations(
+      'Divergence noted [S25, S27]; and again [S25; S30].',
+      pool,
+    );
+    expect(content).toBe('Divergence noted [1][2]; and again [1][3].');
+    expect(content).not.toMatch(/S\d/);
+    expect(cited.map((c) => c.title)).toEqual(['Source 25', 'Source 27', 'Source 30']);
+  });
+
   it('guards against any residual bracketed marker leaking into the output', () => {
     const pool = [citations[0]!]; // only [S1] resolves
     const { content } = renumberCitations('Real [S1]. Phantom range 【S40-S44】 here.', pool);

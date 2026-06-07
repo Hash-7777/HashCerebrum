@@ -9,6 +9,7 @@ import {
   referenceLinesForPublication,
 } from '../swarm/publication';
 import { formatReference, type CitationStyle } from './citationStyles';
+import { expandCitationMarkers } from '../swarm/citationMarkers';
 import { currentCitationStyle } from '@core/store/exportSettingsStore';
 
 const MIN_PDF_BYTES = 256;
@@ -191,14 +192,11 @@ function citationBlock(citations: EvidenceItem[] = [], style: CitationStyle = 'v
 
 // Citation markers can arrive in non-canonical shapes that the renumber pass
 // below would otherwise miss and leak verbatim into the exported document:
-//   • fullwidth / CJK brackets — 【S2】 〔S2〕 ［S2］ — which some models emit
-//     instead of the ASCII [S2]; and
-//   • ranges — [S1-S9], [S5‑S9] (incl. the U+2011 non-breaking hyphen and the
-//     en/em dashes) — a shorthand standing for every marker in the span.
-// Both are normalised to the canonical [S<n>] form (ranges expanded to the
-// explicit sequence) so the single marker pass can handle everything uniformly.
-const ALT_BRACKET_MARKER = /[【〔［]\s*(S\d+(?:\s*[-‑–—]\s*S?\d+)?)\s*[】〕］]/g;
-const RANGE_MARKER = /\[S(\d+)\s*[-‑–—]\s*S?(\d+)\]/g;
+//   • fullwidth / CJK brackets — 【S2】 〔S2〕 ［S2］ — which some models emit;
+//   • ranges — [S1-S9] (incl. the U+2011 non-breaking hyphen and en/em dashes);
+//   • groups — [S25, S27] — a comma/semicolon list of several markers.
+// All are expanded to the canonical [S<n>] form (see citationMarkers.ts) so the
+// single-marker pass can handle everything uniformly.
 // Any residual *bracketed* internal marker (canonical or fullwidth) that
 // survives the renumber pass — stripped as a last-resort guard so nothing
 // internal can reach the PDF/MD. A bare, unbracketed "S100" in prose is left
@@ -206,18 +204,7 @@ const RANGE_MARKER = /\[S(\d+)\s*[-‑–—]\s*S?(\d+)\]/g;
 const RESIDUAL_BRACKET_MARKER = /[[【〔]\s*S\d+\s*[\]】〕]/g;
 
 function normaliseCitationMarkers(content: string, citationCount: number): string {
-  const bracketed = content.replace(ALT_BRACKET_MARKER, '[$1]');
-  return bracketed.replace(RANGE_MARKER, (full, a: string, b: string) => {
-    let lo = Number(a);
-    let hi = Number(b);
-    if (!Number.isInteger(lo) || !Number.isInteger(hi)) return full;
-    if (hi < lo) [lo, hi] = [hi, lo];
-    // Cap the span so a malformed "[S1-S9999]" cannot explode the document.
-    if (hi - lo > Math.max(citationCount, 50)) return full;
-    let expanded = '';
-    for (let n = lo; n <= hi; n += 1) expanded += `[S${n}]`;
-    return expanded;
-  });
+  return expandCitationMarkers(content, citationCount);
 }
 
 const TIDY_MARKER_GAPS = (text: string): string =>

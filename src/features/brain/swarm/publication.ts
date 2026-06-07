@@ -27,6 +27,7 @@ import type {
   UploadedDatasetSummary,
   ValidationIssue,
 } from './publicationTypes';
+import { expandCitationMarkers } from './citationMarkers';
 import { forestPlotFigure } from './stats/forestPlot';
 import { formatReference, type CitationStyle } from '../export/citationStyles';
 import type { MetaAnalysisResult } from './metaAnalysis';
@@ -131,7 +132,10 @@ function textFromManuscript(manuscript: Manuscript): string {
 
 export function citedSourceNumbers(manuscript: Manuscript): number[] {
   const seen = new Set<number>();
-  for (const match of textFromManuscript(manuscript).matchAll(SOURCE_CITATION_RX)) {
+  // Expand grouped / ranged markers first so a record cited only inside
+  // "[S25, S27]" is still recognised as cited and kept in the reference list.
+  const text = expandCitationMarkers(textFromManuscript(manuscript), 200);
+  for (const match of text.matchAll(SOURCE_CITATION_RX)) {
     const value = Number(match[1]);
     if (Number.isFinite(value) && value > 0) seen.add(value);
   }
@@ -1194,7 +1198,9 @@ function replaceCitations(value: string, citationMap: Record<string, CitationMap
   // hallucinated "[S43]" when only 20 records exist) is dropped rather than
   // left raw in the rendered text — a citation a reader cannot follow is worse
   // than none. The validator separately blocks such markers from passing QA.
-  return value
+  // Grouped / ranged / fullwidth markers ([S25, S27], [S1-S4], 【S2】) are first
+  // expanded to single [S<n>] markers so none leaks past the single-marker pass.
+  return expandCitationMarkers(value, Object.keys(citationMap).length)
     .replace(SOURCE_CITATION_RX, (_full, n: string) => citationMap[`S${n}`]?.displayMarker ?? '')
     // Separate adjacent citation markers ("[1][2]" -> "[1] [2]") for readability.
     .replace(/\](\[)/g, '] $1')
