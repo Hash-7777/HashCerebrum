@@ -7,27 +7,15 @@
 //! resolves to its SNPs (findByGene) and each SNP's associations are fetched.
 //! Bounded by small caps so a run stays light enough for free/local tiers.
 
-use crate::commands::medical::{evidence, fetch_json, gene_symbol, max_results as clamp, rs_id, EvidenceItem};
+use crate::commands::medical::{
+    disease_terms, evidence, fetch_json, gene_symbol, max_results as clamp, rs_id, EvidenceItem,
+};
 use crate::error::AppResult;
 use url::Url;
 
 const API: &str = "https://www.ebi.ac.uk/gwas/rest/api";
 const MAX_SNPS: usize = 6;
 const CACHE_TTL: i64 = 86_400;
-
-/// Disease/trait terms from the query, excluding the gene symbol, used to keep
-/// only associations whose trait actually matches the user's disease.
-fn disease_terms(query: &str, gene: Option<&str>) -> Vec<String> {
-    query
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
-        .map(|t| t.trim_matches('-').to_lowercase())
-        .filter(|t| {
-            t.chars().count() >= 4
-                && t.chars().any(|c| c.is_alphabetic())
-                && gene.map(|g| g.to_lowercase() != *t).unwrap_or(true)
-        })
-        .collect()
-}
 
 /// Parse the rsIDs a gene maps to (findByGene response). Pure.
 pub(crate) fn parse_snp_ids(json: &serde_json::Value) -> Vec<String> {

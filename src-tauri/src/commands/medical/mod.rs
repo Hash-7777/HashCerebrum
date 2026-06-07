@@ -4,6 +4,7 @@
 //! All implementations route through commands::net::net_get and inherit
 //! its guard + audit guarantees.
 
+pub mod clinvar;
 pub mod crossref;
 pub mod ctgov;
 pub mod europepmc;
@@ -333,6 +334,32 @@ pub(super) fn gene_symbol(query: &str) -> Option<String> {
                 && t.chars().any(|c| c.is_ascii_alphabetic())
         })
         .map(|t| t.to_string())
+}
+
+/// Genetics meta-words that describe the *kind* of finding, not the disease, so
+/// they must not leak into a disease/trait filter ("MICA gene and diabetes" →
+/// the disease is "diabetes", not "gene").
+const GENETICS_META_WORDS: &[&str] = &[
+    "gene", "genes", "variant", "variants", "polymorphism", "polymorphisms", "mutation",
+    "mutations", "allele", "alleles", "genotype", "genotypes", "association", "associations",
+    "snp", "snps", "variation", "variations", "correlation", "correlations",
+];
+
+/// Disease/condition terms from a genetics query — lowercased, excluding the
+/// gene symbol, genetics meta-words and generic stop words. Shared by the
+/// genetic-database sources to keep results on the user's actual disease.
+pub(super) fn disease_terms(query: &str, gene: Option<&str>) -> Vec<String> {
+    query
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .map(|t| t.trim_matches('-').to_lowercase())
+        .filter(|t| {
+            t.chars().count() >= 4
+                && t.chars().any(|c| c.is_alphabetic())
+                && gene.map(|g| !t.eq_ignore_ascii_case(g)).unwrap_or(true)
+                && !GENETICS_META_WORDS.contains(&t.as_str())
+                && !QUERY_STOP_WORDS.contains(&t.as_str())
+        })
+        .collect()
 }
 
 #[cfg(test)]
