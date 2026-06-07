@@ -191,7 +191,11 @@ function vancouverText(record: EvidenceItem): string {
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
   const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
   const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}`);
+  // A record dated after the current year is an advance online publication —
+  // label it so a valid ahead-of-print reference does not read as fabricated.
+  const yearNum = typeof record.year === 'number' ? record.year : Number(record.year);
+  const aheadOfPrint = Number.isFinite(yearNum) && yearNum > new Date().getFullYear() ? ' Advance online publication.' : '';
+  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${aheadOfPrint}`);
 }
 
 function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {

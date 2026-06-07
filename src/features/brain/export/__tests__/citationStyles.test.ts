@@ -88,3 +88,20 @@ describe('formatReference — comma-form author names', () => {
     expect(out).toContain('Smith, J.');
   });
 });
+
+describe('formatReference — advance online publication', () => {
+  const future = new Date().getFullYear() + 1;
+  const aheadOfPrint = rec({ title: 'Future-dated indexed study', year: future, source: 'europepmc' });
+  const current = rec({ title: 'Current-year study', year: new Date().getFullYear(), source: 'europepmc' });
+
+  it('labels a future-dated record as advance online across styles', () => {
+    for (const style of ['vancouver', 'apa', 'harvard'] as const) {
+      expect(formatReference(aheadOfPrint, style)).toContain('Advance online publication.');
+    }
+  });
+
+  it('leaves current-year and earlier records unannotated', () => {
+    expect(formatReference(current, 'vancouver')).not.toContain('Advance online');
+    expect(formatReference(study, 'vancouver')).not.toContain('Advance online');
+  });
+});

@@ -67,6 +67,18 @@ function yearText(record: EvidenceItem): string | null {
   return Number.isFinite(n) ? String(n) : String(record.year);
 }
 
+// A record dated after the current year is an ahead-of-print / advance online
+// publication (Europe PMC and others index these before the issue year). Marking
+// it as such is correct bibliographic practice and stops a valid future-dated
+// record from reading as a fabricated reference — which a peer reviewer flagged.
+// Current-year and earlier records are left verbatim, so normal output is
+// unchanged.
+function aheadOfPrintNote(record: EvidenceItem): string {
+  const n = typeof record.year === 'number' ? record.year : Number(record.year);
+  if (!Number.isFinite(n)) return '';
+  return n > new Date().getFullYear() ? ' Advance online publication.' : '';
+}
+
 function trailingId(record: EvidenceItem): string {
   if (record.identifiers?.doi) return ` https://doi.org/${record.identifiers.doi}`;
   if (record.identifiers?.pmid) return ` PMID: ${record.identifiers.pmid}.`;
@@ -96,7 +108,7 @@ function vancouver(record: EvidenceItem): string {
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
   const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
   const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${pageSuffix(record)}`
+  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -118,7 +130,7 @@ function apaAuthors(record: EvidenceItem): string {
 
 function apa(record: EvidenceItem): string {
   const year = yearText(record);
-  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${SOURCE_LABELS[record.source]}.${trailingId(record)}${pageSuffix(record)}`
+  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${SOURCE_LABELS[record.source]}.${trailingId(record)}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -147,7 +159,7 @@ function harvard(record: EvidenceItem): string {
       : record.identifiers?.pmid
         ? ` PMID: ${record.identifiers.pmid}.`
         : '';
-  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${SOURCE_LABELS[record.source]}.${avail}${pageSuffix(record)}`
+  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${SOURCE_LABELS[record.source]}.${avail}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
