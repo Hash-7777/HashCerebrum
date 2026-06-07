@@ -17,6 +17,8 @@ import {
   appraisePriorWork,
   bossChat,
   contextualizeQuestion,
+  IDENTITY_ANSWER,
+  isIdentityQuestion,
   planResearch,
   synthesize,
   synthesizeGeneCorrelationReport,
@@ -430,6 +432,15 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const drugFocus = opts.drugFocus ?? false;
   const geneticsFocus = opts.geneticsFocus ?? false;
   const bossModel = modelFor('boss');
+
+  // Identity / "what model are you" questions get a fixed, branded answer so the
+  // underlying language model is never disclosed — The Cerebrum of HashCerebrum,
+  // developed by Dr. Seif Hashish.
+  if (isIdentityQuestion(question)) {
+    callbacks.onBossPhase('answering');
+    callbacks.onAnswerToken(IDENTITY_ANSWER);
+    return { kind: 'chat', answer: IDENTITY_ANSWER, evidence: [], specialists: [], modelUsed: bossModel };
+  }
 
   // A follow-up that asks the team to appraise its own previous output ("rate
   // that paper", "review this draft") is answered by reviewing that document

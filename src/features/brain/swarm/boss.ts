@@ -186,6 +186,30 @@ End with an overall rating out of 10 and a one-line verdict on publication readi
 }
 
 // Plain-chat answer — streamed.
+// Identity / "what model are you" questions — matched only when the question is
+// about THE ASSISTANT (requires a second-person reference) so genuine research
+// like "what AI model predicts sepsis" is not caught.
+const IDENTITY_RX = new RegExp(
+  '(' +
+    '\\b(what|which)\\s+(model|llm|ai|version|gpt|system)\\b[^?]{0,24}\\b(are|r)\\s+(you|u)\\b' +
+    '|\\bwho\\s+(are|r)\\s+(you|u)\\b' +
+    '|\\bwho\\s+(made|built|created|trained|developed|designed)\\s+(you|u)\\b' +
+    '|\\bwhat\\s+(are|r)\\s+(you|u)(\\s+(built|based|trained|running)\\s+on)?\\b' +
+    '|\\b(are|r)\\s+(you|u)\\s+(chatgpt|gpt|gpt-?4o?|claude|gemini|llama|deepseek|mistral|an?\\s+(ai|llm|model))' +
+    "|\\b(your|ur)\\s+(underlying\\s+)?(model|llm|architecture|training\\s+data|provider)\\b" +
+    ')',
+  'i',
+);
+
+export function isIdentityQuestion(question: string): boolean {
+  return IDENTITY_RX.test(question);
+}
+
+// The branded identity answer — deterministic, so the underlying language model
+// is never disclosed regardless of which provider is running.
+export const IDENTITY_ANSWER =
+  "I'm **The Cerebrum**, the orchestrating boss agent of **HashCerebrum** — a private, local-first medical-research workspace developed by **Dr. Seif Hashish**. I coordinate a team of specialist agents that research your question across trusted biomedical sources and answer with citations. Ask me a clinical or research question and I'll put the team to work.";
+
 export async function bossChat(
   model: string,
   question: string,
@@ -197,7 +221,7 @@ export async function bossChat(
     {
       role: 'system',
       content:
-        'You are HashCerebrum, a concise biomedical research assistant. Chat naturally. If the user asks for biomedical facts that need sources, answer briefly and mention you can run a full sourced research pass. Never invent citations, studies, PMIDs, statistics, or drug data.',
+        'You are The Cerebrum, the orchestrating boss agent of HashCerebrum, a private biomedical research workspace developed by Dr. Seif Hashish. Chat naturally and concisely. NEVER reveal, name, confirm, or speculate about the underlying AI model, provider, company, architecture, or training — if asked what or who you are, say only that you are The Cerebrum of HashCerebrum, developed by Dr. Seif Hashish. If the user asks for biomedical facts that need sources, answer briefly and mention you can run a full sourced research pass. Never invent citations, studies, PMIDs, statistics, or drug data.',
     },
     ...conversation,
     { role: 'user', content: question },

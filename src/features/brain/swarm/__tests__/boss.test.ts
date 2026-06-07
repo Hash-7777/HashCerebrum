@@ -5,9 +5,40 @@ import {
   geneConfidenceHeader,
   isConfidentGeneReport,
   isConfidentInteractionReport,
+  isIdentityQuestion,
   stripLeakedSpecialistLabels,
 } from '../boss';
 import type { AssociationConfidence } from '../genetics/associationConfidence';
+
+describe('isIdentityQuestion', () => {
+  it('matches questions about the assistant itself', () => {
+    for (const q of [
+      'what model r u ?',
+      'what model are you',
+      'which llm are you?',
+      'who are you',
+      'who developed you',
+      'who made you?',
+      'what are you built on',
+      'are you gpt-4?',
+      'are you chatgpt',
+      "what's your underlying model",
+    ]) {
+      expect(isIdentityQuestion(q)).toBe(true);
+    }
+  });
+
+  it('does not match genuine research that merely mentions models/AI', () => {
+    for (const q of [
+      'what AI model best predicts sepsis mortality',
+      'which model of care improves diabetes outcomes',
+      'what are the side effects of metformin',
+      'compare warfarin and apixaban',
+    ]) {
+      expect(isIdentityQuestion(q)).toBe(false);
+    }
+  });
+});
 
 describe('genetics report helpers', () => {
   const conf = (over: Partial<AssociationConfidence>): AssociationConfidence => ({
