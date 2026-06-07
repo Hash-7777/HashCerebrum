@@ -126,8 +126,52 @@ describe('associationPointsFromEvidence', () => {
     ]); // uncertain → dropped
   });
 
-  it('ignores non-genetic sources', () => {
-    expect(associationPointsFromEvidence([rec({ source: 'pubmed' })])).toEqual([]);
+  it('ignores a literature record with no reported effect size', () => {
+    expect(associationPointsFromEvidence([rec({ source: 'pubmed', snippet: 'a narrative review' })])).toEqual([]);
+  });
+
+  it('counts a significant published odds ratio on the asked disease', () => {
+    const points = associationPointsFromEvidence(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'MICA TT genotype and cardiovascular complications in type 1 diabetes',
+          snippet: 'The TT genotype was associated with cardiovascular complications (odds ratio 24.53, 95% CI 3.94-152.85, p<0.0001).',
+        }),
+      ],
+      'MICA TT genotype and cardiovascular complications in type 1 diabetes',
+    );
+    expect(points).toEqual([{ source: 'literature', significant: true, direction: 'risk' }]);
+  });
+
+  it('does not count a literature OR from an off-disease record', () => {
+    const points = associationPointsFromEvidence(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'MICA and psoriasis',
+          snippet: 'Risk was higher (odds ratio 2.1, 95% CI 1.4-3.2, p=0.001).',
+        }),
+      ],
+      'MICA and cardiovascular complications in type 1 diabetes',
+    );
+    expect(points).toEqual([]); // psoriasis record does not mention the asked disease
+  });
+
+  it('a strong published association yields a real (non-zero) score', () => {
+    const result = confidenceFromEvidence(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'MICA TT and cardiovascular complications in type 1 diabetes',
+          snippet: 'TT vs CC odds ratio 24.53 (95% CI 3.94-152.85), p<0.0001.',
+        }),
+      ],
+      'MICA TT and cardiovascular complications in type 1 diabetes',
+    );
+    expect(result.band).not.toBe('insufficient');
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.pooledDirection).toBe('risk');
   });
 
   it('confidenceFromEvidence ties it together (MICA-style risk association)', () => {

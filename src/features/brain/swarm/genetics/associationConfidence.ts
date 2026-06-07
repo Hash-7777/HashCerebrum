@@ -8,6 +8,8 @@
 // model only narrates the result and its citations.
 
 import type { EvidenceItem } from '@platform/index';
+import { extractEffectValues } from '../paperPipeline';
+import { diseaseTerms } from './geneQueryReadiness';
 
 export type AssociationSource = 'gwas_catalog' | 'clinvar' | 'literature';
 export type AssociationDirection = 'risk' | 'protective' | 'neutral';
@@ -144,6 +146,40 @@ function parseCi(ci: unknown): [number, number] | null {
   return lo <= hi ? [lo, hi] : [hi, lo];
 }
 
+const RATIO_LABELS = new Set(['odds ratio', 'risk ratio', 'hazard ratio']);
+
+// Does a 95% CI string (e.g. "1.10-1.84") exclude the null value of 1?
+function ciExcludesOne(value: string): boolean {
+  const ci = parseCi(value);
+  return ci ? ci[0] > 1 || ci[1] < 1 : false;
+}
+
+// Derive an association point from a literature record's reported statistics.
+// Uses the shared (WS2-guarded) effect extractor over the title + snippet, so a
+// significant published odds/risk/hazard ratio counts toward the score even when
+// no GWAS Catalog / ClinVar row exists — but only for a record that mentions the
+// asked disease, so an off-topic ratio cannot inflate the result.
+function literaturePoint(record: EvidenceItem, disease: string[]): AssociationDataPoint | null {
+  const text = `${record.title} ${record.snippet ?? ''}`;
+  if (disease.length > 0) {
+    const hay = text.toLowerCase();
+    if (!disease.some((d) => hay.includes(d))) return null;
+  }
+  const effects = extractEffectValues(text);
+  const ratio = effects.find((e) => RATIO_LABELS.has(e.label));
+  if (!ratio) return null;
+  const value = Number(ratio.value);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const significant =
+    effects.some((e) => e.label === 'p-value' && Number(e.value) < 0.05) ||
+    effects.some((e) => e.label === 'confidence interval' && ciExcludesOne(e.value));
+  return {
+    source: 'literature',
+    significant,
+    direction: value > 1 ? 'risk' : value < 1 ? 'protective' : 'neutral',
+  };
+}
+
 // ClinVar significance → a decisive correlation signal, or null when uncertain.
 function clinvarPoint(significance: string): AssociationDataPoint | null {
   const s = significance.toLowerCase();
@@ -165,8 +201,12 @@ function clinvarPoint(significance: string): AssociationDataPoint | null {
  * score never depends on free-text parsing or the model. GWAS Catalog gives
  * odds ratio + CI + p-value; ClinVar gives clinical significance.
  */
-export function associationPointsFromEvidence(evidence: EvidenceItem[]): AssociationDataPoint[] {
+export function associationPointsFromEvidence(
+  evidence: EvidenceItem[],
+  question?: string,
+): AssociationDataPoint[] {
   const points: AssociationDataPoint[] = [];
+  const disease = question ? diseaseTerms(question) : [];
   const num = (v: unknown): number | null => {
     if (typeof v !== 'string' && typeof v !== 'number') return null;
     const n = Number(v);
@@ -190,12 +230,21 @@ export function associationPointsFromEvidence(evidence: EvidenceItem[]): Associa
       const sig = typeof id.clinicalSignificance === 'string' ? id.clinicalSignificance : '';
       const point = clinvarPoint(sig);
       if (point) points.push(point);
+    } else {
+      // Literature (PubMed / Europe PMC / OpenAlex / imported library): use a
+      // significant published effect size when the record is on the asked disease.
+      const point = literaturePoint(record, disease);
+      if (point) points.push(point);
     }
   }
   return points;
 }
 
-/** Convenience: score straight from retrieved evidence. */
-export function confidenceFromEvidence(evidence: EvidenceItem[]): AssociationConfidence {
-  return associationConfidence(associationPointsFromEvidence(evidence));
+/** Convenience: score straight from retrieved evidence. The question gates which
+ *  literature records may contribute (must mention the asked disease). */
+export function confidenceFromEvidence(
+  evidence: EvidenceItem[],
+  question?: string,
+): AssociationConfidence {
+  return associationConfidence(associationPointsFromEvidence(evidence, question));
 }

@@ -51,6 +51,22 @@ export function hasGeneSignal(text: string): boolean {
   return text.split(/[^A-Za-z0-9-]+/).some(geneLikeToken);
 }
 
+/** The disease/phenotype content words in a query (lowercased) — excluding gene
+ *  symbols, rsIDs and genetics meta-words. Used to keep literature scoring on
+ *  the asked disease. */
+export function diseaseTerms(text: string): string[] {
+  const out: string[] = [];
+  for (const tok of text.split(/[^A-Za-z0-9-]+/)) {
+    const original = tok.trim();
+    const word = original.toLowerCase();
+    if (word.length < 4 || !/[a-z]/.test(word)) continue;
+    if (NON_DISEASE_WORDS.has(word)) continue;
+    if (geneLikeToken(original) || RS_RX.test(original)) continue;
+    if (!out.includes(word)) out.push(word);
+  }
+  return out;
+}
+
 /** Does the text name a disease/phenotype (a topical content word)? */
 export function hasDiseaseSignal(text: string, gene?: string): boolean {
   return text.split(/[^A-Za-z0-9-]+/).some((tok) => {

@@ -12,7 +12,7 @@ import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
-import type { EvidenceItem } from '@platform/index';
+import { platform, type EvidenceItem } from '@platform/index';
 import {
   appraisePriorWork,
   bossChat,
@@ -406,6 +406,24 @@ async function libraryEvidence(question: string, model?: string): Promise<{ evid
   return { evidence: out, gapNote };
 }
 
+// Query the curated genetic databases (GWAS Catalog, ClinVar) DIRECTLY, so the
+// structured association evidence — and therefore the association-confidence
+// score — never depends on the LLM specialist happening to pick the right tool.
+// (A real run showed the specialist querying only PubMed/Europe PMC, leaving the
+// score with no structured data and forced to 0%.) Failures are non-fatal.
+async function geneticDatabaseEvidence(question: string): Promise<EvidenceItem[]> {
+  const med = platform().medical;
+  const results = await Promise.allSettled([
+    med.gwas_catalog({ query: question, maxResults: 25 }),
+    med.clinvar({ query: question, maxResults: 25 }),
+  ]);
+  const out: EvidenceItem[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') out.push(...r.value.results);
+  }
+  return out;
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const mini = opts.mini ?? false;
@@ -514,20 +532,32 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     callbacks.onBossPhase('delegating');
     setMemoryScope('genetics');
     let specialist: SpecialistResult;
+    let dbEvidence: EvidenceItem[];
     try {
-      specialist = await runSpecialist(
-        agentById('genetics'),
-        modelFor('genetics'),
-        researchQuestion,
-        callbacks,
-      );
+      // Run the LLM specialist (literature + narrative) and the deterministic
+      // genetic-database fetch in parallel.
+      [specialist, dbEvidence] = await Promise.all([
+        runSpecialist(agentById('genetics'), modelFor('genetics'), researchQuestion, callbacks),
+        geneticDatabaseEvidence(researchQuestion),
+      ]);
     } finally {
       setMemoryScope(null);
     }
-    const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    const dbSpecialist: SpecialistResult = {
+      agentId: 'genetics',
+      label: 'Genetic databases',
+      subQuery: researchQuestion,
+      findings: '',
+      evidence: dbEvidence,
+      toolCalls: 0,
+    };
+    const evidence = rankEvidenceByRelevance(
+      researchQuestion,
+      mergeEvidence([specialist, dbSpecialist]),
+    );
     // The percentage is computed deterministically from the structured genetic
-    // records — never by the model — over the FULL evidence set.
-    const confidence = confidenceFromEvidence(evidence);
+    // records and significant published effect sizes — never by the model.
+    const confidence = confidenceFromEvidence(evidence, researchQuestion);
     callbacks.onBossPhase('synthesizing');
     // Mini / local-model path: trim the records fed to the synthesis prompt so it
     // fits a small context window. The score above already used all the evidence.

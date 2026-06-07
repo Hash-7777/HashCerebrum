@@ -412,7 +412,7 @@ function isLowercaseWordAbbrev(keyword: string): boolean {
   return /^(or|rr|hr)$/i.test(keyword) && keyword !== keyword.toUpperCase();
 }
 
-function extractEffectValues(text: string): ExtractedEffectValue[] {
+export function extractEffectValues(text: string): ExtractedEffectValue[] {
   const effects: ExtractedEffectValue[] = [];
 
   for (const { label, rx } of RATIO_PATTERNS) {
