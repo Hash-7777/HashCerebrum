@@ -259,8 +259,16 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
   // run finishes and the glow fades, the driver stops and the scene renders no
   // more frames, so an idle brain costs no GPU. User interaction (orbit/zoom)
   // still renders on demand via OrbitControls.
+  const spinSpeedRef = useRef(0);
+  // "winding" keeps frames flowing through the smooth ease-OUT after a run ends,
+  // so the rotation glides to a stop instead of freezing mid-spin.
+  const [winding, setWinding] = useState(false);
   useEffect(() => {
-    if (!hasActiveGlow || !active) return;
+    if (hasActiveGlow) setWinding(true);
+  }, [hasActiveGlow]);
+
+  useEffect(() => {
+    if (!(hasActiveGlow || winding) || !active) return;
     let raf = 0;
     const loop = () => {
       invalidate();
@@ -268,9 +276,12 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [hasActiveGlow, active, invalidate]);
+  }, [hasActiveGlow, winding, active, invalidate]);
 
   useFrame((state, delta) => {
+    // Clamp dt so the first frame after an idle gap (demand frameloop) cannot
+    // jump the rotation — the cause of the "starts from a different part" glitch.
+    const dt = Math.min(delta, 1 / 30);
     // Fade the agent glow only while it is active.
     if (hasActiveGlow) {
       const elapsedMs = state.clock.elapsedTime * 1000;
@@ -282,9 +293,17 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
     }
     if (!groupRef.current) return;
     groupRef.current.rotation.x = 0.12;
-    // Auto-rotate only during a run (active glow) and not while the user drags.
-    if (hasActiveGlow && rotateEnabled) {
-      groupRef.current.rotation.y += delta * AUTO_ROTATE_SPEED;
+    // Ease the spin speed toward its target — full speed during a run, 0 when
+    // idle or while the user is dragging — so it accelerates from rest and
+    // decelerates to a stop from wherever it currently is. No snap on send/stop.
+    const target = hasActiveGlow && rotateEnabled ? AUTO_ROTATE_SPEED : 0;
+    spinSpeedRef.current += (target - spinSpeedRef.current) * Math.min(1, dt * 3);
+    groupRef.current.rotation.y += spinSpeedRef.current * dt;
+    // Once eased to a near-stop and no longer running, end the wind-down so the
+    // frame driver can shut off and the brain rests statically.
+    if (!hasActiveGlow && spinSpeedRef.current < 0.002) {
+      spinSpeedRef.current = 0;
+      if (winding) setWinding(false);
     }
   });
 
@@ -494,7 +513,6 @@ function BrainCanvasInner(props: BrainCanvasProps) {
         onPointerMissed={() => props.onSelectRegion(null)}
       >
         <color attach="background" args={['#04070d']} />
-        <fog attach="fog" args={['#04070d', 6.4, 12]} />
         <ambientLight intensity={0.42} />
         <hemisphereLight args={['#d8fff6', '#0d1722', 0.58]} />
         <directionalLight position={[2.8, 4.2, 3.5]} intensity={performanceMode ? 1.4 : 1.95} color="#f3eee2" castShadow={!performanceMode} />
