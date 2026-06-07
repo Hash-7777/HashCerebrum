@@ -21,7 +21,10 @@ pub(crate) fn build_term(query: &str) -> String {
         return rs;
     }
     if let Some(gene) = gene_symbol(query) {
-        let disease: Vec<String> = disease_terms(query, Some(&gene)).into_iter().take(4).collect();
+        let disease: Vec<String> = disease_terms(query, Some(&gene))
+            .into_iter()
+            .take(4)
+            .collect();
         if disease.is_empty() {
             return format!("{gene}[gene]");
         }
@@ -44,10 +47,7 @@ fn traits_of(item: &serde_json::Value) -> Vec<String> {
 
 /// Turn an esummary response into citable EvidenceItems. Pure.
 pub(crate) fn parse_summaries(json: &serde_json::Value) -> Vec<EvidenceItem> {
-    let Some(uids) = json
-        .pointer("/result/uids")
-        .and_then(|v| v.as_array())
-    else {
+    let Some(uids) = json.pointer("/result/uids").and_then(|v| v.as_array()) else {
         return Vec::new();
     };
 
@@ -100,7 +100,9 @@ pub(crate) fn parse_summaries(json: &serde_json::Value) -> Vec<EvidenceItem> {
             year,
             Vec::new(),
             identifiers,
-            Some(format!("https://www.ncbi.nlm.nih.gov/clinvar/variation/{uid}/")),
+            Some(format!(
+                "https://www.ncbi.nlm.nih.gov/clinvar/variation/{uid}/"
+            )),
             Some(snippet),
         ));
     }
@@ -192,7 +194,10 @@ mod tests {
         let snip = item.snippet.as_deref().unwrap();
         assert!(snip.contains("Likely pathogenic"));
         assert!(snip.contains("Type 1 diabetes mellitus"));
-        assert_eq!(item.identifiers["clinicalSignificance"].as_str(), Some("Likely pathogenic"));
+        assert_eq!(
+            item.identifiers["clinicalSignificance"].as_str(),
+            Some("Likely pathogenic")
+        );
         assert_eq!(item.identifiers["accession"].as_str(), Some("VCV000157007"));
     }
 }

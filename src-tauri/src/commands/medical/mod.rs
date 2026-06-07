@@ -340,9 +340,26 @@ pub(super) fn gene_symbol(query: &str) -> Option<String> {
 /// they must not leak into a disease/trait filter ("MICA gene and diabetes" →
 /// the disease is "diabetes", not "gene").
 const GENETICS_META_WORDS: &[&str] = &[
-    "gene", "genes", "variant", "variants", "polymorphism", "polymorphisms", "mutation",
-    "mutations", "allele", "alleles", "genotype", "genotypes", "association", "associations",
-    "snp", "snps", "variation", "variations", "correlation", "correlations",
+    "gene",
+    "genes",
+    "variant",
+    "variants",
+    "polymorphism",
+    "polymorphisms",
+    "mutation",
+    "mutations",
+    "allele",
+    "alleles",
+    "genotype",
+    "genotypes",
+    "association",
+    "associations",
+    "snp",
+    "snps",
+    "variation",
+    "variations",
+    "correlation",
+    "correlations",
 ];
 
 /// Disease/condition terms from a genetics query — lowercased, excluding the
@@ -428,7 +445,10 @@ mod tests {
             gene_symbol("MICA polymorphism and cardiovascular disease"),
             Some("MICA".to_string())
         );
-        assert_eq!(gene_symbol("BRCA1 and breast cancer risk"), Some("BRCA1".to_string()));
+        assert_eq!(
+            gene_symbol("BRCA1 and breast cancer risk"),
+            Some("BRCA1".to_string())
+        );
         // No uppercase gene-like token → None (lowercase prose is not a symbol).
         assert_eq!(gene_symbol("does the variant affect diabetes"), None);
     }

@@ -85,9 +85,18 @@ pub(crate) fn parse_associations(
 
         // Human + extractor-friendly snippet (uses "odds ratio" / "95% CI" so the
         // shared numeric extractor reads it). Structured numbers also kept below.
-        let mut parts = vec![format!("GWAS Catalog association with {}.", if trait_label.is_empty() { "an unspecified trait" } else { &trait_label })];
+        let mut parts = vec![format!(
+            "GWAS Catalog association with {}.",
+            if trait_label.is_empty() {
+                "an unspecified trait"
+            } else {
+                &trait_label
+            }
+        )];
         if let Some(or) = or {
-            let ci_txt = ci.map(|c| format!(" (95% CI {})", c.trim_matches(['[', ']']))).unwrap_or_default();
+            let ci_txt = ci
+                .map(|c| format!(" (95% CI {})", c.trim_matches(['[', ']'])))
+                .unwrap_or_default();
             parts.push(format!("Odds ratio {or}{ci_txt}."));
         } else if let Some(beta) = beta {
             parts.push(format!("Beta {beta} {beta_unit} {beta_dir}.").replace("  ", " "));
@@ -98,9 +107,23 @@ pub(crate) fn parse_associations(
         let snippet = parts.join(" ");
 
         let title = if let Some(g) = gene {
-            format!("{} association at {rsid} ({g})", if trait_label.is_empty() { "Trait".into() } else { trait_label.clone() })
+            format!(
+                "{} association at {rsid} ({g})",
+                if trait_label.is_empty() {
+                    "Trait".into()
+                } else {
+                    trait_label.clone()
+                }
+            )
         } else {
-            format!("{} association at {rsid}", if trait_label.is_empty() { "Trait".into() } else { trait_label.clone() })
+            format!(
+                "{} association at {rsid}",
+                if trait_label.is_empty() {
+                    "Trait".into()
+                } else {
+                    trait_label.clone()
+                }
+            )
         };
 
         // Numeric fields are stored as strings: EvidenceItem.identifiers is a
@@ -207,7 +230,11 @@ mod tests {
         assert!(snip.contains("Odds ratio 1.42"));
         assert!(snip.contains("95% CI 1.10-1.84"));
         assert_eq!(item.identifiers["oddsRatio"].as_str(), Some("1.42"));
-        let p: f64 = item.identifiers["pValue"].as_str().unwrap().parse().unwrap();
+        let p: f64 = item.identifiers["pValue"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
         assert!((p - 3.0e-6).abs() < 1e-12);
     }
 
