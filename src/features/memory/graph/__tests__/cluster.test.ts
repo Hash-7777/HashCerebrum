@@ -80,4 +80,29 @@ describe('kmeans clustering', () => {
     // Stopwords / meta terms must not be chosen.
     expect(label.toLowerCase()).not.toContain('risk');
   });
+
+  it('does not let a single-finding fluke token name a cluster', () => {
+    // "empire" / "mica" appear once; "warfarin" recurs and should win.
+    const label = clusterLabel([
+      'warfarin elderly anticoagulation empire',
+      'warfarin atrial fibrillation mica',
+      'warfarin bleeding elderly',
+      'warfarin dosing elderly',
+    ]);
+    expect(label.toLowerCase()).not.toContain('empire');
+    expect(label.toLowerCase()).not.toContain('mica');
+    expect(label.toLowerCase()).toContain('warfarin');
+  });
+
+  it('drops generic connective words like "among" and "analyze"', () => {
+    const label = clusterLabel([
+      'among elderly patients we analyze digoxin levels',
+      'analyze digoxin among older adults',
+      'digoxin toxicity in elderly',
+      'digoxin clearance elderly',
+    ]);
+    expect(label.toLowerCase()).not.toContain('among');
+    expect(label.toLowerCase()).not.toContain('analyze');
+    expect(label.toLowerCase()).toContain('digoxin');
+  });
 });

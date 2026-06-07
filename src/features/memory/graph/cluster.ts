@@ -139,7 +139,28 @@ const STOP = new Set([
   'not', 'but', 'all', 'any', 'can', 'use', 'used', 'using', 'into', 'than', 'then', 'such', 'who',
   'study', 'studies', 'review', 'effect', 'effects', 'analysis', 'results', 'result', 'data', 'full',
   'paper', 'research', 'about', 'patients', 'patient', 'clinical', 'evidence', 'associated', 'risk',
+  // Generic verbs, connectives and biomedical filler that read as meaningless
+  // cluster labels ("Among · Analyze", "Long · Conclude") rather than topics.
+  'among', 'also', 'analyze', 'analyse', 'analyzed', 'analysed', 'compare', 'compared', 'comparison',
+  'versus', 'conclude', 'concluded', 'conclusion', 'conclusions', 'long', 'short', 'term', 'high',
+  'higher', 'low', 'lower', 'increase', 'increased', 'decrease', 'decreased', 'reduce', 'reduced',
+  'reduction', 'between', 'during', 'after', 'before', 'role', 'impact', 'outcome', 'outcomes',
+  'group', 'groups', 'level', 'levels', 'rate', 'rates', 'factor', 'factors', 'more', 'most', 'less',
+  'very', 'significant', 'significantly', 'association', 'related', 'finding', 'findings', 'reported',
+  'report', 'shown', 'show', 'found', 'based', 'included', 'including', 'within', 'without', 'both',
+  'each', 'other', 'overall', 'total', 'mean', 'median', 'value', 'values', 'observed', 'these',
+  'those', 'their', 'when', 'which', 'while', 'been', 'will', 'may', 'might', 'could', 'should',
 ]);
+
+/**
+ * Minimum number of cluster members a term must appear in to be eligible as a
+ * label. A one-off token from a single finding's title (e.g. a stray "empire" or
+ * "mica") should never name a whole cluster, so require it to recur once the
+ * cluster is large enough to make that meaningful.
+ */
+function minDocFreq(clusterSize: number): number {
+  return clusterSize >= 4 ? 2 : 1;
+}
 
 /**
  * Derive a short human label for a cluster from its members' titles/queries —
@@ -157,10 +178,12 @@ export function clusterLabel(texts: string[], maxWords = 2): string {
       freq.set(w, (freq.get(w) ?? 0) + 1);
     }
   }
-  const top = [...freq.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, maxWords)
-    .map(([w]) => w);
+  // Prefer terms that recur across members; fall back to any term only if none
+  // recurs, so a fluke one-off token never names the cluster on its own.
+  const minDf = minDocFreq(texts.length);
+  const entries = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const recurring = entries.filter(([, f]) => f >= minDf);
+  const top = (recurring.length ? recurring : entries).slice(0, maxWords).map(([w]) => w);
   if (top.length === 0) return 'misc';
   return top.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' · ');
 }
@@ -195,9 +218,15 @@ export function distinctiveClusterLabels(textsPerCluster: string[][], maxWords =
   const total = textsPerCluster.length;
   const used = new Set<string>();
   return perClusterFreq.map((freq, i) => {
+    // A term must recur within the cluster (appear in >= minDf member texts) to
+    // be eligible, so a single finding's stray token cannot name the cluster.
+    // If nothing recurs, fall back to every term so the cluster still gets a name.
+    const minDf = minDocFreq(textsPerCluster[i]!.length);
+    const eligible = [...freq.entries()].filter(([, f]) => f >= minDf);
+    const pool = eligible.length ? eligible : [...freq.entries()];
     // Rank: terms confined to FEWER clusters first (a term in every cluster is
     // not distinctive), then by frequency/spread, then raw frequency, then name.
-    const ranked = [...freq.entries()]
+    const ranked = pool
       .map(([w, f]) => {
         const df = termClusterCount.get(w) ?? 1;
         return { w, f, ubiquitous: df >= total ? 1 : 0, score: f / df };
