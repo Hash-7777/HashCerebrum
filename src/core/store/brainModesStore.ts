@@ -12,6 +12,20 @@ import { create } from 'zustand';
 
 const MINI_KEY = 'hc.brain.mini.v1';
 const OUTLINE_KEY = 'hc.brain.outlineFirst.v1';
+const LITE_KEY = 'hc.brain.lite.v1';
+
+// Lite mode (lightweight 2D, no WebGL): 'auto' defers to device detection,
+// 'on'/'off' are explicit user overrides.
+export type LitePref = 'auto' | 'on' | 'off';
+
+function loadLite(): LitePref {
+  try {
+    const v = window.localStorage.getItem(LITE_KEY);
+    return v === 'on' || v === 'off' ? v : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
 
 function loadBool(key: string, fallback: boolean): boolean {
   try {
@@ -37,6 +51,8 @@ interface BrainModesStore {
   outlineFirst: boolean;
   setOutlineFirst: (value: boolean) => void;
   toggleOutlineFirst: () => void;
+  lite: LitePref;
+  setLite: (value: LitePref) => void;
 }
 
 export const useBrainModesStore = create<BrainModesStore>((set, get) => ({
@@ -52,4 +68,13 @@ export const useBrainModesStore = create<BrainModesStore>((set, get) => ({
     set({ outlineFirst: value });
   },
   toggleOutlineFirst: () => get().setOutlineFirst(!get().outlineFirst),
+  lite: loadLite(),
+  setLite: (value) => {
+    try {
+      window.localStorage.setItem(LITE_KEY, value);
+    } catch {
+      /* storage may be unavailable; the in-memory flag still works */
+    }
+    set({ lite: value });
+  },
 }));

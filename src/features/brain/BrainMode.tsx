@@ -6,7 +6,7 @@
 // BrainCanvas, AgentPanel, SettingsPanel) so a crash in one stays
 // contained by FeatureBoundary instead of taking the workspace down.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentId, RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
@@ -29,7 +29,12 @@ import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
-import { BrainCanvas } from './components/BrainCanvas';
+import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
+// Lazy so the heavy three.js / WebGL bundle and the 3D brain model load ONLY
+// when the canvas is actually rendered — never in Lite mode or on weak hardware.
+const BrainCanvas = lazy(() =>
+  import('./components/BrainCanvas').then((m) => ({ default: m.BrainCanvas })),
+);
 import { Composer } from './components/Composer';
 import { DrugInteractionPanel } from './components/DrugInteractionPanel';
 import { GeneticsPanel } from './components/GeneticsPanel';
@@ -62,6 +67,11 @@ export function BrainMode({
   // Both reuse the solo (no 3D brain, no swarm panel) layout and a single
   // specialist pipeline.
   const soloFocus = drugFocus || geneticsFocus;
+  // Lite mode: skip the 3D brain entirely (no three.js, no GLB, no GPU) and show
+  // the 2D agent panel instead. Auto-enabled on weak hardware; user-overridable.
+  const autoLowEnd = useLowEndDevice();
+  const litePref = useBrainModesStore((s) => s.lite);
+  const lite = litePref === 'on' || (litePref === 'auto' && autoLowEnd);
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const modelGroups = useModelCatalogStore((s) => s.groups);
@@ -700,7 +710,7 @@ export function BrainMode({
         </FeatureBoundary>
       </section>
 
-      <section className={`brain-side${soloFocus ? ' brain-side--solo' : ''}`}>
+      <section className={`brain-side${soloFocus || lite ? ' brain-side--solo' : ''}`}>
         {drugFocus ? (
           // Specialised layout for Drug-Interactions: no 3D brain and no agent
           // swarm panel — just the interaction-grade key beside the report.
@@ -713,17 +723,32 @@ export function BrainMode({
           <FeatureBoundary name="Genetics panel">
             <GeneticsPanel />
           </FeatureBoundary>
+        ) : lite ? (
+          // Lite mode: no WebGL / 3D — the 2D agent panel carries the same
+          // region/agent activity, so weak or no-GPU hardware runs full-speed
+          // with no loss of any research feature.
+          <FeatureBoundary name="Agents">
+            <AgentPanel statuses={agentStatuses} />
+          </FeatureBoundary>
         ) : (
           <>
             <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
               <div className="brain-model-panel">
                 <div className="brain-stage">
-                  <BrainCanvas
-                    selectedRegion={selectedRegion}
-                    hoveredRegion={hoveredRegion}
-                    onSelectRegion={toggleRegion}
-                    onHoverRegion={setHoveredRegion}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="brain-empty" role="status">
+                        <p className="brain-empty-title">Loading 3D brain…</p>
+                      </div>
+                    }
+                  >
+                    <BrainCanvas
+                      selectedRegion={selectedRegion}
+                      hoveredRegion={hoveredRegion}
+                      onSelectRegion={toggleRegion}
+                      onHoverRegion={setHoveredRegion}
+                    />
+                  </Suspense>
                   <p className="brain-credit-line">
                     {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
                   </p>

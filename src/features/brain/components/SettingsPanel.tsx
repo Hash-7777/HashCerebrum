@@ -3,6 +3,7 @@ import { APP_NAME, APP_VERSION } from '@config/constants';
 import { useThemeStore, THEMES } from '@core/store/themeStore';
 import { useExportSettingsStore } from '@core/store/exportSettingsStore';
 import { CITATION_STYLES } from '@features/brain/export/citationStyles';
+import { useBrainModesStore, type LitePref } from '@core/store/brainModesStore';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
 import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -45,6 +46,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const setTheme = useThemeStore((s) => s.setTheme);
   const citationStyle = useExportSettingsStore((s) => s.citationStyle);
   const setCitationStyle = useExportSettingsStore((s) => s.setCitationStyle);
+  const lite = useBrainModesStore((s) => s.lite);
+  const setLite = useBrainModesStore((s) => s.setLite);
 
   const refreshCacheStats = useCallback(async () => {
     try {
@@ -266,6 +269,32 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         <p className="field-hint">
           Applies to the reference list in every export (PDF, Word, LaTeX, Markdown, HTML).
           In-text citation numbers never change.
+        </p>
+      </section>
+
+      <section className="settings-theme" aria-label="Performance">
+        <header>
+          <strong>3D &amp; performance</strong>
+          <span>{lite === 'auto' ? 'Auto' : lite === 'on' ? 'Lite (2D)' : 'Full 3D'}</span>
+        </header>
+        <div className="settings-citation-styles">
+          {(['auto', 'off', 'on'] as LitePref[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className="settings-citation-style"
+              data-active={lite === value}
+              onClick={() => setLite(value)}
+            >
+              {value === 'auto' ? 'Auto' : value === 'off' ? 'Full 3D' : 'Lite (2D)'}
+            </button>
+          ))}
+        </div>
+        <p className="field-hint">
+          Lite mode replaces the 3D brain with a lightweight 2D panel — no WebGL, no GPU, far less
+          memory — so the app runs full-speed on low-RAM or GPU-less machines. Every research feature
+          is unchanged. <strong>Auto</strong> enables it on weak hardware. Takes effect when you reopen
+          the Brain mode.
         </p>
       </section>
 
