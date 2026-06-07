@@ -23,8 +23,8 @@
 > its building blocks — its multi-provider failover chain, guarded/audited
 > network core, swarm + tool-registry orchestration, and the "Medical
 > Lexi-Check" drug-interaction grader — then extends them for medicine with a
-> hallucination-gated paper pipeline, on-device semantic memory, and a 3D
-> anatomical workspace.
+> hallucination-gated paper pipeline, on-device semantic memory, Smart Agentic
+> RAG with a true learning layer, and a 3D anatomical workspace.
 
 Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all** — including the embedding model that powers memory, which is bundled and runs on-device.
 
@@ -45,6 +45,53 @@ In medicine, two things matter more than anything else: **where your data goes**
 5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list
 
 The result is an answer where **every sentence has a chain of custody back to a real publication** — and a clear record of exactly which databases were contacted to produce it.
+
+**Learning by design.** With Smart RAG enabled (default ON), retrieval is not a one-shot search. The agent decomposes the query, measures coverage, extracts claims, detects contradictions, follows citations, and persists what it learns across sessions. It accumulates beliefs, tracks how consensus shifts, builds a knowledge graph of entities and relations, scores source reliability, records episodes, and flags semantic drift. Everything is local and user-controlled.
+
+---
+
+## Smart Agentic RAG
+
+When **Smart RAG** is on, a research turn becomes a structured reasoning loop rather than a single search:
+
+```
+Query -> Plan -> Retrieve -> Coverage -> Claims -> Conflicts -> Citations -> Learn
+```
+
+1. **Plan** — Decomposes the query into sub-queries, hypotheses, and key concepts (one lightweight model call, with deterministic fallback)
+2. **Retrieve** — Runs the original query plus up to three sub-queries in parallel through hybrid semantic + lexical search
+3. **Coverage** — Measures which concepts are covered and which are missing
+4. **Claims** — Extracts structured findings from each chunk (effect sizes, p-values, confidence intervals, sample sizes)
+5. **Conflicts** — Detects contradictions between claims from different sources
+6. **Citations** — Resolves DOI/PMID/NCT references against the in-memory library
+7. **Learn** — Updates persistent learning state: beliefs, graph, reliability scores, and queued gaps
+
+### Learning layers
+
+| Layer | What it tracks | Why it matters |
+|---|---|---|
+| **Belief State** | Confidence per claim fingerprint, supporting and conflicting evidence, revision history | You see *how confident* the literature is, not just what it says |
+| **Consensus Timeline** | Direction of evidence per topic, year by year, with flip detection | Know when the field changed its mind |
+| **Knowledge Graph** | Entities (drugs, conditions, outcomes, populations, biomarkers, interventions) and relations (treats, causes, associated with, contraindicated in, etc.) | Query relationally across the literature |
+| **Source Reliability** | Score per journal/author, with citation and retraction tracking | Weight trustworthy sources; flag retracted papers |
+| **Episodic Memory** | Record of each research session: query, findings, gaps, confidence | Compare a new run against what you found before |
+| **Learning Queue** | Coverage gaps ranked by priority | The agent identifies what it does not know and prioritises follow-up |
+| **Semantic Drift** | Embedding snapshots of key terms over time | Detect when a concept's usage shifts (for example, "long COVID") |
+
+All of this data is computed and stored on-device. It is never transmitted.
+
+### How Smart RAG differs from classic search
+
+Classic retrieval returns the most similar chunks for a query. Smart RAG adds:
+
+- **Query understanding** — breaks complex questions into sub-questions instead of searching the raw prompt verbatim
+- **Coverage awareness** — tells you when the retrieved set is missing key concepts
+- **Structured claims** — pulls effect sizes, CIs, p-values, and sample sizes into a normalised form
+- **Conflict detection** — surfaces contradictions between papers automatically
+- **Citation traversal** — follows references found in the text to enrich the context
+- **Persistent learning** — remembers beliefs, consensus shifts, source reliability, and prior sessions across runs
+
+It is not a replacement for reading the literature. It is a reasoning layer on top of retrieval that helps you navigate large bodies of evidence more systematically.
 
 ---
 
@@ -71,7 +118,7 @@ The roster and the region map are compile-time constants — the type system rej
 
 | Mode | Key | Description |
 |---|---|---|
-| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain. Two composer toggles: **Memory** on/off (research from scratch) and **Brain Mini** (a lighter pipeline — fewer specialists, shorter sections, no rate-limit waiting — tuned for free models and small Ollama models) |
+| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain. Composer toggles: **Memory** (saved findings), **Library** (imported PDFs, default OFF), **Smart RAG** (agentic reasoning, default ON), **Brain Mini** (lighter pipeline for free/small models) |
 | **Memory** | `⌘2` | Semantic knowledge store — cited findings searched by meaning, plotted on a real **labelled 3-axis (PC1/PC2/PC3) vector map** with k-means clusters; a **Project / Library** scope toggle browses the whole cross-project corpus; one-click **Prune** |
 | **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review |
 | **Drug Interactions** | `⌘4` | A focused clinical-pharmacology checker — grades each drug pair **A–X** (none → contraindicated) with mechanism, effect, and management, weighting authoritative drug-label sources |
@@ -135,6 +182,10 @@ infarction." Nothing is downloaded at runtime and no text leaves the machine.
   your knowledge, not a decorative layout.
 - **Memory toggle** — flip memory off in the composer to research a topic from
   scratch on fresh sources only.
+- **Library toggle** — imported PDF passages are cited only when you turn this on
+  (default OFF).
+- **Smart RAG toggle** — agentic query planning, coverage assessment, claim
+  extraction, conflict detection, and citation traversal (default ON).
 
 Embeddings are stored compactly (int8-quantised) with oldest-first eviction. A
 **Reset all data** control in Settings wipes memory, chats, runs, and cache for a
@@ -149,6 +200,7 @@ HashCerebrum is designed so that **your data stays yours**. It is a single-user 
 | What | Where it lives | Leaves your machine? |
 |---|---|---|
 | Projects, chat history, saved findings (memory) | Local app storage on your device | **Never** |
+| Learning data (beliefs, graph, episodes, reliability) | Local app storage on your device | **Never** |
 | Retrieved-evidence cache, audit log | Local SQLite in the app data dir | **Never** |
 | Provider API keys | Renderer `localStorage`, isolated by the app's bundle identifier | **Never** committed, logged, or cached |
 | Generated papers / PDFs | Written to your Downloads folder | Only if you export them |
@@ -213,7 +265,8 @@ The audit log is readable and verifiable from Settings → Audit log.
 | PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
-| Testing | Vitest (362 tests) + `cargo test` (31 tests) |
+| Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
+| Testing | Vitest (521 tests) + `cargo test` (38 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -241,7 +294,7 @@ npm run build          # macOS .app
 npm run build:dmg      # macOS .dmg
 
 # Checks
-npm test               # Vitest — 362 unit tests
+npm test               # Vitest — 521 unit tests
 npm run typecheck      # tsc strict — app + node configs
 npm run build:web      # tsc over app + tests, then Vite build
 ```
@@ -273,8 +326,9 @@ src/
   core/
     bus/           typed EventBus
     llm/           provider registry, model catalog, streaming
-    rag/           semantic memory — embeddings, hybrid retrieval, vector store
-    store/         Zustand stores — brain, agents, projects, runs, reset
+    rag/           semantic memory — embeddings, hybrid retrieval, vector store,
+                   agentic learning layer (beliefs, graph, episodes, drift)
+    store/         Zustand stores — brain, agents, projects, runs, reset, learning
     tools/         ToolRegistry — medical, stat, memory tools
   features/
     brain/         3D canvas, swarm runner, paper pipeline, manuscript editor
@@ -299,105 +353,12 @@ src-tauri/
 
 ---
 
-## How the paper pipeline prevents hallucination
-
-```
-User prompt
-    │
-    ▼
-detectPaperRequest()  ──no──▶  normal chat answer
-    │ yes
-    ▼
-Parallel evidence fetch  (PubMed · PMC · OpenAlex · ClinicalTrials · openFDA · RxNorm · Semantic Scholar)
-    │
-    ▼
-extractEvidenceFromRecords()  →  structured rows: [design, population, exposure,
-                                  comparator, outcomes, n, effect, limitations, trust]
-    │
-    ▼
-buildClaimLedger()  →  section-targeted claims with [S#] source markers
-    │                   and evidence-strength grades (RCT > cohort > case report)
-    ▼
-buildPaperBlueprint()  →  section plan with required claims, figures, tables
-    │
-    ▼
-compileManuscriptFromLedger()  →  model writes ONLY from approved [S#] entries
-    │                              no invented statistics, no hallucinated trials
-    ▼
-validatePaperPackage()  →  BLOCKS export if:
-    │                       · sections below word minimum
-    │                       · inline citations disagree with reference list
-    │                       · clinical results section has no source-backed findings
-    │                       · statistical claims are unsupported
-    │                       · abstract overstates the body
-    ▼
-buildPublicationArtifact()  →  manuscript + Vancouver references + evidence table
-                                + claim ledger + source-yield stats + QA blockers
-    │
-    ▼
-Typst PDF render  (embedded, offline, no fonts downloaded)
-```
-
-Missing effect sizes produce an honest warning and source-yield/evidence-strength statistics — not fabricated meta-analysis results.
-
----
-
-## Documentation
-
-| Document | Contents |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layer diagram, data-flow walkthrough, guardrails |
-| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, invariants, SSRF denylist, logging hygiene |
-| [docs/AGENTS.md](docs/AGENTS.md) | Full agent roster, lifecycle, system-prompt discipline |
-| [docs/LICENSES.md](docs/LICENSES.md) | Third-party asset and dependency licenses |
-
----
-
 ## Lineage — built on HashCortX
 
-HashCerebrum is built using **HashCortX** — the author's earlier local-first
-agentic desktop app — as its building blocks. Several core patterns are carried
-over and adapted for the medical domain:
-
-- the **multi-provider failover chain** (tier-based candidate selection, provider
-  cooldown, retriable/billing error classification) — ported and extended with
-  cross-provider spreading;
-- the **guarded, audited network core** (single Rust chokepoint, host allowlist,
-  hash-chained audit log) hardened for SSRF;
-- the **swarm + tool-registry** orchestration model; and
-- the **Drug Interactions grader**, modelled on HashCortX's "Medical Lexi-Check"
-  agent (A–X interaction grading with per-pair cards).
-
-HashCerebrum then layers on what HashCortX did not have: a typeset,
-hallucination-gated paper pipeline, on-device semantic memory with a real 3-axis
-vector map, the 3D anatomical workspace, and a peer-review swarm.
-
----
-
-## Disclaimer
-
-> **HashCerebrum is for research and education only. It is not a medical device and carries no FDA, EMA, or equivalent regulatory approval. It is not intended to diagnose, treat, cure, or prevent any medical condition.**
-
-| Topic | Terms |
-|---|---|
-| **Not a medical device** | For research and education only. No regulatory approval. Not intended to diagnose, treat, or prevent any condition. Not for users under 18. LLMs can hallucinate — always verify outputs independently. |
-| **Consult a professional** | Never disregard professional medical advice or delay seeking it because of something you read or generated here. Always consult your physician, pharmacist, or qualified healthcare provider for questions about a medical condition, medication, or treatment. |
-| **No warranties** | Provided "as is" without warranties of any kind. As open-source software it has not undergone professional clinical validation or heavy-load testing. Authors have no obligation to provide updates, support, or bug fixes. You are responsible for your own data backups. |
-| **No liability** | To the fullest extent permitted by law, the authors are not liable for damages, wrong results, data-privacy issues, or data loss arising from your use. You agree to indemnify the authors from any claims arising from your use, modification, or distribution of the software. |
-| **Data & third parties** | HashCerebrum is software, not a HIPAA-covered entity or GDPR controller. Your data stays on your device; you are responsible for its security. Retrieved evidence comes from public databases and LLM providers — we do not control, guarantee, or endorse their accuracy. References to drugs or treatments do not constitute endorsement. |
-| **License** | GNU AGPL-3.0-or-later. You may use, modify, and distribute the software under those terms. You are responsible for any modifications you make. Third-party trademarks belong to their owners. Your generated manuscripts remain your intellectual property. |
-
-By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
+HashCerebrum is built using the author's earlier local-first agentic desktop app, **HashCortX**, as its building blocks — its multi-provider failover chain, guarded/audited network core, swarm + tool-registry orchestration, and the "Medical Lexi-Check" drug-interaction grader — then extends them for medicine with a hallucination-gated paper pipeline, on-device semantic memory, Smart Agentic RAG with true learning agents, and a 3D anatomical workspace.
 
 ---
 
 ## License
 
-[GNU AGPL-3.0-or-later](LICENSE) — © 2026 Seif Hashish.
-
-HashCerebrum is free and open source. Under the AGPL, anyone who distributes a
-modified version — or runs a modified version as a network service — must make
-their corresponding source available under the same license.
-
-Bundled third-party dependencies and assets retain their own (permissive)
-licenses — see [docs/LICENSES.md](docs/LICENSES.md).
+AGPL-3.0. See [LICENSE](LICENSE).
