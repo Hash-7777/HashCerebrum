@@ -34,6 +34,38 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
     let path = audit_path(app)?;
     let conn = Connection::open(&path)?;
 
+    ensure_schema(&conn)?;
+
+    // Integrity check on startup — corrupt DB should be detected early
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap_or_else(|_| "unknown".into());
+    if integrity != "ok" {
+        tracing::error!(result = %integrity, "audit database integrity check failed");
+        return Err(AppError::Audit(format!("integrity check: {integrity}")));
+    }
+
+    let key = encrypt::get_or_create_key()
+        .map_err(|e| AppError::Audit(format!("encryption key init: {e}")))?;
+    let _ = ENC_KEY.set(key);
+
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    *guard = Some(conn);
+    Ok(())
+}
+
+/// Create the audit table if needed and migrate older databases forward.
+///
+/// `CREATE TABLE IF NOT EXISTS` does NOT add a new column to a table that
+/// already exists, so a database created before encryption-at-rest (which added
+/// `enc_data`) would be missing that column — and every read selecting it would
+/// fail with "no such column: enc_data" surfaced as "cache error: database
+/// operation failed". The migration adds the column idempotently. Pure with
+/// respect to the passed connection so it can be exercised against an in-memory
+/// database in tests.
+fn ensure_schema(conn: &Connection) -> AppResult<()> {
     // Schema includes enc_data for encrypted-at-rest entries.
     // Old entries without enc_data remain readable via plaintext columns.
     conn.execute_batch(
@@ -57,23 +89,27 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
          CREATE INDEX IF NOT EXISTS idx_audit_cat ON audit(category);",
     )?;
 
-    // Integrity check on startup — corrupt DB should be detected early
-    let integrity: String = conn
-        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
-        .unwrap_or_else(|_| "unknown".into());
-    if integrity != "ok" {
-        tracing::error!(result = %integrity, "audit database integrity check failed");
-        return Err(AppError::Audit(format!("integrity check: {integrity}")));
+    // Forward-migrate a pre-encryption database that lacks the enc_data column.
+    let has_enc_data = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(audit)")
+            .map_err(|e| AppError::Audit(format!("table_info: {e}")))?;
+        let names = stmt
+            .query_map([], |r| r.get::<_, String>(1))
+            .map_err(|e| AppError::Audit(format!("table_info query: {e}")))?;
+        let mut found = false;
+        for name in names {
+            if name.map_err(|e| AppError::Audit(format!("table_info row: {e}")))? == "enc_data" {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !has_enc_data {
+        conn.execute("ALTER TABLE audit ADD COLUMN enc_data BLOB", [])
+            .map_err(|e| AppError::Audit(format!("enc_data migration: {e}")))?;
     }
-
-    let key = encrypt::get_or_create_key()
-        .map_err(|e| AppError::Audit(format!("encryption key init: {e}")))?;
-    let _ = ENC_KEY.set(key);
-
-    let mut guard = DB
-        .lock()
-        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
-    *guard = Some(conn);
     Ok(())
 }
 
@@ -314,4 +350,55 @@ pub fn close_connection() -> AppResult<()> {
             .map_err(|(_, e)| AppError::Audit(e.to_string()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrates_pre_encryption_database_missing_enc_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Recreate the OLD schema (before encryption-at-rest) — no enc_data column.
+        conn.execute_batch(
+            "CREATE TABLE audit (
+                seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          TEXT NOT NULL,
+                category    TEXT NOT NULL DEFAULT '',
+                subject     TEXT NOT NULL DEFAULT '',
+                action      TEXT NOT NULL DEFAULT '',
+                data_hash   TEXT NOT NULL DEFAULT '',
+                prev_hash   TEXT NOT NULL,
+                entry_hash  TEXT NOT NULL UNIQUE
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO audit (ts, prev_hash, entry_hash) VALUES ('2026-01-01T00:00:00Z', 'GENESIS', 'h1')",
+            [],
+        )
+        .unwrap();
+
+        // The migration must add enc_data without dropping the existing row.
+        ensure_schema(&conn).unwrap();
+
+        // A read that selects enc_data (which previously failed) now succeeds.
+        let enc: Option<Vec<u8>> = conn
+            .query_row("SELECT enc_data FROM audit WHERE seq = 1", [], |r| r.get(0))
+            .unwrap();
+        assert!(enc.is_none());
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM audit", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn ensure_schema_is_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        // A second call must not error (column already present).
+        ensure_schema(&conn).unwrap();
+        assert!(conn.prepare("SELECT enc_data FROM audit").is_ok());
+    }
 }
