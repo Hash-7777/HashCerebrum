@@ -61,7 +61,6 @@ export function AppShell() {
     void hydrateResearchRuns();
     void hydrateRag();
     void hydratePeerReview();
-    void warmupEmbeddings(); // begin loading the local embedding model early
     void hydrateAgentModels();
     void hydrateLearning();
     // Projects must hydrate before chats so legacy chats with no projectId
@@ -79,6 +78,30 @@ export function AppShell() {
     hydrateResearchRuns,
     refreshModels,
   ]);
+
+  // Load the local embedding model lazily — on the user's first interaction,
+  // during idle time — instead of at boot. A freshly-opened or untouched app
+  // (e.g. on a low-RAM machine) never pays the ~33 MB model + WASM cost until
+  // the user actually starts working; runs that need it stay fast because it
+  // warms while they type their first query.
+  useEffect(() => {
+    let warmed = false;
+    const warm = () => {
+      if (warmed) return;
+      warmed = true;
+      const idle = (cb: () => void) =>
+        typeof requestIdleCallback === 'function' ? requestIdleCallback(cb) : window.setTimeout(cb, 1);
+      idle(() => warmupEmbeddings());
+      window.removeEventListener('pointerdown', warm);
+      window.removeEventListener('keydown', warm);
+    };
+    window.addEventListener('pointerdown', warm);
+    window.addEventListener('keydown', warm);
+    return () => {
+      window.removeEventListener('pointerdown', warm);
+      window.removeEventListener('keydown', warm);
+    };
+  }, []);
 
   useEffect(() => {
     const pushError = (source: string, message: string) => {
