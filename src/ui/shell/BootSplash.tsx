@@ -213,6 +213,9 @@ export function BootSplash({ onEnter }: { onEnter: () => void }) {
       role="status"
       aria-label="Loading HashCerebrum"
     >
+      {/* Top drag strip so the window can be moved during loading, exactly like
+          the app's titlebar (the splash overlays it, so it needs its own). */}
+      <div className="boot-dragbar" data-tauri-drag-region aria-hidden="true" />
       <canvas ref={fieldRef} className="boot-field" aria-hidden="true" />
       <div className="boot-vignette" aria-hidden="true" />
 

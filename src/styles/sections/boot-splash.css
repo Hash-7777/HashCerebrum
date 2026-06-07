@@ -32,6 +32,20 @@
   pointer-events: none;
 }
 
+/* Draggable top strip — mirrors the app titlebar (44px) so the window can be
+   moved while the splash is up. 80px left clearance keeps the native macOS
+   traffic lights clickable. */
+.boot-dragbar {
+  position: absolute;
+  top: 0;
+  left: 80px;
+  right: 0;
+  height: 44px;
+  z-index: 50;
+  -webkit-app-region: drag;
+}
+.boot.exiting .boot-dragbar { -webkit-app-region: no-drag; }
+
 .boot-field { position: absolute; inset: 0; z-index: 0; display: block; }
 /* A single soft cool glow from above + a gentle vignette — clean, not busy. */
 .boot-vignette {
