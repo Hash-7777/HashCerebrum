@@ -392,7 +392,7 @@ Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundl
 ### Running a research turn
 
 1. Open **Brain** mode (`⌘1`)
-2. Ask a clinical question — "What is the evidence for metformin in PCOS?"
+2. Ask a clinical question — "In reproductive-age women with PCOS and anovulatory infertility, does metformin plus letrozole improve live-birth rates compared with letrozole alone?"
 3. Watch the boss route the question; specialists fetch evidence; the brain lights up
 4. For a full paper, start with "write a paper on..." — the paper pipeline runs automatically
 
