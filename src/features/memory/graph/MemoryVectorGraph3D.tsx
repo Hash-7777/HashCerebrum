@@ -6,11 +6,10 @@
 // distinct blobs, and edges are the real cosine nearest-neighbour links.
 // Rendered with React Three Fiber (orbit / zoom / pan + idle auto-rotate).
 
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { useWindowActive } from '@ui/hooks/useWindowActive';
 import { getChunkVectors, type RagChunk } from '@core/rag';
 import { Icon } from '@ui/icons';
 import { pca3, type Vec3 } from './pca3';
@@ -282,29 +281,6 @@ function Axes3D() {
   );
 }
 
-// Idle auto-rotation that conveys depth, paused whenever the user is dragging.
-// The canvas runs in 'demand' frameloop, so while spinning (and the window is
-// focused) we drive frames ourselves; when the spin stops or the window is
-// backgrounded, no frames render and the graph costs no GPU.
-function SceneSpin({ active }: { active: boolean }) {
-  const { scene, invalidate } = useThree();
-  const focused = useWindowActive();
-  useFrame((_, delta) => {
-    if (active) scene.rotation.y += delta * 0.08;
-  });
-  useEffect(() => {
-    if (!active || !focused) return;
-    let raf = 0;
-    const loop = () => {
-      invalidate();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [active, focused, invalidate]);
-  return null;
-}
-
 function Node({
   node,
   color,
@@ -368,8 +344,22 @@ export function MemoryVectorGraph3D({
   const graph = useMemo(() => buildGraph(chunks), [chunks]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusCluster, setFocusCluster] = useState<number | null>(null);
-  const [spin, setSpin] = useState(true);
   const dragging = useRef(false);
+  // The graph is STATIC by default — it rotates only while the user drags it.
+  // When the Memory mode is hidden (another mode is active, the host is
+  // display:none) the canvas is off-screen, so we stop rendering entirely.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => setVisible(entries.some((e) => e.isIntersecting)),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   if (!graph) {
     return (
@@ -396,11 +386,11 @@ export function MemoryVectorGraph3D({
   const isDimmed = (c: number) => focusCluster !== null && c !== focusCluster;
 
   return (
-    <div className="memory-vec3d">
+    <div className="memory-vec3d" ref={containerRef}>
       <Canvas
         camera={{ position: [8, 4.8, 12.5], fov: 45, near: 0.1, far: 200 }}
         dpr={[1, 1.5]}
-        frameloop="demand"
+        frameloop={visible ? 'demand' : 'never'}
         onPointerMissed={() => {
           setSelectedId(null);
           setFocusCluster(null);
@@ -413,7 +403,6 @@ export function MemoryVectorGraph3D({
         <fog attach="fog" args={['#070c16', 30, 90]} />
         <ambientLight intensity={0.95} />
         <pointLight position={[6, 8, 10]} intensity={1.2} />
-        <SceneSpin active={spin && focusCluster === null && !selected} />
         <Axes3D />
         <Edges positions={graph.intraPositions} color="#b9c6ee" opacity={focusCluster === null ? 0.5 : 0.18} />
         <Edges positions={graph.interPositions} color="#7180a6" opacity={0.22} />
@@ -447,7 +436,6 @@ export function MemoryVectorGraph3D({
           maxDistance={48}
           onStart={() => {
             dragging.current = true;
-            setSpin(false);
           }}
           onEnd={() => {
             dragging.current = false;
