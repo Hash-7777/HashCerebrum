@@ -299,29 +299,84 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 ## Getting started
 
-**Prerequisites:** Node ≥ 20 and the [Rust toolchain](https://rustup.rs).
+You need **Node ≥ 20** and the **Rust toolchain**. Everything else is in the repo.
+
+### 1. Install prerequisites
+
+**macOS**
+```sh
+# Node (via Homebrew)
+brew install node
+
+# Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+**Linux (Ubuntu/Debian)**
+```sh
+# Node (via NodeSource)
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Tauri Linux dependencies
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+**Windows**
+```powershell
+# Node (via winget)
+winget install OpenJS.NodeJS
+
+# Rust (then restart your terminal)
+winget install Rustlang.Rustup
+
+# WebView2 runtime is usually already installed on Windows 11/10.
+# If not: winget install Microsoft.EdgeWebView2Runtime
+```
+
+### 2. Install project dependencies
 
 ```sh
-# Install dependencies. The embedding model is committed, so there's no model
-# download or setup step. (On an offline/restricted machine, set
-# ONNXRUNTIME_NODE_INSTALL=skip to skip onnxruntime-node's unused native binary —
-# the app uses onnxruntime-web/WASM. CI sets this automatically.)
+git clone https://github.com/Hash-7777/HashCerebrum.git
+cd HashCerebrum
 npm install
+```
 
-# Desktop development (hot reload — Tauri + Vite)
-npm run dev
+The embedding model is committed, so there is no separate download step.
 
-# Browser-only development (no Rust required — mock platform)
+### 3. Run or build
+
+**Browser-only development** (works on every OS; no Rust compile needed)
+```sh
 npm run dev:web
+```
 
-# Production build
-npm run build          # macOS .app
-npm run build:dmg      # macOS .dmg
+**Desktop development** (full Tauri app with hot reload)
+```sh
+npm run dev
+```
 
-# Checks
+**Production build**
+
+| OS | Command | Output |
+|---|---|---|
+| macOS | `npm run build` | `.app` bundle |
+| macOS | `npm run build:dmg` | `.dmg` installer |
+| Linux | `npm run build` | AppImage / `.deb` (depends on your distro) |
+| Windows | `npm run build` | `.msi` installer |
+
+The `npm run build` script delegates to `tauri build`, which produces the right bundle for the OS you are on.
+
+### Checks
+
+```sh
 npm test               # Vitest — 521 unit tests
-npm run typecheck      # tsc strict — app + node configs
-npm run build:web      # tsc over app + tests, then Vite build
+npm run typecheck      # TypeScript strict — app + node configs
+npm run build:web      # Production Vite build (also runs typecheck)
 ```
 
 ### Adding an LLM provider
