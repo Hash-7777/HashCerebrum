@@ -103,13 +103,16 @@ pub(crate) fn parse_associations(
             format!("{} association at {rsid}", if trait_label.is_empty() { "Trait".into() } else { trait_label.clone() })
         };
 
+        // Numeric fields are stored as strings: EvidenceItem.identifiers is a
+        // string map on the TS side (like pmid/doi). The association-confidence
+        // engine parses them back to numbers.
         let identifiers = serde_json::json!({
             "rsId": rsid,
             "trait": trait_label,
-            "oddsRatio": or,
-            "beta": beta,
+            "oddsRatio": or.map(|x| x.to_string()),
+            "beta": beta.map(|x| x.to_string()),
             "ci": ci,
-            "pValue": assoc["pvalue"].as_f64(),
+            "pValue": assoc["pvalue"].as_f64().map(|x| x.to_string()),
         });
 
         out.push(evidence(
@@ -203,8 +206,9 @@ mod tests {
         let snip = item.snippet.as_deref().unwrap();
         assert!(snip.contains("Odds ratio 1.42"));
         assert!(snip.contains("95% CI 1.10-1.84"));
-        assert_eq!(item.identifiers["oddsRatio"].as_f64(), Some(1.42));
-        assert_eq!(item.identifiers["pValue"].as_f64(), Some(3.0e-6));
+        assert_eq!(item.identifiers["oddsRatio"].as_str(), Some("1.42"));
+        let p: f64 = item.identifiers["pValue"].as_str().unwrap().parse().unwrap();
+        assert!((p - 3.0e-6).abs() < 1e-12);
     }
 
     #[test]

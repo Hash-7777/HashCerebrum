@@ -86,11 +86,12 @@ pub(crate) fn parse_summaries(json: &serde_json::Value) -> Vec<EvidenceItem> {
             "ClinVar clinical significance: {significance} for {condition}. Variant type: {variant_type}."
         );
 
+        // EvidenceItem.identifiers is a string map on the TS side; the trait
+        // list lives in the snippet, so only string IDs go here.
         let identifiers = serde_json::json!({
             "accession": accession,
             "clinvarId": uid,
             "clinicalSignificance": significance,
-            "traits": traits,
         });
 
         out.push(evidence(
