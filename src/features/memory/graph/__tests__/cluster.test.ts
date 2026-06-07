@@ -82,16 +82,30 @@ describe('kmeans clustering', () => {
   });
 
   it('does not let a single-finding fluke token name a cluster', () => {
-    // "empire" / "mica" appear once; "warfarin" recurs and should win.
+    // 'sundae' / 'origami' appear once; 'warfarin' recurs and should win. The
+    // filter is frequency-based, never a denylist of specific words.
     const label = clusterLabel([
-      'warfarin elderly anticoagulation empire',
-      'warfarin atrial fibrillation mica',
+      'warfarin elderly anticoagulation sundae',
+      'warfarin atrial fibrillation origami',
       'warfarin bleeding elderly',
       'warfarin dosing elderly',
     ]);
-    expect(label.toLowerCase()).not.toContain('empire');
-    expect(label.toLowerCase()).not.toContain('mica');
+    expect(label.toLowerCase()).not.toContain('sundae');
+    expect(label.toLowerCase()).not.toContain('origami');
     expect(label.toLowerCase()).toContain('warfarin');
+  });
+
+  it('keeps a real recurring gene symbol (e.g. MICA) as a label', () => {
+    // A genuine research cluster — like the MICA gene work — recurs across its
+    // findings and MUST survive as a label. The recurrence filter only drops
+    // one-off tokens; it never suppresses a real recurring term.
+    const label = clusterLabel([
+      'MICA gene polymorphism in transplant rejection',
+      'MICA allele association with autoimmune disease',
+      'soluble MICA and NKG2D ligand in cancer',
+      'MICA expression and NK cell activation',
+    ]);
+    expect(label.toLowerCase()).toContain('mica');
   });
 
   it('drops generic connective words like "among" and "analyze"', () => {
