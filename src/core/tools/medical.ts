@@ -86,6 +86,22 @@ export function registerMedicalTools() {
   });
 
   tools.register({
+    name: 'gwas_catalog_search',
+    description:
+      'Search the GWAS Catalog for curated gene/variant–trait associations with odds ratio, 95% CI and p-value. Use for genetic correlation questions (gene or rsID + disease).',
+    parameters: sourceQuerySchema,
+    execute: (args) => platform().medical.gwas_catalog(cleanQuery(args)),
+  });
+
+  tools.register({
+    name: 'clinvar_search',
+    description:
+      'Search ClinVar for variant clinical significance and the conditions a variant is classified against. Use for genetic correlation questions (gene or rsID + disease).',
+    parameters: sourceQuerySchema,
+    execute: (args) => platform().medical.clinvar(cleanQuery(args)),
+  });
+
+  tools.register({
     name: 'ctgov_search',
     description: 'Search ClinicalTrials.gov studies through the Rust network guard.',
     parameters: sourceQuerySchema,

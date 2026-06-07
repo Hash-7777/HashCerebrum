@@ -55,6 +55,10 @@ const SOURCE_SCORE: Record<EvidenceItem['source'], number> = {
   // User-imported library papers are deliberately chosen primary sources — rank
   // them high, just below PubMed, so the Brain leans on the user's own corpus.
   library: 11,
+  // Curated genetic databases — trusted, quantitative association evidence —
+  // rank just below PubMed/library and above the general literature graph.
+  gwas_catalog: 9,
+  clinvar: 8,
   ctgov: 6,
   europepmc: 5,
   openalex: 4,

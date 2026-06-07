@@ -11,6 +11,8 @@ const sourceUrl: Record<EvidenceItem['source'], string> = {
   openfda: 'https://open.fda.gov/',
   rxnorm: 'https://rxnav.nlm.nih.gov/',
   semantic_scholar: 'https://www.semanticscholar.org/',
+  gwas_catalog: 'https://www.ebi.ac.uk/gwas/',
+  clinvar: 'https://www.ncbi.nlm.nih.gov/clinvar/',
   library: '',
 };
 
@@ -97,6 +99,8 @@ export const browserPlatform: Platform = {
     openfda: async () => mocked('openfda', 'Mock OpenFDA safety signal result'),
     rxnorm: async () => mocked('rxnorm', 'Mock RxNorm concept result'),
     semantic_scholar: async () => mocked('semantic_scholar', 'Mock Semantic Scholar result'),
+    gwas_catalog: async () => mocked('gwas_catalog', 'Mock GWAS Catalog association result'),
+    clinvar: async () => mocked('clinvar', 'Mock ClinVar clinical-significance result'),
     crossref_lookup: async (doi: string) => ({
       doi,
       title: 'Mock Crossref title',

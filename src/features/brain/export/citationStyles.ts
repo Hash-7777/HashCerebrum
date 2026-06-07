@@ -26,6 +26,8 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   openfda: 'openFDA',
   rxnorm: 'RxNorm',
   semantic_scholar: 'Semantic Scholar',
+  gwas_catalog: 'GWAS Catalog',
+  clinvar: 'ClinVar',
   library: 'Imported document',
 };
 
