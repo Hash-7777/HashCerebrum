@@ -38,7 +38,7 @@ In medicine, two things matter more than anything else: **where your data goes**
 
 **Sourced by construction.** The model is not allowed to write a claim it cannot prove. Every research turn follows a strict pipeline:
 
-1. Authoritative biomedical databases are queried in parallel — **PubMed/NLM, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar** (no scraped blogs, no synthetic corpora)
+1. Authoritative biomedical databases are queried in parallel — **PubMed/NLM, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar**, plus **GWAS Catalog and ClinVar** for genetics (no scraped blogs, no synthetic corpora)
 2. Retrieved records are extracted into a structured evidence table with study design, population, outcomes, and effect values
 3. A claim ledger maps each finding to a source marker and grades its evidence strength
 4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive
@@ -122,7 +122,7 @@ It is not a replacement for reading the literature. It is a reasoning layer on t
 
 ## The 3D workspace
 
-The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Science Museum). Each of the eight agents is bound to a specific brain region. As the swarm works, the corresponding regions pulse with a base glow blended against topic-detection accent colours — so you can watch the brain *think*.
+The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Science Museum). Each of the nine agents is bound to a specific brain region. As the swarm works, the corresponding regions pulse with a base glow blended against topic-detection accent colours — so you can watch the brain *think*.
 
 | Agent | Brain region | Domain |
 |---|---|---|
@@ -147,8 +147,9 @@ The roster and the region map are compile-time constants — the type system rej
 | **Memory** | `⌘2` | Semantic knowledge store — cited findings searched by meaning, plotted on a real **labelled 3-axis (PC1/PC2/PC3) vector map** with k-means clusters; a **Project / Library** scope toggle browses the whole cross-project corpus; one-click **Prune** |
 | **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review |
 | **Drug Interactions** | `⌘4` | A focused clinical-pharmacology checker — grades each drug pair **A–X** (none → contraindicated) with mechanism, effect, and management, weighting authoritative drug-label sources |
+| **Genetics** | `⌘5` | A gene-expert checker — enter a gene variant and a disease and get an **association-confidence score** plus a cited correlation report from curated genetic databases (GWAS Catalog, ClinVar) and literature. Clarifies the query first if a gene or disease is missing |
 
-The mode registry is a typed tuple capped at five entries (`src/config/modes.ts`) — adding a sixth is a compile error.
+The mode registry is a typed tuple capped at six entries (`src/config/modes.ts`) — adding a seventh is a compile error.
 
 ---
 
@@ -175,6 +176,20 @@ The **Drug Interactions** mode is a focused interaction checker rather than the 
 Its confirmed findings are saved to the shared memory (tagged `drug_interactions`) so ordinary Brain research benefits from them — but the checker itself only draws on its **own trusted interaction findings**, never the other modes' general research.
 
 This grading model and the failover chain are adapted from patterns in my prior desktop app, **HashCortX** (see *Lineage* below).
+
+---
+
+## Genetics — gene-variant ↔ disease correlation, scored
+
+The **Genetics** mode is a gene-expert checker. You name a gene variant (a gene symbol like `MICA`, or an rsID like `rs1051792`) and a disease, and it returns an **Association Confidence score (0–100%)** plus a cited correlation report. It is **gene-agnostic** — any gene, any variant, any disease.
+
+What makes the number trustworthy:
+
+- **The score is computed in code, never by the model.** It is derived deterministically from the structured evidence — odds ratios, confidence intervals and p-values from the **GWAS Catalog**, clinical significance from **ClinVar**, study concordance, and source trust — so it is reproducible and cannot be hallucinated. It reflects the **strength of the published association, not a personal clinical risk**, and returns *“insufficient”* rather than a number when the evidence does not support one.
+- **Clarify before answering.** If the conversation does not yet name both a gene and a disease, the agent asks a targeted question first instead of guessing.
+- **Trusted, keyless sources only.** GWAS Catalog (EBI) and ClinVar (NCBI) sit alongside PubMed / Europe PMC / OpenAlex; every claim cites a real record with `[S#]`.
+- **Its own memory that feeds the Brain.** Confident findings are saved to the shared memory (tagged `genetics`); the gene expert is fed only its own genetics-scoped findings, while ordinary Brain research can read them.
+- **Runs free and local.** No API keys are required, and because the score is model-independent it produces the same percentage on a small Ollama model as on a frontier one (the Mini flag trims the report context to fit small windows).
 
 ---
 
@@ -233,7 +248,7 @@ HashCerebrum is designed so that **your data stays yours**. It is a single-user 
 
 **The web layer cannot reach the internet.** A strict Content-Security-Policy (`connect-src 'self' blob:`, where `blob:` is in-memory data only and cannot address the network) means the UI has no network capability at all. Every outbound request is made by the Rust core, and only to a **fixed allowlist** of destinations:
 
-- **Trusted medical data sources** — eutils/PubMed (NLM), Europe PMC (EBI), OpenAlex, ClinicalTrials.gov, openFDA, RxNorm (NLM), Semantic Scholar. These are public, authoritative biomedical databases; the app reads from them and sends no personal data.
+- **Trusted medical data sources** — eutils/PubMed (NLM), Europe PMC (EBI), OpenAlex, ClinicalTrials.gov, openFDA, RxNorm (NLM), Semantic Scholar, GWAS Catalog (EBI), ClinVar (NCBI). These are public, authoritative biomedical databases; the app reads from them and sends no personal data.
 - **The single LLM provider you choose** — your prompt (question + retrieved evidence) goes to that provider under their terms. Nothing else does.
 - **Nowhere, if you go fully local** — configure **Ollama** as your model and the app makes **no external network calls whatsoever**: questions, evidence, and reasoning all stay on the device.
 
@@ -291,7 +306,7 @@ The audit log is readable and verifiable from Settings → Audit log.
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (521 tests) + `cargo test` (38 tests) |
+| Testing | Vitest (581 tests) + `cargo test` (49 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -374,7 +389,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 521 unit tests
+npm test               # Vitest — 581 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -402,7 +417,7 @@ Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundl
 
 ```
 src/
-  config/          compile-time caps — modes (≤5), agents (≤8), constants
+  config/          compile-time caps — modes (≤6), agents (≤9), constants
   core/
     bus/           typed EventBus
     llm/           provider registry, model catalog, streaming
@@ -423,7 +438,8 @@ src/
 
 src-tauri/
   src/
-    commands/      IPC surface — llm, medical, pdf, audit, cache, keychain
+    commands/      IPC surface — llm, medical (incl. GWAS Catalog, ClinVar),
+                   pdf, audit, cache, keychain
     security/      guard, denylist, policy, allowlist
     audit/         hash-chain + SQLite store + verify
     cache/         SQLite response cache
@@ -435,12 +451,12 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 192 | ~34,993 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 71 | ~6,756 |
-| Rust Tauri backend (`src-tauri/src/`) | 40 | ~5,739 |
-| **Total core source** | **303** | **~47,488** |
+| React/TypeScript app code (`src/`, excluding tests) | 198 | ~36,019 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 75 | ~7,244 |
+| Rust Tauri backend (`src-tauri/src/`) | 42 | ~6,383 |
+| **Total core source** | **315** | **~49,646** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (521 Vitest tests plus 38 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (581 Vitest tests plus 49 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 
