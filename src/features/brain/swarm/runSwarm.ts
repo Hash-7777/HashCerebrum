@@ -526,14 +526,17 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     }
     const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
     // The percentage is computed deterministically from the structured genetic
-    // records — never by the model.
+    // records — never by the model — over the FULL evidence set.
     const confidence = confidenceFromEvidence(evidence);
     callbacks.onBossPhase('synthesizing');
+    // Mini / local-model path: trim the records fed to the synthesis prompt so it
+    // fits a small context window. The score above already used all the evidence.
+    const reportEvidence = mini ? evidence.slice(0, 8) : evidence;
     const report = await synthesizeGeneCorrelationReport(
       bossModel,
       researchQuestion,
       [specialist],
-      evidence,
+      reportEvidence,
       confidence,
       callbacks.onAnswerToken,
       signal,
