@@ -66,6 +66,10 @@ export interface SwarmOptions {
   // Drug-Interactions focus: route to a single drug-interaction specialist that
   // writes a focused interaction report instead of the general research team.
   drugFocus?: boolean;
+  // Genetics focus: route to the gene-expert specialist that returns a
+  // gene-variant ↔ disease correlation report with an association-confidence
+  // score, after clarifying the query if a gene or disease is missing.
+  geneticsFocus?: boolean;
   // If provided, the paper pipeline pauses after claim extraction so the user
   // can curate claims before drafting begins.
   onClaimLedger?: (ledger: import('./publicationTypes').ClaimLedgerEntry[]) => Promise<import('./publicationTypes').ClaimLedgerEntry[]>;

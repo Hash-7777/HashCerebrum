@@ -19,8 +19,11 @@ import {
   contextualizeQuestion,
   planResearch,
   synthesize,
+  synthesizeGeneCorrelationReport,
   synthesizeInteractionReport,
 } from './boss';
+import { confidenceFromEvidence } from './genetics/associationConfidence';
+import { assessGeneQueryReadiness, clarificationMessage } from './genetics/geneQueryReadiness';
 import {
   detectPaperRequest,
   fallbackPaperTasks,
@@ -407,6 +410,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const mini = opts.mini ?? false;
   const drugFocus = opts.drugFocus ?? false;
+  const geneticsFocus = opts.geneticsFocus ?? false;
   const bossModel = modelFor('boss');
 
   // A follow-up that asks the team to appraise its own previous output ("rate
@@ -476,6 +480,61 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       researchQuestion,
       [specialist],
       evidence,
+      callbacks.onAnswerToken,
+      signal,
+    );
+    return {
+      kind: 'research',
+      answer: report.content,
+      evidence,
+      specialists: [specialist],
+      modelUsed: report.modelUsed,
+    };
+  }
+
+  // Genetics focus: the gene-expert specialist returns a gene-variant ↔ disease
+  // correlation report with an app-computed association-confidence score. Its own
+  // findings feed the shared memory (genetics-tagged) so the Brain benefits,
+  // while the run itself is fed only its genetics-scoped intake.
+  if (geneticsFocus) {
+    // Clarify-before-answer: if the conversation does not yet name both a gene/
+    // variant and a disease, ask for the missing piece instead of guessing.
+    const conversationText = [
+      ...conversation.filter((m) => m.role === 'user').map((m) => m.content),
+      question,
+    ].join('\n');
+    const readiness = assessGeneQueryReadiness(conversationText);
+    if (!readiness.ready) {
+      callbacks.onBossPhase('answering');
+      const message = clarificationMessage(readiness);
+      callbacks.onAnswerToken(message);
+      return { kind: 'chat', answer: message, evidence: [], specialists: [], modelUsed: bossModel };
+    }
+
+    callbacks.onBossPhase('delegating');
+    setMemoryScope('genetics');
+    let specialist: SpecialistResult;
+    try {
+      specialist = await runSpecialist(
+        agentById('genetics'),
+        modelFor('genetics'),
+        researchQuestion,
+        callbacks,
+      );
+    } finally {
+      setMemoryScope(null);
+    }
+    const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    // The percentage is computed deterministically from the structured genetic
+    // records — never by the model.
+    const confidence = confidenceFromEvidence(evidence);
+    callbacks.onBossPhase('synthesizing');
+    const report = await synthesizeGeneCorrelationReport(
+      bossModel,
+      researchQuestion,
+      [specialist],
+      evidence,
+      confidence,
       callbacks.onAnswerToken,
       signal,
     );
