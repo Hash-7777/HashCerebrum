@@ -7,7 +7,9 @@
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { setMemoryScope } from '@core/tools/memoryScope';
-import { retrieve } from '@core/rag';
+import { retrieve, smartRetrieve } from '@core/rag';
+import { createEpisode } from '@core/rag/agentic/episodicMemory';
+import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import type { EvidenceItem } from '@platform/index';
@@ -305,18 +307,25 @@ function mostRecentSubstantialAnswer(conversation: LlmMessage[]): string | null 
 // question and turn them into citable EvidenceItems (source 'library'), so the
 // Brain can cite the specific papers the user added — exactly like an external
 // database record. Gated by the memory toggle; deduped by document+passage.
-async function libraryEvidence(question: string): Promise<EvidenceItem[]> {
+async function libraryEvidence(question: string, model?: string): Promise<{ evidence: EvidenceItem[]; gapNote: string | null }> {
   const memory = useMemorySettingsStore.getState();
   // Needs memory on AND the library toggle on — so a clean from-scratch run, or
   // a run where the user excluded their imported papers, cites neither.
-  if (!memory.enabled || !memory.libraryEnabled) return [];
+  if (!memory.enabled || !memory.libraryEnabled) return { evidence: [], gapNote: null };
   const projectId = useProjectStore.getState().activeProjectId ?? '';
-  if (!projectId) return [];
+  if (!projectId) return { evidence: [], gapNote: null };
   let hits;
+  let gapNote: string | null = null;
   try {
-    hits = await retrieve(question, { activeProjectId: projectId, limit: 8 });
+    if (memory.smartRagEnabled) {
+      const result = await smartRetrieve(question, { activeProjectId: projectId, limit: 8, ...(model ? { model } : {}) });
+      hits = result.hits;
+      gapNote = result.gapNote;
+    } else {
+      hits = await retrieve(question, { activeProjectId: projectId, limit: 8 });
+    }
   } catch {
-    return [];
+    return { evidence: [], gapNote: null };
   }
   const seen = new Set<string>();
   const out: EvidenceItem[] = [];
@@ -341,7 +350,7 @@ async function libraryEvidence(question: string): Promise<EvidenceItem[]> {
       provenanceHash: `library:${chunk.docId}:${chunk.chunkIndex ?? 0}`,
     });
   }
-  return out;
+  return { evidence: out, gapNote };
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
@@ -458,8 +467,15 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // added), de-duplicate, quality-rank, then re-rank by topical relevance to the
   // (context-resolved) question so off-topic records sink or drop out before
   // they can be cited.
-  const fromLibrary = await libraryEvidence(researchQuestion);
+  const { evidence: fromLibrary, gapNote: libraryGapNote } = await libraryEvidence(researchQuestion, bossModel);
   const merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialists), ...fromLibrary]);
+  if (libraryGapNote) {
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'tool_call',
+      detail: libraryGapNote,
+    });
+  }
 
   // Honesty gate: name any requested concept with NO direct supporting record,
   // so the answer states the gap plainly instead of implying depth. Surfaced in
@@ -518,6 +534,24 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       specialists,
       modelUsed: bossModel,
     };
+  }
+
+  // Save episodic memory of this research run
+  const projectId = useProjectStore.getState().activeProjectId ?? '';
+  if (projectId) {
+    const episode = createEpisode({
+      projectId,
+      query: researchQuestion,
+      subQueries: plan.tasks.map((t) => t.subQuery),
+      evidence: citableEvidence,
+      gaps: gap.uncovered,
+      modelUsed: synth.modelUsed,
+      specialists,
+      citedChunks: citableEvidence
+        .map((e) => e.provenanceHash)
+        .filter((h): h is string => !!h),
+    });
+    useLearningStore.getState().addEpisode(episode);
   }
 
   return {

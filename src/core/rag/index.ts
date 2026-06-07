@@ -5,6 +5,7 @@
 import { getEmbeddingProvider } from './embeddings/workerClient';
 import { useRagStore } from './store/ragStore';
 import type { RagSearchHit } from './types';
+export { smartRetrieve, type SmartRetrieveResult, type SmartRetrieveOptions } from './agentic/smartRagOrchestrator';
 
 export type {
   RagChunk,

@@ -4,7 +4,7 @@
 
 import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
-import { retrieve, type RagSearchHit } from '@core/rag';
+import { retrieve, smartRetrieve, type RagSearchHit } from '@core/rag';
 import { tools } from './ToolRegistry';
 import { getMemoryScope } from './memoryScope';
 
@@ -28,9 +28,10 @@ export interface RagSearchToolResult {
   text: string;
 }
 
-function formatHits(hits: RagSearchHit[], activeProjectId: string): string {
+function formatHits(hits: RagSearchHit[], activeProjectId: string, gapNote?: string | null): string {
   if (hits.length === 0) {
-    return 'Project memory: no earlier research matches the query.';
+    const base = 'Project memory: no earlier research matches the query.';
+    return gapNote ? `${base}\n\n${gapNote}` : base;
   }
   const lines = hits.map((hit) => {
     const chunk = hit.chunk;
@@ -39,7 +40,8 @@ function formatHits(hits: RagSearchHit[], activeProjectId: string): string {
     const excerpt = chunk.text.replace(/\s+/g, ' ').trim().slice(0, EXCERPT_CHARS);
     return `- (${tag}${scope}) ${chunk.title} — ${excerpt}`;
   });
-  return `Project memory — ${hits.length} relevant earlier finding(s):\n${lines.join('\n')}`;
+  const base = `Project memory — ${hits.length} relevant earlier finding(s):\n${lines.join('\n')}`;
+  return gapNote ? `${base}\n\n${gapNote}` : base;
 }
 
 export function registerMemoryTools() {
@@ -71,10 +73,18 @@ export function registerMemoryTools() {
       // The Drug-Interactions run scopes retrieval to its own domain so it is
       // only ever fed by its own trusted findings, never other modes'.
       const scope = getMemoryScope();
-      const hits = projectId
-        ? await retrieve(query, { activeProjectId: projectId, limit, ...(scope ? { tag: scope } : {}) })
-        : [];
-      return { source: 'rag', count: hits.length, text: formatHits(hits, projectId) };
+      let hits: RagSearchHit[] = [];
+      let gapNote: string | null = null;
+      if (projectId) {
+        if (useMemorySettingsStore.getState().smartRagEnabled) {
+          const result = await smartRetrieve(query, { activeProjectId: projectId, limit, ...(scope ? { tag: scope } : {}) });
+          hits = result.hits;
+          gapNote = result.gapNote;
+        } else {
+          hits = await retrieve(query, { activeProjectId: projectId, limit, ...(scope ? { tag: scope } : {}) });
+        }
+      }
+      return { source: 'rag', count: hits.length, text: formatHits(hits, projectId, gapNote) };
     },
   });
 }

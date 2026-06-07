@@ -38,6 +38,8 @@ export function Composer({
   const toggleMemory = useMemorySettingsStore((s) => s.toggle);
   const libraryEnabled = useMemorySettingsStore((s) => s.libraryEnabled);
   const toggleLibrary = useMemorySettingsStore((s) => s.toggleLibrary);
+  const smartRagEnabled = useMemorySettingsStore((s) => s.smartRagEnabled);
+  const toggleSmartRag = useMemorySettingsStore((s) => s.toggleSmartRag);
   const miniEnabled = useBrainModesStore((s) => s.mini);
   const toggleMini = useBrainModesStore((s) => s.toggleMini);
   const outlineFirst = useBrainModesStore((s) => s.outlineFirst);
@@ -96,6 +98,21 @@ export function Composer({
         >
           <Icon name="book" size={13} />
           Library
+        </button>
+        <button
+          type="button"
+          className="memory-toggle-chip"
+          data-on={smartRagEnabled}
+          onClick={toggleSmartRag}
+          aria-pressed={smartRagEnabled}
+          title={
+            smartRagEnabled
+              ? 'Smart RAG ON — agentic query planning, coverage checks, claim extraction, conflict detection, and citation traversal. Click for classic search.'
+              : 'Smart RAG OFF — classic hybrid search only. Click for agentic memory retrieval.'
+          }
+        >
+          <Icon name="agent" size={13} />
+          Smart RAG
         </button>
         <button
           type="button"

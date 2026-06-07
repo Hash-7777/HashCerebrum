@@ -7,6 +7,7 @@ import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useRagStore } from '@core/store/ragStore';
+import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { usePeerReviewStore } from '@core/store/peerReviewStore';
 import { warmupEmbeddings } from '@core/rag';
 import { useAgentModelStore } from '@core/store/agentModelStore';
@@ -49,6 +50,7 @@ export function AppShell() {
   const hydrateRag = useRagStore((s) => s.hydrate);
   const hydratePeerReview = usePeerReviewStore((s) => s.hydrate);
   const hydrateAgentModels = useAgentModelStore((s) => s.hydrate);
+  const hydrateLearning = useLearningStore((s) => s.hydrate);
 
   useEffect(() => {
     applyTheme(theme);
@@ -61,6 +63,7 @@ export function AppShell() {
     void hydratePeerReview();
     void warmupEmbeddings(); // begin loading the local embedding model early
     void hydrateAgentModels();
+    void hydrateLearning();
     // Projects must hydrate before chats so legacy chats with no projectId
     // can be adopted into the active project.
     void (async () => {
