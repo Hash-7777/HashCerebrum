@@ -1,31 +1,24 @@
 // Full, must-acknowledge safety disclaimer for the Drug-Interactions checker.
-// Drug-interaction calls are critical clinical decisions, so the first time the
-// mode is opened this gates use behind an explicit acknowledgement; it can be
-// re-opened any time from the panel. Portaled to <body> with a high z-index so
-// it sits above all app chrome.
+// Drug-interaction calls are critical clinical decisions, so the gate must be
+// acknowledged once per app session; it can be re-opened any time from the
+// panel. Portaled to <body> with a high z-index so it sits above all app chrome.
 
 import { createPortal } from 'react-dom';
 import { Icon } from '@ui/icons';
 
-// v2: the v1 gate could fire on app launch (the mode mounts hidden) and may
-// already have been acknowledged there; bumping the key makes it appear fresh
-// on the first real entry into Drug-Interactions mode.
-const ACK_KEY = 'hc.drugInteractions.disclaimerAck.v2';
+// Acknowledgement is intentionally per app SESSION, not permanent. A
+// module-level flag resets every time the app is launched (the JS context
+// reloads), so the gate appears once on the first entry into Drug-Interactions
+// mode and not again until the app is closed and reopened. (It used to persist
+// in localStorage, which is why it stopped appearing after the first ever use.)
+let ackedThisSession = false;
 
 export function hasAckedDiDisclaimer(): boolean {
-  try {
-    return localStorage.getItem(ACK_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return ackedThisSession;
 }
 
 function ackDiDisclaimer(): void {
-  try {
-    localStorage.setItem(ACK_KEY, '1');
-  } catch {
-    /* private mode / storage disabled — the gate simply shows again next time. */
-  }
+  ackedThisSession = true;
 }
 
 const POINTS: Array<{ heading: string; body: string }> = [

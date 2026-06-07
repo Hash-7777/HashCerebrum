@@ -16,9 +16,10 @@ const GRADES: Array<{ grade: string; label: string; detail: string; cls: string 
 ];
 
 export function DrugInteractionPanel() {
-  // Gate first use behind the full disclaimer; allow re-opening it any time.
-  // The panel is mounted (hidden) at app start, so only raise the gate once the
-  // Drug-Interactions mode is actually active — not on launch.
+  // Gate the first entry into Drug-Interactions mode each app session behind the
+  // full disclaimer (the acknowledgement resets on every launch); allow
+  // re-opening it any time. The panel is mounted (hidden) at app start, so only
+  // raise the gate once the Drug-Interactions mode is actually active.
   const isActive = useModeStore((s) => s.mode === 'drug_interactions');
   const [disclaimer, setDisclaimer] = useState<'gate' | 'review' | null>(null);
   useEffect(() => {
