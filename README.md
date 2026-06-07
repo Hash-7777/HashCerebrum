@@ -431,6 +431,15 @@ src-tauri/
     crypto/        SHA-256 helpers
 ```
 
+### By the numbers
+
+| Layer | Files | Lines |
+|-------|-------|-------|
+| React/TypeScript app code (`src/`, excluding tests) | 192 | ~34,993 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 71 | ~6,756 |
+| Rust Tauri backend (`src-tauri/src/`) | 40 | ~5,739 |
+| **Total core source** | **303** | **~47,488** |
+
 ---
 
 ## Lineage — built on HashCortX
