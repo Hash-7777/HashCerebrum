@@ -82,9 +82,11 @@ export function BrainMode({
   const [dataset, setDataset] = useState<UploadedDatasetSummary | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
+  const activeChat = useChatHistoryStore((s) => s.chats.find((c) => c.id === s.activeChatId));
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId));
   const clearActive = useChatHistoryStore((s) => s.clearActive);
+  const exportTitle = activeChat?.title || 'The Cerebrum';
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -672,8 +674,8 @@ export function BrainMode({
               </span>
               {messages.filter((m) => m.role !== 'system').length > 0 && (
                 <span className="chat-export-actions">
-                  <button type="button" onClick={() => exportChatMarkdown(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
-                  <button type="button" onClick={() => void exportChatPdf(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
+                  <button type="button" onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
+                  <button type="button" onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
                   <button
                     type="button"
                     className="chat-clear-btn"
