@@ -6,10 +6,11 @@
 // distinct blobs, and edges are the real cosine nearest-neighbour links.
 // Rendered with React Three Fiber (orbit / zoom / pan + idle auto-rotate).
 
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrbitControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { useWindowActive } from '@ui/hooks/useWindowActive';
 import { getChunkVectors, type RagChunk } from '@core/rag';
 import { Icon } from '@ui/icons';
 import { pca3, type Vec3 } from './pca3';
@@ -281,6 +282,29 @@ function Axes3D() {
   );
 }
 
+// Gentle auto-rotation that conveys depth. Driven on-demand (the canvas is in
+// 'demand' frameloop) only while active AND the window is focused; when the user
+// stops it (perf toggle), focuses a node/cluster, leaves the mode, or
+// backgrounds the app, no frames render and the graph costs no GPU.
+function SceneSpin({ active }: { active: boolean }) {
+  const { scene, invalidate } = useThree();
+  const focused = useWindowActive();
+  useFrame((_, delta) => {
+    if (active && focused) scene.rotation.y += Math.min(delta, 1 / 30) * 0.08;
+  });
+  useEffect(() => {
+    if (!active || !focused) return;
+    let raf = 0;
+    const loop = () => {
+      invalidate();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active, focused, invalidate]);
+  return null;
+}
+
 function Node({
   node,
   color,
@@ -337,17 +361,22 @@ function Node({
 export function MemoryVectorGraph3D({
   chunks,
   onRemove,
+  onDeleteAll,
+  deleteAllCount = 0,
 }: {
   chunks: RagChunk[];
   onRemove: (id: string) => void;
+  onDeleteAll?: () => void;
+  deleteAllCount?: number;
 }) {
   const graph = useMemo(() => buildGraph(chunks), [chunks]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusCluster, setFocusCluster] = useState<number | null>(null);
   const dragging = useRef(false);
-  // The graph is STATIC by default — it rotates only while the user drags it.
-  // When the Memory mode is hidden (another mode is active, the host is
-  // display:none) the canvas is off-screen, so we stop rendering entirely.
+  // The graph auto-rotates by default while it is on screen; a perf toggle stops
+  // it. When the Memory mode is hidden (another mode active → display:none) the
+  // canvas is off-screen, so rendering stops entirely.
+  const [spin, setSpin] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   useEffect(() => {
@@ -403,6 +432,7 @@ export function MemoryVectorGraph3D({
         <fog attach="fog" args={['#070c16', 30, 90]} />
         <ambientLight intensity={0.95} />
         <pointLight position={[6, 8, 10]} intensity={1.2} />
+        <SceneSpin active={spin && visible && focusCluster === null && !selected} />
         <Axes3D />
         <Edges positions={graph.intraPositions} color="#b9c6ee" opacity={focusCluster === null ? 0.5 : 0.18} />
         <Edges positions={graph.interPositions} color="#7180a6" opacity={0.22} />
@@ -442,6 +472,30 @@ export function MemoryVectorGraph3D({
           }}
         />
       </Canvas>
+
+      <div className="memory-vec3d-tools">
+        <button
+          type="button"
+          className="memory-vec3d-perf"
+          aria-pressed={!spin}
+          onClick={() => setSpin((s) => !s)}
+          title={spin ? 'Stop auto-rotation (performance)' : 'Resume auto-rotation'}
+          aria-label={spin ? 'Stop auto-rotation' : 'Resume auto-rotation'}
+        >
+          <Icon name="gauge" size={13} />
+        </button>
+      </div>
+
+      {onDeleteAll && deleteAllCount > 0 && (
+        <button
+          type="button"
+          className="memory-vec3d-deleteall"
+          onClick={onDeleteAll}
+          title="Delete all saved memory in this project"
+        >
+          <Icon name="close" size={12} /> Delete all
+        </button>
+      )}
 
       <div className="memory-vec3d-clusters">
         {graph.clusters.map((cl) => (

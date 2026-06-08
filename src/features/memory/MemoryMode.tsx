@@ -165,6 +165,16 @@ export function MemoryMode() {
     else useToastStore.getState().show('Nothing was pruned', 'info');
   };
 
+  const deleteAll = () => {
+    if (!activeProjectId || activeProjectCount === 0) return;
+    const ok = window.confirm(
+      `Delete all ${activeProjectCount} saved ${
+        activeProjectCount === 1 ? 'finding' : 'findings'
+      } in "${projectName}"? This permanently empties this project's memory and cannot be undone.`,
+    );
+    if (ok) clearProject(activeProjectId);
+  };
+
   const handleUndo = () => {
     const restored = undoLastPrune();
     setUndoCount(null);
@@ -311,23 +321,6 @@ export function MemoryMode() {
             >
               <Icon name="refresh" size={13} /> {pruneComputing ? 'Analyzing…' : 'Prune'}
             </button>
-            <button
-              type="button"
-              className="memory-clear"
-              disabled={activeProjectCount === 0}
-              title="Delete all saved memory in this project"
-              onClick={() => {
-                if (!activeProjectId || activeProjectCount === 0) return;
-                const ok = window.confirm(
-                  `Delete all ${activeProjectCount} saved ${
-                    activeProjectCount === 1 ? 'finding' : 'findings'
-                  } in "${projectName}"? This permanently empties this project's memory and cannot be undone.`,
-                );
-                if (ok) clearProject(activeProjectId);
-              }}
-            >
-              <Icon name="close" size={13} /> Delete all
-            </button>
           </div>
         </header>
 
@@ -383,7 +376,12 @@ export function MemoryMode() {
             </p>
           </div>
         ) : view === 'graph' ? (
-          <MemoryVectorGraph3D chunks={visible} onRemove={removeChunk} />
+          <MemoryVectorGraph3D
+            chunks={visible}
+            onRemove={removeChunk}
+            onDeleteAll={deleteAll}
+            deleteAllCount={activeProjectCount}
+          />
         ) : (
           <div className="memory-list">
             {visible.map((chunk) => (

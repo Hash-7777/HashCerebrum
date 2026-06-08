@@ -1207,3 +1207,57 @@
   cursor: pointer;
 }
 .memory-undo button:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* ── In-graph overlays: perf (stop rotation) toggle + Delete all ── */
+.memory-vec3d-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+.memory-vec3d-perf {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hc-border);
+  border-radius: 8px;
+  background: rgba(3, 7, 12, 0.66);
+  backdrop-filter: blur(10px);
+  color: var(--hc-fg-muted);
+  cursor: pointer;
+  transition: color var(--hc-ease), border-color var(--hc-ease), background var(--hc-ease);
+}
+.memory-vec3d-perf:hover { color: var(--hc-fg); }
+.memory-vec3d-perf[aria-pressed='true'] {
+  color: var(--hc-accent-strong);
+  border-color: var(--hc-accent);
+  background: var(--hc-accent-soft);
+}
+
+.memory-vec3d-deleteall {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 122, 138, 0.3);
+  border-radius: var(--hc-radius-pill);
+  background: rgba(3, 7, 12, 0.66);
+  backdrop-filter: blur(10px);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--hc-ease), border-color var(--hc-ease), background var(--hc-ease);
+}
+.memory-vec3d-deleteall:hover {
+  color: var(--hc-danger);
+  border-color: rgba(255, 122, 138, 0.5);
+  background: rgba(255, 122, 138, 0.12);
+}
