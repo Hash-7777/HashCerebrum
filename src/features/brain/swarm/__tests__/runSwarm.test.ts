@@ -24,8 +24,8 @@ function makeRecord(partial: Partial<EvidenceItem> & { source: EvidenceItem['sou
 
 function makeSpecialist(evidence: EvidenceItem[]): SpecialistResult {
   return {
-    agentId: 'literature',
-    label: 'Literature',
+    agentId: 'evidence_synthesis',
+    label: 'Evidence synthesis',
     subQuery: 'test',
     findings: '',
     evidence,

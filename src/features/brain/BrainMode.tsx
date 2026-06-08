@@ -94,6 +94,8 @@ export function BrainMode({
   const [pendingClaims, setPendingClaims] = useState<ClaimLedgerEntry[] | null>(null);
   const claimLedgerResolve = useRef<((ledger: ClaimLedgerEntry[]) => void) | null>(null);
   const claimLedgerReject = useRef<(() => void) | null>(null);
+  const [draftProgress, setDraftProgress] = useState<string | null>(null);
+  const draftingAssistantId = useRef<string | null>(null);
   const canSubmit = query.trim().length > 0;
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
@@ -384,6 +386,7 @@ export function BrainMode({
           detail: label,
           light: { intensity: 0.88, ttlMs: 2300 },
         });
+        setDraftProgress(label);
         setMessages((current) =>
           current.map((m) =>
             m.id === assistantId ? { ...m, content: `${label}...` } : m,
@@ -392,7 +395,82 @@ export function BrainMode({
       },
     };
 
+    const handlePaperDraftComplete = (result: import('./swarm/types').SwarmResult) => {
+      if (!isMounted.current) return;
+      const draftId = draftingAssistantId.current;
+      if (!draftId) return;
+      const content = result.answer || 'Drafting completed.';
+      setDraftProgress(null);
+      setEvidence(result.evidence);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === draftId
+            ? {
+                ...m,
+                content,
+                modelLabel: labelForModel(result.modelUsed),
+                isStreaming: false,
+                trace: traceEntries,
+                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
+                ...(result.manuscript ? { manuscript: result.manuscript } : {}),
+              }
+            : m,
+        ),
+      );
+      if (result.manuscript) {
+        void notify('Manuscript complete', 'Your research paper is ready for review and export.');
+      }
+      updateAgentStatus('boss', {
+        state: 'done',
+        detail: result.kind === 'research' ? 'synthesis complete' : 'reply complete',
+      });
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'done',
+        detail: `${result.kind} · ${labelForModel(result.modelUsed)}`,
+        light: { intensity: result.kind === 'research' ? 0.74 : 0.52, ttlMs: 1800 },
+      });
+      // Save memory (same logic as the synchronous path)
+      if (result.kind === 'research' && activeProjectId) {
+        const runId = ensureResearchRun();
+        runs.storeEvidence(runId, result.evidence);
+        runs.storeSummary(runId, content, result.modelUsed);
+        const memoryTopic = memoryTopicLabel(cleanQuery);
+        const citableForMemory = citedEvidenceFor(content, result.evidence);
+        if (memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
+          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
+            const strength = classifyEvidenceStrength([item.title, item.snippet ?? ''].join(' '), item.source);
+            return {
+              kind: 'evidence',
+              title: item.title,
+              text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
+              source: item.source,
+              runId,
+              query: memoryTopic,
+              ...(item.url ? { url: item.url } : {}),
+              ...(item.year != null ? { year: item.year } : {}),
+              ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
+              ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
+              ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
+              ...(strength ? { evidenceStrength: strength } : {}),
+            };
+          });
+          const answerChunk: NewRagChunk = {
+            kind: 'answer',
+            title: memoryTopic,
+            text: content,
+            source: 'answer',
+            runId,
+            query: memoryTopic,
+          };
+          useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+        }
+      }
+      setIsRunning(false);
+    };
+
     try {
+      draftingAssistantId.current = assistantId;
       const result = await runSwarm({
         question: cleanQuery,
         conversation,
@@ -410,7 +488,22 @@ export function BrainMode({
             setPendingClaims(ledger);
             setClaimLedgerOpen(true);
           }),
+        onPaperDraftComplete: handlePaperDraftComplete,
       });
+
+      // If the pipeline is drafting in the background, keep the UI alive
+      // and do NOT run the synchronous completion logic below.
+      if (result.kind === 'drafting') {
+        if (!isMounted.current) return;
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: result.answer, isStreaming: false }
+              : m,
+          ),
+        );
+        return;
+      }
 
       flushTopicHits(result.answer || streamedContent);
       const finalContent =
@@ -671,6 +764,7 @@ export function BrainMode({
               <span className="chat-meta-line">
                 <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
                 {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
+                {draftProgress && <><span className="dot-sep">·</span><span className="draft-progress">{draftProgress}</span></>}
               </span>
               {messages.filter((m) => m.role !== 'system').length > 0 && (
                 <span className="chat-export-actions">

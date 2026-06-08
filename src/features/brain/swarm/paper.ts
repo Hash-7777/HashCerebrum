@@ -130,16 +130,12 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
   const topic = titleTopic(question) || question;
   const tasks: SpecialistTask[] = [
     {
-      agentId: 'literature',
-      subQuery: `${topic} — systematic review and meta-analysis evidence`,
+      agentId: 'evidence_synthesis',
+      subQuery: `${topic} — systematic review, meta-analysis, and observational evidence`,
     },
     {
-      agentId: 'trials',
-      subQuery: `${topic} — randomized controlled trial, cohort, and registered studies`,
-    },
-    {
-      agentId: 'data_scientist',
-      subQuery: `${topic} — controlled trials reporting clinical outcomes, adherence, and effect sizes`,
+      agentId: 'clinical_research',
+      subQuery: `${topic} — randomized controlled trial, cohort, registry, and statistical outcomes`,
     },
   ];
 
@@ -157,17 +153,10 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
     });
   }
 
-  if (/\b(dental|dentistry|oral|periodontal|teeth|gum)\b/i.test(question)) {
+  if (/\b(gene|variant|SNP|rsID|allele|genotype|polymorphism|mutation|GWAS|ClinVar|heritability|pharmacogenomics)\b/i.test(question)) {
     tasks.push({
-      agentId: 'dentistry',
-      subQuery: `${topic} — dental and oral-health evidence`,
-    });
-  }
-
-  if (/\b(epidemiolog|public health|population|prevention|vaccine|screening|incidence|prevalence|risk factor|burden|outbreak)\b/i.test(question)) {
-    tasks.push({
-      agentId: 'public_health',
-      subQuery: `${topic} — epidemiology, population impact, hospitalization, and prevention`,
+      agentId: 'genetics',
+      subQuery: `${topic} — gene-disease associations, pharmacogenomics, and variant evidence`,
     });
   }
   return tasks;

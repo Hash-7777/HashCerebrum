@@ -146,8 +146,8 @@ or
   } catch {
     /* fall through to a safe default */
   }
-  // Safe default: research the question through the literature specialist.
-  return { mode: 'research', tasks: [{ agentId: 'literature', subQuery: question }] };
+  // Safe default: research the question through the evidence-synthesis specialist.
+  return { mode: 'research', tasks: [{ agentId: 'evidence_synthesis', subQuery: question }] };
 }
 
 // Critical appraisal of a document the team already produced — used when the

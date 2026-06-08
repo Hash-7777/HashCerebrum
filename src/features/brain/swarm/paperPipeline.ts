@@ -30,9 +30,9 @@ const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
 const SECTION_TOKENS = 5800;
 // Brain Mini drafts shorter sections so a small / free model finishes quickly.
 const MINI_SECTION_TOKENS = 1600;
-const MAX_SECTION_PASSES = 4;
+const MAX_SECTION_PASSES = 2;
 const MAX_QA_REPAIR_SECTIONS = 4;
-const MAX_QA_REPAIR_PASSES = 2;
+const MAX_QA_REPAIR_PASSES = 1;
 /** When true, the pipeline allows export even with residual repairable blockers
  *  after all repair passes are exhausted — the manuscript is flagged with a
  *  prominent warning rather than being hard-blocked. This prevents free-tier
@@ -1099,6 +1099,10 @@ function callSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callModel(
   model: string,
   system: string,
@@ -1318,8 +1322,11 @@ async function compileSections(opts: {
       ];
     }
 
+    // Skip expansion if the initial draft already failed — don't burn calls
+    // on a section that is guaranteed to stay a stub.
+    const draftFailed = body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG);
     let passes = 1;
-    while (bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
+    while (!draftFailed && bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
       opts.onStage?.(`${blueprintSection.heading} expansion ${passes}`);
       try {
         body = await draftLedgerSection({
@@ -1341,6 +1348,10 @@ async function compileSections(opts: {
       passes += 1;
     }
     sections.push({ heading: blueprintSection.heading, body });
+    // Inter-call delay to avoid rate-limit hits on providers with per-minute quotas.
+    if (!opts.mini) {
+      await delay(500);
+    }
   }
   return sections;
 }
@@ -1411,20 +1422,7 @@ function safePublicationArtifact(
   }
 }
 
-export async function compileManuscriptFromLedger(opts: {
-  question: string;
-  bossModel: string;
-  specialists: SpecialistResult[];
-  evidence: EvidenceItem[];
-  evidenceExtractions: EvidenceExtraction[];
-  claimLedger: ClaimLedgerEntry[];
-  paperBlueprint: PaperBlueprint;
-  standard?: ManuscriptStandard;
-  dataset?: UploadedDatasetSummary | null;
-  onStage?: (stage: string) => void;
-  evidenceGap?: string;
-  mini?: boolean;
-}): Promise<Manuscript> {
+export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promise<Manuscript> {
   opts.onStage?.('Drafting');
   let sections = await compileSections({
     question: opts.question,
@@ -1531,7 +1529,25 @@ export async function compileManuscriptFromLedger(opts: {
   return manuscript;
 }
 
-export async function runPaperPipeline(opts: {
+export interface PaperLedgerPrep {
+  question: string;
+  bossModel: string;
+  evidence: EvidenceItem[];
+  specialists: SpecialistResult[];
+  evidenceExtractions: EvidenceExtraction[];
+  claimLedger: ClaimLedgerEntry[];
+  paperBlueprint: PaperBlueprint;
+  overrideTitle?: string | undefined;
+  standard?: ManuscriptStandard | undefined;
+  dataset?: UploadedDatasetSummary | null | undefined;
+  evidenceGap?: string | undefined;
+  mini?: boolean | undefined;
+  onStage?: ((stage: string) => void) | undefined;
+}
+
+/** Blocking phase: title generation, evidence extraction, claim ledger build,
+ *  and optional user claim-review. Returns everything needed for drafting. */
+export async function preparePaperLedger(opts: {
   question: string;
   bossModel: string;
   evidence: EvidenceItem[];
@@ -1541,10 +1557,8 @@ export async function runPaperPipeline(opts: {
   onStage?: (stage: string) => void;
   evidenceGap?: string;
   mini?: boolean;
-  /** If provided, the pipeline pauses after building the claim ledger and
-   *  awaits the callback, allowing the user to curate claims before drafting. */
   onClaimLedger?: (ledger: ClaimLedgerEntry[]) => Promise<ClaimLedgerEntry[]>;
-}): Promise<Manuscript> {
+}): Promise<PaperLedgerPrep> {
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
   opts.onStage?.('Title');
@@ -1584,18 +1598,37 @@ export async function runPaperPipeline(opts: {
     claimLedger = await opts.onClaimLedger(claimLedger);
   }
   const paperBlueprint = buildPaperBlueprint(opts.question, claimLedger, overrideTitle, opts.mini ?? false);
-  return compileManuscriptFromLedger({
+  return {
     question: opts.question,
     bossModel: opts.bossModel,
-    specialists: opts.specialists,
     evidence: opts.evidence,
+    specialists: opts.specialists,
     evidenceExtractions,
     claimLedger,
     paperBlueprint,
+    overrideTitle,
     ...(opts.standard ? { standard: opts.standard } : {}),
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     mini: opts.mini ?? false,
-    ...(opts.onStage ? { onStage: opts.onStage } : {}),
-  });
+    onStage: opts.onStage,
+  };
+}
+
+export async function runPaperPipeline(opts: {
+  question: string;
+  bossModel: string;
+  evidence: EvidenceItem[];
+  specialists: SpecialistResult[];
+  standard?: ManuscriptStandard;
+  dataset?: UploadedDatasetSummary | null;
+  onStage?: (stage: string) => void;
+  evidenceGap?: string;
+  mini?: boolean;
+  /** If provided, the pipeline pauses after building the claim ledger and
+   *  awaits the callback, allowing the user to curate claims before drafting. */
+  onClaimLedger?: (ledger: ClaimLedgerEntry[]) => Promise<ClaimLedgerEntry[]>;
+}): Promise<Manuscript> {
+  const prep = await preparePaperLedger(opts);
+  return compileManuscriptFromLedger(prep);
 }

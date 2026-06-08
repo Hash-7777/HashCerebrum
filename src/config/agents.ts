@@ -1,5 +1,5 @@
-// Agent roster — an eight-slot tuple: one boss plus seven topic specialists.
-// TypeScript enforces the cap (a ninth entry is a compile error). The
+// Agent roster — a six-slot tuple: one boss plus five topic specialists.
+// TypeScript enforces the cap (a seventh entry is a compile error). The
 // boss is the single agent the user talks to; it routes each message and
 // delegates research to the relevant specialists, then synthesizes.
 
@@ -8,15 +8,12 @@ import type { MAX_AGENTS } from './constants';
 export type AgentId =
   | 'boss'
   | 'pharmacology'
-  | 'trials'
-  | 'literature'
-  | 'dentistry'
-  | 'public_health'
   | 'drug_interactions'
-  | 'data_scientist'
+  | 'clinical_research'
+  | 'evidence_synthesis'
   | 'genetics';
 
-// Maps to anatomical regions in modes/brain/regions.ts. Each agent claims
+// Maps to anatomical regions in features/brain/data/regions.ts. Each agent claims
 // one base region for its glow. Topic detection adds accents.
 export type RegionId =
   | 'frontal'
@@ -92,42 +89,6 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     regionBinding: 'basal_ganglia', // neurochemistry
   },
   {
-    id: 'trials',
-    label: 'Clinical trials',
-    kind: 'specialist',
-    specialty: 'Registered clinical trials, study cohorts, and trial outcomes.',
-    topicHint: 'clinical trials, study design, cohorts, interventions, trial results',
-    tools: SPECIALIST_TOOLS,
-    regionBinding: 'parietal', // integration
-  },
-  {
-    id: 'literature',
-    label: 'Literature & evidence',
-    kind: 'specialist',
-    specialty: 'Peer-reviewed literature, systematic reviews, and evidence synthesis.',
-    topicHint: 'published research, reviews, mechanisms, diagnosis, general medicine',
-    tools: SPECIALIST_TOOLS,
-    regionBinding: 'hippocampus', // memory / recall
-  },
-  {
-    id: 'dentistry',
-    label: 'Dentistry',
-    kind: 'specialist',
-    specialty: 'Oral health, dental conditions, and dental treatment evidence.',
-    topicHint: 'teeth, gums, oral health, dental procedures, periodontics, orthodontics',
-    tools: SPECIALIST_TOOLS,
-    regionBinding: 'temporal', // sensory context
-  },
-  {
-    id: 'public_health',
-    label: 'Public health',
-    kind: 'specialist',
-    specialty: 'Epidemiology, prevention, vaccination, and population health.',
-    topicHint: 'epidemiology, prevention, vaccines, screening, population health, outbreaks',
-    tools: SPECIALIST_TOOLS,
-    regionBinding: 'occipital', // wide-field overview
-  },
-  {
     id: 'drug_interactions',
     label: 'Drug interactions',
     kind: 'specialist',
@@ -139,15 +100,26 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     regionBinding: 'amygdala', // threat and alarm processing
   },
   {
-    id: 'data_scientist',
-    label: 'Statistics & data',
+    id: 'clinical_research',
+    label: 'Clinical research',
     kind: 'specialist',
     specialty:
-      'Published statistical analyses, effect sizes, confidence intervals, sample sizes, and quantitative figures from clinical and epidemiological literature.',
+      'Registered clinical trials, study cohorts, trial outcomes, statistical analyses, effect sizes, confidence intervals, and quantitative figures from clinical and epidemiological literature.',
     topicHint:
-      'statistics, data analysis, effect sizes, confidence intervals, p-values, sample size, hazard ratios, meta-analysis, figures, tables, quantitative results',
+      'clinical trials, study design, cohorts, interventions, trial results, statistics, data analysis, effect sizes, confidence intervals, p-values, sample size, hazard ratios, meta-analysis, figures, tables, quantitative results',
     tools: SPECIALIST_TOOLS,
-    regionBinding: 'thalamus', // data relay and integration
+    regionBinding: 'parietal', // integration
+  },
+  {
+    id: 'evidence_synthesis',
+    label: 'Evidence synthesis',
+    kind: 'specialist',
+    specialty:
+      'Peer-reviewed literature, systematic reviews, evidence synthesis, epidemiology, prevention, vaccination, population health, and oral health.',
+    topicHint:
+      'published research, reviews, mechanisms, diagnosis, general medicine, epidemiology, prevention, vaccines, screening, population health, outbreaks, teeth, gums, oral health, dental procedures, periodontics, orthodontics',
+    tools: SPECIALIST_TOOLS,
+    regionBinding: 'hippocampus', // memory / recall
   },
   {
     id: 'genetics',

@@ -320,10 +320,10 @@ describe('buildChatMarkdownExport', () => {
         trace: [
           { agent: 'boss', phase: 'routing', detail: 'routing message' },
           { agent: 'boss', phase: 'delegating', detail: 'delegating to specialists' },
-          { agent: 'literature', phase: 'start', detail: 'metformin insulin sensitivity' },
-          { agent: 'literature', phase: 'tool_call', detail: 'pubmed_search' },
-          { agent: 'literature', phase: 'tool_result', detail: 'pubmed_search: 12' },
-          { agent: 'literature', phase: 'done', detail: '12 records' },
+          { agent: 'evidence_synthesis', phase: 'start', detail: 'metformin insulin sensitivity' },
+          { agent: 'evidence_synthesis', phase: 'tool_call', detail: 'pubmed_search' },
+          { agent: 'evidence_synthesis', phase: 'tool_result', detail: 'pubmed_search: 12' },
+          { agent: 'evidence_synthesis', phase: 'done', detail: '12 records' },
           { agent: 'boss', phase: 'synthesizing', detail: 'synthesizing specialist findings' },
         ],
       },
@@ -331,9 +331,9 @@ describe('buildChatMarkdownExport', () => {
     const md = buildChatMarkdownExport(messages, meta);
     expect(md).toContain('### Execution Trace');
     expect(md).toContain('- **boss** · routing — routing message');
-    expect(md).toContain('- **literature** · start — metformin insulin sensitivity');
-    expect(md).toContain('- **literature** · tool_result — pubmed_search: 12');
-    expect(md).toContain('- **literature** · done — 12 records');
+    expect(md).toContain('- **evidence_synthesis** · start — metformin insulin sensitivity');
+    expect(md).toContain('- **evidence_synthesis** · tool_result — pubmed_search: 12');
+    expect(md).toContain('- **evidence_synthesis** · done — 12 records');
     expect(md).toContain('- **boss** · synthesizing — synthesizing specialist findings');
   });
 

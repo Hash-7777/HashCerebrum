@@ -72,7 +72,7 @@ describe('brainStore lighting decay', () => {
 
   it('lights an agent bound region and thalamus from activity events', () => {
     bus.emit('agent:activity', {
-      agentId: 'literature',
+      agentId: 'evidence_synthesis',
       phase: 'tool_call',
       detail: 'PubMed',
       light: { intensity: 0.8, ttlMs: 1600 },

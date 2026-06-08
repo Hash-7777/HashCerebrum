@@ -88,9 +88,8 @@ describe('paper request helpers', () => {
     const tasks = fallbackPaperTasks('make a full research paper about NSAIDs and warfarin');
 
     expect(tasks.map((task) => task.agentId)).toEqual([
-      'literature',
-      'trials',
-      'data_scientist',
+      'evidence_synthesis',
+      'clinical_research',
       'pharmacology',
       'drug_interactions',
     ]);

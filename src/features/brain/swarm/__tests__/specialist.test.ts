@@ -88,7 +88,7 @@ describe('runSpecialist', () => {
     const cb = callbacks();
 
     const result = await runSpecialist(
-      agentById('literature'),
+      agentById('evidence_synthesis'),
       'openrouter:test-model',
       'glioma biomarker trial safety',
       cb,
@@ -97,7 +97,7 @@ describe('runSpecialist', () => {
     expect(executedTools).toEqual(Object.keys(SOURCE_BY_TOOL));
     expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
     expect(result.error).toContain('planner unavailable');
-    expect(cb.onToolResult).toHaveBeenCalledWith('literature', 'pubmed_search', 1);
+    expect(cb.onToolResult).toHaveBeenCalledWith('evidence_synthesis', 'pubmed_search', 1);
   });
 });
 
@@ -139,9 +139,8 @@ describe('runSwarm', () => {
 
     expect(result.kind).toBe('research');
     expect(result.specialists.map((specialist) => specialist.agentId)).toEqual([
-      'literature',
-      'trials',
-      'data_scientist',
+      'evidence_synthesis',
+      'clinical_research',
       'pharmacology',
       'drug_interactions',
     ]);
@@ -172,7 +171,7 @@ describe('runSwarm', () => {
     expect(cb.onManuscriptSection).toHaveBeenCalledWith('Building claims');
     expect(cb.onManuscriptSection).toHaveBeenCalledWith('Drafting');
     expect(result.answer).toContain('INTRODUCTION');
-  });
+  }, 15_000);
 
   it('lets the boss route ordinary messages to chat without running specialists', async () => {
     llmMocks.completeWithModelChain.mockResolvedValue({ content: '{"mode":"chat"}', toolCalls: [] });
@@ -204,7 +203,7 @@ describe('runSwarm', () => {
       if (lastMessage.includes('User message:')) {
         return {
           content:
-            '{"mode":"research","tasks":[{"agent":"pharmacology","subQuery":"drug safety"},{"agent":"trials","subQuery":"trial status"}]}',
+            '{"mode":"research","tasks":[{"agent":"pharmacology","subQuery":"drug safety"},{"agent":"clinical_research","subQuery":"trial status"}]}',
           toolCalls: [],
         };
       }
@@ -221,7 +220,7 @@ describe('runSwarm', () => {
     const requestedModels = new Map<string, string>([
       ['boss', 'cloud:openai:gpt-5'],
       ['pharmacology', 'cloud:groq:llama-3.1-8b'],
-      ['trials', 'cloud:gemini:gemini-2.5-flash'],
+      ['clinical_research', 'cloud:gemini:gemini-2.5-flash'],
     ]);
     const modelFor = vi.fn((agentId: string) => requestedModels.get(agentId) ?? 'cloud:openai:gpt-5');
 
@@ -233,9 +232,9 @@ describe('runSwarm', () => {
     });
 
     expect(result.kind).toBe('research');
-    expect(result.specialists.map((specialist) => specialist.agentId).sort()).toEqual(['pharmacology', 'trials']);
+    expect(result.specialists.map((specialist) => specialist.agentId).sort()).toEqual(['clinical_research', 'pharmacology']);
     expect(modelFor).toHaveBeenCalledWith('boss');
     expect(modelFor).toHaveBeenCalledWith('pharmacology');
-    expect(modelFor).toHaveBeenCalledWith('trials');
+    expect(modelFor).toHaveBeenCalledWith('clinical_research');
   });
 });

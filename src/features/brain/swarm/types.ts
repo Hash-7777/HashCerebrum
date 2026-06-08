@@ -38,7 +38,7 @@ export interface SwarmCallbacks {
 }
 
 export interface SwarmResult {
-  kind: 'chat' | 'research';
+  kind: 'chat' | 'research' | 'drafting';
   answer: string;
   evidence: EvidenceItem[];
   specialists: SpecialistResult[];
@@ -73,4 +73,7 @@ export interface SwarmOptions {
   // If provided, the paper pipeline pauses after claim extraction so the user
   // can curate claims before drafting begins.
   onClaimLedger?: (ledger: import('./publicationTypes').ClaimLedgerEntry[]) => Promise<import('./publicationTypes').ClaimLedgerEntry[]>;
+  // Called when a background paper draft completes. The SwarmResult will have
+  // kind 'research' and a manuscript. Only used when the pipeline runs async.
+  onPaperDraftComplete?: (result: SwarmResult) => void;
 }

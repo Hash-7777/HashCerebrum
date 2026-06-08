@@ -1470,3 +1470,11 @@
 }
 .gene-disclaimer-text svg { flex: none; margin-top: 1px; color: #e6b65f; }
 .gene-disclaimer-text strong { color: var(--text-1); font-weight: 700; }
+
+/* ── Background drafting progress indicator ── */
+.draft-progress {
+  color: var(--accent, #4f8cff);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}

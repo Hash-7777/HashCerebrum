@@ -38,7 +38,7 @@ import {
 import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
 import { normalizeMedicalSpelling } from './queryNormalize';
-import { CONTEXT_ONLY_SOURCES, runPaperPipeline } from './paperPipeline';
+import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
 import { runSpecialist } from './specialist';
 import type { SpecialistResult, SpecialistTask, SwarmOptions, SwarmResult } from './types';
 
@@ -683,7 +683,8 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // Full-paper requests are drafted section by section into a structured
   // manuscript from a source-backed evidence extraction and claim ledger.
   if (paperRequest) {
-    const manuscript = await runPaperPipeline({
+    // Phase 1: blocking preparation (title, extraction, claims, user review)
+    const prep = await preparePaperLedger({
       question: researchQuestion,
       bossModel,
       evidence: merged,
@@ -695,6 +696,41 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
       ...(opts.onClaimLedger ? { onClaimLedger: opts.onClaimLedger } : {}),
     });
+
+    // Phase 2: async drafting so the UI frees immediately after claim review.
+    if (opts.onPaperDraftComplete) {
+      // Fire-and-forget: drafting continues in the background.
+      compileManuscriptFromLedger(prep)
+        .then((manuscript) => {
+          opts.onPaperDraftComplete!({
+            kind: 'research',
+            answer: manuscriptToReadableText(manuscript),
+            evidence: merged,
+            specialists,
+            manuscript,
+            modelUsed: bossModel,
+          });
+        })
+        .catch((error) => {
+          opts.onPaperDraftComplete!({
+            kind: 'research',
+            answer: `Drafting failed: ${error instanceof Error ? error.message : String(error)}`,
+            evidence: merged,
+            specialists,
+            modelUsed: bossModel,
+          });
+        });
+      return {
+        kind: 'drafting',
+        answer: 'Drafting manuscript in the background…',
+        evidence: merged,
+        specialists,
+        modelUsed: bossModel,
+      };
+    }
+
+    // Fallback: old blocking behaviour when no async callback is provided.
+    const manuscript = await compileManuscriptFromLedger(prep);
     return {
       kind: 'research',
       answer: manuscriptToReadableText(manuscript),
