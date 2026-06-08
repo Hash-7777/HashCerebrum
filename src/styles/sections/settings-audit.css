@@ -78,7 +78,7 @@
   padding: 10px 12px;
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius);
-  background: rgba(11, 17, 26, 0.55);
+  background: var(--hc-bg-card);
 }
 
 /* ── Disclaimer & Terms of Use ───────────────────────────────── */
@@ -88,7 +88,7 @@
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, #d97706 28%, var(--hc-border));
   border-radius: var(--hc-radius);
-  background: color-mix(in srgb, #d97706 5%, rgba(11, 17, 26, 0.55));
+  background: color-mix(in srgb, #d97706 5%, var(--hc-bg-card));
 }
 .settings-disclaimer header strong {
   display: inline-flex;
@@ -132,7 +132,7 @@
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--hc-danger) 38%, var(--hc-border));
   border-radius: var(--hc-radius);
-  background: color-mix(in srgb, var(--hc-danger) 7%, rgba(11, 17, 26, 0.55));
+  background: color-mix(in srgb, var(--hc-danger) 7%, var(--hc-bg-card));
 }
 .settings-danger header strong {
   display: inline-flex;
@@ -180,7 +180,7 @@
   border-color: color-mix(in srgb, var(--accent) 26%, var(--hc-border));
   background:
     linear-gradient(color-mix(in srgb, var(--accent) 6%, transparent), transparent),
-    rgba(11, 17, 26, 0.55);
+    var(--hc-bg-card);
 }
 .settings-privacy header {
   display: flex;
@@ -283,9 +283,9 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius-sm);
-  background: rgba(11, 17, 26, 0.42);
+  background: var(--hc-bg-card);
 }
 .settings-model-tools span {
   color: var(--hc-fg-muted);
@@ -700,7 +700,7 @@
   padding: 10px 12px;
   border: 1px solid var(--hc-border);
   border-radius: var(--hc-radius);
-  background: rgba(11, 17, 26, 0.55);
+  background: var(--hc-bg-card);
 }
 .settings-theme header {
   display: flex;

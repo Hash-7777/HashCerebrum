@@ -79,6 +79,9 @@
   --hc-bg-elev-2:       var(--ink-4);
   --hc-bg-glass:        rgba(22, 24, 30, 0.62);
   --hc-bg-glass-strong: rgba(15, 16, 20, 0.84);
+  /* Recessed card surface inside glass panels — theme-aware so dark text on the
+     light Parchment theme stays readable (overridden in that block). */
+  --hc-bg-card:         rgba(11, 17, 26, 0.55);
 
   --hc-border:        var(--line);
   --hc-border-strong: var(--line-strong);
@@ -234,5 +237,13 @@
   --shadow-lg: 0 18px 48px rgba(60, 40, 20, 0.12), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   --hc-bg-glass:        rgba(237, 229, 210, 0.72);
   --hc-bg-glass-strong: rgba(244, 239, 228, 0.92);
+  --hc-bg-card:         rgba(255, 255, 255, 0.5);
+  /* Semantic accents are hardcoded for the dark themes in :root; on the light
+     Parchment surface those bright tints fail contrast, so darken them here. */
+  --hc-secondary:      #3d4eb0;
+  --hc-secondary-soft: rgba(61, 78, 176, 0.14);
+  --hc-success:        #2f7a55;
+  --hc-info:           #225f9e;
+  --hc-glow-indigo:    0 0 24px rgba(61, 78, 176, 0.22);
   color-scheme: light;
 }
