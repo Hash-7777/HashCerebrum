@@ -8,6 +8,7 @@
 // button covers the rare "view live" case.
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { platform } from '@platform/index';
 import type { AuditEntry } from '@core/bus/events';
 import { Icon } from '@ui/icons';
@@ -60,7 +61,10 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     void refresh(page);
   }, [page]);
 
-  return (
+  // Portal to <body> so the fixed-position overlay is anchored to the viewport,
+  // not to the (transformed/scrolled) Settings panel it is opened from —
+  // otherwise it renders inside Settings and is only reachable by scrolling up.
+  return createPortal(
     <div className="audit-modal-backdrop" role="dialog" aria-modal="true" aria-label="Audit log">
       <aside className="audit-modal">
         <header>
@@ -163,6 +167,7 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           </>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
