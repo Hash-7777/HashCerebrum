@@ -24,10 +24,10 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<LoadState>({ state: 'idle' });
   const [page, setPage] = useState(0);
 
-  const refresh = async () => {
+  const refresh = async (p = page) => {
     setLoad({ state: 'loading' });
     try {
-      const offset = page * PAGE_SIZE;
+      const offset = p * PAGE_SIZE;
       const [entries, total, brokenSeq] = await Promise.all([
         platform().audit.read({ offset, limit: PAGE_SIZE }),
         platform().audit.count(),
@@ -39,8 +39,25 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const resetLog = async () => {
+    const ok = window.confirm(
+      'Reset the audit log?\n\nThis clears every recorded entry and starts a fresh hash chain. ' +
+        'Past activity history is removed permanently; actions are logged again from now on. ' +
+        'Use this to retire a legacy chain so verification reads intact.',
+    );
+    if (!ok) return;
+    setLoad({ state: 'loading' });
+    try {
+      await platform().audit.reset();
+      setPage(0);
+      await refresh(0);
+    } catch (error) {
+      setLoad({ state: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
   useEffect(() => {
-    void refresh();
+    void refresh(page);
   }, [page]);
 
   return (
@@ -56,6 +73,14 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
           <div className="audit-actions">
             <button type="button" onClick={() => void refresh()} aria-label="Refresh audit log">
               <Icon name="pulse" size={13} /> Refresh
+            </button>
+            <button
+              type="button"
+              className="audit-reset"
+              onClick={() => void resetLog()}
+              aria-label="Reset audit log"
+            >
+              <Icon name="refresh" size={13} /> Reset log
             </button>
             <button type="button" className="icon-button" onClick={onClose} aria-label="Close audit log">
               <Icon name="close" size={14} />

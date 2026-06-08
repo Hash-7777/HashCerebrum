@@ -33,7 +33,9 @@ mod telemetry;
 use tauri::Manager;
 
 use commands::{
-    audit::{audit_log_count, audit_log_read, audit_log_read_page, audit_log_verify},
+    audit::{
+        audit_log_count, audit_log_read, audit_log_read_page, audit_log_reset, audit_log_verify,
+    },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     files::write_file_bytes,
     keychain::{keychain_delete, keychain_retrieve, keychain_store},
@@ -102,6 +104,7 @@ pub fn run() {
             audit_log_read_page,
             audit_log_count,
             audit_log_verify,
+            audit_log_reset,
             net_get,
             net_get_bytes,
             llm_http_get,

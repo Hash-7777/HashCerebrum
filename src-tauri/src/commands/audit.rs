@@ -23,3 +23,10 @@ pub async fn audit_log_count() -> AppResult<u64> {
 pub async fn audit_log_verify() -> AppResult<Option<u64>> {
     store::verify()
 }
+
+/// Clear the audit log to a fresh chain. Used to retire a legacy chain (older
+/// hash format or the encrypted build) so verification reads intact again.
+#[tauri::command]
+pub async fn audit_log_reset() -> AppResult<()> {
+    store::reset()
+}

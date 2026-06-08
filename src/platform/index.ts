@@ -70,6 +70,7 @@ export interface Platform {
     read(options?: { offset?: number; limit?: number }): Promise<AuditEntry[]>;
     count(): Promise<number>;
     verify(): Promise<number | null>; // returns broken seq or null if intact
+    reset(): Promise<void>; // clear the log to a fresh chain
   };
 
   // Medical sources

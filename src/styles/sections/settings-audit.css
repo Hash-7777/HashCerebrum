@@ -377,6 +377,11 @@
   cursor: pointer;
 }
 .audit-actions button:hover { color: var(--hc-fg); border-color: var(--hc-border-accent); background: var(--hc-accent-soft); }
+.audit-actions .audit-reset:hover {
+  color: var(--hc-danger);
+  border-color: var(--hc-danger);
+  background: color-mix(in srgb, var(--hc-danger) 12%, transparent);
+}
 .audit-status {
   display: inline-flex;
   align-items: center;

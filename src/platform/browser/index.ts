@@ -90,6 +90,7 @@ export const browserPlatform: Platform = {
     read: async () => [],
     count: async () => 0,
     verify: async () => null,
+    reset: async () => {},
   },
   medical: {
     pubmed: async () => mocked('pubmed', 'Mock PubMed literature result'),

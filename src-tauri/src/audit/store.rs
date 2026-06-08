@@ -1,5 +1,7 @@
-//! SQLite-backed audit log. Append-only by convention — no per-entry
-//! DELETE/UPDATE anywhere in the codebase.
+//! SQLite-backed audit log. Append-only for individual entries — the only
+//! bulk mutations are retention pruning (drops a contiguous prefix of the
+//! oldest rows) and the explicit `reset()` (clears the log to a fresh chain).
+//! No code edits an entry in place.
 //!
 //! Storage model:
 //!   - Entries are stored in plain text on the local machine (app-data dir).
@@ -21,6 +23,12 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 static DB: Mutex<Option<Connection>> = Mutex::new(None);
+
+/// Retention cap. After each append the oldest rows beyond this many are
+/// pruned so the log cannot grow without bound. ~5000 metadata rows is a few
+/// MB at most; the surviving tail stays internally chained, and `verify()`
+/// anchors on the new head, so pruning never reports a false break.
+const MAX_ENTRIES: u64 = 5000;
 
 fn audit_path(app: &AppHandle) -> AppResult<PathBuf> {
     let dir = app
@@ -189,9 +197,46 @@ fn append_conn(
         ],
     )?;
 
+    prune_to(&tx, MAX_ENTRIES)?;
+
     tx.commit()
         .map_err(|e| AppError::Audit(format!("transaction commit: {e}")))?;
     Ok(entry)
+}
+
+/// Keep only the most recent `keep` rows, dropping the oldest contiguous
+/// prefix. A no-op when the log holds `keep` rows or fewer (the OFFSET subquery
+/// yields no seq, and `seq <= NULL` matches nothing).
+fn prune_to(conn: &Connection, keep: u64) -> AppResult<()> {
+    conn.execute(
+        "DELETE FROM audit WHERE seq <= (
+            SELECT seq FROM audit ORDER BY seq DESC LIMIT 1 OFFSET ?1
+         )",
+        params![keep],
+    )?;
+    Ok(())
+}
+
+/// Clear the log to a fresh chain. The next append re-seeds from GENESIS, so
+/// `verify()` reports intact. Used to retire a legacy chain (e.g. entries
+/// written under an older hash format or the encrypted build) on user request.
+pub fn reset() -> AppResult<()> {
+    let mut guard = DB
+        .lock()
+        .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+    let conn = guard
+        .as_mut()
+        .ok_or(AppError::Audit("not initialized".into()))?;
+    reset_conn(conn)
+}
+
+fn reset_conn(conn: &Connection) -> AppResult<()> {
+    conn.execute_batch(
+        "DELETE FROM audit;
+         DELETE FROM sqlite_sequence WHERE name = 'audit';",
+    )
+    .map_err(|e| AppError::Audit(format!("reset failed: {e}")))?;
+    Ok(())
 }
 
 pub fn read_all() -> AppResult<Vec<AuditEntry>> {
@@ -427,5 +472,43 @@ mod tests {
         let mut entries = read_all_conn(&conn).unwrap();
         entries[1].subject = "tampered.example.com".into();
         assert_eq!(verify_entries(&entries), Some(entries[1].seq));
+    }
+
+    #[test]
+    fn prune_keeps_newest_rows_and_tail_verifies() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for i in 0..6 {
+            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
+                .unwrap();
+        }
+        prune_to(&conn, 3).unwrap();
+        let tail = read_all_conn(&conn).unwrap();
+        assert_eq!(tail.len(), 3);
+        assert_eq!(tail.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![4, 5, 6]);
+        assert_eq!(verify_entries(&tail), None);
+        // Pruning below the row count is a no-op.
+        prune_to(&conn, 10).unwrap();
+        assert_eq!(read_all_conn(&conn).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn reset_clears_to_a_fresh_chain() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for i in 0..4 {
+            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
+                .unwrap();
+        }
+        reset_conn(&conn).unwrap();
+        assert!(read_all_conn(&conn).unwrap().is_empty());
+        // The next append re-seeds from GENESIS at seq 1, and the chain verifies.
+        append_conn(&mut conn, "net", "fresh.example.com", "get", &serde_json::Value::Null)
+            .unwrap();
+        let entries = read_all_conn(&conn).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].seq, 1);
+        assert_eq!(entries[0].prev_hash, GENESIS_HASH);
+        assert_eq!(verify_entries(&entries), None);
     }
 }

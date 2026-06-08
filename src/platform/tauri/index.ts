@@ -92,6 +92,7 @@ export const tauriPlatform: Platform = {
         : invoke<AuditEntry[]>('audit_log_read'),
     count: () => invoke<number>('audit_log_count'),
     verify: () => invoke<number | null>('audit_log_verify'),
+    reset: () => invoke<void>('audit_log_reset'),
   },
 
   medical: {
