@@ -3,12 +3,14 @@ import ReactDOM from 'react-dom/client';
 import { AppShell } from '@ui/shell/AppShell';
 import { BootSplash } from '@ui/shell/BootSplash';
 import { RootErrorBoundary } from '@ui/errors/RootErrorBoundary';
+import { ErrorOverlay } from '@ui/errors/ErrorConsole';
 import { setPlatform } from '@platform/index';
 import { revealWindow } from '@platform/revealWindow';
 import { tauriPlatform } from '@platform/tauri';
 import { browserPlatform } from '@platform/browser';
 import { registerMedicalTools } from '@core/tools/medical';
 import { registerMemoryTools } from '@core/tools/memory';
+import { installErrorCapture } from '@core/store/errorLogStore';
 // Self-hosted fonts — served from node_modules by Vite, no external network
 // requests. Replaces the Google Fonts <link> that the Tauri CSP was blocking
 // (font-src 'self' data: does not cover fonts.gstatic.com).
@@ -48,6 +50,7 @@ declare global {
 // under the desktop shell. In `vite dev` (browser) we fall back to mock.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 setPlatform(isTauri ? tauriPlatform : browserPlatform);
+installErrorCapture();
 registerMedicalTools();
 registerMemoryTools();
 
@@ -59,6 +62,7 @@ function Root() {
   return (
     <>
       <AppShell />
+      <ErrorOverlay />
       {!entered && <BootSplash onEnter={() => setEntered(true)} />}
     </>
   );

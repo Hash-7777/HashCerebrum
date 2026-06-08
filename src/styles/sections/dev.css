@@ -1,0 +1,148 @@
+/* Developer diagnostics — runtime error console (Settings → Dev) and the
+   opt-in floating overlay. Theme-aware via tokens. */
+
+.dev-errors {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius);
+  background: var(--hc-bg-card);
+}
+.dev-errors > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dev-errors-count {
+  font: 600 11px var(--hc-font-mono);
+  padding: 1px 8px;
+  border-radius: var(--hc-radius-pill);
+  color: var(--accent-ink);
+  background: var(--hc-danger);
+}
+.dev-errors-count[data-empty='true'] {
+  color: var(--hc-fg-muted);
+  background: var(--hc-bg-elev);
+}
+.dev-errors-actions { display: flex; gap: 6px; }
+.dev-errors-actions button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  color: var(--hc-fg-muted);
+  background: var(--hc-bg-elev);
+  font-size: 11px;
+}
+.dev-errors-actions button:hover:not(:disabled) { color: var(--hc-fg); border-color: var(--hc-border-accent); }
+.dev-errors-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.dev-errors-empty { color: var(--hc-fg-muted); font: 12px var(--hc-font-mono); margin: 2px 0 0; }
+
+.dev-errors-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+.dev-errors-list li {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--hc-border);
+  border-left: 2px solid var(--hc-danger);
+  border-radius: var(--hc-radius-sm);
+  background: var(--hc-bg-elev);
+}
+.dev-errors-list li[data-source='console'] { border-left-color: var(--hc-warn); }
+.dev-errors-list li[data-source='promise'] { border-left-color: var(--hc-info); }
+.dev-error-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dev-error-source {
+  font: 600 9.5px var(--hc-font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hc-fg-muted);
+}
+.dev-error-head time { font: 10px var(--hc-font-mono); color: var(--hc-fg-dim); }
+.dev-error-msg { margin: 0; font: 12px var(--hc-font-mono); color: var(--hc-fg); word-break: break-word; }
+.dev-error-stack {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--hc-radius-sm);
+  background: color-mix(in srgb, var(--hc-fg) 6%, transparent);
+  font: 10px var(--hc-font-mono);
+  color: var(--hc-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+}
+
+/* ── Floating overlay ─────────────────────────────────────────── */
+.dev-overlay {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.dev-overlay-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--hc-radius-pill);
+  border: 1px solid var(--hc-border-strong);
+  background: var(--hc-bg-glass-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--hc-fg-muted);
+  font: 600 12px var(--hc-font-mono);
+  box-shadow: var(--hc-shadow-2);
+}
+.dev-overlay-badge[data-has='true'] { color: var(--hc-danger); border-color: var(--hc-danger); }
+.dev-overlay-panel {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(60vh, 520px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--hc-border-strong);
+  border-radius: var(--hc-radius);
+  background: var(--hc-bg-glass-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--hc-shadow-3);
+}
+.dev-overlay-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dev-overlay-panel > header strong { font: 600 12px var(--hc-font-mono); color: var(--hc-fg); }
+.dev-overlay-panel > header > div { display: inline-flex; gap: 6px; align-items: center; }
+.dev-overlay-panel > header button:not(.icon-button) {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  color: var(--hc-fg-muted);
+  font-size: 11px;
+}
+.dev-overlay-panel > header button:not(.icon-button):hover:not(:disabled) { color: var(--hc-fg); border-color: var(--hc-border-accent); }
+.dev-overlay-panel .dev-errors-list { max-height: none; flex: 1 1 auto; min-height: 0; }

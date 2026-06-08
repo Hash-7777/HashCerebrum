@@ -15,6 +15,7 @@ import { resetAllData } from '@core/store/resetData';
 import { Icon, type IconName } from '@ui/icons';
 import { AgentModelSettings } from './AgentModelSettings';
 import { AuditModal } from './AuditModal';
+import { ErrorConsole } from '@ui/errors/ErrorConsole';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -540,6 +541,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             </ul>
           </section>
         )}
+
+        {tab === 'dev' && <ErrorConsole />}
       </div>
 
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
