@@ -426,10 +426,20 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         ensure_schema(&conn).unwrap();
 
-        let hosts = ["clinicaltrials.gov", "eutils.ncbi.nlm.nih.gov", "www.ebi.ac.uk"];
+        let hosts = [
+            "clinicaltrials.gov",
+            "eutils.ncbi.nlm.nih.gov",
+            "www.ebi.ac.uk",
+        ];
         for host in hosts {
-            append_conn(&mut conn, "net", host, "get", &serde_json::json!({ "host": host }))
-                .unwrap();
+            append_conn(
+                &mut conn,
+                "net",
+                host,
+                "get",
+                &serde_json::json!({ "host": host }),
+            )
+            .unwrap();
         }
 
         let entries = read_all_conn(&conn).unwrap();
@@ -448,11 +458,18 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         ensure_schema(&conn).unwrap();
         for i in 0..5 {
-            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
-                .unwrap();
+            append_conn(
+                &mut conn,
+                "net",
+                &format!("host{i}"),
+                "get",
+                &serde_json::Value::Null,
+            )
+            .unwrap();
         }
         // Drop the genesis-rooted prefix, mimicking retention pruning.
-        conn.execute("DELETE FROM audit WHERE seq <= 2", []).unwrap();
+        conn.execute("DELETE FROM audit WHERE seq <= 2", [])
+            .unwrap();
 
         let tail = read_all_conn(&conn).unwrap();
         assert_eq!(tail.len(), 3);
@@ -466,8 +483,14 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         ensure_schema(&conn).unwrap();
         for i in 0..3 {
-            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
-                .unwrap();
+            append_conn(
+                &mut conn,
+                "net",
+                &format!("host{i}"),
+                "get",
+                &serde_json::Value::Null,
+            )
+            .unwrap();
         }
         let mut entries = read_all_conn(&conn).unwrap();
         entries[1].subject = "tampered.example.com".into();
@@ -479,13 +502,22 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         ensure_schema(&conn).unwrap();
         for i in 0..6 {
-            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
-                .unwrap();
+            append_conn(
+                &mut conn,
+                "net",
+                &format!("host{i}"),
+                "get",
+                &serde_json::Value::Null,
+            )
+            .unwrap();
         }
         prune_to(&conn, 3).unwrap();
         let tail = read_all_conn(&conn).unwrap();
         assert_eq!(tail.len(), 3);
-        assert_eq!(tail.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![4, 5, 6]);
+        assert_eq!(
+            tail.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![4, 5, 6]
+        );
         assert_eq!(verify_entries(&tail), None);
         // Pruning below the row count is a no-op.
         prune_to(&conn, 10).unwrap();
@@ -497,14 +529,26 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         ensure_schema(&conn).unwrap();
         for i in 0..4 {
-            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
-                .unwrap();
+            append_conn(
+                &mut conn,
+                "net",
+                &format!("host{i}"),
+                "get",
+                &serde_json::Value::Null,
+            )
+            .unwrap();
         }
         reset_conn(&conn).unwrap();
         assert!(read_all_conn(&conn).unwrap().is_empty());
         // The next append re-seeds from GENESIS at seq 1, and the chain verifies.
-        append_conn(&mut conn, "net", "fresh.example.com", "get", &serde_json::Value::Null)
-            .unwrap();
+        append_conn(
+            &mut conn,
+            "net",
+            "fresh.example.com",
+            "get",
+            &serde_json::Value::Null,
+        )
+        .unwrap();
         let entries = read_all_conn(&conn).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].seq, 1);
