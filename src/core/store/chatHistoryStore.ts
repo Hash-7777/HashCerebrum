@@ -66,6 +66,7 @@ interface ChatHistoryStore {
   selectChat: (id: string) => void;
   renameChat: (id: string, title: string) => void;
   saveActive: (messages: ChatMessage[], mode?: ChatMode) => void;
+  clearActive: () => void;
   deleteChat: (id: string) => void;
   deleteChatsForProject: (projectId: string) => void;
 }
@@ -193,6 +194,15 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       return { chats, activeChatId };
     });
   },
+
+  clearActive: () =>
+    set((state) => {
+      // Remove any empty draft that was the active chat so it doesn't clutter
+      // the rail, then clear the selection.
+      const chats = state.chats.filter((c) => c.id !== state.activeChatId || c.messages.length > 0);
+      persist(chats);
+      return { chats, activeChatId: null };
+    }),
 
   deleteChat: (id) =>
     set((state) => {

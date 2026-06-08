@@ -29,7 +29,9 @@ import { assessGeneQueryReadiness, clarificationMessage } from './genetics/geneQ
 import {
   detectPaperRequest,
   fallbackPaperTasks,
+  isJailbreakAttempt,
   isMetaOrAppQuestion,
+  isOffTopicQuestion,
   isPriorWorkReviewRequest,
   manuscriptStandardForQuestion,
 } from './paper';
@@ -173,9 +175,7 @@ export function conceptCoverage(record: EvidenceItem, groups: string[][]): numbe
 // concepts. Returns the concepts that NO retrieved record addresses — the
 // honest gaps. These are surfaced to the user and named for the drafting model
 // so the output states the gap plainly instead of implying depth that the
-// sources do not support. Only a PARTIAL gap is flagged (some concepts covered,
-// some not): that is the dangerous case where a paper looks complete while
-// silently missing a core entity. A total miss is left to the low-evidence floor.
+// sources do not support.
 export function assessEvidenceSufficiency(
   question: string,
   evidence: EvidenceItem[],
@@ -191,7 +191,19 @@ export function assessEvidenceSufficiency(
       return !present;
     })
     .map((group) => group[0]!);
-  if (uncovered.length === 0 || uncovered.length === groups.length) return { uncovered, note: null };
+  if (uncovered.length === 0) return { uncovered, note: null };
+  // TOTAL MISS: none of the question's concepts appear in the evidence.
+  // This happens when the query is off-topic or the databases have nothing
+  // relevant. Refuse synthesis rather than hallucinating a manuscript from
+  // unrelated records.
+  if (uncovered.length === groups.length) {
+    const note =
+      `The retrieved records contain NO evidence related to the requested topic ` +
+      `(${uncovered.slice(0, 4).join(', ')}${uncovered.length > 4 ? '…' : ''}). ` +
+      `State plainly that the databases returned no relevant sources and do NOT synthesise an answer.`;
+    return { uncovered, note };
+  }
+  // PARTIAL gap: some concepts covered, some missing.
   const note =
     `The retrieved records contain NO direct evidence for the following requested concept(s): ` +
     `${uncovered.join(', ')}. State this gap explicitly and early, attribute it to the absence of ` +
@@ -460,6 +472,25 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // instead of launching the research swarm, which turned them into refusals
   // rendered as "Research result · N references" documents.
   if (isMetaOrAppQuestion(question)) {
+    callbacks.onBossPhase('answering');
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
+  }
+
+  // Jailbreak / roleplay / translation-bypass / token-smuggling / reverse-
+  // psychology attempts must NEVER reach the research swarm. Route to chat
+  // mode where the hardened system prompt refuses them cleanly.
+  if (isJailbreakAttempt(question)) {
+    callbacks.onBossPhase('answering');
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
+  }
+
+  // Off-topic questions disguised as medical requests (e.g. "evaluate the
+  // psychological themes of historical figures...Napoleon at Waterloo") should
+  // not launch a research swarm that retrieves unrelated evidence and writes a
+  // bogus manuscript. Route to chat with a refusal.
+  if (isOffTopicQuestion(question)) {
     callbacks.onBossPhase('answering');
     const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };

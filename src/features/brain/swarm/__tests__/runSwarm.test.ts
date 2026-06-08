@@ -237,10 +237,14 @@ describe('assessEvidenceSufficiency', () => {
     expect(assessEvidenceSufficiency(q, evidence).note).toBeNull();
   });
 
-  it('returns no note when the retrieval missed everything (handled by the floor)', () => {
+  it('returns a strong note when the retrieval missed everything (total miss)', () => {
     const evidence = [titled('Unrelated cardiology review', 'beta blockers in heart failure')];
-    // Every concept uncovered → total miss, left to the low-evidence floor.
-    expect(assessEvidenceSufficiency(q, evidence).note).toBeNull();
+    // Every concept uncovered → total miss. The new behavior flags this so the
+    // pipeline can refuse synthesis rather than hallucinating a manuscript from
+    // unrelated records.
+    const result = assessEvidenceSufficiency(q, evidence);
+    expect(result.note).not.toBeNull();
+    expect(result.note).toContain('NO evidence related to the requested topic');
   });
 
   it('treats anticoagulant as a drug class — NOAC/warfarin records cover it (no false gap)', () => {

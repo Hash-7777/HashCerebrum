@@ -54,10 +54,30 @@ export function isPriorWorkReviewRequest(question: string): boolean {
 // run through the research swarm, which turned them into refusals dressed up as
 // "Research result · N references" documents.
 const META_QUESTION_RX =
-  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack)|ignore\s+(any|all|the|previous|prior|your)?\s*(prompts?|instructions?|rules?)|disregard\s+(your|the|any|all|previous)|reveal\s+your|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+used\s+in\s+code|prompt\s+injection|jail\s?break)\b/i;
+  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack|database|endpoint|pipeline|data\s+flow)|ignore\s+(any|all|the|previous|prior|your)?\s*(prompts?|instructions?|rules?)|disregard\s+(your|the|any|all|previous)|reveal\s+(your|the)|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+(used|key|endpoint|stored|names?)|prompt\s+injection|jail\s?break|debug\s+mode|administrator\s+override|hospital\s+engineering\s+board|emergency\s+code|failure\s+to\s+display|backend\s+code)\b/i;
 
 export function isMetaOrAppQuestion(question: string): boolean {
   return META_QUESTION_RX.test(question);
+}
+
+// Jailbreak / roleplay / translation-bypass / token-smuggling / reverse-psychology
+// patterns that must NEVER reach the research swarm. Answered in plain chat with
+// a firm refusal so they cannot be dressed up as evidence reviews.
+const JAILBREAK_RX =
+  /\b(act\s+as|in\s+character|play\s+(?:as|a|the)|pretend\s+(?:to\s+be|you\s+are)|you\s+are\s+now|roleplay|fictional\s+game|text-based\s+game|translate.*(?:execute|run|perform)|exécute|traduis.*exécute|forget\s+(?:all|any)\s+(?:medical\s+)?rules?|bypass\s+(?:your|the|any|all|standard|patient)\s+(?:disclaimer|rules?|guardrails?|safeguard|limitation)|hack\s+(?:into|a|the)|word\s+game|combine\s+(?:the\s+)?letters?|spell\s+out|token\s+smuggl|do\s+not\s+(?:list|tell|reveal|share|show|provide)|to\s+avoid.*repeat\s+(?:them|it|back)|what\s+you\s+are\s+avoiding|red-team|security\s+attack|penetration\s+test|exploit|malware|virus|worm|ransomware)\b/i;
+
+export function isJailbreakAttempt(question: string): boolean {
+  return JAILBREAK_RX.test(question);
+}
+
+// Off-topic detector: questions that are clearly not biomedical research even
+// when wrapped in medical language. These should be handled in chat mode with a
+// polite refusal rather than launching a research swarm that retrieves garbage.
+const OFF_TOPIC_RX =
+  /\b(Napoleon|Waterloo|military\s+(?:strategy|tactic|breakdown|history)|battle\s+of|ancient\s+Rome|World\s+War|Cold\s+War|political\s+(?:party|leader|campaign|election)|stock\s+market|crypto\s+currency|bitcoin|football|soccer|basketball|NBA|FIFA|Olympics\s+(?!medical|health|doping)|movie\s+review|celebrity\s+gossip|travel\s+guide|cooking\s+recipe|car\s+repair|programming\s+tutorial)\b/i;
+
+export function isOffTopicQuestion(question: string): boolean {
+  return OFF_TOPIC_RX.test(question);
 }
 
 // Typo-tolerant fallback: a creation verb plus a document noun anywhere in the

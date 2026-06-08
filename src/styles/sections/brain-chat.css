@@ -126,6 +126,10 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+.chat-export-actions .chat-clear-btn:hover {
+  color: var(--danger, #e07070);
+  border-color: var(--danger, #e07070);
+}
 
 .lede {
   font-family: var(--f-display);

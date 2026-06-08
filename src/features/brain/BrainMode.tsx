@@ -84,6 +84,7 @@ export function BrainMode({
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId));
+  const clearActive = useChatHistoryStore((s) => s.clearActive);
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -661,6 +662,19 @@ export function BrainMode({
                 <span className="chat-export-actions">
                   <button type="button" onClick={() => exportChatMarkdown(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
                   <button type="button" onClick={() => void exportChatPdf(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
+                  <button
+                    type="button"
+                    className="chat-clear-btn"
+                    onClick={() => {
+                      clearActive();
+                      setMessages([WELCOME_MESSAGE]);
+                      setDataset(null);
+                      setEvidence([]);
+                    }}
+                    title="Clear workspace"
+                  >
+                    Clear
+                  </button>
                 </span>
               )}
               {evidence.length > 0 && (
