@@ -1,25 +1,26 @@
-//! SQLite-backed audit log. Append-only by convention — no DELETE/UPDATE
-//! statements anywhere in the codebase. Any code that *adds* one fails review.
+//! SQLite-backed audit log. Append-only by convention — no per-entry
+//! DELETE/UPDATE anywhere in the codebase.
 //!
-//! Encryption at rest (Phase 49.5):
-//!   - Sensitive fields (category, subject, action, data_hash, payload) are
-//!     encrypted with AES-256-GCM before storage.
-//!   - The encryption key lives in the OS keychain and is retrieved/generated
-//!     once at app startup.
-//!   - Chain-verification fields (seq, ts, prev_hash, entry_hash) remain
-//!     plaintext so tamper detection still works without the key.
-//!   - Old entries without enc_data remain readable via plaintext fallback.
+//! Storage model:
+//!   - Entries are stored in plain text on the local machine (app-data dir).
+//!     The log only ever holds activity metadata — category, subject (host /
+//!     provider / key name), action, a one-way SHA-256 of the payload, plus the
+//!     chain fields (seq, ts, prev_hash, entry_hash). It never stores API keys
+//!     or the content of queries/answers, so there is nothing secret at rest.
+//!   - The hash chain makes the log *tamper-evident* (any edit, reorder, or
+//!     deletion breaks `verify()`), not *tamper-proof* — the hash is unkeyed,
+//!     so it is not encrypted and requires no OS keychain access.
+//!   - The legacy `enc_data` column is retained so databases written by the
+//!     short-lived encrypted-at-rest build still open; it is no longer written.
 
 use crate::audit::chain::{AuditEntry, GENESIS_HASH};
-use crate::crypto::encrypt;
 use crate::error::{AppError, AppResult};
 use rusqlite::{params, Connection};
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 static DB: Mutex<Option<Connection>> = Mutex::new(None);
-static ENC_KEY: OnceLock<[u8; 32]> = OnceLock::new();
 
 fn audit_path(app: &AppHandle) -> AppResult<PathBuf> {
     let dir = app
@@ -44,10 +45,6 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
         tracing::error!(result = %integrity, "audit database integrity check failed");
         return Err(AppError::Audit(format!("integrity check: {integrity}")));
     }
-
-    let key = encrypt::get_or_create_key()
-        .map_err(|e| AppError::Audit(format!("encryption key init: {e}")))?;
-    let _ = ENC_KEY.set(key);
 
     let mut guard = DB
         .lock()
@@ -113,68 +110,22 @@ fn ensure_schema(conn: &Connection) -> AppResult<()> {
     Ok(())
 }
 
-/// Bundle of sensitive fields encrypted as a single blob.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct EncBundle {
-    category: String,
-    subject: String,
-    action: String,
-    data_hash: String,
-    payload: String,
-}
-
-fn encrypt_bundle(
-    category: &str,
-    subject: &str,
-    action: &str,
-    data_hash: &str,
-    payload: &serde_json::Value,
-) -> Option<Vec<u8>> {
-    let key = ENC_KEY.get()?;
-    let bundle = EncBundle {
-        category: category.to_string(),
-        subject: subject.to_string(),
-        action: action.to_string(),
-        data_hash: data_hash.to_string(),
-        payload: payload.to_string(),
-    };
-    let plaintext = serde_json::to_vec(&bundle).ok()?;
-    Some(encrypt::encrypt(&plaintext, key))
-}
-
-fn decrypt_bundle(blob: Option<Vec<u8>>) -> Option<EncBundle> {
-    let blob = blob?;
-    let key = ENC_KEY.get()?;
-    let plaintext = encrypt::decrypt(&blob, key)?;
-    serde_json::from_slice(&plaintext).ok()
-}
-
-/// Build an AuditEntry from a database row, decrypting enc_data when present.
+/// Build an AuditEntry from a plaintext database row.
+///
+/// Rows written by the short-lived encrypted build stored their sensitive
+/// fields only inside `enc_data`, leaving these columns blank; such rows read
+/// back with empty category/subject/action.
 fn row_to_entry(r: &rusqlite::Row) -> rusqlite::Result<AuditEntry> {
     let ts: String = r.get(1)?;
-    let enc_data: Option<Vec<u8>> = r.get(8)?;
-
-    let (category, subject, action, data_hash) = if let Some(bundle) = decrypt_bundle(enc_data) {
-        (
-            bundle.category,
-            bundle.subject,
-            bundle.action,
-            bundle.data_hash,
-        )
-    } else {
-        // Fallback: plaintext columns (old entries or decryption failure)
-        (r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)
-    };
-
     Ok(AuditEntry {
         seq: r.get(0)?,
         ts: chrono::DateTime::parse_from_rfc3339(&ts)
             .map_err(|_| rusqlite::Error::InvalidQuery)?
             .with_timezone(&chrono::Utc),
-        category,
-        subject,
-        action,
-        data_hash,
+        category: r.get(2)?,
+        subject: r.get(3)?,
+        action: r.get(4)?,
+        data_hash: r.get(5)?,
         prev_hash: r.get(6)?,
         entry_hash: r.get(7)?,
     })
@@ -192,7 +143,18 @@ pub(crate) fn append(
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
+    append_conn(conn, category, subject, action, payload)
+}
 
+/// Append against an explicit connection. Public path locks the global DB and
+/// delegates here; tests drive it against an in-memory connection.
+fn append_conn(
+    conn: &mut Connection,
+    category: &str,
+    subject: &str,
+    action: &str,
+    payload: &serde_json::Value,
+) -> AppResult<AuditEntry> {
     let tx = conn
         .transaction()
         .map_err(|e| AppError::Audit(format!("transaction begin: {e}")))?;
@@ -212,30 +174,21 @@ pub(crate) fn append(
     };
 
     let entry = AuditEntry::new(prev_seq + 1, category, subject, action, payload, prev_hash);
-    let enc_data = encrypt_bundle(
-        &entry.category,
-        &entry.subject,
-        &entry.action,
-        &entry.data_hash,
-        payload,
-    );
 
     tx.execute(
-        "INSERT INTO audit (ts, category, subject, action, data_hash, prev_hash, entry_hash, enc_data)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO audit (ts, category, subject, action, data_hash, prev_hash, entry_hash)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             entry.ts.to_rfc3339(),
-            // Store empty strings in plaintext columns for new encrypted entries.
-            // Old entries keep their plaintext values for backward compatibility.
-            if enc_data.is_some() { "" } else { &entry.category },
-            if enc_data.is_some() { "" } else { &entry.subject },
-            if enc_data.is_some() { "" } else { &entry.action },
-            if enc_data.is_some() { "" } else { &entry.data_hash },
+            entry.category,
+            entry.subject,
+            entry.action,
+            entry.data_hash,
             entry.prev_hash,
             entry.entry_hash,
-            enc_data,
         ],
     )?;
+
     tx.commit()
         .map_err(|e| AppError::Audit(format!("transaction commit: {e}")))?;
     Ok(entry)
@@ -248,8 +201,12 @@ pub fn read_all() -> AppResult<Vec<AuditEntry>> {
     let conn = guard
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
+    read_all_conn(conn)
+}
+
+fn read_all_conn(conn: &Connection) -> AppResult<Vec<AuditEntry>> {
     let mut stmt = conn.prepare(
-        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash, enc_data
+        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash
          FROM audit ORDER BY seq ASC",
     )?;
     let rows = stmt
@@ -281,7 +238,7 @@ pub fn read_page(offset: u64, limit: u64) -> AppResult<Vec<AuditEntry>> {
         .ok_or(AppError::Audit("not initialized".into()))?;
     let limit = limit.clamp(1, 500);
     let mut stmt = conn.prepare(
-        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash, enc_data
+        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash
          FROM audit ORDER BY seq ASC LIMIT ?1 OFFSET ?2",
     )?;
     let rows = stmt
@@ -301,7 +258,7 @@ pub fn read_recent(limit: u64) -> AppResult<Vec<AuditEntry>> {
         .as_mut()
         .ok_or(AppError::Audit("not initialized".into()))?;
     let mut stmt = conn.prepare(
-        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash, enc_data
+        "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash
          FROM (SELECT * FROM audit ORDER BY seq DESC LIMIT ?1)
          ORDER BY seq ASC",
     )?;
@@ -313,27 +270,38 @@ pub fn read_recent(limit: u64) -> AppResult<Vec<AuditEntry>> {
 
 /// Returns the sequence number of the first broken entry, or None if intact.
 pub fn verify() -> AppResult<Option<u64>> {
-    let entries = read_all()?;
-    let mut prev = GENESIS_HASH.to_string();
-    for e in &entries {
+    Ok(verify_entries(&read_all()?))
+}
+
+/// Pure chain check over an ordered slice. Each entry's hash is recomputed from
+/// its own stored `prev_hash`, and consecutive entries must link
+/// (`entry[i].prev_hash == entry[i-1].entry_hash`). The first entry is the
+/// trust anchor: its `prev_hash` is accepted as-is (GENESIS for a full chain,
+/// or the pruned predecessor's hash for a retained tail), so retention never
+/// reports a false break.
+fn verify_entries(entries: &[AuditEntry]) -> Option<u64> {
+    let mut expected_prev: Option<&str> = None;
+    for e in entries {
+        if let Some(prev) = expected_prev {
+            if e.prev_hash != prev {
+                return Some(e.seq);
+            }
+        }
         let recomputed = AuditEntry::compute_entry_hash(
             e.seq,
-            &prev,
+            &e.prev_hash,
             &e.ts,
             &e.category,
             &e.subject,
             &e.action,
             &e.data_hash,
         );
-        if e.prev_hash != prev {
-            return Ok(Some(e.seq));
-        }
         if recomputed != e.entry_hash {
-            return Ok(Some(e.seq));
+            return Some(e.seq);
         }
-        prev = e.entry_hash.clone();
+        expected_prev = Some(&e.entry_hash);
     }
-    Ok(None)
+    None
 }
 
 pub fn connection() -> AppResult<std::sync::MutexGuard<'static, Option<Connection>>> {
@@ -400,5 +368,64 @@ mod tests {
         // A second call must not error (column already present).
         ensure_schema(&conn).unwrap();
         assert!(conn.prepare("SELECT enc_data FROM audit").is_ok());
+    }
+
+    // Full store -> read -> verify round-trip through a real connection. This is
+    // the cover the previous tests lacked: chain.rs's recompute test reused the
+    // in-memory entry and never went through SQLite, so a divergence between
+    // what `append` writes (timestamp serialization, hash inputs) and what
+    // `verify` recomputes — exactly the failure that surfaced as
+    // "chain broken at seq 1" — went undetected.
+    #[test]
+    fn append_read_verify_round_trip_is_intact() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+
+        let hosts = ["clinicaltrials.gov", "eutils.ncbi.nlm.nih.gov", "www.ebi.ac.uk"];
+        for host in hosts {
+            append_conn(&mut conn, "net", host, "get", &serde_json::json!({ "host": host }))
+                .unwrap();
+        }
+
+        let entries = read_all_conn(&conn).unwrap();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].prev_hash, GENESIS_HASH);
+        assert_eq!(entries[1].prev_hash, entries[0].entry_hash);
+        // The chain a fresh plaintext log produces must verify clean.
+        assert_eq!(verify_entries(&entries), None);
+    }
+
+    // A retained tail (oldest rows pruned) no longer starts at GENESIS, but its
+    // surviving entries still link to one another. verify() must anchor on the
+    // first surviving entry rather than report a false break at seq 1.
+    #[test]
+    fn verify_anchors_on_first_surviving_entry_after_pruning() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for i in 0..5 {
+            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
+                .unwrap();
+        }
+        // Drop the genesis-rooted prefix, mimicking retention pruning.
+        conn.execute("DELETE FROM audit WHERE seq <= 2", []).unwrap();
+
+        let tail = read_all_conn(&conn).unwrap();
+        assert_eq!(tail.len(), 3);
+        assert_ne!(tail[0].prev_hash, GENESIS_HASH);
+        assert_eq!(verify_entries(&tail), None);
+    }
+
+    // Sanity: a tampered field must break verification at that entry.
+    #[test]
+    fn verify_detects_tampered_entry() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for i in 0..3 {
+            append_conn(&mut conn, "net", &format!("host{i}"), "get", &serde_json::Value::Null)
+                .unwrap();
+        }
+        let mut entries = read_all_conn(&conn).unwrap();
+        entries[1].subject = "tampered.example.com".into();
+        assert_eq!(verify_entries(&entries), Some(entries[1].seq));
     }
 }
