@@ -6,7 +6,15 @@ import jsPDF from 'jspdf';
 import type { ReviewedPaper } from '@core/store/peerReviewStore';
 import { REVIEW_SWARM_AGENTS } from './reviewSwarm';
 
-const ACCENT_R = 130, ACCENT_G = 224, ACCENT_B = 194; // #82e0c2
+// Light document palette — readable, print-friendly, high contrast. The mint
+// brand colour (#82e0c2) is too pale on white, so headings/accents use a deep
+// teal; body text is near-black.
+const ACCENT_R = 26, ACCENT_G = 122, ACCENT_B = 99; // #1a7a63 deep teal
+const INK_R = 38, INK_G = 38, INK_B = 46;           // body text
+const MUTED_R = 110, MUTED_G = 112, MUTED_B = 120;  // meta / footer
+const GREEN_R = 31, GREEN_G = 116, GREEN_B = 80;    // strengths / high score
+const AMBER_R = 173, AMBER_G = 116, AMBER_B = 28;   // mid score
+const RED_R = 192, RED_G = 57, RED_B = 43;          // weaknesses / low score
 const PAGE_W = 210;
 const PAGE_H = 297;
 const ML = 18, MR = 18;
@@ -46,7 +54,7 @@ function heading(doc: jsPDF, text: string, y: number): number {
 function paragraph(doc: jsPDF, text: string, y: number): number {
   doc.setFontSize(FONT_NORMAL);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(220, 220, 225);
+  doc.setTextColor(INK_R, INK_G, INK_B);
   const lines = doc.splitTextToSize(text, CONTENT_W) as string[];
   for (const line of lines) {
     y = checkPage(doc, y, LINE_H);
@@ -59,13 +67,13 @@ function paragraph(doc: jsPDF, text: string, y: number): number {
 function bulletList(doc: jsPDF, items: string[], y: number): number {
   doc.setFontSize(FONT_NORMAL);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(210, 215, 220);
+  doc.setTextColor(INK_R, INK_G, INK_B);
   for (const item of items) {
     y = checkPage(doc, y, LINE_H * 2);
     const lines = doc.splitTextToSize(item, CONTENT_W - 6) as string[];
     doc.setTextColor(ACCENT_R, ACCENT_G, ACCENT_B);
     doc.text('–', ML, y);
-    doc.setTextColor(210, 215, 220);
+    doc.setTextColor(INK_R, INK_G, INK_B);
     doc.text(lines[0] ?? '', ML + 5, y);
     y += LINE_H;
     for (let i = 1; i < lines.length; i++) {
@@ -78,9 +86,9 @@ function bulletList(doc: jsPDF, items: string[], y: number): number {
 }
 
 function scoreBox(doc: jsPDF, score: number, x: number, y: number) {
-  const [tr, tg, tb] = score >= 8 ? [ACCENT_R, ACCENT_G, ACCENT_B]
-    : score >= 5 ? [232, 178, 106]
-    : [232, 122, 122];
+  const [tr, tg, tb] = score >= 8 ? [GREEN_R, GREEN_G, GREEN_B]
+    : score >= 5 ? [AMBER_R, AMBER_G, AMBER_B]
+    : [RED_R, RED_G, RED_B];
   doc.setDrawColor(tr!, tg!, tb!);
   doc.setLineWidth(1.2);
   doc.circle(x, y, 9, 'S');
@@ -90,7 +98,7 @@ function scoreBox(doc: jsPDF, score: number, x: number, y: number) {
   doc.text(String(score), x, y + 2, { align: 'center' });
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(140, 145, 150);
+  doc.setTextColor(MUTED_R, MUTED_G, MUTED_B);
   doc.text('/10', x, y + 6.5, { align: 'center' });
 }
 
@@ -99,9 +107,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
   if (!review) throw new Error('No review available to export.');
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  // dark page background
-  doc.setFillColor(15, 16, 20);
-  doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+  // White document background (jsPDF default), with a deep-teal accent bar.
   accentBar(doc);
 
   // ── Title block ────────────────────────────────────────────────────────
@@ -114,7 +120,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
 
   doc.setFont('times', 'normal');
   doc.setFontSize(17);
-  doc.setTextColor(245, 245, 247);
+  doc.setTextColor(20, 20, 24);
   const titleLines = doc.splitTextToSize(paper.title, CONTENT_W - 22) as string[];
   for (const line of titleLines) {
     doc.text(line, ML, y);
@@ -128,7 +134,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
   y += 2;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(FONT_SMALL);
-  doc.setTextColor(100, 105, 115);
+  doc.setTextColor(MUTED_R, MUTED_G, MUTED_B);
   const date = new Date(review.reviewedAt).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -143,7 +149,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
     y = checkPage(doc, y, 12);
     doc.setFontSize(FONT_SMALL);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(92, 208, 166);
+    doc.setTextColor(GREEN_R, GREEN_G, GREEN_B);
     doc.text('STRENGTHS', ML, y);
     y += 4;
     y = bulletList(doc, review.strengths, y);
@@ -152,7 +158,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
     y = checkPage(doc, y, 12);
     doc.setFontSize(FONT_SMALL);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(232, 122, 122);
+    doc.setTextColor(RED_R, RED_G, RED_B);
     doc.text('WEAKNESSES', ML, y);
     y += 4;
     y = bulletList(doc, review.weaknesses, y);
@@ -177,7 +183,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
     y = newPage(doc);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
-    doc.setTextColor(245, 245, 247);
+    doc.setTextColor(20, 20, 24);
     doc.text('Swarm Agent Analysis', ML, y);
     y += 10;
 

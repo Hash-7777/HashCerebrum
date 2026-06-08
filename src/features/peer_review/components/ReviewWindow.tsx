@@ -14,6 +14,7 @@ import {
   type SuggestionType,
 } from '../reviewSwarm';
 import { buildReviewReportPdf } from '../reviewReportPdf';
+import { buildReviewReportMarkdown } from '../reviewReportMarkdown';
 import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../citationAudit';
 import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
 import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../rewriteSelection';
@@ -1073,6 +1074,21 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
     }
   };
 
+  const exportMarkdown = () => {
+    if (!paper.review) return;
+    setExportBusy(true);
+    try {
+      const md = buildReviewReportMarkdown(paper);
+      const slug = paper.title.slice(0, 48).replace(/\s+/g, '-').toLowerCase();
+      downloadBlob(`${slug}-peer-review.md`, new Blob([md], { type: 'text/markdown' }));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`Export failed: ${detail}`, 'error');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   // ── Derived ────────────────────────────────────────────────────────────
 
   const { review, reviewStreaming, reviewError } = paper;
@@ -1438,6 +1454,14 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
                     >
                       <Icon name="filePdf" size={13} />
                       {exportBusy ? 'Exporting…' : 'Export PDF Report'}
+                    </button>
+                    <button
+                      type="button"
+                      className="review-run-btn review-run-btn--secondary"
+                      onClick={exportMarkdown}
+                      disabled={exportBusy}
+                    >
+                      <Icon name="download" size={13} /> Export Markdown
                     </button>
                     <button
                       type="button"
