@@ -346,9 +346,6 @@
   flex: 1;
   min-height: 0;
 }
-.chats::-webkit-scrollbar { width: 6px; }
-.chats::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.06); border-radius: 3px; }
-.chats::-webkit-scrollbar-track { background: transparent; }
 
 .chat-group { display: flex; flex-direction: column; }
 .chat-group + .chat-group { border-top: 1px solid var(--line); }

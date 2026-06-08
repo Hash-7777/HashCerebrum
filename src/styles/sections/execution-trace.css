@@ -104,8 +104,6 @@
   -webkit-user-select: text;
   cursor: text;
 }
-.execution-trace-entries::-webkit-scrollbar { width: 4px; }
-.execution-trace-entries::-webkit-scrollbar-thumb { background: var(--hc-border); border-radius: 2px; }
 
 .execution-trace-entry {
   display: flex;

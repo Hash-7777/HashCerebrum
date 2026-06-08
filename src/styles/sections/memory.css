@@ -675,8 +675,6 @@
   background: rgba(3, 7, 12, 0.56);
   box-shadow: var(--hc-shadow-inset);
   backdrop-filter: blur(12px);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(139, 158, 255, 0.34) transparent;
 }
 .memory-graph-topics button {
   display: inline-flex;

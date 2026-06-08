@@ -423,9 +423,6 @@
   background: var(--ink-1);
 }
 
-.review-sidebar::-webkit-scrollbar { width: 6px; }
-.review-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
-.review-sidebar::-webkit-scrollbar-track { background: transparent; }
 
 .review-sidebar-header {
   display: flex;
@@ -793,9 +790,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.review-agent-section-body::-webkit-scrollbar { width: 5px; }
-.review-agent-section-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-.review-agent-section-body::-webkit-scrollbar-track { background: transparent; }
+/* Scrollbars styled globally in base.css. */
 .review-agent-section-body ul {
   margin: 0;
   padding-left: 1rem;
@@ -1311,9 +1306,7 @@
   color: #334155;
 }
 
-.doc-editor::-webkit-scrollbar { width: 6px; }
-.doc-editor::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
-.doc-editor::-webkit-scrollbar-track { background: transparent; }
+/* Scrollbars styled globally in base.css. */
 
 /* ── Inline highlights (marks) ────────────────────────────── */
 mark.doc-mark {
@@ -1381,9 +1374,7 @@ mark.doc-mark--active {
   padding: 2px 0 8px;
 }
 
-.suggestion-list::-webkit-scrollbar { width: 5px; }
-.suggestion-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
-.suggestion-list::-webkit-scrollbar-track { background: transparent; }
+/* Scrollbars styled globally in base.css. */
 
 /* ── Card ─────────────────────────────────────────────────── */
 .suggestion-card {
