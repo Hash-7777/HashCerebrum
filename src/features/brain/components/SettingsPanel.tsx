@@ -12,7 +12,7 @@ import { useResearchRunStore } from '@core/store/researchRunStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { resetAllData } from '@core/store/resetData';
-import { Icon } from '@ui/icons';
+import { Icon, type IconName } from '@ui/icons';
 import { AgentModelSettings } from './AgentModelSettings';
 import { AuditModal } from './AuditModal';
 
@@ -21,6 +21,16 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+type SettingsTab = 'settings' | 'apis' | 'data' | 'disclaimer' | 'dev';
+
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
+  { id: 'settings', label: 'Settings', icon: 'settings' },
+  { id: 'apis', label: 'APIs', icon: 'database' },
+  { id: 'data', label: 'Data & Privacy', icon: 'lock' },
+  { id: 'disclaimer', label: 'Disclaimer', icon: 'alert' },
+  { id: 'dev', label: 'Dev', icon: 'activity' },
+];
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [keyStatus, setKeyStatus] = useState<Partial<Record<LlmProviderId, boolean>>>({});
@@ -33,6 +43,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [cacheBusy, setCacheBusy] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [tab, setTab] = useState<SettingsTab>('settings');
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const modelStatuses = useModelCatalogStore((s) => s.statuses);
   const refreshingModels = useModelCatalogStore((s) => s.refreshing);
@@ -144,352 +155,392 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const connectedProviders = PROVIDER_DEFS.filter(
+    (g) => modelStatuses[g.provider]?.state === 'connected',
+  ).length;
+
   return (
-    <aside className="settings-panel" aria-label="Provider settings">
+    <aside className="settings-panel" aria-label="Settings">
       <header>
         <div>
           <p className="eyebrow">
             <Icon name="settings" size={10} /> Settings
           </p>
-          <h3>Model Providers</h3>
+          <h3>{SETTINGS_TABS.find((t) => t.id === tab)?.label}</h3>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
           <Icon name="close" size={14} />
         </button>
       </header>
 
-      <section className="settings-status" aria-label="System status">
-        <ul>
-          <li>
-            <span>App</span>
-            <span>{APP_NAME} v{APP_VERSION}</span>
-          </li>
-          <li>
-            <span>Platform</span>
-            <span>{platform().env.isTauri ? `Tauri (${platform().env.platform})` : 'Browser dev'}</span>
-          </li>
-          <li>
-            <span>Providers</span>
-            <span>
-              {PROVIDER_DEFS.filter((g) => modelStatuses[g.provider]?.state === 'connected').length} / {PROVIDER_DEFS.length} connected
-            </span>
-          </li>
-          <li>
-            <span>Models</span>
-            <span>{availableModels.length}</span>
-          </li>
-          <li>
-            <span>Projects</span>
-            <span>{totalProjects}</span>
-          </li>
-          <li>
-            <span>Research runs</span>
-            <span>{totalRuns}</span>
-          </li>
-        </ul>
-      </section>
+      <nav className="settings-tabs" role="tablist" aria-label="Settings sections">
+        {SETTINGS_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className="settings-tab"
+            data-active={tab === t.id}
+            onClick={() => setTab(t.id)}
+          >
+            <Icon name={t.icon} size={12} /> {t.label}
+          </button>
+        ))}
+      </nav>
 
-      <section className="settings-privacy" aria-label="Privacy and data locality">
-        <header>
-          <strong>
-            <Icon name="lock" size={12} /> Privacy &amp; data
-          </strong>
-          <span className="settings-privacy-pill" data-on={localOnly}>
-            {localOnly ? 'Local-only' : 'Standard'}
-          </span>
-        </header>
-        <p>
-          Local-first. Your projects, saved findings, evidence cache, audit log, and API keys stay on
-          this device — no account, no cloud, no telemetry. The interface cannot make a network call;
-          only the Rust core can, and only to the destinations below.
-        </p>
-        <ul className="settings-privacy-facts">
-          <li>
-            <span>Evidence sources</span>
-            <span>PubMed · Europe PMC · OpenAlex · ClinicalTrials.gov · openFDA · RxNorm · Semantic Scholar</span>
-          </li>
-          <li>
-            <span>LLM provider</span>
-            <span>Only the provider you configure receives your prompts</span>
-          </li>
-          <li>
-            <span>Telemetry</span>
-            <span>None</span>
-          </li>
-        </ul>
-        <label className="toggle-row">
-          <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
-          <span>Local-only mode — block cloud providers, use a local Ollama model only</span>
-        </label>
-        <p className="settings-privacy-note">
-          {localOnly
-            ? 'Cloud providers are blocked. With a local Ollama model the app makes no external LLM calls — your prompts never leave this device.'
-            : 'A cloud provider receives your prompt (question + retrieved evidence) under its own terms. For zero external calls, enable Local-only and use Ollama.'}
-        </p>
-      </section>
+      <div className="settings-body">
+        {tab === 'settings' && (
+          <>
+            <section className="settings-theme" aria-label="Appearance">
+              <header>
+                <strong>Appearance</strong>
+                <span>{THEMES.find((t) => t.id === theme)?.label}</span>
+              </header>
+              <div className="settings-theme-swatches">
+                {THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="settings-theme-swatch"
+                    data-active={theme === t.id}
+                    title={t.label}
+                    onClick={() => setTheme(t.id)}
+                    style={{ '--swatch-color': t.swatch } as React.CSSProperties}
+                  />
+                ))}
+              </div>
+            </section>
 
-      <section className="settings-theme" aria-label="Appearance">
-        <header>
-          <strong>Appearance</strong>
-          <span>{THEMES.find((t) => t.id === theme)?.label}</span>
-        </header>
-        <div className="settings-theme-swatches">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className="settings-theme-swatch"
-              data-active={theme === t.id}
-              title={t.label}
-              onClick={() => setTheme(t.id)}
-              style={{ '--swatch-color': t.swatch } as React.CSSProperties}
-            />
-          ))}
-        </div>
-      </section>
+            <section className="settings-theme" aria-label="Citation style">
+              <header>
+                <strong>Citation style</strong>
+                <span>{CITATION_STYLES.find((s) => s.value === citationStyle)?.label}</span>
+              </header>
+              <div className="settings-citation-styles">
+                {CITATION_STYLES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    className="settings-citation-style"
+                    data-active={citationStyle === s.value}
+                    onClick={() => setCitationStyle(s.value)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <p className="field-hint">
+                Applies to the reference list in every export (PDF, Word, LaTeX, Markdown, HTML).
+                In-text citation numbers never change.
+              </p>
+            </section>
 
-      <section className="settings-theme" aria-label="Citation style">
-        <header>
-          <strong>Citation style</strong>
-          <span>{CITATION_STYLES.find((s) => s.value === citationStyle)?.label}</span>
-        </header>
-        <div className="settings-citation-styles">
-          {CITATION_STYLES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              className="settings-citation-style"
-              data-active={citationStyle === s.value}
-              onClick={() => setCitationStyle(s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <p className="field-hint">
-          Applies to the reference list in every export (PDF, Word, LaTeX, Markdown, HTML).
-          In-text citation numbers never change.
-        </p>
-      </section>
-
-      <section className="settings-theme" aria-label="Performance">
-        <header>
-          <strong>3D &amp; performance</strong>
-          <span>{lite === 'auto' ? 'Auto' : lite === 'on' ? 'Lite (2D)' : 'Full 3D'}</span>
-        </header>
-        <div className="settings-citation-styles">
-          {(['auto', 'off', 'on'] as LitePref[]).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className="settings-citation-style"
-              data-active={lite === value}
-              onClick={() => setLite(value)}
-            >
-              {value === 'auto' ? 'Auto' : value === 'off' ? 'Full 3D' : 'Lite (2D)'}
-            </button>
-          ))}
-        </div>
-        <p className="field-hint">
-          Lite mode replaces the 3D brain with a lightweight 2D panel — no WebGL, no GPU, far less
-          memory — so the app runs full-speed on low-RAM or GPU-less machines. Every research feature
-          is unchanged. <strong>Auto</strong> enables it on weak hardware. Takes effect when you reopen
-          the Brain mode.
-        </p>
-      </section>
-
-      <div className="settings-model-tools">
-        <span>
-          {refreshingModels
-            ? 'checking providers'
-            : `${availableModels.length} live model${availableModels.length === 1 ? '' : 's'} loaded`}
-        </span>
-        <button type="button" disabled={refreshingModels} onClick={() => void refreshAllModels()}>
-          Refresh models
-        </button>
-      </div>
-
-      <AgentModelSettings />
-
-      <div className="field inline">
-        <label>
-          <span>Ollama host</span>
-          <input value={host} onChange={(event) => setHost(event.target.value)} placeholder="http://localhost:11434" />
-        </label>
-        <button type="button" onClick={saveHost}>
-          Save
-        </button>
-      </div>
-      <p className="field-hint">
-        Run Ollama on this machine, or on another device on your network — e.g.{' '}
-        <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
-        automatically; only your local network is reachable, never the public internet.
-        <br />
-        For a LAN device, start Ollama there with <code>OLLAMA_HOST=0.0.0.0</code> and allow port{' '}
-        <code>11434</code> through its firewall so this machine can reach it.
-      </p>
-
-      <section className="settings-cache" aria-label="Source cache">
-        <header>
-          <strong>Source cache</strong>
-          <span>
-            {cacheStats
-              ? `${cacheStats.rows} rows · ${formatBytes(cacheStats.bytes)}`
-              : 'not available'}
-          </span>
-        </header>
-        {cacheStats && cacheStats.hosts.length > 0 && (
-          <ul>
-            {cacheStats.hosts.slice(0, 6).map((host) => (
-              <li key={host.host}>
-                <span>{host.host}</span>
-                <span>{host.rows}</span>
-                <span>{formatBytes(host.bytes)}</span>
-              </li>
-            ))}
-          </ul>
+            <section className="settings-theme" aria-label="Performance">
+              <header>
+                <strong>3D &amp; performance</strong>
+                <span>{lite === 'auto' ? 'Auto' : lite === 'on' ? 'Lite (2D)' : 'Full 3D'}</span>
+              </header>
+              <div className="settings-citation-styles">
+                {(['auto', 'off', 'on'] as LitePref[]).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="settings-citation-style"
+                    data-active={lite === value}
+                    onClick={() => setLite(value)}
+                  >
+                    {value === 'auto' ? 'Auto' : value === 'off' ? 'Full 3D' : 'Lite (2D)'}
+                  </button>
+                ))}
+              </div>
+              <p className="field-hint">
+                Lite mode replaces the 3D brain with a lightweight 2D panel — no WebGL, no GPU, far less
+                memory — so the app runs full-speed on low-RAM or GPU-less machines. Every research feature
+                is unchanged. <strong>Auto</strong> enables it on weak hardware. Takes effect when you reopen
+                the Brain mode.
+              </p>
+            </section>
+          </>
         )}
-        <div className="settings-cache-actions">
-          <button type="button" disabled={cacheBusy} onClick={() => clearCache(true)}>
-            Clear expired
-          </button>
-          <button type="button" disabled={cacheBusy} onClick={() => clearCache(false)}>
-            Clear all
-          </button>
-        </div>
-      </section>
 
-      <section className="settings-audit" aria-label="Audit log">
-        <header>
-          <strong>Audit log</strong>
-          <button type="button" onClick={() => setAuditOpen(true)} className="settings-audit-button">
-            <Icon name="shield" size={12} /> Open
-          </button>
-        </header>
-        <p>Hash-chained log of every guarded action. Verify to confirm the chain is intact.</p>
-      </section>
-
-      <div className="provider-key-list">
-        {PROVIDER_DEFS.filter((group) => !!group.keyName).map((group) => {
-          const status = modelStatuses[group.provider];
-          const hasSavedKey = keyStatus[group.provider] === true;
-          const providerError = keyErrors[group.provider] || (hasSavedKey ? status?.error : '');
-          const statusLabel = keyStatus[group.provider]
-            ? status?.state === 'connected'
-              ? `${status.modelCount} models`
-              : status?.state === 'checking'
-                ? 'checking'
-                : status?.state === 'unavailable'
-                  ? 'no models'
-                  : 'fetch failed'
-            : 'no key';
-          return (
-          <section key={group.provider} className="provider-key-row">
-            <header>
-              <strong>{group.label}</strong>
-              <span data-ready={keyStatus[group.provider] === true && status?.state === 'connected'}>
-                {keyStatus[group.provider] && status?.state === 'connected' ? (
-                  <>
-                    <Icon name="check" size={11} /> {statusLabel}
-                  </>
-                ) : (
-                  <>
-                    <Icon name="alert" size={11} /> {statusLabel}
-                  </>
-                )}
+        {tab === 'apis' && (
+          <>
+            <div className="settings-model-tools">
+              <span>
+                {refreshingModels
+                  ? 'checking providers'
+                  : `${availableModels.length} live model${availableModels.length === 1 ? '' : 's'} loaded`}
               </span>
-            </header>
-            <div>
-              <input
-                type="password"
-                value={apiKeys[group.provider] ?? ''}
-                autoComplete="new-password"
-                spellCheck={false}
-                placeholder={`${group.label} API key`}
-                onChange={(event) => setApiKeys((current) => ({ ...current, [group.provider]: event.target.value }))}
-              />
-              <button type="button" disabled={saving === group.provider} onClick={() => saveKey(group.provider)}>
-                Save
-              </button>
-              <button
-                type="button"
-                disabled={saving === group.provider || !keyStatus[group.provider]}
-                onClick={() => deleteKey(group.provider)}
-              >
-                Remove
+              <button type="button" disabled={refreshingModels} onClick={() => void refreshAllModels()}>
+                Refresh models
               </button>
             </div>
-            {providerError && <p className="provider-key-error">{providerError}</p>}
+
+            <AgentModelSettings />
+
+            <div className="provider-key-list">
+              {PROVIDER_DEFS.filter((group) => !!group.keyName).map((group) => {
+                const status = modelStatuses[group.provider];
+                const hasSavedKey = keyStatus[group.provider] === true;
+                const providerError = keyErrors[group.provider] || (hasSavedKey ? status?.error : '');
+                const statusLabel = keyStatus[group.provider]
+                  ? status?.state === 'connected'
+                    ? `${status.modelCount} models`
+                    : status?.state === 'checking'
+                      ? 'checking'
+                      : status?.state === 'unavailable'
+                        ? 'no models'
+                        : 'fetch failed'
+                  : 'no key';
+                return (
+                <section key={group.provider} className="provider-key-row">
+                  <header>
+                    <strong>{group.label}</strong>
+                    <span data-ready={keyStatus[group.provider] === true && status?.state === 'connected'}>
+                      {keyStatus[group.provider] && status?.state === 'connected' ? (
+                        <>
+                          <Icon name="check" size={11} /> {statusLabel}
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="alert" size={11} /> {statusLabel}
+                        </>
+                      )}
+                    </span>
+                  </header>
+                  <div>
+                    <input
+                      type="password"
+                      value={apiKeys[group.provider] ?? ''}
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      placeholder={`${group.label} API key`}
+                      onChange={(event) => setApiKeys((current) => ({ ...current, [group.provider]: event.target.value }))}
+                    />
+                    <button type="button" disabled={saving === group.provider} onClick={() => saveKey(group.provider)}>
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving === group.provider || !keyStatus[group.provider]}
+                      onClick={() => deleteKey(group.provider)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {providerError && <p className="provider-key-error">{providerError}</p>}
+                </section>
+                );
+              })}
+            </div>
+
+            <div className="field inline">
+              <label>
+                <span>Ollama host</span>
+                <input value={host} onChange={(event) => setHost(event.target.value)} placeholder="http://localhost:11434" />
+              </label>
+              <button type="button" onClick={saveHost}>
+                Save
+              </button>
+            </div>
+            <p className="field-hint">
+              Run Ollama on this machine, or on another device on your network — e.g.{' '}
+              <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
+              automatically; only your local network is reachable, never the public internet.
+              <br />
+              For a LAN device, start Ollama there with <code>OLLAMA_HOST=0.0.0.0</code> and allow port{' '}
+              <code>11434</code> through its firewall so this machine can reach it.
+            </p>
+          </>
+        )}
+
+        {tab === 'data' && (
+          <>
+            <section className="settings-privacy" aria-label="Privacy and data locality">
+              <header>
+                <strong>
+                  <Icon name="lock" size={12} /> Privacy &amp; data
+                </strong>
+                <span className="settings-privacy-pill" data-on={localOnly}>
+                  {localOnly ? 'Local-only' : 'Standard'}
+                </span>
+              </header>
+              <p>
+                Local-first. Your projects, saved findings, evidence cache, audit log, and API keys stay on
+                this device — no account, no cloud, no telemetry. The interface cannot make a network call;
+                only the Rust core can, and only to the destinations below.
+              </p>
+              <ul className="settings-privacy-facts">
+                <li>
+                  <span>Evidence sources</span>
+                  <span>PubMed · Europe PMC · OpenAlex · ClinicalTrials.gov · openFDA · RxNorm · Semantic Scholar</span>
+                </li>
+                <li>
+                  <span>LLM provider</span>
+                  <span>Only the provider you configure receives your prompts</span>
+                </li>
+                <li>
+                  <span>Telemetry</span>
+                  <span>None</span>
+                </li>
+              </ul>
+              <label className="toggle-row">
+                <input type="checkbox" checked={localOnly} onChange={(event) => toggleLocalOnly(event.target.checked)} />
+                <span>Local-only mode — block cloud providers, use a local Ollama model only</span>
+              </label>
+              <p className="settings-privacy-note">
+                {localOnly
+                  ? 'Cloud providers are blocked. With a local Ollama model the app makes no external LLM calls — your prompts never leave this device.'
+                  : 'A cloud provider receives your prompt (question + retrieved evidence) under its own terms. For zero external calls, enable Local-only and use Ollama.'}
+              </p>
+            </section>
+
+            <section className="settings-cache" aria-label="Source cache">
+              <header>
+                <strong>Source cache</strong>
+                <span>
+                  {cacheStats
+                    ? `${cacheStats.rows} rows · ${formatBytes(cacheStats.bytes)}`
+                    : 'not available'}
+                </span>
+              </header>
+              {cacheStats && cacheStats.hosts.length > 0 && (
+                <ul>
+                  {cacheStats.hosts.slice(0, 6).map((host) => (
+                    <li key={host.host}>
+                      <span>{host.host}</span>
+                      <span>{host.rows}</span>
+                      <span>{formatBytes(host.bytes)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="settings-cache-actions">
+                <button type="button" disabled={cacheBusy} onClick={() => clearCache(true)}>
+                  Clear expired
+                </button>
+                <button type="button" disabled={cacheBusy} onClick={() => clearCache(false)}>
+                  Clear all
+                </button>
+              </div>
+            </section>
+
+            <section className="settings-audit" aria-label="Audit log">
+              <header>
+                <strong>Audit log</strong>
+                <button type="button" onClick={() => setAuditOpen(true)} className="settings-audit-button">
+                  <Icon name="shield" size={12} /> Open
+                </button>
+              </header>
+              <p>Hash-chained, tamper-evident log of every guarded action, stored in plain text on this device. Verify to confirm the chain is intact.</p>
+            </section>
+
+            <section className="settings-danger" aria-label="Reset all data">
+              <header>
+                <strong>
+                  <Icon name="alert" size={12} /> Reset all data
+                </strong>
+              </header>
+              <p>
+                Permanently erases every project&apos;s memory and embeddings, all chat history, research
+                runs, and the source cache — a clean slate for new research. Your settings and API keys are
+                kept. This cannot be undone.
+              </p>
+              <button
+                type="button"
+                className="settings-danger-button"
+                disabled={resetting}
+                onClick={() => {
+                  const ok = window.confirm(
+                    'Erase ALL saved data — every project’s memory, chats, research runs, and cache? ' +
+                      'Settings and API keys are kept. This cannot be undone.',
+                  );
+                  if (!ok) return;
+                  setResetting(true);
+                  void resetAllData(); // wipes storage + cache, then reloads
+                }}
+              >
+                <Icon name="close" size={12} /> {resetting ? 'Resetting…' : 'Reset everything'}
+              </button>
+            </section>
+          </>
+        )}
+
+        {tab === 'disclaimer' && (
+          <section className="settings-disclaimer" aria-label="Disclaimer and terms of use">
+            <header>
+              <strong>
+                <Icon name="alert" size={12} /> Disclaimer &amp; Terms of Use
+              </strong>
+            </header>
+            <div className="settings-disclaimer-grid">
+              <div className="settings-disclaimer-item">
+                <h4>Not a Medical Device</h4>
+                <p>For research and education only. Not a medical device, no FDA/EMA approval, not intended to diagnose, treat, or prevent any condition. Not for users under 18. By using this software you represent that you are of legal age and have sufficient training to evaluate its outputs. LLMs can hallucinate — always verify independently.</p>
+              </div>
+              <div className="settings-disclaimer-item">
+                <h4>Consult a Professional</h4>
+                <p>Never disregard professional medical advice or delay seeking it because of something you read or generated here. Always consult your physician, pharmacist, or qualified healthcare provider for questions about a medical condition, medication, or treatment.</p>
+              </div>
+              <div className="settings-disclaimer-item">
+                <h4>No Warranties</h4>
+                <p>Provided "as is" without warranties of any kind. As open-source software it has not undergone professional clinical validation or heavy-load testing. Authors have no obligation to provide updates, support, or bug fixes. You are responsible for your own data backups.</p>
+              </div>
+              <div className="settings-disclaimer-item">
+                <h4>No Liability</h4>
+                <p>To the fullest extent permitted by law, the authors are not liable for damages, wrong results, data-privacy issues, or data loss arising from your use. You agree to indemnify the authors from any claims arising from your use, modification, or distribution of the software.</p>
+              </div>
+              <div className="settings-disclaimer-item">
+                <h4>Data &amp; Third Parties</h4>
+                <p>HashCerebrum is software, not a HIPAA-covered entity or GDPR controller. Your data stays on your device; you are responsible for its security. Retrieved evidence comes from public databases and LLM providers — we do not control, guarantee, or endorse their accuracy. References to drugs or treatments do not constitute endorsement.</p>
+              </div>
+              <div className="settings-disclaimer-item">
+                <h4>License</h4>
+                <p>Licensed under GNU AGPL-3.0-or-later. You may use, modify, and distribute the software under those terms. You are responsible for any modifications you make. Third-party trademarks belong to their owners. Your generated manuscripts remain your intellectual property.</p>
+              </div>
+            </div>
+            <p className="settings-disclaimer-footer">
+              By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
+            </p>
           </section>
-          );
-        })}
+        )}
+
+        {tab === 'dev' && (
+          <section className="settings-status" aria-label="System status">
+            <header>
+              <strong>System</strong>
+              <span>{platform().env.isTauri ? `Tauri (${platform().env.platform})` : 'Browser dev'}</span>
+            </header>
+            <ul>
+              <li>
+                <span>App</span>
+                <span>{APP_NAME} v{APP_VERSION}</span>
+              </li>
+              <li>
+                <span>Platform</span>
+                <span>{platform().env.isTauri ? `Tauri (${platform().env.platform})` : 'Browser dev'}</span>
+              </li>
+              <li>
+                <span>Providers</span>
+                <span>{connectedProviders} / {PROVIDER_DEFS.length} connected</span>
+              </li>
+              <li>
+                <span>Models</span>
+                <span>{availableModels.length}</span>
+              </li>
+              <li>
+                <span>Projects</span>
+                <span>{totalProjects}</span>
+              </li>
+              <li>
+                <span>Research runs</span>
+                <span>{totalRuns}</span>
+              </li>
+            </ul>
+          </section>
+        )}
       </div>
-
-      <section className="settings-disclaimer" aria-label="Disclaimer and terms of use">
-        <header>
-          <strong>
-            <Icon name="alert" size={12} /> Disclaimer &amp; Terms of Use
-          </strong>
-        </header>
-        <div className="settings-disclaimer-grid">
-          <div className="settings-disclaimer-item">
-            <h4>Not a Medical Device</h4>
-            <p>For research and education only. Not a medical device, no FDA/EMA approval, not intended to diagnose, treat, or prevent any condition. Not for users under 18. By using this software you represent that you are of legal age and have sufficient training to evaluate its outputs. LLMs can hallucinate — always verify independently.</p>
-          </div>
-          <div className="settings-disclaimer-item">
-            <h4>Consult a Professional</h4>
-            <p>Never disregard professional medical advice or delay seeking it because of something you read or generated here. Always consult your physician, pharmacist, or qualified healthcare provider for questions about a medical condition, medication, or treatment.</p>
-          </div>
-          <div className="settings-disclaimer-item">
-            <h4>No Warranties</h4>
-            <p>Provided "as is" without warranties of any kind. As open-source software it has not undergone professional clinical validation or heavy-load testing. Authors have no obligation to provide updates, support, or bug fixes. You are responsible for your own data backups.</p>
-          </div>
-          <div className="settings-disclaimer-item">
-            <h4>No Liability</h4>
-            <p>To the fullest extent permitted by law, the authors are not liable for damages, wrong results, data-privacy issues, or data loss arising from your use. You agree to indemnify the authors from any claims arising from your use, modification, or distribution of the software.</p>
-          </div>
-          <div className="settings-disclaimer-item">
-            <h4>Data &amp; Third Parties</h4>
-            <p>HashCerebrum is software, not a HIPAA-covered entity or GDPR controller. Your data stays on your device; you are responsible for its security. Retrieved evidence comes from public databases and LLM providers — we do not control, guarantee, or endorse their accuracy. References to drugs or treatments do not constitute endorsement.</p>
-          </div>
-          <div className="settings-disclaimer-item">
-            <h4>License</h4>
-            <p>Licensed under GNU AGPL-3.0-or-later. You may use, modify, and distribute the software under those terms. You are responsible for any modifications you make. Third-party trademarks belong to their owners. Your generated manuscripts remain your intellectual property.</p>
-          </div>
-        </div>
-        <p className="settings-disclaimer-footer">
-          By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
-        </p>
-      </section>
-
-      <section className="settings-danger" aria-label="Reset all data">
-        <header>
-          <strong>
-            <Icon name="alert" size={12} /> Reset all data
-          </strong>
-        </header>
-        <p>
-          Permanently erases every project&apos;s memory and embeddings, all chat history, research
-          runs, and the source cache — a clean slate for new research. Your settings and API keys are
-          kept. This cannot be undone.
-        </p>
-        <button
-          type="button"
-          className="settings-danger-button"
-          disabled={resetting}
-          onClick={() => {
-            const ok = window.confirm(
-              'Erase ALL saved data — every project’s memory, chats, research runs, and cache? ' +
-                'Settings and API keys are kept. This cannot be undone.',
-            );
-            if (!ok) return;
-            setResetting(true);
-            void resetAllData(); // wipes storage + cache, then reloads
-          }}
-        >
-          <Icon name="close" size={12} /> {resetting ? 'Resetting…' : 'Reset everything'}
-        </button>
-      </section>
 
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
     </aside>

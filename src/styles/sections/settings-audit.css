@@ -8,10 +8,10 @@
   position: absolute;
   z-index: 61;
   inset: 14px 14px 14px auto;
-  width: min(460px, calc(100% - 28px));
+  width: min(520px, calc(100% - 28px));
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   padding: 16px;
   border: 1px solid var(--hc-border-strong);
   border-radius: var(--hc-radius);
@@ -20,8 +20,52 @@
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   box-shadow: var(--hc-shadow-3), var(--hc-shadow-inset);
   user-select: text;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Header + tab bar stay pinned; only the body scrolls. */
+.settings-panel > header { flex-shrink: 0; }
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hc-border);
+}
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--hc-radius-pill);
+  background: transparent;
+  color: var(--hc-fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.settings-tab:hover { color: var(--hc-fg); background: var(--hc-accent-soft); }
+.settings-tab[data-active='true'] {
+  color: var(--accent-ink);
+  background: var(--hc-accent);
+  border-color: var(--hc-accent);
+}
+
+.settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 2px 4px;
 }
 
 .settings-status,
