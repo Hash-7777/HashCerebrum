@@ -16,6 +16,7 @@ import { useBrainModesStore } from '@core/store/brainModesStore';
 import { notify } from '@platform/notify';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
+import { exportChatMarkdown, exportChatPdf } from './export/messageExport';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
@@ -82,6 +83,7 @@ export function BrainMode({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId));
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -655,6 +657,12 @@ export function BrainMode({
                 <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
                 {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
               </span>
+              {messages.filter((m) => m.role !== 'system').length > 0 && (
+                <span className="chat-export-actions">
+                  <button type="button" onClick={() => exportChatMarkdown(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
+                  <button type="button" onClick={() => void exportChatPdf(messages, { title: 'The Cerebrum', mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
+                </span>
+              )}
               {evidence.length > 0 && (
                 <span className="chat-meta-evidence">
                   <b>{evidence.length}</b> EVIDENCE

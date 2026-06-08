@@ -104,6 +104,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+.chat-export-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chat-export-actions button {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.chat-export-actions button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .lede {
   font-family: var(--f-display);
   font-size: 11px;

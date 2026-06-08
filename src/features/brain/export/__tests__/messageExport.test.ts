@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
 import {
+  buildChatMarkdownExport,
   buildExportHtml,
   buildMarkdownExport,
   deriveDocumentTitle,
@@ -200,5 +201,111 @@ describe('message export helpers', () => {
     expect(markdown).toContain('## References');
     expect(markdown.match(/## References/g)).toHaveLength(1);
     expect(markdownToHtml(content)).not.toContain('Duplicated model reference');
+  });
+});
+
+describe('buildChatMarkdownExport', () => {
+  const meta = { title: 'Test Chat', mode: 'brain', project: 'Demo', messageCount: 3 };
+
+  it('includes metadata header and skips system messages', () => {
+    const messages = [
+      { id: '1', role: 'system' as const, content: 'You are a research assistant.' },
+      { id: '2', role: 'user' as const, content: 'Hello?' },
+      { id: '3', role: 'assistant' as const, content: 'Hi there.', modelLabel: 'GPT-4o' },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    expect(md).toContain('# Chat Transcript: Test Chat');
+    expect(md).toContain('**Mode:** brain');
+    expect(md).toContain('**Project:** Demo');
+    expect(md).toContain('**Messages:** 3');
+    expect(md).not.toContain('system');
+    expect(md).toContain('## Message 1 — user');
+    expect(md).toContain('## Message 2 — assistant (GPT-4o)');
+  });
+
+  it('includes citations, errors, and critique metadata', () => {
+    const messages = [
+      {
+        id: '1',
+        role: 'assistant' as const,
+        content: 'Result here.',
+        modelLabel: 'Claude',
+        citations: [
+          {
+            source: 'pubmed' as const,
+            title: 'Metformin in PCOS',
+            authors: ['Smith', 'Jones'],
+            year: 2024,
+            identifiers: {},
+            fetchedAt: '2026-01-01T00:00:00Z',
+            provenanceHash: 'abc',
+          },
+        ],
+        error: 'Rate limited',
+        critiqueOf: 'msg-0',
+      },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    expect(md).toContain('(Claude)');
+    expect(md).toContain('### Citations');
+    expect(md).toContain('Metformin in PCOS');
+    expect(md).toContain('### Error');
+    expect(md).toContain('Rate limited');
+    expect(md).toContain('**Critique of message:** msg-0');
+  });
+
+  it('includes manuscript and outline proposal metadata', () => {
+    const messages = [
+      {
+        id: '1',
+        role: 'assistant' as const,
+        content: '',
+        manuscript: {
+          title: 'PCOS Review',
+          abstract: { background: 'PCOS affects 10% of women.', objective: '', methods: '', results: '', conclusion: '', conclusions: '' },
+          keywords: ['PCOS', 'metformin'],
+          sections: [],
+        },
+      },
+      {
+        id: '2',
+        role: 'user' as const,
+        content: 'Draft this.',
+        outlineProposal: { query: 'Write a review on PCOS' },
+      },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    expect(md).toContain('### Manuscript');
+    expect(md).toContain('PCOS Review');
+    expect(md).toContain('**Background:** PCOS affects 10% of women.');
+    expect(md).toContain('**Keywords:** PCOS, metformin');
+    expect(md).toContain('### Outline Proposal');
+    expect(md).toContain('Write a review on PCOS');
+  });
+
+  it('skips empty messages with no content, manuscript, or outline', () => {
+    const messages = [
+      { id: '1', role: 'user' as const, content: '   ' },
+      { id: '2', role: 'assistant' as const, content: 'Answer.' },
+      { id: '3', role: 'user' as const, content: '' },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    // Whitespace-only and empty messages are skipped
+    expect(md).toContain('## Message 1 — assistant');
+    expect(md).not.toContain('## Message 2');
+    expect(md.match(/## Message/g)).toHaveLength(1);
+  });
+
+  it('numbers messages sequentially regardless of skipped system messages', () => {
+    const messages = [
+      { id: 's1', role: 'system' as const, content: 'sys' },
+      { id: 'u1', role: 'user' as const, content: 'Q1' },
+      { id: 's2', role: 'system' as const, content: 'sys2' },
+      { id: 'a1', role: 'assistant' as const, content: 'A1' },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    expect(md).toContain('## Message 1 — user');
+    expect(md).toContain('## Message 2 — assistant');
+    expect(md).not.toContain('## Message 3');
   });
 });

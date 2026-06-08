@@ -720,3 +720,102 @@ export async function exportMessagePdf(message: ExportableMessage): Promise<void
   const blob = await buildMessagePdfBlob(message);
   downloadBlob(filename, blob);
 }
+
+export interface ChatExportMeta {
+  title: string;
+  mode?: string | undefined;
+  project?: string | undefined;
+  messageCount: number;
+}
+
+function formatChatCitations(citations: EvidenceItem[] | undefined): string {
+  if (!citations || citations.length === 0) return '';
+  const lines = citations.map((c, i) => {
+    const authors = c.authors.slice(0, 3).join(', ');
+    const etAl = c.authors.length > 3 ? ' et al.' : '';
+    const year = c.year ? ` (${c.year})` : '';
+    return `${i + 1}. ${authors}${etAl}${year}. ${c.title}. ${c.source}.`;
+  });
+  return `\n\n### Citations\n\n${lines.join('\n\n')}`;
+}
+
+export function buildChatMarkdownExport(
+  messages: ChatMessage[],
+  meta: ChatExportMeta,
+): string {
+  const exportedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const modeLine = meta.mode ? ` | **Mode:** ${meta.mode}` : '';
+  const projectLine = meta.project ? ` | **Project:** ${meta.project}` : '';
+
+  let out = `# Chat Transcript: ${meta.title}\n\n`;
+  out += `**Messages:** ${meta.messageCount}${modeLine}${projectLine} | **Exported:** ${exportedAt}\n\n`;
+  out += '---\n';
+
+  let msgIndex = 0;
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+    if (!message.content.trim() && !message.manuscript && !message.outlineProposal) continue;
+
+    msgIndex += 1;
+    const roleLabel = message.role === 'user' ? 'user' : 'assistant';
+    const modelTag = message.modelLabel ? ` (${message.modelLabel})` : '';
+    const failoverTag = message.failoverNote ? ` [failover: ${message.failoverNote}]` : '';
+
+    out += `\n## Message ${msgIndex} — ${roleLabel}${modelTag}${failoverTag}\n\n`;
+
+    if (message.content.trim()) {
+      out += `${message.content.trim()}\n`;
+    }
+
+    if (message.citations && message.citations.length > 0) {
+      out += formatChatCitations(message.citations);
+      out += '\n';
+    }
+
+    if (message.error) {
+      out += `\n### Error\n\n\`\`\`\n${message.error}\n\`\`\`\n`;
+    }
+
+    if (message.critiqueOf) {
+      out += `\n> **Critique of message:** ${message.critiqueOf}\n`;
+    }
+
+    if (message.manuscript) {
+      out += `\n### Manuscript\n\n**Title:** ${message.manuscript.title}\n\n`;
+      if (message.manuscript.abstract?.background) {
+        out += `**Background:** ${message.manuscript.abstract.background}\n\n`;
+      }
+      if (message.manuscript.keywords?.length) {
+        out += `**Keywords:** ${message.manuscript.keywords.join(', ')}\n\n`;
+      }
+    }
+
+    if (message.outlineProposal) {
+      out += `\n### Outline Proposal\n\n**Query:** ${message.outlineProposal.query}\n`;
+    }
+
+    out += '\n---\n';
+  }
+
+  return out.trim() + '\n';
+}
+
+export function exportChatMarkdown(
+  messages: ChatMessage[],
+  meta: ChatExportMeta,
+): void {
+  const body = buildChatMarkdownExport(messages, meta);
+  const filename = `${slugifyFilename(meta.title)}-chat.md`;
+  downloadTextFile(filename, body, 'text/markdown;charset=utf-8');
+}
+
+export async function exportChatPdf(
+  messages: ChatMessage[],
+  meta: ChatExportMeta,
+): Promise<void> {
+  const markdown = buildChatMarkdownExport(messages, meta);
+  const { buildPaperPdfBlob } = await import('./paperPdf');
+  const blob = await buildPaperPdfBlob({ title: meta.title, content: markdown });
+  const filename = `${slugifyFilename(meta.title)}-chat.pdf`;
+  downloadBlob(filename, assertPdfBlob(blob, 'jsPDF chat renderer'));
+}
