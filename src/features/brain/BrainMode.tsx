@@ -254,6 +254,7 @@ export function BrainMode({
     let streamedContent = '';
     let lastTopicAt = 0;
     const seenTerms = new Set<string>();
+    const traceEntries: import('@core/store/chatHistoryStore').TurnTraceEntry[] = [];
     const flushTopicHits = (text: string) => {
       const now = Date.now();
       if (now - lastTopicAt < TOPIC_THROTTLE_MS) return;
@@ -285,6 +286,7 @@ export function BrainMode({
         if (!isMounted.current) return;
         if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
         updateAgentStatus('boss', { state: 'running', detail: bossDetail[phase] });
+        traceEntries.push({ agent: 'boss', phase, detail: bossDetail[phase] });
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: phase === 'routing' || phase === 'answering' ? 'start' : 'tool_call',
@@ -299,6 +301,7 @@ export function BrainMode({
         if (!isMounted.current) return;
         ensureResearchRun();
         updateAgentStatus(agentId, { state: 'running', detail: subQuery });
+        traceEntries.push({ agent: agentId, phase: 'start', detail: subQuery });
         bus.emit('agent:activity', {
           agentId,
           phase: 'start',
@@ -312,16 +315,19 @@ export function BrainMode({
           state: 'done',
           detail: `${recordCount} record${recordCount === 1 ? '' : 's'}`,
         });
+        const detail = `${recordCount} record${recordCount === 1 ? '' : 's'}`;
+        traceEntries.push({ agent: agentId, phase: 'done', detail });
         bus.emit('agent:activity', {
           agentId,
           phase: 'done',
-          detail: `${recordCount} records`,
+          detail,
           light: { intensity: recordCount > 0 ? 0.72 : 0.38, ttlMs: recordCount > 0 ? 1700 : 900 },
         });
       },
       onSpecialistError: (agentId, message) => {
         if (!isMounted.current) return;
         updateAgentStatus(agentId, { state: 'error', detail: message });
+        traceEntries.push({ agent: agentId, phase: 'error', detail: message });
         bus.emit('agent:activity', {
           agentId,
           phase: 'error',
@@ -333,10 +339,12 @@ export function BrainMode({
         if (!isMounted.current) return;
         const def = sourceForTool(toolName);
         if (def) lightRegion(def.region, 'topic', 0.55, 1250);
+        const detail = def?.label ?? toolName;
+        traceEntries.push({ agent: agentId, phase: 'tool_call', detail });
         bus.emit('agent:activity', {
           agentId,
           phase: 'tool_call',
-          detail: def?.label ?? toolName,
+          detail,
           light: { intensity: 0.68, ttlMs: 1600 },
         });
       },
@@ -344,10 +352,12 @@ export function BrainMode({
         if (!isMounted.current) return;
         const def = sourceForTool(toolName);
         if (def && count > 0) lightRegion(def.region, 'topic', Math.min(0.88, 0.42 + count / 30), 1550);
+        const detail = `${def?.label ?? toolName}: ${count}`;
+        traceEntries.push({ agent: agentId, phase: 'tool_result', detail });
         bus.emit('agent:activity', {
           agentId,
           phase: 'tool_result',
-          detail: `${def?.label ?? toolName}: ${count}`,
+          detail,
           light: { intensity: count > 0 ? 0.76 : 0.36, ttlMs: count > 0 ? 1700 : 850 },
         });
       },
@@ -365,6 +375,7 @@ export function BrainMode({
         const isPipelineStage = pipelineStages.has(heading);
         const label = isPipelineStage ? `Paper pipeline - ${heading}` : `Drafting manuscript - ${heading}`;
         updateAgentStatus('boss', { state: heading === 'blocked' ? 'error' : 'running', detail: label });
+        traceEntries.push({ agent: 'boss', phase: 'manuscript', detail: label });
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: 'token',
@@ -484,6 +495,7 @@ export function BrainMode({
                 content: finalContent,
                 modelLabel: labelForModel(result.modelUsed),
                 isStreaming: false,
+                trace: traceEntries,
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
                 ...(result.manuscript ? { manuscript: result.manuscript } : {}),
               }
@@ -511,7 +523,7 @@ export function BrainMode({
       updateAgentStatus('boss', { state: 'error', detail });
       setMessages((current) =>
         current.map((m) =>
-          m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false } : m,
+          m.id === assistantId ? { ...m, content: fallback, error: detail, isStreaming: false, trace: traceEntries } : m,
         ),
       );
       bus.emit('agent:activity', {

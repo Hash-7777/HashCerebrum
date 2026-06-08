@@ -17,6 +17,12 @@ const STORAGE_KEY = 'chatHistory.v1';
 const MAX_CHATS = 100;
 const TITLE_MAX = 48;
 
+export interface TurnTraceEntry {
+  agent: string;
+  phase: string;
+  detail: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -33,6 +39,8 @@ export interface ChatMessage {
   // Present on an outline-first proposal message — carries the original query so
   // the "Draft full paper" action can run the real pipeline on approval.
   outlineProposal?: { query: string };
+  // Execution trace for this turn: boss phases, specialist calls, tool results.
+  trace?: TurnTraceEntry[];
 }
 
 // Which workspace produced a chat. Brain and Drug-Interactions keep separate

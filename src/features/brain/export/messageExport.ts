@@ -1,5 +1,5 @@
 import { platform, type EvidenceItem } from '@platform/index';
-import type { ChatMessage } from '@core/store/chatHistoryStore';
+import type { ChatMessage, TurnTraceEntry } from '@core/store/chatHistoryStore';
 import { manuscriptToReadableText, type Manuscript } from '../swarm/manuscript';
 import {
   buildPublicationArtifact,
@@ -739,6 +739,12 @@ function formatChatCitations(citations: EvidenceItem[] | undefined): string {
   return `\n\n### Citations\n\n${lines.join('\n\n')}`;
 }
 
+function formatTrace(trace: TurnTraceEntry[] | undefined): string {
+  if (!trace || trace.length === 0) return '';
+  const lines = trace.map((t) => `- **${t.agent}** · ${t.phase} — ${t.detail}`);
+  return `\n### Execution Trace\n\n${lines.join('\n')}\n`;
+}
+
 export function buildChatMarkdownExport(
   messages: ChatMessage[],
   meta: ChatExportMeta,
@@ -794,6 +800,7 @@ export function buildChatMarkdownExport(
       out += `\n### Outline Proposal\n\n**Query:** ${message.outlineProposal.query}\n`;
     }
 
+    out += formatTrace(message.trace);
     out += '\n---\n';
   }
 
