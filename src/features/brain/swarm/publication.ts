@@ -31,8 +31,7 @@ import { expandCitationMarkers } from './citationMarkers';
 import { forestPlotFigure } from './stats/forestPlot';
 import { formatReference, type CitationStyle } from '../export/citationStyles';
 import type { MetaAnalysisResult } from './metaAnalysis';
-import { assessRiskOfBias } from './riskOfBias';
-import { buildSmdMeta, formatMetaResult } from './metaAnalysis';
+import { buildEvidenceMeta, formatMetaResult } from './metaAnalysis';
 
 // Resolve a reference's display text in the requested style. Vancouver (or no
 // style) returns the text baked at build time verbatim — zero regression — and
@@ -188,6 +187,12 @@ function formatAuthors(record: EvidenceItem): string {
   return `${authors.join(', ')}${suffix}`;
 }
 
+function referenceVenue(record: EvidenceItem): string {
+  const venue =
+    record.identifiers?.journal || record.identifiers?.venue || record.identifiers?.containerTitle;
+  return venue && venue.trim() ? venue.trim() : SOURCE_LABELS[record.source];
+}
+
 function vancouverText(record: EvidenceItem): string {
   const year = record.year ? ` ${record.year}.` : '';
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
@@ -197,7 +202,10 @@ function vancouverText(record: EvidenceItem): string {
   // label it so a valid ahead-of-print reference does not read as fabricated.
   const yearNum = typeof record.year === 'number' ? record.year : Number(record.year);
   const aheadOfPrint = Number.isFinite(yearNum) && yearNum > new Date().getFullYear() ? ' Advance online publication.' : '';
-  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${aheadOfPrint}`);
+  // Use the journal name when an adapter captured it; fall back to the database
+  // label only when no real venue is known (so refs read "… N Engl J Med. 2024."
+  // rather than "… PubMed.").
+  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${referenceVenue(record)}.${doi}${pmid}${url}${aheadOfPrint}`);
 }
 
 function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
@@ -461,6 +469,14 @@ function buildFigures(
     });
   }
 
+  // Compute the pooled synthesis once (continuous SMD, else reported ratio
+  // measures) so the captions below can tell the truth about whether a pooled
+  // estimate was actually computed.
+  const evidenceMeta = pipeline?.evidenceExtractions
+    ? buildEvidenceMeta(pipeline.evidenceExtractions)
+    : undefined;
+  const pooledComputed = evidenceMeta?.interpretable === true;
+
   // Extracted-statistics yield — how many quantitative results (sample sizes,
   // effect estimates, CIs, p-values) were copied from source text.
   if (pipeline?.evidenceExtractions?.length) {
@@ -470,8 +486,9 @@ function buildFigures(
         id: 'fig-numeric-yield',
         kind: 'numeric_yield',
         title: 'Extracted statistics by type',
-        caption:
-          'Count of numeric statistics copied verbatim from retrieved source text, by type. No pooled estimates or new statistics are computed in evidence-review mode.',
+        caption: pooledComputed
+          ? 'Count of numeric statistics extracted from retrieved source text, by type. These source-reported values are pooled into the random-effects meta-analysis shown separately below.'
+          : 'Count of numeric statistics extracted from retrieved source text, by type. Too few comparable effect estimates were reported to compute a pooled meta-analysis.',
         alt: 'Bar chart showing the count of extracted statistics by type.',
         svg: numericYieldSvg(numericRows),
         data: { numericYield: Object.fromEntries(numericRows) },
@@ -484,9 +501,10 @@ function buildFigures(
     figures.push(forestPlotFigure(dataset.inferential.subgroups));
   }
 
-  // Meta-analysis forest plot when ≥2 studies have comparable continuous outcomes.
-  if (pipeline?.evidenceExtractions) {
-    const meta = buildSmdMeta(pipeline.evidenceExtractions);
+  // Meta-analysis forest plot when ≥2 studies report comparable effect estimates
+  // (continuous outcomes, or ratio measures with CIs).
+  {
+    const meta = evidenceMeta;
     if (meta?.interpretable) {
       figures.push({
         id: 'fig-meta-analysis',
@@ -587,33 +605,6 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
   };
 }
 
-function evidenceExtractionTable(extractions: EvidenceExtraction[]): ManuscriptTable {
-  return {
-    id: 'table-evidence-extraction',
-    title: 'Structured evidence extraction',
-    caption:
-      'Agent pipeline extraction table. Each row is bound to an app-owned source marker and contains only fields traceable to the retrieved record metadata or snippet. The RoB/GRADE column is a design-based heuristic (no model calls), not a formal full-text appraisal.',
-    columns: ['Source', 'Design', 'RoB / GRADE (heuristic)', 'Population', 'Exposure', 'Outcomes', 'Numeric support', 'Key finding'],
-    rows: extractions.map((item) => {
-      const rob = assessRiskOfBias(item);
-      const robSummary = `${rob.tool}: ${rob.overall.replace(/_/g, ' ')}${rob.gradeCertainty ? ` | GRADE ${rob.gradeCertainty}` : ''}`;
-      return [
-        `${item.sourceMarker} ${SOURCE_LABELS[item.source]}`,
-        item.studyDesign,
-        robSummary,
-        item.population,
-        item.exposureOrIntervention,
-        item.outcomes.join('; ') || 'not reported',
-        [
-          item.sampleSize ? `sample ${item.sampleSize}` : '',
-          ...item.effectValues.map((effect) => `${effect.label} ${effect.value}`),
-        ].filter(Boolean).join('; ') || 'none extracted',
-        item.keyFinding,
-      ];
-    }),
-  };
-}
-
 function claimLedgerTable(ledger: ClaimLedgerEntry[]): ManuscriptTable {
   return {
     id: 'table-claim-ledger',
@@ -629,27 +620,6 @@ function claimLedgerTable(ledger: ClaimLedgerEntry[]): ManuscriptTable {
       entry.numericSupport.join('; ') || 'none extracted',
       entry.contradictionNotes.join('; ') || 'none recorded',
     ]),
-  };
-}
-
-function extractedNumericStatisticsTable(extractions: EvidenceExtraction[]): ManuscriptTable | null {
-  const rows = extractions.flatMap((item) =>
-    item.effectValues.map((effect) => [
-      item.sourceMarker,
-      effect.label,
-      effect.value,
-      item.sampleSize ?? 'not reported',
-      effect.sourceText,
-    ]),
-  );
-  if (rows.length === 0) return null;
-  return {
-    id: 'table-extracted-numeric-statistics',
-    title: 'Extracted numeric statistics',
-    caption:
-      'Numeric statistics copied from retrieved source text by the extraction layer. No pooled estimates or new p-values are generated in evidence-review mode.',
-    columns: ['Source', 'Statistic', 'Value', 'Sample size', 'Trace text'],
-    rows,
   };
 }
 
@@ -680,17 +650,18 @@ function buildTables(
     },
   ];
   if (pipeline?.evidenceExtractions?.length) {
-    tables.push(evidenceExtractionTable(pipeline.evidenceExtractions));
-    const numericTable = extractedNumericStatisticsTable(pipeline.evidenceExtractions);
-    if (numericTable) tables.push(numericTable);
-    // Add meta-analysis table if computable
-    const meta = buildSmdMeta(pipeline.evidenceExtractions);
+    // The structured per-record extraction and the raw extracted-statistics
+    // tables are kept out of the publishable body — they read as internal
+    // worksheets, not journal tables. The pooled meta-analysis below is the one
+    // legitimate results table. (Both remain available in the execution trace.)
+    // Add meta-analysis table if computable.
+    const meta = buildEvidenceMeta(pipeline.evidenceExtractions);
     if (meta && meta.interpretable) {
       tables.push({
         id: 'table-meta-analysis',
         title: 'Pooled quantitative synthesis',
         caption:
-          'Inverse-variance random-effects meta-analysis computed in-app from extracted statistics. This is NOT a replacement for a full Cochrane review; it is a rapid quantitative summary when ≥2 studies report comparable continuous outcomes.',
+          'Inverse-variance random-effects meta-analysis (DerSimonian-Laird) computed in-app from the extracted effect estimates. This is NOT a replacement for a full Cochrane review; it is a rapid quantitative summary when ≥2 studies report comparable continuous outcomes or ratio measures with confidence intervals.',
         columns: ['Parameter', 'Value'],
         rows: [
           ['Studies pooled', String(meta.studies)],
@@ -754,7 +725,7 @@ function statisticsPayload(
   if (pipeline?.claimLedger?.length) computedAnalyses.push('claim_ledger', 'evidence_strength_counts');
   if (numericCount && numericCount > 0) computedAnalyses.push('extracted_numeric_statistics');
   // Check if meta-analysis is computable
-  if (pipeline?.evidenceExtractions && buildSmdMeta(pipeline.evidenceExtractions)?.interpretable) {
+  if (pipeline?.evidenceExtractions && buildEvidenceMeta(pipeline.evidenceExtractions)?.interpretable) {
     computedAnalyses.push('inverse_variance_meta_analysis');
   }
   if (inferential?.generated) {
@@ -766,7 +737,7 @@ function statisticsPayload(
     }
   }
 
-  const metaResult = pipeline?.evidenceExtractions ? buildSmdMeta(pipeline.evidenceExtractions) : undefined;
+  const metaResult = pipeline?.evidenceExtractions ? buildEvidenceMeta(pipeline.evidenceExtractions) : undefined;
   const safeguards = inferential?.generated
     ? [
         'Inferential statistics (p-values, confidence intervals, odds and risk ratios, hazard ratios, and survival estimates) were computed in-app by the validated analysis engine directly from the uploaded dataset.',
@@ -866,7 +837,7 @@ function unsupportedStatisticIssues(
 ): ValidationIssue[] {
   const supportedText = evidenceText(evidence, dataset, extractions);
   // Also include meta-analysis computed values as supported
-  const meta = extractions ? buildSmdMeta(extractions) : undefined;
+  const meta = extractions ? buildEvidenceMeta(extractions) : undefined;
   const metaText = meta?.interpretable
     ? [
         String(meta.pooledPoint),

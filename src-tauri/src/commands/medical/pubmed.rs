@@ -131,7 +131,11 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
             title,
             year,
             authors,
-            serde_json::json!({ "pmid": id, "doi": item["elocationid"].as_str() }),
+            serde_json::json!({
+                "pmid": id,
+                "doi": item["elocationid"].as_str(),
+                "journal": item["fulljournalname"].as_str(),
+            }),
             url,
             snippet,
         ));

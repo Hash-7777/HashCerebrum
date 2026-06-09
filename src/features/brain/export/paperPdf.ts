@@ -290,8 +290,29 @@ export function splitPdfTextToSize(doc: PdfTextWrapper, text: string, width: num
   return baseLines.flatMap((line) => reflowPdfLine(doc, String(line), width));
 }
 
+// The publication venue (journal) when an adapter captured it, else a readable
+// database label — so a reference reads "… N Engl J Med. 2024." not "… PUBMED.".
+function referenceVenue(record: EvidenceItem): string {
+  const venue =
+    record.identifiers?.journal || record.identifiers?.venue || record.identifiers?.containerTitle;
+  if (venue && venue.trim()) return venue.trim();
+  const labels: Record<string, string> = {
+    pubmed: 'PubMed',
+    europepmc: 'Europe PMC',
+    openalex: 'OpenAlex',
+    ctgov: 'ClinicalTrials.gov',
+    openfda: 'openFDA',
+    rxnorm: 'RxNorm',
+    semantic_scholar: 'Semantic Scholar',
+    gwas_catalog: 'GWAS Catalog',
+    clinvar: 'ClinVar',
+    library: 'Imported document',
+  };
+  return labels[record.source] ?? record.source;
+}
+
 function formatReference(record: EvidenceItem, index: number, _style: 'source' | 'vancouver' = 'source'): string {
-  const year = record.year ? ` (${record.year})` : '';
+  const year = record.year ? ` ${record.year}.` : '';
   const id = record.identifiers?.pmid
     ? ` PMID: ${record.identifiers.pmid}.`
     : record.identifiers?.doi
@@ -299,11 +320,11 @@ function formatReference(record: EvidenceItem, index: number, _style: 'source' |
       : '';
   const authors =
     record.authors.length > 0
-      ? record.authors.slice(0, 4).join(', ') + (record.authors.length > 4 ? ' et al.' : '') + '.'
-      : record.source.toUpperCase() + '.';
-  // The leading "[n]" marker is drawn separately in accent colour; we only
-  // return the body text here (marker is NOT prepended to avoid duplication).
-  return `[${index + 1}] ${authors} ${record.title}.${year} ${record.source.toUpperCase()}.${id}`;
+      ? record.authors.slice(0, 6).join(', ') + (record.authors.length > 6 ? ' et al.' : '') + '.'
+      : referenceVenue(record) + '.';
+  // Vancouver order: Authors. Title. Journal. Year. PMID/doi. The leading "[n]"
+  // marker is drawn separately in accent colour, so it is not prepended here.
+  return `[${index + 1}] ${authors} ${record.title}. ${referenceVenue(record)}.${year}${id}`;
 }
 
 // Accent mint colour (#82e0c2) used across headings and decorative elements.

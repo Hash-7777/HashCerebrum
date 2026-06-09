@@ -63,7 +63,7 @@ pub async fn europepmc_fetch(
                 title,
                 year,
                 authors,
-                serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str() }),
+                serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str(), "journal": item["journalTitle"].as_str() }),
                 url,
                 snippet,
             )

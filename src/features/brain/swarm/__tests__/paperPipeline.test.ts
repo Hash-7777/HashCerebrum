@@ -323,9 +323,11 @@ describe('paper pipeline claim ledger and QA', () => {
 
     expect(artifact.evidenceExtractions).toHaveLength(1);
     expect(artifact.claimLedger).toHaveLength(1);
-    expect(artifact.tables.map((table) => table.id)).toContain('table-evidence-extraction');
+    // The structured per-record extraction and raw numeric-statistics tables are
+    // kept out of the publishable body (worksheet-like); the claim ledger stays.
+    expect(artifact.tables.map((table) => table.id)).not.toContain('table-evidence-extraction');
+    expect(artifact.tables.map((table) => table.id)).not.toContain('table-extracted-numeric-statistics');
     expect(artifact.tables.map((table) => table.id)).toContain('table-claim-ledger');
-    expect(artifact.tables.map((table) => table.id)).toContain('table-extracted-numeric-statistics');
     expect(artifact.statistics.computedAnalyses).toContain('claim_ledger');
     expect(artifact.statistics.extractedNumericStatisticCount).toBeGreaterThan(0);
   });

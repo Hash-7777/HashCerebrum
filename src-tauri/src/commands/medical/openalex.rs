@@ -87,7 +87,7 @@ pub async fn openalex_query(
                 title,
                 item["publication_year"].as_i64().map(|y| y.to_string()),
                 authors,
-                serde_json::json!({ "openalex": item["id"].as_str(), "doi": item["doi"].as_str() }),
+                serde_json::json!({ "openalex": item["id"].as_str(), "doi": item["doi"].as_str(), "journal": item["primary_location"]["source"]["display_name"].as_str() }),
                 item["id"].as_str().map(str::to_string),
                 snippet,
             )

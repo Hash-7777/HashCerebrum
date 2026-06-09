@@ -33,6 +33,23 @@ describe('formatReference — Vancouver (default)', () => {
   it('falls back to the source label when there are no authors', () => {
     expect(formatReference(rec({ title: 'Label record', source: 'openfda' }), 'vancouver')).toContain('openFDA');
   });
+
+  it('uses the journal name when an adapter captured it, not the database label', () => {
+    const withJournal = rec({
+      title: 'SGLT2 inhibitors in HFpEF',
+      authors: ['Anker SD'],
+      year: 2021,
+      identifiers: { pmid: '34449189', journal: 'N Engl J Med' },
+    });
+    const out = formatReference(withJournal, 'vancouver');
+    expect(out).toContain('N Engl J Med.');
+    expect(out).not.toContain('PubMed');
+  });
+
+  it('still shows the database label when no journal is known (no regression)', () => {
+    const noJournal = rec({ title: 'No journal', authors: ['Smith J'], year: 2022 });
+    expect(formatReference(noJournal, 'vancouver')).toContain('PubMed');
+  });
 });
 
 describe('formatReference — APA', () => {

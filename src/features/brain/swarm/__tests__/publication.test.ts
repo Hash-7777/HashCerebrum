@@ -176,8 +176,12 @@ describe('publication artifact contract', () => {
     const kinds = artifact.figures.map((figure) => figure.kind);
     expect(kinds).toContain('evidence_strength');
     expect(kinds).toContain('numeric_yield');
-    const extractionTable = artifact.tables.find((table) => table.id === 'table-evidence-extraction');
-    expect(extractionTable?.columns).toContain('RoB / GRADE (heuristic)');
+    // The structured per-record extraction and raw extracted-statistics tables
+    // are deliberately kept out of the publishable body — they read as internal
+    // worksheets, not journal tables.
+    const tableIds = artifact.tables.map((table) => table.id);
+    expect(tableIds).not.toContain('table-evidence-extraction');
+    expect(tableIds).not.toContain('table-extracted-numeric-statistics');
   });
 
   it('cleans stale prompt leakage during export normalization', () => {

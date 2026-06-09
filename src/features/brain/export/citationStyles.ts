@@ -31,6 +31,16 @@ const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
   library: 'Imported document',
 };
 
+// The journal / publication venue when an adapter captured it (stored on
+// identifiers as a string). Falls back to the database label only when no real
+// venue is known — so a reference reads "… N Engl J Med. 2024." instead of
+// "… PubMed." once the source provides the journal name.
+function venueText(record: EvidenceItem): string {
+  const venue =
+    record.identifiers?.journal || record.identifiers?.venue || record.identifiers?.containerTitle;
+  return venue && venue.trim() ? venue.trim() : SOURCE_LABELS[record.source];
+}
+
 interface ParsedName {
   family: string;
   initials: string; // e.g. "J.A."
@@ -110,7 +120,7 @@ function vancouver(record: EvidenceItem): string {
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
   const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
   const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${SOURCE_LABELS[record.source]}.${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${venueText(record)}.${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -132,7 +142,7 @@ function apaAuthors(record: EvidenceItem): string {
 
 function apa(record: EvidenceItem): string {
   const year = yearText(record);
-  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${SOURCE_LABELS[record.source]}.${trailingId(record)}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${venueText(record)}.${trailingId(record)}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -161,7 +171,7 @@ function harvard(record: EvidenceItem): string {
       : record.identifiers?.pmid
         ? ` PMID: ${record.identifiers.pmid}.`
         : '';
-  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${SOURCE_LABELS[record.source]}.${avail}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${venueText(record)}.${avail}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
