@@ -22,7 +22,7 @@ function makePaper(overrides: Partial<ReviewedPaper> = {}): ReviewedPaper {
       reviewedAt: '2026-06-08T11:00:00.000Z',
       modelUsed: 'test-model',
       agentResults: [
-        { agentId: 'grammar', label: 'Grammar & Language', status: 'done', text: 'Reads well.', items: ['Fix one typo'] },
+        { agentId: 'vocabulary', label: 'Vocabulary & Style', status: 'done', text: 'Reads well.', items: ['Tighten one phrase'] },
         { agentId: 'statistics', label: 'Statistics & Data', status: 'done', text: 'Stats are sound and the analysis is appropriate.', items: [] },
         { agentId: 'originality', label: 'Originality Check', status: 'error', text: '', items: [] },
       ],
@@ -48,8 +48,8 @@ describe('buildReviewReportMarkdown', () => {
   it('includes finished swarm agents (with items or prose) and skips errored/empty ones', () => {
     const md = buildReviewReportMarkdown(makePaper());
     expect(md).toContain('## Swarm Agent Analysis');
-    expect(md).toContain('### Grammar & Language');
-    expect(md).toContain('- Fix one typo');
+    expect(md).toContain('### Vocabulary & Style');
+    expect(md).toContain('- Tighten one phrase');
     expect(md).toContain('### Statistics & Data');
     expect(md).toContain('Stats are sound');
     // Errored agent is omitted.

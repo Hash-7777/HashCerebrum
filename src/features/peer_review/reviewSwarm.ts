@@ -133,8 +133,9 @@ export function chunkDocument(text: string, size: number = CHUNK_CHARS): string[
 }
 
 // Maximum number of parts any one agent will review. A 12-section manuscript
-// chunked at 6k chars is ~12 parts, and at 5 agents that is dozens of calls —
-// on a low free tier that meant a 10-minute, heavily rate-limited review.
+// chunked at 6k chars is ~12 parts, and across the review agents that is dozens
+// of calls — on a low free tier that meant a 10-minute, heavily rate-limited
+// review.
 const MAX_REVIEW_PARTS = 3;
 
 // Reduce a manuscript to at most MAX_REVIEW_PARTS review chunks. A short paper
@@ -236,22 +237,6 @@ STATISTICS: <methods, sample size, effect sizes, CIs, p-values, clinical vs stat
 CONCLUSIONS: <supported? overclaiming? underclaiming?>
 PUBLICATION READINESS: <ready/minor/major/reject + journal tier>`;
 
-const GRAMMAR_PROMPT = `You are a biomedical copyeditor. Find spelling, grammar, and clarity issues.
-
-For fixable issues use:
-"exact text" → "replacement"
-
-Headings:
-SPELLING ERRORS:
-- "[wrong]" → "[correction]" — context
-GRAMMAR ISSUES:
-- [description] — context
-CLARITY PROBLEMS:
-- [unclear sentence]
-STYLE SUGGESTIONS:
-- [wordiness / passive overuse / jargon]
-LANGUAGE QUALITY: [A-F grade, 1-2 sentences]`;
-
 const ORIGINALITY_PROMPT = `You are an academic integrity reviewer. Check originality and attribution.
 
 REPETITIVE CONTENT:
@@ -330,13 +315,6 @@ export const REVIEW_SWARM_AGENTS: ReviewAgentDef[] = [
     iconName: 'shield',
     systemPrompt: ORCHESTRATOR_PROMPT,
     maxTokens: 2800,
-  },
-  {
-    agentId: 'grammar',
-    label: 'Grammar & Language',
-    iconName: 'edit',
-    systemPrompt: GRAMMAR_PROMPT,
-    maxTokens: 1400,
   },
   {
     agentId: 'originality',
