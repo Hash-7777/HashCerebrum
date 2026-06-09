@@ -46,8 +46,13 @@ function buildUserMessage(text: string): string {
   return `Please review the following manuscript:\n\n---\n${truncated}\n---`;
 }
 
-function parseScore(text: string): number {
-  const match = /SCORE:\s*(\d+)/.exec(text);
+export function parseScore(text: string): number {
+  // Tolerate markdown emphasis and spacing around the score — the orchestrator
+  // often writes "**SCORE:** 3 / 10", and the old /SCORE:\s*(\d+)/ could not
+  // match across the asterisks, so it fell back to 5 while the body showed 3
+  // (the ring-vs-body mismatch). Strip emphasis first, then read the integer.
+  const clean = text.replace(/[*_`]/g, '');
+  const match = /\bSCORE\b\s*:?\s*(\d+)/i.exec(clean);
   const n = match ? Number.parseInt(match[1]!, 10) : 5;
   return Math.max(1, Math.min(10, Number.isNaN(n) ? 5 : n));
 }

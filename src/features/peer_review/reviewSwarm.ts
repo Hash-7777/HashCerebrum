@@ -206,11 +206,22 @@ export function isRateLimited(err: unknown): boolean {
 }
 
 function bullets(block: string): string[] {
-  return block
-    .split('\n')
-    .filter((l) => /^\s*[-•*]/.test(l))
-    .map((l) => l.replace(/^\s*[-•*]\s*/, '').trim())
-    .filter(Boolean);
+  // De-duplicate identical points: an agent that reviews a manuscript in several
+  // parts repeats the same observation (e.g. "STATISTICS SCORE: 3/10",
+  // "AMSTAR-2: high concerns") once per part, which surfaced three identical
+  // copies in the report. Keep the first occurrence only.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of block.split('\n')) {
+    if (!/^\s*[-•*]/.test(line)) continue;
+    const text = line.replace(/^\s*[-•*]\s*/, '').trim();
+    if (!text) continue;
+    const key = text.toLowerCase().replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
 }
 
 // ── Agent system prompts ──────────────────────────────────────────────────
