@@ -22,6 +22,7 @@ import { useModeStore } from '@core/store/modeStore';
 import { manuscriptToReadableText } from '../swarm/manuscript';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
+import { MarkdownText } from '@ui/MarkdownText';
 import {
   buildExportHtml,
   buildMarkdownExport,
@@ -445,10 +446,10 @@ export const Transcript = memo(function Transcript({
                       <InteractionReportBody content={message.content} />
                     </>
                   ) : (
-                    <p>
-                      {message.content}
+                    <div className="assistant-text">
+                      <MarkdownText content={message.content} />
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
-                    </p>
+                    </div>
                   )}
                   {message.outlineProposal && onDraftOutline && !message.isStreaming && (
                     <button

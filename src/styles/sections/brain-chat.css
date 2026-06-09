@@ -1475,3 +1475,20 @@
   font-size: 11px;
   letter-spacing: 0.02em;
 }
+
+/* Lightweight markdown rendering for assistant chat text (MarkdownText). */
+.md-text > :first-child { margin-top: 0; }
+.md-text > :last-child { margin-bottom: 0; }
+.md-text p { margin: 0 0 10px; }
+.md-text ul, .md-text ol { margin: 0 0 10px; padding-left: 20px; }
+.md-text li { margin: 3px 0; }
+.md-text li::marker { color: var(--hc-fg-dim); }
+.md-text strong { font-weight: 650; color: var(--hc-fg-strong); }
+.md-text em { font-style: italic; }
+.md-text a { color: var(--hc-accent); text-decoration: underline; text-underline-offset: 2px; }
+.md-text code {
+  font: 0.9em var(--hc-font-mono);
+  padding: 1px 5px;
+  border-radius: var(--hc-radius-sm);
+  background: color-mix(in srgb, var(--hc-fg) 8%, transparent);
+}
