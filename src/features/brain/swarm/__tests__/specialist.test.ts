@@ -181,7 +181,9 @@ describe('runSwarm', () => {
     const cb = callbacks();
 
     const result = await runSwarm({
-      question: 'hi',
+      // Not a bare greeting (which short-circuits before routing) — a neutral
+      // message the planner itself classifies as chat, so the routing phase runs.
+      question: 'I am still deciding what to look into',
       conversation: [],
       modelFor: () => 'cloud:openai:gpt-5',
       callbacks: cb,

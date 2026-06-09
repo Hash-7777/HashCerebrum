@@ -103,6 +103,19 @@ export function isHarmfulRequest(question: string): boolean {
   return HARMFUL_REQUEST_RX.test(question);
 }
 
+// A message that is *entirely* a greeting, thanks, or acknowledgement — no
+// biomedical content. Answered conversationally instead of routed to a
+// literature search. The planner is told to treat these as chat, but its safe
+// default is "research", so a rate-limited planner turned a bare "hi" into a
+// 70-record PubMed dump. The pattern is anchored to the whole message, so
+// "hi, what is metformin?" or "history of stroke" never match.
+const SMALL_TALK_RX =
+  /^\s*(hi+|hey+|hello+|yo|sup|hiya|howdy|heya|good\s*(morning|afternoon|evening|day|night)|thanks?|thank\s*you|thx|ty|ok|okay|k|kk|cool|nice|great|awesome|perfect|got\s*it|gotcha|np|no\s*problem|cheers|how\s*(are|r)\s*(you|u)|what'?s\s*up|greetings)(\s+there)?[\s!.?,]*$/i;
+
+export function isSmallTalk(question: string): boolean {
+  return SMALL_TALK_RX.test(question);
+}
+
 // Deterministic replies (never model-generated, so they are guaranteed).
 export const SELF_HARM_MESSAGE =
   "I'm really sorry you're going through this, and I can't help with that request. " +

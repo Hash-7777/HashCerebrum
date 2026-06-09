@@ -36,6 +36,7 @@ import {
   isOffTopicQuestion,
   isPriorWorkReviewRequest,
   isSelfHarmQuery,
+  isSmallTalk,
   manuscriptStandardForQuestion,
   SELF_HARM_MESSAGE,
 } from './paper';
@@ -525,6 +526,16 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // not launch a research swarm that retrieves unrelated evidence and writes a
   // bogus manuscript. Route to chat with a refusal.
   if (isOffTopicQuestion(question)) {
+    callbacks.onBossPhase('answering');
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
+  }
+
+  // A bare greeting / thanks / acknowledgement is answered conversationally and
+  // never routed to the research swarm — deterministic, so it holds even when
+  // the planner is rate-limited (whose safe default is "research", which is how
+  // a plain "hi" became a literature search).
+  if (isSmallTalk(question)) {
     callbacks.onBossPhase('answering');
     const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };

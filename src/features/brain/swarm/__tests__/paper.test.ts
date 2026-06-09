@@ -8,6 +8,7 @@ import {
   isMetaOrAppQuestion,
   isPriorWorkReviewRequest,
   isSelfHarmQuery,
+  isSmallTalk,
   manuscriptStandardForQuestion,
   paperSystemInstruction,
 } from '../paper';
@@ -46,6 +47,19 @@ describe('safety gates', () => {
   it('does not flag legitimate public-health research', () => {
     expect(isHarmfulRequest('epidemiology of waterborne disease outbreaks and prevention')).toBe(false);
     expect(isHarmfulRequest('hospital water system safety and Legionella control')).toBe(false);
+  });
+
+  it('routes bare greetings and acknowledgements to chat, not research', () => {
+    for (const m of ['hi', 'Hello', 'hey there', 'thanks!', 'thank you', 'ok', 'how are you?', 'good morning']) {
+      expect(isSmallTalk(m)).toBe(true);
+    }
+  });
+
+  it('does not treat a greeting-prefixed question or real query as small talk', () => {
+    expect(isSmallTalk('hi, what is metformin?')).toBe(false);
+    expect(isSmallTalk('history of stroke')).toBe(false);
+    expect(isSmallTalk('how does aspirin work')).toBe(false);
+    expect(isSmallTalk('okay so which statin is safest in CKD')).toBe(false);
   });
 });
 
