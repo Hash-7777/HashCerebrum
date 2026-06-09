@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  drugCandidates,
   ensureGeneDisclaimer,
   ensureInteractionDisclaimer,
   geneConfidenceHeader,
@@ -8,8 +9,37 @@ import {
   isIdentityQuestion,
   looksLikeRefusalOrNonQuery,
   stripLeakedSpecialistLabels,
+  unverifiedDrugNames,
 } from '../boss';
 import type { AssociationConfidence } from '../genetics/associationConfidence';
+import type { EvidenceItem } from '@platform/index';
+
+describe('drug-interaction fabrication guard', () => {
+  const rec = (title: string, snippet = ''): EvidenceItem => ({
+    source: 'pubmed',
+    title,
+    snippet,
+    authors: [],
+    identifiers: {},
+    fetchedAt: new Date(0).toISOString(),
+    provenanceHash: 'h',
+  });
+
+  it('parses candidate drug names and drops connectors', () => {
+    expect(drugCandidates('zynteprol and warfarin')).toEqual(expect.arrayContaining(['zynteprol', 'warfarin']));
+    expect(drugCandidates('warfarin and ibuprofen')).not.toContain('and');
+  });
+
+  it('flags a drug that appears in no retrieved record', () => {
+    const evidence = [rec('Systematic overview of warfarin and its drug and food interactions', 'warfarin interactions')];
+    expect(unverifiedDrugNames('zynteprol and warfarin', evidence)).toEqual(['zynteprol']);
+  });
+
+  it('does not flag drugs present in the evidence', () => {
+    const evidence = [rec('Warfarin and ibuprofen bleeding risk', 'warfarin ibuprofen gastrointestinal')];
+    expect(unverifiedDrugNames('warfarin and ibuprofen', evidence)).toEqual([]);
+  });
+});
 
 describe('looksLikeRefusalOrNonQuery', () => {
   it('flags a model refusal so it never becomes the search query', () => {

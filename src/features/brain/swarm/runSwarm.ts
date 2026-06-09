@@ -23,6 +23,8 @@ import {
   synthesize,
   synthesizeGeneCorrelationReport,
   synthesizeInteractionReport,
+  unverifiedDrugMessage,
+  unverifiedDrugNames,
 } from './boss';
 import { confidenceFromEvidence } from './genetics/associationConfidence';
 import { assessGeneQueryReadiness, clarificationMessage } from './genetics/geneQueryReadiness';
@@ -587,6 +589,17 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     // an interaction question they are authoritative trusted sources, not just
     // background, so the report can cite them for a clear regulatory-grade answer.
     const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    // Fabrication guard: if a named drug appears in none of the retrieved
+    // records, it is likely misspelled or not a real drug — refuse to grade it
+    // rather than inventing a clinical interaction grade for a drug that does
+    // not exist.
+    const unverified = unverifiedDrugNames(researchQuestion, evidence);
+    if (unverified.length > 0) {
+      callbacks.onBossPhase('answering');
+      const message = unverifiedDrugMessage(unverified);
+      callbacks.onAnswerToken(message);
+      return { kind: 'chat', answer: message, evidence: [], specialists: [specialist], modelUsed: bossModel };
+    }
     callbacks.onBossPhase('synthesizing');
     const report = await synthesizeInteractionReport(
       bossModel,
