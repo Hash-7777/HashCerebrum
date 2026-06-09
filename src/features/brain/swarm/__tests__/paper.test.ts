@@ -50,7 +50,23 @@ describe('safety gates', () => {
   });
 
   it('routes bare greetings and acknowledgements to chat, not research', () => {
-    for (const m of ['hi', 'Hello', 'hey there', 'thanks!', 'thank you', 'ok', 'how are you?', 'good morning']) {
+    for (const m of [
+      'hi',
+      'Hello',
+      'hey there',
+      'thanks!',
+      'thank you',
+      'ok',
+      'how are you?',
+      'good morning',
+      'thanks man',
+      'done for today',
+      "that's all",
+      'bye',
+      'goodbye',
+      'see you',
+      'good job',
+    ]) {
       expect(isSmallTalk(m)).toBe(true);
     }
   });

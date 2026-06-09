@@ -6,9 +6,33 @@ import {
   isConfidentGeneReport,
   isConfidentInteractionReport,
   isIdentityQuestion,
+  looksLikeRefusalOrNonQuery,
   stripLeakedSpecialistLabels,
 } from '../boss';
 import type { AssociationConfidence } from '../genetics/associationConfidence';
+
+describe('looksLikeRefusalOrNonQuery', () => {
+  it('flags a model refusal so it never becomes the search query', () => {
+    for (const t of [
+      "I'm sorry, but I can't help with that.",
+      'I cannot help with that request.',
+      'I am unable to assist with this.',
+      'As an AI language model, I cannot comply.',
+    ]) {
+      expect(looksLikeRefusalOrNonQuery(t)).toBe(true);
+    }
+  });
+
+  it('does not flag a genuine rewritten research question', () => {
+    for (const t of [
+      'What is the efficacy of SGLT2 inhibitors in HFpEF?',
+      'Compare warfarin and apixaban for stroke prevention in atrial fibrillation',
+      'dapagliflozin and renal outcomes in chronic kidney disease',
+    ]) {
+      expect(looksLikeRefusalOrNonQuery(t)).toBe(false);
+    }
+  });
+});
 
 describe('isIdentityQuestion', () => {
   it('matches questions about the assistant itself', () => {

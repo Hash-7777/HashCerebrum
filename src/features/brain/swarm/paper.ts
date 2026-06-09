@@ -110,7 +110,7 @@ export function isHarmfulRequest(question: string): boolean {
 // 70-record PubMed dump. The pattern is anchored to the whole message, so
 // "hi, what is metformin?" or "history of stroke" never match.
 const SMALL_TALK_RX =
-  /^\s*(hi+|hey+|hello+|yo|sup|hiya|howdy|heya|good\s*(morning|afternoon|evening|day|night)|thanks?|thank\s*you|thx|ty|ok|okay|k|kk|cool|nice|great|awesome|perfect|got\s*it|gotcha|np|no\s*problem|cheers|how\s*(are|r)\s*(you|u)|what'?s\s*up|greetings)(\s+there)?[\s!.?,]*$/i;
+  /^\s*(hi+|hey+|hello+|yo|sup|hiya|howdy|heya|good\s*(morning|afternoon|evening|day|night)|thanks?|thank\s*you|thx|ty|ok|okay|k|kk|cool|nice|great|awesome|perfect|got\s*it|gotcha|np|no\s*problem|cheers|how\s*(are|r)\s*(you|u)|what'?s\s*up|greetings|bye+|goodbye|see\s*(ya|you)|laters?|done(\s+for\s+(now|today))?|that'?s\s+(all|it)|good\s*job|well\s*done|nvm|never\s*mind)(\s+(there|man|dude|bro|bruh|mate|buddy|guys|all))?[\s!.?,]*$/i;
 
 export function isSmallTalk(question: string): boolean {
   return SMALL_TALK_RX.test(question);

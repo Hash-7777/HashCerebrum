@@ -79,6 +79,17 @@ function parsePlan(text: string): BossPlan | null {
 const BACK_REF_FOLLOWUP_RX =
   /\b(it|its|they|them|those|these|that|this|so|also|then|which|what about|how about|same|instead|alternative|either|both|former|latter)\b/i;
 
+// A model "rewrite" that is actually a refusal or a meta non-answer ("I'm sorry,
+// but I can't help with that.") must NEVER become the literature-search query —
+// doing so searched the refusal text itself and returned apology-themed papers.
+// Detect it so contextualization falls back to the user's original message.
+const REFUSAL_OR_NON_QUERY_RX =
+  /\b(i(?:'?m| am)\s+sorry|i\s+can(?:'?t|not)\s+(?:help|assist|comply|do\s+that|provide|fulfil|answer)|i\s+(?:am|'?m)\s+unable|i\s+won'?t\s+(?:help|assist)|as\s+an?\s+(?:ai|language\s+model)|cannot\s+(?:help|assist)\s+with\s+that)\b/i;
+
+export function looksLikeRefusalOrNonQuery(text: string): boolean {
+  return REFUSAL_OR_NON_QUERY_RX.test(text);
+}
+
 export async function contextualizeQuestion(
   model: string,
   question: string,
@@ -106,7 +117,9 @@ export async function contextualizeQuestion(
     const rewritten = (res.content.split('\n').find((l) => l.trim()) ?? '')
       .replace(/^["'\s]+|["'\s]+$/g, '')
       .trim();
-    if (rewritten.length >= 8 && rewritten.length <= 300) return rewritten;
+    if (rewritten.length >= 8 && rewritten.length <= 300 && !looksLikeRefusalOrNonQuery(rewritten)) {
+      return rewritten;
+    }
   } catch {
     /* model unavailable — fall back to the original question */
   }
@@ -147,6 +160,10 @@ or
     /* fall through to a safe default */
   }
   // Safe default: research the question through the evidence-synthesis specialist.
+  // Casual / meta / off-topic messages are filtered by the deterministic gates in
+  // runSwarm BEFORE planning, so anything reaching this failure path is plausibly
+  // research — defaulting to research lets the source agents still return an
+  // evidence snapshot even when the boss model is unreachable.
   return { mode: 'research', tasks: [{ agentId: 'evidence_synthesis', subQuery: question }] };
 }
 
