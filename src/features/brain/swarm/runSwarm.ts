@@ -29,11 +29,15 @@ import { assessGeneQueryReadiness, clarificationMessage } from './genetics/geneQ
 import {
   detectPaperRequest,
   fallbackPaperTasks,
+  HARMFUL_REQUEST_REFUSAL,
+  isHarmfulRequest,
   isJailbreakAttempt,
   isMetaOrAppQuestion,
   isOffTopicQuestion,
   isPriorWorkReviewRequest,
+  isSelfHarmQuery,
   manuscriptStandardForQuestion,
+  SELF_HARM_MESSAGE,
 } from './paper';
 import type { LlmMessage } from '@core/llm/types';
 import { manuscriptToReadableText } from './manuscript';
@@ -452,6 +456,20 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     callbacks.onBossPhase('answering');
     callbacks.onAnswerToken(IDENTITY_ANSWER);
     return { kind: 'chat', answer: IDENTITY_ANSWER, evidence: [], specialists: [], modelUsed: bossModel };
+  }
+
+  // Safety gates run before any routing so a harmful or self-harm request can
+  // never be turned into a research run or a model-improvised answer. Both
+  // replies are deterministic.
+  if (isSelfHarmQuery(question)) {
+    callbacks.onBossPhase('answering');
+    callbacks.onAnswerToken(SELF_HARM_MESSAGE);
+    return { kind: 'chat', answer: SELF_HARM_MESSAGE, evidence: [], specialists: [], modelUsed: bossModel };
+  }
+  if (isHarmfulRequest(question)) {
+    callbacks.onBossPhase('answering');
+    callbacks.onAnswerToken(HARMFUL_REQUEST_REFUSAL);
+    return { kind: 'chat', answer: HARMFUL_REQUEST_REFUSAL, evidence: [], specialists: [], modelUsed: bossModel };
   }
 
   // A follow-up that asks the team to appraise its own previous output ("rate

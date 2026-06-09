@@ -80,6 +80,44 @@ export function isOffTopicQuestion(question: string): boolean {
   return OFF_TOPIC_RX.test(question);
 }
 
+// Self-harm / suicide intent expressed in the first person. These must never be
+// routed to the research swarm (which would answer "no evidence found"); they
+// get a deterministic, compassionate safety reply with crisis resources. The
+// patterns require self-reference so clinical toxicology questions ("lethal dose
+// of digoxin in case reports") are not falsely flagged.
+const SELF_HARM_RX =
+  /\b(kill|harm|hurt|end)\s+(myself|my\s?self)|take\s+my\s+(own\s+)?life|commit\s+suicide|end\s+my\s+life|(so|to)\s+(i|that\s+i)\s+(can\s+)?(die|don'?t\s+wake|won'?t\s+wake|never\s+wake)|(won'?t|never|don'?t)\s+wake\s+up|overdose\s+(on\b.*\b(myself|me)|and\s+(die|end))|how\s+(much|many).*\b(i|me|my)\b.*\b(die|overdose|won'?t\s+wake|never\s+wake|not\s+wake)\b/i;
+
+export function isSelfHarmQuery(question: string): boolean {
+  return SELF_HARM_RX.test(question);
+}
+
+// Requests to harm people or critical infrastructure (weapons of mass effect,
+// sabotage of water/power/food systems, terrorism). Hard-refused before routing
+// — even when wrapped as a "historical" or "public-health drill" framing, which
+// previously slipped past the off-topic gate and reached the swarm.
+const HARMFUL_REQUEST_RX =
+  /\b(disable|sabotage|attack|poison|contaminate|disrupt|cripple|destroy|take\s+down)\b[^.?!]*\b(water\s+(supply|system|treatment)|power\s+(grid|station)|electrical\s+grid|food\s+supply|hospital\s+(network|system)|public\s+health\s+(system|infrastructure)|critical\s+infrastructure)\b|\b(bio(?:logical)?\s+weapon|bioweapon|chemical\s+weapon|nerve\s+agent|dirty\s+bomb|improvised\s+explosive|ied\b|mass\s+casualt|weaponi[sz]e|how\s+to\s+(make|build|synthesi[sz]e)\s+(a\s+)?(bomb|explosive|weapon))\b/i;
+
+export function isHarmfulRequest(question: string): boolean {
+  return HARMFUL_REQUEST_RX.test(question);
+}
+
+// Deterministic replies (never model-generated, so they are guaranteed).
+export const SELF_HARM_MESSAGE =
+  "I'm really sorry you're going through this, and I can't help with that request. " +
+  'Please reach out right now to someone who can help: contact your local emergency number, ' +
+  'or a suicide and crisis line in your country — for example, in the US call or text 988; ' +
+  'in the UK and Ireland call Samaritans on 116 123. ' +
+  "If you're in immediate danger, please call your local emergency services. " +
+  'You deserve support from a person who can help, and reaching out is a strong first step.';
+
+export const HARMFUL_REQUEST_REFUSAL =
+  "I can't help with that. HashCerebrum is a biomedical research assistant and won't provide " +
+  'guidance on harming people or critical infrastructure, including under a "historical" or ' +
+  '"emergency-drill" framing. If your interest is defensive — prevention, detection, clinical ' +
+  'treatment, or public-health preparedness — rephrase the question around those goals and I can help.';
+
 // Typo-tolerant fallback: a creation verb plus a document noun anywhere in the
 // question (not necessarily adjacent) is a paper request. PAPER_RX requires the
 // noun to immediately follow the verb + qualifiers, so a stray or misspelled
