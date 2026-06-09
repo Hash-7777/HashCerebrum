@@ -23,7 +23,7 @@ type NumericEffect = {
 };
 
 export type MetaAnalysisResult = {
-  kind: 'smd' | 'or' | 'rr' | 'other';
+  kind: 'smd' | 'or' | 'rr' | 'hr' | 'other';
   studies: number;
   pooledPoint: number;
   pooledSe: number;
@@ -135,6 +135,116 @@ export function buildOrMeta(_extractions: EvidenceExtraction[]): MetaAnalysisRes
   // Not enough information in snippets for reliable OR meta-analysis
   // without event counts. Leave as placeholder for future full-text extraction.
   return undefined;
+}
+
+type RatioFamily = 'hr' | 'or' | 'rr';
+
+function ratioFamily(token: string): RatioFamily | undefined {
+  const t = token.toLowerCase();
+  if (t.includes('hazard')) return 'hr';
+  if (t.includes('odds')) return 'or';
+  if (t.includes('risk ratio') || t.includes('relative risk')) return 'rr';
+  return undefined;
+}
+
+/**
+ * Parse a ratio effect measure together with its 95% CI from free text, e.g.
+ * "hazard ratio 0.80 (95% CI 0.74-0.86)". Only the unambiguous long forms are
+ * matched (never the bare abbreviations HR/OR/RR, since "or" is also an English
+ * word — the exact false-positive that produced phantom effect estimates).
+ */
+function extractRatioWithCi(
+  text: string,
+): { family: RatioFamily; point: number; ciLow: number; ciHigh: number } | undefined {
+  const measureRx = /\b(hazard ratio|odds ratio|risk ratio|relative risk)\b\s*(?:of|was|were|=|:|,|approximately)?\s*(\d+(?:\.\d+)?)/i;
+  const m = measureRx.exec(text);
+  if (!m) return undefined;
+  const family = ratioFamily(m[1]!);
+  const point = safeNumber(m[2]);
+  if (!family || point === undefined || point <= 0 || point > 100) return undefined;
+  // Look for a 95% CI after the point estimate (accepts "CI" or the spelled-out
+  // "confidence interval", and "to" / dash / comma separators).
+  const tail = text.slice(m.index);
+  const ciRx =
+    /(?:95\s*%\s*)?(?:ci|confidence interval)\s*[:=]?\s*(?:of\s*)?\(?\s*(\d+(?:\.\d+)?)\s*(?:to|[-–—]|,)\s*(\d+(?:\.\d+)?)/i;
+  const ci = ciRx.exec(tail);
+  if (!ci) return undefined;
+  const ciLow = safeNumber(ci[1]);
+  const ciHigh = safeNumber(ci[2]);
+  if (ciLow === undefined || ciHigh === undefined || ciLow <= 0 || ciHigh <= ciLow) return undefined;
+  // The point estimate must sit within a tolerance of its own CI, else the CI we
+  // found belongs to a different statistic in the same snippet.
+  if (point < ciLow * 0.5 || point > ciHigh * 2) return undefined;
+  return { family, point, ciLow, ciHigh };
+}
+
+/**
+ * Pool ratio effect measures (HR / OR / RR) reported with 95% CIs across studies.
+ * Effects are combined on the log scale (inverse-variance, DerSimonian-Laird) and
+ * exponentiated back for display, so the pooled estimate and forest plot read on
+ * the natural ratio scale while heterogeneity is computed correctly on the log
+ * scale. Only one measure family is pooled — it never mixes a hazard ratio with
+ * an odds ratio. At least two studies of the same family are required.
+ */
+export function buildRatioMeta(extractions: EvidenceExtraction[]): MetaAnalysisResult | undefined {
+  const byFamily = new Map<RatioFamily, NumericEffect[]>();
+  for (const ex of extractions) {
+    const candidates = [
+      ex.keyFinding,
+      ...ex.effectValues.map((e) => `${e.label} ${e.value} ${e.sourceText}`),
+    ];
+    let parsed: ReturnType<typeof extractRatioWithCi>;
+    for (const text of candidates) {
+      parsed = extractRatioWithCi(text);
+      if (parsed) break;
+    }
+    if (!parsed) continue;
+    const se = (Math.log(parsed.ciHigh) - Math.log(parsed.ciLow)) / (2 * Z_975);
+    if (!(se > 0) || !Number.isFinite(se)) continue;
+    const effect: NumericEffect = {
+      label: parsed.family,
+      point: Math.log(parsed.point),
+      se,
+      ciLow: Math.log(parsed.ciLow),
+      ciHigh: Math.log(parsed.ciHigh),
+      weight: 1 / (se * se),
+      sourceMarker: ex.sourceMarker,
+    };
+    const list = byFamily.get(parsed.family);
+    if (list) list.push(effect);
+    else byFamily.set(parsed.family, [effect]);
+  }
+  // Pool the family with the most studies (need ≥2 to pool).
+  let best: { family: RatioFamily; effects: NumericEffect[] } | undefined;
+  for (const [family, effects] of byFamily) {
+    if (effects.length >= 2 && (!best || effects.length > best.effects.length)) best = { family, effects };
+  }
+  if (!best) return undefined;
+  const result = computeInverseVariance(best.effects, best.family);
+  // Exponentiate display fields back to the natural ratio scale; heterogeneity
+  // (I², τ², Q) stays as computed on the log scale.
+  return {
+    ...result,
+    pooledPoint: Math.exp(result.pooledPoint),
+    ciLow: Math.exp(result.ciLow),
+    ciHigh: Math.exp(result.ciHigh),
+    predictionCiLow: Math.exp(result.predictionCiLow),
+    predictionCiHigh: Math.exp(result.predictionCiHigh),
+    studyEffects: result.studyEffects.map((e) => ({
+      ...e,
+      point: Math.exp(e.point),
+      ciLow: Math.exp(e.ciLow),
+      ciHigh: Math.exp(e.ciHigh),
+    })),
+  };
+}
+
+/**
+ * Pool the strongest computable synthesis from the extractions: continuous
+ * (standardized mean difference) first, otherwise reported ratio measures.
+ */
+export function buildEvidenceMeta(extractions: EvidenceExtraction[]): MetaAnalysisResult | undefined {
+  return buildSmdMeta(extractions) ?? buildRatioMeta(extractions);
 }
 
 function computeInverseVariance(effects: NumericEffect[], kind: MetaAnalysisResult['kind']): MetaAnalysisResult {

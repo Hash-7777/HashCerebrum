@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { buildSmdMeta, formatMetaResult } from '../metaAnalysis';
+import { buildEvidenceMeta, buildRatioMeta, buildSmdMeta, formatMetaResult } from '../metaAnalysis';
 import type { EvidenceExtraction } from '../publicationTypes';
+
+function makeRatio(marker: string, text: string): EvidenceExtraction {
+  return {
+    id: 'test',
+    sourceMarker: marker,
+    evidenceIndex: 0,
+    source: 'pubmed',
+    title: 'Test',
+    year: '2024',
+    identifiers: {},
+    studyDesign: 'randomized clinical trial',
+    population: 'adults',
+    exposureOrIntervention: 'drug',
+    comparator: 'placebo',
+    outcomes: ['mortality'],
+    sampleSize: 'n=1000',
+    effectValues: [{ label: 'finding', value: '', sourceText: '' }],
+    limitations: [],
+    keyFinding: text,
+    trusted: true,
+  };
+}
 
 function makeExtraction(marker: string, sampleSize: string, effectText: string): EvidenceExtraction {
   return {
@@ -56,6 +78,51 @@ describe('buildSmdMeta', () => {
     expect(Number.isFinite(r!.i2)).toBe(true);
     expect(Number.isFinite(r!.qStatistic)).toBe(true);
     expect(r!.qDf).toBe(2);
+  });
+});
+
+describe('buildRatioMeta', () => {
+  it('pools hazard ratios reported with 95% CIs (log-scale, exponentiated)', () => {
+    const r = buildRatioMeta([
+      makeRatio('[S1]', 'hazard ratio 0.80 (95% CI 0.74-0.86)'),
+      makeRatio('[S2]', 'hazard ratio 0.76 (95% CI 0.72 to 0.81)'),
+      makeRatio('[S3]', 'hazard ratio 0.90 (95% CI 0.79-1.02)'),
+    ]);
+    expect(r).toBeDefined();
+    expect(r!.kind).toBe('hr');
+    expect(r!.studies).toBe(3);
+    // Pooled HR sits among the inputs and is protective with CI excluding 1.
+    expect(r!.pooledPoint).toBeGreaterThan(0.7);
+    expect(r!.pooledPoint).toBeLessThan(0.9);
+    expect(r!.ciLow < r!.pooledPoint && r!.pooledPoint < r!.ciHigh).toBe(true);
+    expect(r!.ciHigh).toBeLessThan(1);
+    expect(r!.interpretable).toBe(true);
+  });
+
+  it('requires at least two studies and a CI', () => {
+    expect(buildRatioMeta([makeRatio('[S1]', 'hazard ratio 0.80 (95% CI 0.74-0.86)')])).toBeUndefined();
+    expect(
+      buildRatioMeta([makeRatio('[S1]', 'hazard ratio 0.80'), makeRatio('[S2]', 'hazard ratio 0.76')]),
+    ).toBeUndefined();
+  });
+
+  it('never mistakes the English word "or" for an odds ratio', () => {
+    expect(
+      buildRatioMeta([
+        makeRatio('[S1]', 'metformin or placebo was given and the outcome improved'),
+        makeRatio('[S2]', 'aspirin or warfarin, either or both, were compared'),
+      ]),
+    ).toBeUndefined();
+  });
+});
+
+describe('buildEvidenceMeta', () => {
+  it('falls back to ratio pooling when no continuous outcomes exist', () => {
+    const r = buildEvidenceMeta([
+      makeRatio('[S1]', 'odds ratio 1.5 (95% CI 1.2-1.9)'),
+      makeRatio('[S2]', 'odds ratio 1.3 (95% CI 1.1-1.6)'),
+    ]);
+    expect(r?.kind).toBe('or');
   });
 });
 
