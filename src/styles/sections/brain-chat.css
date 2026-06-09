@@ -87,6 +87,9 @@
   text-transform: uppercase;
   color: var(--text-3);
   white-space: nowrap;
+  /* Allow the meta block to shrink within the header row so it can never push
+     the title out or overflow/clip the column. */
+  min-width: 0;
 }
 .chat-meta-line {
   display: flex;
@@ -107,6 +110,9 @@
 .chat-export-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  /* Wrap to a second line on a tight header rather than overflowing/clipping. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
 }

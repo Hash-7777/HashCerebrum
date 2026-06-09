@@ -767,11 +767,10 @@ export function BrainMode({
                 {draftProgress && <><span className="dot-sep">·</span><span className="draft-progress">{draftProgress}</span></>}
               </span>
               <span className="chat-export-actions">
-                <span className="chat-tip">
-                  <span className="tip">Tip</span>
-                  <span>Set a large Boss model in Settings for the best results.</span>
-                </span>
-                {messages.filter((m) => m.role !== 'system').length > 0 && (
+                {messages.filter((m) => m.role !== 'system').length > 0 ? (
+                  // Working state: compact export actions only. The onboarding tip
+                  // is dropped here so the long prose + buttons no longer share one
+                  // nowrap line that overflowed and clipped the header.
                   <>
                     <button type="button" onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
                     <button type="button" onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
@@ -789,6 +788,13 @@ export function BrainMode({
                       Clear
                     </button>
                   </>
+                ) : (
+                  // Empty state: the onboarding tip (there are no export buttons yet,
+                  // so there is room for the full hint).
+                  <span className="chat-tip">
+                    <span className="tip">Tip</span>
+                    <span>Set a large Boss model in Settings for the best results.</span>
+                  </span>
                 )}
               </span>
               {evidence.length > 0 && (
