@@ -766,35 +766,37 @@ export function BrainMode({
                 {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
                 {draftProgress && <><span className="dot-sep">·</span><span className="draft-progress">{draftProgress}</span></>}
               </span>
-              {messages.filter((m) => m.role !== 'system').length > 0 && (
-                <span className="chat-export-actions">
-                  <button type="button" onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
-                  <button type="button" onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
-                  <button
-                    type="button"
-                    className="chat-clear-btn"
-                    onClick={() => {
-                      clearActive();
-                      setMessages([WELCOME_MESSAGE]);
-                      setDataset(null);
-                      setEvidence([]);
-                    }}
-                    title="Clear workspace"
-                  >
-                    Clear
-                  </button>
+              <span className="chat-export-actions">
+                <span className="chat-tip">
+                  <span className="tip">Tip</span>
+                  <span>Set a large Boss model in Settings for the best results.</span>
                 </span>
-              )}
+                {messages.filter((m) => m.role !== 'system').length > 0 && (
+                  <>
+                    <button type="button" onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
+                    <button type="button" onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
+                    <button
+                      type="button"
+                      className="chat-clear-btn"
+                      onClick={() => {
+                        clearActive();
+                        setMessages([WELCOME_MESSAGE]);
+                        setDataset(null);
+                        setEvidence([]);
+                      }}
+                      title="Clear workspace"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+              </span>
               {evidence.length > 0 && (
                 <span className="chat-meta-evidence">
                   <b>{evidence.length}</b> EVIDENCE
                 </span>
               )}
             </div>
-          </div>
-          <div className="lede">
-            <span className="tip">Tip</span>
-            <span>Set a large model as the Boss in Settings for the best results.</span>
           </div>
         </header>
 

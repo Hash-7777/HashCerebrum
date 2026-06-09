@@ -106,7 +106,8 @@
 
 .chat-export-actions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   margin-top: 4px;
 }
 .chat-export-actions button {
@@ -131,35 +132,38 @@
   border-color: var(--danger, #e07070);
 }
 
-.lede {
+/* Tip now sits inline on the export-actions line to slim the header. */
+.chat-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--f-display);
   font-size: 11px;
   font-style: italic;
   font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-variation-settings: "opsz" 12;
-  line-height: 1.2;
   white-space: nowrap;
 }
-.lede > span:last-child {
-  min-width: 0;
-}
-.lede .tip {
+.chat-tip .tip {
   font-family: var(--f-mono);
-  font-size: 9.5px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  padding: 3px 7px;
+  padding: 2px 6px;
   border-radius: 3px;
   background: var(--warm-soft);
   color: var(--warm);
   border: 1px solid var(--warm-line);
   flex-shrink: 0;
-  font-style: normal;
-  font-weight: 600;
+}
+/* On a narrow header the prose tip yields before the buttons. */
+@media (max-width: 720px) {
+  .chat-tip > span:last-child { display: none; }
 }
 
 /* ── Chat scroll area ─────────────────────────────────────── */
