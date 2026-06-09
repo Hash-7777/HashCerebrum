@@ -64,6 +64,31 @@ describe('autoAssignModels — provider spreading', () => {
     const assigned = autoAssignModels([]);
     for (const agent of AGENTS) expect(assigned[agent.id]).toBe(DEFAULT_MODEL);
   });
+
+  it('keeps the throttled free 405B that cannot tool-call out of the boss slot', () => {
+    // The exact reported bug: a free 405B used to win the boss slot on raw
+    // parameter count, then 429'd and could not tool-call. OpenRouter reports it
+    // without `tools`, so discovery marks supportsTools:false and it is excluded.
+    const assigned = autoAssignModels([
+      {
+        value: 'cloud:openrouter:nousresearch/hermes-3-llama-3.1-405b:free',
+        label: 'Hermes 3 405B (free)',
+        shortLabel: 'Hermes',
+        supportsTools: false,
+      },
+      model('cloud:groq:openai/gpt-oss-120b', 'GPT OSS 120B'),
+    ]);
+    expect(assigned.boss).toBe('cloud:groq:openai/gpt-oss-120b');
+    for (const agent of AGENTS) expect(assigned[agent.id]).not.toContain('hermes');
+  });
+
+  it('prefers the paid variant over the throttled free variant of a comparable model', () => {
+    const assigned = autoAssignModels([
+      model('cloud:openrouter:deepseek/deepseek-v3:free', 'DeepSeek V3 (free)'),
+      model('cloud:openrouter:deepseek/deepseek-v3', 'DeepSeek V3'),
+    ]);
+    expect(assigned.boss).toBe('cloud:openrouter:deepseek/deepseek-v3');
+  });
 });
 
 describe('agentModelFor', () => {

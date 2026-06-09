@@ -28,7 +28,12 @@ export function modelStrengthScore(value: string, label = '', bigTask = true): n
   add(/gpt-oss-120b|405b|235b|120b|70b/i, 105);
   add(/llama-3\.3|llama-3\.1/i, 65);
 
-  score += Math.min(modelSizeScore(text), 500);
+  // Parameter count is a signal, not the verdict. Capped low so a huge but
+  // fragile model cannot outscore a smaller, reliable, tool-capable flagship on
+  // raw size alone — the bug that made a rate-limited free 405B the auto-boss.
+  // (Free-tier reliability is handled separately at auto-assignment time so this
+  // capability score still ranks the discovery catalog faithfully.)
+  score += Math.min(modelSizeScore(text), 140);
   if (bigTask) {
     add(/pro|opus|sonnet|r1|v3|405b|235b|120b|70b|maverick|nemotron|hermes/i, 60);
     add(/flash|lite|mini|small|fast|instant|8b|20b/i, -90);

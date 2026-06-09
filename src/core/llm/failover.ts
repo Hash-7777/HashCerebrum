@@ -18,6 +18,7 @@ export interface FailoverCandidate {
   shortLabel: string;
   provider: LlmProviderId;
   tier: number;
+  supportsTools?: boolean;
 }
 
 const FREE_PREFERRED: Partial<Record<LlmProviderId, number>> = {
@@ -61,6 +62,7 @@ export function listCloudCandidates(
         shortLabel: model.shortLabel,
         provider: group.provider,
         tier: modelTier(model.value, model.label),
+        ...(model.supportsTools !== undefined ? { supportsTools: model.supportsTools } : {}),
       });
     }
   }
@@ -72,13 +74,21 @@ export function findBestFailover(
   excluded: Set<string>,
   hasKey: (provider: LlmProviderId) => boolean,
   modelGroups: ModelGroup[],
+  needsTools = false,
 ): FailoverCandidate | null {
   const current = parseModelRef(currentModel);
   if (current.kind !== 'cloud') return null;
   const currentTier = modelTier(currentModel);
-  const available = listCloudCandidates(hasKey, modelGroups).filter(
+  let available = listCloudCandidates(hasKey, modelGroups).filter(
     (candidate) => candidate.value !== currentModel && !excluded.has(candidate.value),
   );
+  // When the failed call uses tools, don't hand it to a model we positively know
+  // can't tool-call (it would just hard-fail again). Unknown stays eligible; if
+  // the filter would empty the pool, keep all so the chain can still progress.
+  if (needsTools) {
+    const toolCapable = available.filter((candidate) => candidate.supportsTools !== false);
+    if (toolCapable.length > 0) available = toolCapable;
+  }
   if (available.length === 0) return null;
   available.sort((a, b) => {
     if (b.tier !== a.tier) return b.tier - a.tier;

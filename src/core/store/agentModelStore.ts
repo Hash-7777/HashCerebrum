@@ -40,6 +40,18 @@ function isCompleteAgentMap(map: Partial<Record<AgentId, string>>): map is Recor
   return AGENTS.every((agent) => typeof map[agent.id] === 'string');
 }
 
+// OpenRouter-style ":free" endpoints are throttled to a few requests per minute,
+// so on a long hot path (boss synthesis, manuscript drafting across many
+// sections) they 429 and cascade. The penalty keeps a smaller, reliable model as
+// the auto-pick while leaving the free model selectable manually and usable as a
+// last-resort failover. Applied only here — the discovery catalog still ranks by
+// pure capability via modelStrengthScore.
+const FREE_TIER_ENDPOINT = /:free\b/i;
+function selectionScore(model: ModelOption): number {
+  const base = modelStrengthScore(model.value, model.label);
+  return FREE_TIER_ENDPOINT.test(model.value) ? base - 250 : base;
+}
+
 export function autoAssignModels(models: ModelOption[]): Record<AgentId, string> {
   const result: Partial<Record<AgentId, string>> = {};
   if (models.length === 0) {
@@ -47,9 +59,13 @@ export function autoAssignModels(models: ModelOption[]): Record<AgentId, string>
     if (!isCompleteAgentMap(result)) throw new Error('autoAssignModels failed to populate all agents');
     return result;
   }
-  const ranked = [...models].sort(
-    (a, b) => modelStrengthScore(b.value, b.label) - modelStrengthScore(a.value, a.label),
-  );
+  // Every agent here calls tools (the boss orchestrates + synthesises, the
+  // specialists query sources), so exclude models we positively know lack tool
+  // calling. Unknown (`supportsTools === undefined`) stays in — we never demote
+  // on a guess. If that would empty the pool, keep all models rather than break.
+  const toolCapable = models.filter((model) => model.supportsTools !== false);
+  const pool = toolCapable.length > 0 ? toolCapable : models;
+  const ranked = [...pool].sort((a, b) => selectionScore(b) - selectionScore(a));
   // Group ranked models by provider, preserving strength order; providers are
   // ordered by their strongest model (insertion order of `ranked`).
   const byProvider = new Map<string, ModelOption[]>();

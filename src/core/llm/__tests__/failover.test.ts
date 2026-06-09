@@ -100,6 +100,28 @@ describe('LLM failover', () => {
     expect(isBillingError(new Error('HTTP 429 rate limit'))).toBe(false);
   });
 
+  it('skips a model that cannot tool-call when the failed call needs tools', () => {
+    const toolGroups: ModelGroup[] = [
+      {
+        provider: 'openrouter',
+        label: 'OpenRouter',
+        keyName: 'llm.openrouter',
+        models: [
+          { value: 'cloud:openrouter:free-405b', label: 'Free 405B', shortLabel: 'Free', supportsTools: false },
+          { value: 'cloud:openrouter:tooly', label: 'Tooly', shortLabel: 'Tooly', supportsTools: true },
+        ],
+      },
+    ];
+    const all = (_: LlmProviderId) => true;
+    const tried = new Set(['cloud:groq:openai/gpt-oss-120b']);
+    // needsTools=true must skip the no-tool model even though it is listed first.
+    const next = findBestFailover('cloud:groq:openai/gpt-oss-120b', tried, all, toolGroups, true);
+    expect(next?.value).toBe('cloud:openrouter:tooly');
+    // Without the tool requirement, the no-tool model is eligible again.
+    const any = findBestFailover('cloud:groq:openai/gpt-oss-120b', tried, all, toolGroups, false);
+    expect(any).not.toBeNull();
+  });
+
   it('treats model incompatibility as failover-worthy', () => {
     expect(isHardProviderError(new Error('model not found'))).toBe(true);
     expect(isHardProviderError(new Error('tool calling not supported'))).toBe(true);

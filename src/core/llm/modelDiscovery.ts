@@ -140,6 +140,17 @@ function supportsTextChat(provider: LlmProviderId, id: string, record: Record<st
   return true;
 }
 
+// Tool / function-calling support, read from the provider's model list where it
+// is reported. Returns `undefined` when the provider does not advertise it, so
+// the model stays assumed-capable rather than being demoted on a guess.
+function toolSupport(provider: LlmProviderId, record: Record<string, unknown>): boolean | undefined {
+  if (provider === 'openrouter') {
+    const params = record.supported_parameters;
+    if (Array.isArray(params)) return stringArray(params).some((p) => p.toLowerCase() === 'tools');
+  }
+  return undefined;
+}
+
 function optionFromRaw(provider: LlmProviderId, raw: unknown): ModelOption | null {
   const record = asRecord(raw);
   if (!record) return null;
@@ -150,7 +161,9 @@ function optionFromRaw(provider: LlmProviderId, raw: unknown): ModelOption | nul
     stringField(record, 'displayName') ??
     stringField(record, 'name') ??
     stringField(record, 'description');
-  return makeModelOption(provider, id, displayName && displayName !== id ? displayName : undefined);
+  const option = makeModelOption(provider, id, displayName && displayName !== id ? displayName : undefined);
+  const tools = toolSupport(provider, record);
+  return tools === undefined ? option : { ...option, supportsTools: tools };
 }
 
 function normalizeOptions(provider: LlmProviderId, records: unknown[]): ModelOption[] {

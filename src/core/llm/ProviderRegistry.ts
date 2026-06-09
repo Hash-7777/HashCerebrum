@@ -465,6 +465,8 @@ export async function streamWithModelChain(
   const hasKeySync = (provider: LlmProviderId) => keyCache.get(provider) === true;
   await Promise.all(PROVIDER_DEFS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
   const modelGroups = useModelCatalogStore.getState().groups;
+  // Whether this call uses tools — failover then prefers tool-capable models.
+  const needsTools = (req.tools?.length ?? 0) > 0;
 
   let failovers = 0;
   let acc = ''; // everything emitted so far, across every model leg
@@ -474,10 +476,10 @@ export async function streamWithModelChain(
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
     if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
-      let warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (warm && isProviderOnCooldown(warm.provider)) {
         tried.add(warm.value);
-        warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+        warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }
       if (warm) {
         tried.add(current);
@@ -546,10 +548,10 @@ export async function streamWithModelChain(
         // answer on another model rather than truncating it.
         if (!isRetriableError(error) && !isHardProviderError(error)) break;
         cooldownProvider(parsed.provider, error);
-        let cont = findBestFailover(current, tried, hasKeySync, modelGroups);
+        let cont = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
         while (cont && isProviderOnCooldown(cont.provider)) {
           tried.add(cont.value);
-          cont = findBestFailover(current, tried, hasKeySync, modelGroups);
+          cont = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
         }
         if (!cont) break;
         failovers++;
@@ -579,10 +581,10 @@ export async function streamWithModelChain(
           }
         }
       }
-      let next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (next && isProviderOnCooldown(next.provider)) {
         tried.add(next.value);
-        next = findBestFailover(current, tried, hasKeySync, modelGroups);
+        next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }
       if (!next) break;
       failovers++;
@@ -724,16 +726,18 @@ export async function completeWithModelChain(
   const hasKeySync = (provider: LlmProviderId) => keyCache.get(provider) === true;
   await Promise.all(PROVIDER_DEFS.filter((g) => !!g.keyName).map((g) => hasKey(g.provider)));
   const modelGroups = useModelCatalogStore.getState().groups;
+  // Whether this call uses tools — failover then prefers tool-capable models.
+  const needsTools = (req.tools?.length ?? 0) > 0;
 
   let failovers = 0;
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
     if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
-      let warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (warm && isProviderOnCooldown(warm.provider)) {
         tried.add(warm.value);
-        warm = findBestFailover(current, tried, hasKeySync, modelGroups);
+        warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }
       if (warm) {
         tried.add(current);
@@ -772,10 +776,10 @@ export async function completeWithModelChain(
           }
         }
       }
-      let next = findBestFailover(current, tried, hasKeySync, modelGroups);
+      let next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (next && isProviderOnCooldown(next.provider)) {
         tried.add(next.value);
-        next = findBestFailover(current, tried, hasKeySync, modelGroups);
+        next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }
       if (!next) break;
       failovers++;

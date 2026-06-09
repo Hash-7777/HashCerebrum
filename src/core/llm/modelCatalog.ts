@@ -4,6 +4,11 @@ export interface ModelOption {
   value: string;
   label: string;
   shortLabel: string;
+  // Tool / function-calling support, when the provider's model list reports it
+  // (e.g. OpenRouter `supported_parameters`). `undefined` means unknown — the
+  // model is assumed capable. Only an explicit `false` excludes a model from
+  // tool-using roles, so we never demote a model on a guess.
+  supportsTools?: boolean;
 }
 
 export interface ModelGroup {
