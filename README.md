@@ -122,20 +122,18 @@ It is not a replacement for reading the literature. It is a reasoning layer on t
 
 ## The 3D workspace
 
-The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Science Museum). Each of the nine agents is bound to a specific brain region. As the swarm works, the corresponding regions pulse with a base glow blended against topic-detection accent colours — so you can watch the brain *think*.
+The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Science Museum). Each agent is bound to a specific brain region. As the swarm works, the corresponding regions pulse with a base glow blended against topic-detection accent colours — so you can watch the brain *think*.
 
 | Agent | Brain region | Domain |
 |---|---|---|
 | Boss (The Cerebrum) | Frontal lobe | Routes questions, delegates, synthesizes |
-| Literature & Evidence | Hippocampus | PubMed · Europe PMC · OpenAlex · Semantic Scholar |
-| Clinical Trials | Parietal lobe | ClinicalTrials.gov — cohorts, designs, outcomes |
-| Statistics & Data | Thalamus | Effect sizes · CIs · sample sizes · p-values |
-| Pharmacology | Basal ganglia | RxNorm · openFDA — drugs, dosing, adverse effects |
-| Drug Interactions | Amygdala | Drug-drug interactions · contraindications |
-| Public Health | Occipital lobe | Epidemiology · prevention · vaccination |
-| Dentistry | Temporal lobe | Oral health · dental treatment evidence |
+| Evidence Synthesis | Hippocampus | PubMed · Europe PMC · OpenAlex · Semantic Scholar — reviews, epidemiology, prevention, oral health |
+| Clinical Research | Parietal lobe | ClinicalTrials.gov — cohorts, trial outcomes, statistics, effect sizes |
+| Pharmacist | Basal ganglia | RxNorm · openFDA — drugs, dosing, adverse effects, **and drug interactions** |
+| Genetics | Cerebellum | GWAS Catalog · ClinVar — gene-variant ↔ disease associations |
+| Drug Interactions | Amygdala | *Reserved for the dedicated Drug Interactions mode* |
 
-The roster and the region map are compile-time constants — the type system rejects a ninth agent.
+In **Brain** mode the boss delegates to the first five specialists. The **Pharmacist** is the combined drug expert (pharmacology *and* interactions), so general research routes every medication question to one capable agent; the standalone **Drug Interactions** agent powers the dedicated Drug Interactions mode. The roster and the region map are compile-time constants — the type system rejects a seventh agent.
 
 ---
 
@@ -145,7 +143,7 @@ The roster and the region map are compile-time constants — the type system rej
 |---|---|---|
 | **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain. Composer toggles: **Memory** (saved findings), **Library** (imported PDFs, default OFF), **Smart RAG** (agentic reasoning, default ON), **Brain Mini** (lighter pipeline for free/small models) |
 | **Memory** | `⌘2` | Semantic knowledge store — cited findings searched by meaning, plotted on a real **labelled 3-axis (PC1/PC2/PC3) vector map** with k-means clusters; a **Project / Library** scope toggle browses the whole cross-project corpus; one-click **Prune** |
-| **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 5-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review |
+| **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 4-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review. Export the review as **PDF or Markdown** |
 | **Drug Interactions** | `⌘4` | A focused clinical-pharmacology checker — grades each drug pair **A–X** (none → contraindicated) with mechanism, effect, and management, weighting authoritative drug-label sources |
 | **Genetics** | `⌘5` | A gene-expert checker — enter a gene variant and a disease and get an **association-confidence score** plus a cited correlation report from curated genetic databases (GWAS Catalog, ClinVar) and literature. Clarifies the query first if a gene or disease is missing |
 
@@ -155,15 +153,14 @@ The mode registry is a typed tuple capped at six entries (`src/config/modes.ts`)
 
 ## Peer review and document editing
 
-Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm of five specialist agents runs in parallel:
+Drop any PDF or send a Brain-generated manuscript to Peer Review mode. A swarm of four specialist agents runs in parallel:
 
 - **Orchestrator** — overall score 1–10, strengths, weaknesses, methodology, statistics, conclusions, publish-readiness
-- **Grammar** — spelling, clarity, academic style
 - **Originality** — repetition, unsupported claims, attribution gaps
 - **Vocabulary** — overused words, precision improvements, informal-to-academic replacements
 - **Statistics** — methods, reporting completeness, sample-size/power, interpretation
 
-After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable.
+After the review, **Fix Problems** opens a live `contenteditable` document editor. Each agent's suggestions are mapped back to exact passages in the text and highlighted with colour-coded marks. Every suggestion shows a before/after diff with **Accept**, **Skip**, and **Get Fix** buttons. Every accepted change is undoable. The finished review exports to **PDF or Markdown**.
 
 On a low-quota or local model the review runs **serially with backoff** that honours the provider's own retry hint, sends each agent a **condensed view** of the manuscript (far fewer calls), and — if a provider is exhausted — degrades to a clearly-labelled **partial** review instead of failing outright.
 
@@ -190,6 +187,18 @@ What makes the number trustworthy:
 - **Trusted, keyless sources only.** GWAS Catalog (EBI) and ClinVar (NCBI) sit alongside PubMed / Europe PMC / OpenAlex; every claim cites a real record with `[S#]`.
 - **Its own memory that feeds the Brain.** Confident findings are saved to the shared memory (tagged `genetics`); the gene expert is fed only its own genetics-scoped findings, while ordinary Brain research can read them.
 - **Runs free and local.** No API keys are required, and because the score is model-independent it produces the same percentage on a small Ollama model as on a frontier one (the Mini flag trims the report context to fit small windows).
+
+---
+
+## Safety & guardrails
+
+Unsafe requests are stopped at the gate — before they ever reach the research swarm — and the assistant never leaks its own internals.
+
+- **Self-harm is met with care, not data.** A first-person self-harm question gets a deterministic, compassionate safety reply with crisis-line guidance — never a dose, and never routed to the literature search. Clinical toxicology questions are unaffected.
+- **No help for harm.** Requests to harm people or critical infrastructure (weapons of mass effect; sabotage of water, power, or food systems) are hard-refused, even when wrapped as a "historical" or "emergency-drill" framing.
+- **Prompt-injection resistant.** Jailbreaks, roleplay personas, translation-bypass, token-smuggling, fake-authority claims, and instructions hidden inside pasted "evidence" are caught at the gate and never executed.
+- **Identity stays sealed.** The assistant answers as *The Cerebrum of HashCerebrum, developed by Dr. Seif Hashish* and never discloses the underlying model, provider, system prompt, API keys, or endpoints — even to a caller claiming to be the developer.
+- **Honest about itself.** Questions about how HashCerebrum works are answered from real facts, not invented features.
 
 ---
 
@@ -292,6 +301,24 @@ The audit log is readable and verifiable from Settings → Audit log.
 
 ---
 
+## Provenance you can verify — the audit log
+
+Most research tools ask you to trust their pipeline. HashCerebrum lets you **audit it**. Every privileged action — each outbound request, every biomedical database contacted, every model call, every cache and key access — is appended to a **tamper-evident, hash-chained log**, stored in plain text on your own machine and readable from **Settings → Audit log**.
+
+- **A receipt for every answer.** You can see exactly which sources were queried to produce a result — your chain of custody from claim back to publication, end to end, and proof the app reached nowhere it shouldn't.
+- **Tamper-evident by construction.** Each entry seals the SHA-256 of the entry before it, so any edit, deletion, or reordering breaks the chain. A one-click **Verify** walks it and reports the first broken link, or confirms it is intact.
+- **Local, transparent, nothing to leak.** It records only activity metadata — host, action, and a one-way hash of the payload — never your API keys or the content of your queries. No passkey, no cloud. A retention cap keeps it small, and one click resets it to a fresh chain.
+
+---
+
+## Appearance & performance
+
+- **Six themes**, including a light **Parchment** reading theme, all with carefully tuned contrast across every panel, and a consistent, theme-aware look throughout (scrollbars included).
+- **Lite mode** drops the 3D brain for a lightweight 2D panel — no WebGL, no GPU, far less memory — so the full app runs at speed on low-RAM or GPU-less machines, with auto-detection for weak hardware. Every research feature is unchanged.
+- **Tabbed Settings** (Settings · APIs · Data & Privacy · Disclaimer · Dev), assistant answers rendered as clean inline Markdown, and an in-app **developer error console** that surfaces runtime errors inside the app for debugging.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
@@ -306,7 +333,7 @@ The audit log is readable and verifiable from Settings → Audit log.
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (581 tests) + `cargo test` (49 tests) |
+| Testing | Vitest (612 tests) + `cargo test` (50 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -389,7 +416,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 581 unit tests
+npm test               # Vitest — 612 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -417,7 +444,7 @@ Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundl
 
 ```
 src/
-  config/          compile-time caps — modes (≤6), agents (≤9), constants
+  config/          compile-time caps — modes (≤6), agents (≤6), constants
   core/
     bus/           typed EventBus
     llm/           provider registry, model catalog, streaming
@@ -451,12 +478,12 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 198 | ~36,019 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 75 | ~7,244 |
-| Rust Tauri backend (`src-tauri/src/`) | 42 | ~6,383 |
-| **Total core source** | **315** | **~49,646** |
+| React/TypeScript app code (`src/`, excluding tests) | 204 | ~37,428 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 78 | ~7,655 |
+| Rust Tauri backend (`src-tauri/src/`) | 41 | ~6,411 |
+| **Total core source** | **323** | **~51,494** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (581 Vitest tests plus 49 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (612 Vitest tests plus 50 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 

@@ -1,24 +1,25 @@
 # Agents
 
-HashCerebrum runs a fixed swarm of eight agents: one boss and seven
-specialists. Adding a ninth is a compile-time error (`AGENTS` tuple in
+HashCerebrum runs a fixed swarm of six agents: one boss and five
+specialists. Adding a seventh is a compile-time error (`AGENTS` tuple in
 `src/config/agents.ts`).
 
 ## Roster
 
-| Agent              | Region binding | Role |
-|--------------------|----------------|------|
-| Boss               | Frontal        | Routes questions, delegates research, synthesizes findings |
-| Pharmacology       | Basal ganglia  | RxNorm / OpenFDA drug interactions and safety |
-| Clinical trials    | Parietal       | ClinicalTrials.gov queries, cohorts, and outcomes |
-| Literature & evidence | Hippocampus | PubMed / Europe PMC / OpenAlex literature search |
-| Dentistry          | Temporal       | Oral health and dental treatment evidence |
-| Public health      | Occipital      | Epidemiology, prevention, vaccination, and population health |
-| Drug interactions  | Amygdala       | Drug-drug interactions, contraindications, adverse drug events |
-| Statistics & data  | Thalamus       | Effect sizes, confidence intervals, sample sizes, quantitative results |
+| Agent               | Region binding | Role |
+|---------------------|----------------|------|
+| Boss (The Cerebrum) | Frontal        | Routes questions, delegates research, synthesizes findings |
+| Pharmacist          | Basal ganglia  | Drugs, dosing, pharmacokinetics, adverse effects **and** drug-drug/-food/-herb interactions (RxNorm / openFDA) — the combined drug expert in Brain mode |
+| Clinical research   | Parietal       | ClinicalTrials.gov cohorts and outcomes, plus trial statistics and effect sizes |
+| Evidence synthesis  | Hippocampus    | PubMed / Europe PMC / OpenAlex / Semantic Scholar — reviews, mechanisms, epidemiology, prevention, oral health |
+| Genetics            | Cerebellum     | GWAS Catalog / ClinVar — gene-variant ↔ disease associations with effect sizes |
+| Drug interactions   | Amygdala       | Drug-drug interactions, contraindications, adverse drug events — reserved for the dedicated Drug Interactions mode |
 
-The thalamus is now bound to the Statistics & data agent. Agent activity still
-emits through the same bus and may trigger additional topic accents.
+In **Brain** mode the boss plans across the first five specialists (the
+`BRAIN_SPECIALIST_AGENTS` pool). The **Drug interactions** agent is excluded
+from that pool — it is invoked directly by the dedicated Drug Interactions mode,
+while the **Pharmacist** covers interactions inside Brain. Unbound regions
+(thalamus, temporal, occipital, brainstem) carry only topic-detection accents.
 
 ## Lifecycle
 
