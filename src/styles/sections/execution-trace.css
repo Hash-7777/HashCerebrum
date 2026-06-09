@@ -83,6 +83,19 @@
   background: transparent;
   cursor: pointer;
 }
+.execution-trace-scope {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--hc-border);
+  border-radius: 5px;
+  color: var(--hc-muted);
+  font: 9px var(--hc-font-mono);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: pointer;
+}
+.execution-trace-scope:hover { background: var(--accent-soft); color: var(--hc-accent); }
 .execution-trace-clear:hover,
 .execution-trace-export:hover { background: var(--accent-soft); }
 .execution-trace-header > svg {

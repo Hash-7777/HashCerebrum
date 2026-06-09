@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
+import { useTraceLogStore } from '@core/store/traceLogStore';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { Icon, type IconName } from '@ui/icons';
+
+type TraceScope = 'run' | 'all';
 
 // How close to the bottom (px) still counts as "following" the latest output.
 const STICK_THRESHOLD = 28;
@@ -64,8 +67,15 @@ function traceState(activity: ActivityRecord[]): 'idle' | 'running' | 'done' | '
 }
 
 export function ExecutionTrace() {
-  const activity = useAgentStore((s) => s.activity);
-  const clear = useAgentStore((s) => s.clear);
+  const liveActivity = useAgentStore((s) => s.activity);
+  const clearRun = useAgentStore((s) => s.clear);
+  const persistent = useTraceLogStore((s) => s.entries);
+  const clearAll = useTraceLogStore((s) => s.clear);
+  // "run" shows the current run (cleared each run); "all" shows the persistent,
+  // cross-chat, survives-restart log for debugging background steps and failures.
+  const [scope, setScope] = useState<TraceScope>('run');
+  const activity = scope === 'all' ? persistent : liveActivity;
+  const clear = scope === 'all' ? clearAll : clearRun;
   const [expanded, setExpanded] = useState(false);
   const entriesRef = useRef<HTMLDivElement>(null);
   // Follow new output by default; released when the user scrolls up, re-armed
@@ -122,6 +132,17 @@ export function ExecutionTrace() {
       >
         <span className="execution-trace-dot" data-state={state} />
         <span className="execution-trace-label">Trace</span>
+        <button
+          type="button"
+          className="execution-trace-scope"
+          onClick={(event) => {
+            event.stopPropagation();
+            setScope((value) => (value === 'run' ? 'all' : 'run'));
+          }}
+          title={scope === 'all' ? 'Showing the full persistent log — click for this run only' : 'Showing this run — click for the full persistent log'}
+        >
+          {scope === 'all' ? 'All' : 'Run'}
+        </button>
         <span className="execution-trace-summary">{summaryFor(activity)}</span>
         {activity.length > 0 && (
           <button
@@ -130,7 +151,7 @@ export function ExecutionTrace() {
             onClick={(event) => {
               event.stopPropagation();
               downloadBlob(
-                'execution-trace.md',
+                scope === 'all' ? 'execution-trace-all.md' : 'execution-trace.md',
                 new Blob([buildTraceMarkdown(activity)], { type: 'text/markdown;charset=utf-8' }),
               );
             }}

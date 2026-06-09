@@ -11,6 +11,7 @@ import { browserPlatform } from '@platform/browser';
 import { registerMedicalTools } from '@core/tools/medical';
 import { registerMemoryTools } from '@core/tools/memory';
 import { installErrorCapture } from '@core/store/errorLogStore';
+import { installTraceLog } from '@core/store/traceLogStore';
 // Self-hosted fonts — served from node_modules by Vite, no external network
 // requests. Replaces the Google Fonts <link> that the Tauri CSP was blocking
 // (font-src 'self' data: does not cover fonts.gstatic.com).
@@ -51,6 +52,7 @@ declare global {
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 setPlatform(isTauri ? tauriPlatform : browserPlatform);
 installErrorCapture();
+installTraceLog();
 registerMedicalTools();
 registerMemoryTools();
 
