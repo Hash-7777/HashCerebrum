@@ -33,6 +33,14 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'dev', label: 'Dev', icon: 'activity' },
 ];
 
+// Developer bio shown in the Dev tab. Edit freely.
+const DEVELOPER_NAME = 'Dr. Seif Hashish';
+const DEVELOPER_BIO =
+  'Developer of HashCerebrum, a private, local-first biomedical research workspace. Research ' +
+  'interests span medical genetics and clinical epidemiology, including work on MICA ' +
+  '(MHC class I chain-related gene A) polymorphisms and cardiovascular complications in ' +
+  'type 1 diabetes.';
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [keyStatus, setKeyStatus] = useState<Partial<Record<LlmProviderId, boolean>>>({});
   const [apiKeys, setApiKeys] = useState<Partial<Record<LlmProviderId, string>>>({});
@@ -267,6 +275,24 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
         {tab === 'apis' && (
           <>
+            <div className="field inline">
+              <label>
+                <span>Ollama host</span>
+                <input value={host} onChange={(event) => setHost(event.target.value)} placeholder="http://localhost:11434" />
+              </label>
+              <button type="button" onClick={saveHost}>
+                Save
+              </button>
+            </div>
+            <p className="field-hint">
+              Run Ollama on this machine, or on another device on your network — e.g.{' '}
+              <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
+              automatically; only your local network is reachable, never the public internet.
+              <br />
+              For a LAN device, start Ollama there with <code>OLLAMA_HOST=0.0.0.0</code> and allow port{' '}
+              <code>11434</code> through its firewall so this machine can reach it.
+            </p>
+
             <div className="settings-model-tools">
               <span>
                 {refreshingModels
@@ -335,24 +361,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 );
               })}
             </div>
-
-            <div className="field inline">
-              <label>
-                <span>Ollama host</span>
-                <input value={host} onChange={(event) => setHost(event.target.value)} placeholder="http://localhost:11434" />
-              </label>
-              <button type="button" onClick={saveHost}>
-                Save
-              </button>
-            </div>
-            <p className="field-hint">
-              Run Ollama on this machine, or on another device on your network — e.g.{' '}
-              <code>192.168.1.50:11434</code> or <code>ollama.local:11434</code>. The scheme is added
-              automatically; only your local network is reachable, never the public internet.
-              <br />
-              For a LAN device, start Ollama there with <code>OLLAMA_HOST=0.0.0.0</code> and allow port{' '}
-              <code>11434</code> through its firewall so this machine can reach it.
-            </p>
           </>
         )}
 
@@ -437,33 +445,36 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               <p>Hash-chained, tamper-evident log of every guarded action, stored in plain text on this device. Verify to confirm the chain is intact.</p>
             </section>
 
-            <section className="settings-danger" aria-label="Reset all data">
-              <header>
-                <strong>
-                  <Icon name="alert" size={12} /> Reset all data
-                </strong>
-              </header>
-              <p>
-                Permanently erases every project&apos;s memory and embeddings, all chat history, research
-                runs, and the source cache — a clean slate for new research. Your settings and API keys are
-                kept. This cannot be undone.
+            <section className="danger-zone" aria-label="Danger zone">
+              <p className="danger-zone-title">
+                <Icon name="alert" size={12} /> Danger zone
               </p>
-              <button
-                type="button"
-                className="settings-danger-button"
-                disabled={resetting}
-                onClick={() => {
-                  const ok = window.confirm(
-                    'Erase ALL saved data — every project’s memory, chats, research runs, and cache? ' +
-                      'Settings and API keys are kept. This cannot be undone.',
-                  );
-                  if (!ok) return;
-                  setResetting(true);
-                  void resetAllData(); // wipes storage + cache, then reloads
-                }}
-              >
-                <Icon name="close" size={12} /> {resetting ? 'Resetting…' : 'Reset everything'}
-              </button>
+              <div className="danger-zone-row">
+                <div className="danger-zone-text">
+                  <strong>Reset all data</strong>
+                  <p>
+                    Permanently erases every project&apos;s memory and embeddings, all chat history,
+                    research runs, and the source cache. Your settings and API keys are kept. This
+                    cannot be undone.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="danger-zone-btn"
+                  disabled={resetting}
+                  onClick={() => {
+                    const ok = window.confirm(
+                      'Erase ALL saved data — every project’s memory, chats, research runs, and cache? ' +
+                        'Settings and API keys are kept. This cannot be undone.',
+                    );
+                    if (!ok) return;
+                    setResetting(true);
+                    void resetAllData(); // wipes storage + cache, then reloads
+                  }}
+                >
+                  {resetting ? 'Resetting…' : 'Reset all data'}
+                </button>
+              </div>
             </section>
           </>
         )}
@@ -504,6 +515,18 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <p className="settings-disclaimer-footer">
               By using HashCerebrum, you acknowledge these terms. If you do not agree, please do not use the software.
             </p>
+          </section>
+        )}
+
+        {tab === 'dev' && (
+          <section className="settings-developer" aria-label="Developer">
+            <header>
+              <strong>
+                <Icon name="shield" size={12} /> Developer
+              </strong>
+            </header>
+            <p className="settings-developer-name">{DEVELOPER_NAME}</p>
+            <p>{DEVELOPER_BIO}</p>
           </section>
         )}
 
