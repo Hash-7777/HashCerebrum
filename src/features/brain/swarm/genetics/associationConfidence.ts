@@ -24,6 +24,10 @@ export interface AssociationDataPoint {
   /** 'risk'/'protective' = a correlation exists; 'neutral' = no correlation
    *  (e.g. a benign ClinVar classification) — counts against the correlation. */
   direction: AssociationDirection;
+  /** The significance came from a real quantitative effect size (an odds/risk/
+   *  hazard ratio with a p-value or CI), not just a clinical classification. The
+   *  top "very strong" band requires this so a band can never outrun the data. */
+  quantitative?: boolean;
 }
 
 export interface AssociationConfidence {
@@ -34,6 +38,8 @@ export interface AssociationConfidence {
   supportCount: number;
   /** Points that refute a correlation (significant neutral/benign). */
   refuteCount: number;
+  /** Supporting points backed by a quantitative effect size (OR/RR/HR + stat). */
+  quantitativeCount: number;
   totalCount: number;
   pooledDirection: 'risk' | 'protective' | 'mixed' | 'none';
   rationale: string;
@@ -83,6 +89,7 @@ export function associationConfidence(points: AssociationDataPoint[]): Associati
       band: 'insufficient',
       supportCount: 0,
       refuteCount: refutes.length,
+      quantitativeCount: 0,
       totalCount: points.length,
       pooledDirection: 'none',
       rationale:
@@ -109,7 +116,18 @@ export function associationConfidence(points: AssociationDataPoint[]): Associati
       tierFactor *
       (0.85 + 0.15 * directionConcordance) +
     clinvarBoost;
-  const score = Math.round(Math.min(100, Math.max(0, raw)));
+  let score = Math.round(Math.min(100, Math.max(0, raw)));
+
+  // The "very strong" band must be earned by a quantitative effect size, not by
+  // a pile of clinical classifications alone — otherwise a report reads "very
+  // strong" while showing "Quantitative evidence: none reported". Without a
+  // supporting OR/RR/HR + stat, cap at the top of "strong" (79).
+  const quantitativeCount = supports.filter((p) => p.quantitative).length;
+  let capNote = '';
+  if (score >= 80 && quantitativeCount === 0) {
+    score = 79;
+    capNote = ' Capped below "very strong" because no quantitative effect size (OR/RR/HR with a CI or p-value) was retrieved — the score rests on clinical classifications and effect direction.';
+  }
 
   const pooledDirection: AssociationConfidence['pooledDirection'] =
     directionConcordance < 0.6 ? 'mixed' : risk >= protective ? 'risk' : 'protective';
@@ -119,13 +137,15 @@ export function associationConfidence(points: AssociationDataPoint[]): Associati
       ? `mixed direction (${risk} risk, ${protective} protective)`
       : `consistent ${pooledDirection} direction`;
   const refuteText = refutes.length ? `, with ${refutes.length} non-associating record(s)` : '';
-  const rationale = `Based on ${supports.length} significant association record(s) (${dirText})${refuteText}.`;
+  const quantText = quantitativeCount > 0 ? `, ${quantitativeCount} with a quantitative effect size` : '';
+  const rationale = `Based on ${supports.length} significant association record(s) (${dirText})${quantText}${refuteText}.${capNote}`;
 
   return {
     score,
     band: bandFor(score),
     supportCount: supports.length,
     refuteCount: refutes.length,
+    quantitativeCount,
     totalCount: points.length,
     pooledDirection,
     rationale,
@@ -177,6 +197,9 @@ function literaturePoint(record: EvidenceItem, disease: string[]): AssociationDa
     source: 'literature',
     significant,
     direction: value > 1 ? 'risk' : value < 1 ? 'protective' : 'neutral',
+    // A literature point always carries a reported ratio, and a SUPPORTING one is
+    // significant by a p-value or CI — i.e. a real quantitative effect size.
+    quantitative: significant,
   };
 }
 
@@ -225,6 +248,7 @@ export function associationPointsFromEvidence(
         source: 'gwas_catalog',
         significant,
         direction: or > 1 ? 'risk' : or < 1 ? 'protective' : 'neutral',
+        quantitative: true, // GWAS Catalog rows carry an odds ratio + CI/p-value
       });
     } else if (record.source === 'clinvar') {
       const sig = typeof id.clinicalSignificance === 'string' ? id.clinicalSignificance : '';

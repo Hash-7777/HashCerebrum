@@ -100,6 +100,7 @@ describe('genetics report helpers', () => {
     band: 'strong',
     supportCount: 4,
     refuteCount: 0,
+    quantitativeCount: 4,
     totalCount: 5,
     pooledDirection: 'risk',
     rationale: 'test',

@@ -8,11 +8,12 @@ import {
   type AssociationDataPoint,
 } from '../associationConfidence';
 
-const pt = (p: Partial<AssociationDataPoint> & { direction: AssociationDataPoint['direction'] }): AssociationDataPoint => ({
-  source: 'gwas_catalog',
-  significant: true,
-  ...p,
-});
+const pt = (p: Partial<AssociationDataPoint> & { direction: AssociationDataPoint['direction'] }): AssociationDataPoint => {
+  const source = p.source ?? 'gwas_catalog';
+  // Mirror real semantics: GWAS / literature points carry a quantitative effect
+  // size; ClinVar points are classification-only.
+  return { source, significant: true, quantitative: source !== 'clinvar', ...p };
+};
 
 describe('associationConfidence', () => {
   it('returns insufficient with no evidence', () => {
@@ -74,6 +75,25 @@ describe('associationConfidence', () => {
     expect(withClinvar).toBeGreaterThan(gwasOnly);
   });
 
+  it('caps "very strong" when no quantitative effect size backs the score', () => {
+    // Six concordant ClinVar pathogenic classifications: strong in volume but no
+    // OR/CI/p — must not read "very strong".
+    const clinvarOnly = associationConfidence(
+      Array.from({ length: 6 }, () => pt({ source: 'clinvar', direction: 'risk' })),
+    );
+    expect(clinvarOnly.quantitativeCount).toBe(0);
+    expect(clinvarOnly.band).not.toBe('very strong');
+    expect(clinvarOnly.score).toBeLessThanOrEqual(79);
+    expect(clinvarOnly.rationale).toMatch(/quantitative effect size/i);
+
+    // The same volume backed by quantitative GWAS effect sizes can reach the top.
+    const withQuant = associationConfidence(
+      Array.from({ length: 6 }, () => pt({ source: 'gwas_catalog', direction: 'risk' })),
+    );
+    expect(withQuant.quantitativeCount).toBeGreaterThan(0);
+    expect(withQuant.band).toBe('very strong');
+  });
+
   it('maps scores to bands at the right thresholds', () => {
     expect(bandFor(10)).toBe('insufficient');
     expect(bandFor(20)).toBe('weak');
@@ -97,7 +117,7 @@ describe('associationPointsFromEvidence', () => {
     const points = associationPointsFromEvidence([
       rec({ source: 'gwas_catalog', identifiers: { oddsRatio: '1.42', ci: '[1.10-1.84]', pValue: '3e-6' } }),
     ]);
-    expect(points).toEqual([{ source: 'gwas_catalog', significant: true, direction: 'risk' }]);
+    expect(points).toEqual([{ source: 'gwas_catalog', significant: true, direction: 'risk', quantitative: true }]);
   });
 
   it('marks a GWAS record non-significant when CI crosses 1 and p is high', () => {
@@ -141,7 +161,7 @@ describe('associationPointsFromEvidence', () => {
       ],
       'MICA TT genotype and cardiovascular complications in type 1 diabetes',
     );
-    expect(points).toEqual([{ source: 'literature', significant: true, direction: 'risk' }]);
+    expect(points).toEqual([{ source: 'literature', significant: true, direction: 'risk', quantitative: true }]);
   });
 
   it('does not count a literature OR from an off-disease record', () => {
