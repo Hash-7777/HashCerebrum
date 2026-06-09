@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
+import { downloadBlob } from '@features/brain/export/messageExport';
 import { Icon, type IconName } from '@ui/icons';
 
 // How close to the bottom (px) still counts as "following" the latest output.
@@ -33,6 +34,25 @@ function summaryFor(activity: ActivityRecord[]): string {
   const latest = activity[0];
   if (!latest) return 'No run yet';
   return latest.detail || `${latest.agentId} ${latest.phase}`;
+}
+
+// Markdown export of the live trace, matching the `- **agent** · phase — detail`
+// format used by the chat Markdown export, with a relative timestamp prefix.
+function buildTraceMarkdown(activity: ActivityRecord[]): string {
+  const ordered = [...activity].reverse(); // oldest first
+  const start = ordered[0]?.ts ?? Date.now();
+  const lines: string[] = [
+    '# Execution Trace',
+    '',
+    `_Exported ${new Date().toLocaleString()}_`,
+    '',
+  ];
+  for (const r of ordered) {
+    const t = `${((r.ts - start) / 1000).toFixed(1)}s`;
+    lines.push(`- \`[${t}]\` **${r.agentId}** · ${r.phase}${r.detail ? ` — ${r.detail}` : ''}`);
+  }
+  lines.push('');
+  return lines.join('\n');
 }
 
 function traceState(activity: ActivityRecord[]): 'idle' | 'running' | 'done' | 'error' {
@@ -103,6 +123,22 @@ export function ExecutionTrace() {
         <span className="execution-trace-dot" data-state={state} />
         <span className="execution-trace-label">Trace</span>
         <span className="execution-trace-summary">{summaryFor(activity)}</span>
+        {activity.length > 0 && (
+          <button
+            type="button"
+            className="execution-trace-export"
+            onClick={(event) => {
+              event.stopPropagation();
+              downloadBlob(
+                'execution-trace.md',
+                new Blob([buildTraceMarkdown(activity)], { type: 'text/markdown;charset=utf-8' }),
+              );
+            }}
+            title="Export the trace as Markdown"
+          >
+            Export MD
+          </button>
+        )}
         <button
           type="button"
           className="execution-trace-clear"
