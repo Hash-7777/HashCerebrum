@@ -1,11 +1,14 @@
-// In-memory store for Peer Review mode — holds uploaded or Brain-generated
-// papers and their AI critique results. Not persisted; PDF blobs can be large
-// and are re-supplied each session.
+// Store for Peer Review mode — holds uploaded or Brain-generated papers and
+// their AI critique results. Papers, reviews, edits, and citations persist
+// across restarts (durable app storage); the large raw PDF bytes are kept
+// separately in IndexedDB (see pdfStore) so the rasterised preview survives a
+// restart, while the session-only object URL is rebuilt on demand.
 
 import { create } from 'zustand';
 import { platform } from '@platform/index';
 import type { EvidenceItem } from '@platform/index';
 import type { CitationAudit } from '@features/peer_review/citationGrade';
+import { savePdf, deletePdf } from '@features/peer_review/pdfStore';
 
 export interface AgentReviewResult {
   agentId: string;
@@ -193,6 +196,8 @@ export const usePeerReviewStore = create<PeerReviewStore>((set, get) => {
         blobUrl,
       };
       set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
+      // Persist the bytes so the rasterised preview survives an app restart.
+      void savePdf(id, file);
       save();
       return id;
     } catch (err) {
@@ -218,6 +223,8 @@ export const usePeerReviewStore = create<PeerReviewStore>((set, get) => {
       ? { ...base, blobUrl: URL.createObjectURL(pdfBlob) }
       : base;
     set((s) => ({ papers: [...s.papers, paper], activePaperId: id }));
+    // Persist the bytes so the rasterised preview survives an app restart.
+    if (pdfBlob) void savePdf(id, pdfBlob);
     save();
     return id;
   },
@@ -281,6 +288,7 @@ export const usePeerReviewStore = create<PeerReviewStore>((set, get) => {
   },
 
   removePaper: (id) => {
+    void deletePdf(id);
     set((s) => {
       const paper = s.papers.find((p) => p.id === id);
       if (paper?.blobUrl) URL.revokeObjectURL(paper.blobUrl);

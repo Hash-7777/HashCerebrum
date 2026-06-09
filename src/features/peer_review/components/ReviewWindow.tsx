@@ -15,6 +15,7 @@ import {
 } from '../reviewSwarm';
 import { buildReviewReportPdf } from '../reviewReportPdf';
 import { buildReviewReportMarkdown } from '../reviewReportMarkdown';
+import { loadPdf } from '../pdfStore';
 import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../citationAudit';
 import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
 import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../rewriteSelection';
@@ -428,7 +429,44 @@ function PdfCanvasPreview({ url, paper }: { url: string; paper: ReviewedPaper })
   );
 }
 
+// Resolve a usable PDF object URL: the live session blob if present, otherwise
+// one rebuilt from the bytes persisted in IndexedDB so the preview survives an
+// app restart. `enabled` skips the load when the PDF is not needed.
+function usePdfObjectUrl(paper: ReviewedPaper, enabled: boolean): { url: string | null; loading: boolean } {
+  const [state, setState] = useState<{ url: string | null; loading: boolean }>(
+    paper.blobUrl ? { url: paper.blobUrl, loading: false } : { url: null, loading: enabled },
+  );
+  useEffect(() => {
+    if (paper.blobUrl) {
+      setState({ url: paper.blobUrl, loading: false });
+      return;
+    }
+    if (!enabled) {
+      setState({ url: null, loading: false });
+      return;
+    }
+    let created: string | null = null;
+    let cancelled = false;
+    setState({ url: null, loading: true });
+    void loadPdf(paper.id).then((blob) => {
+      if (cancelled) return;
+      if (blob) {
+        created = URL.createObjectURL(blob);
+        setState({ url: created, loading: false });
+      } else {
+        setState({ url: null, loading: false });
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [paper.id, paper.blobUrl, enabled]);
+  return state;
+}
+
 function DocumentPane({ paper }: { paper: ReviewedPaper }) {
+  const { url: pdfUrl, loading: pdfLoading } = usePdfObjectUrl(paper, !paper.editedHtml);
   if (paper.editedHtml) {
     return (
       <div className="review-document-preview">
@@ -449,12 +487,23 @@ function DocumentPane({ paper }: { paper: ReviewedPaper }) {
   // to canvases with pdf.js, the same renderer the Brain document preview uses.
   // Brain manuscripts carry both a blobUrl and htmlContent; uploaded PDFs carry
   // only a blobUrl. Either way the PDF is the source of truth here.
-  if (paper.blobUrl) {
-    return <PdfCanvasPreview url={paper.blobUrl} paper={paper} />;
+  if (pdfUrl) {
+    return <PdfCanvasPreview url={pdfUrl} paper={paper} />;
   }
 
-  // Fallback only when no PDF blob was produced (e.g. the manuscript's PDF build
-  // failed): the pre-built HTML preview in a sandboxed iframe.
+  // The PDF bytes are still being read back from IndexedDB after a restart —
+  // show a brief placeholder rather than flashing the extracted-text fallback.
+  if (pdfLoading) {
+    return (
+      <div className="review-pdf-canvas-pane">
+        <div className="review-pdf-loading">Restoring PDF…</div>
+      </div>
+    );
+  }
+
+  // Fallback only when no PDF blob is available (e.g. the manuscript's PDF build
+  // failed, or an older paper saved before PDFs were persisted): the pre-built
+  // HTML preview in a sandboxed iframe.
   if (paper.htmlContent) {
     return (
       <iframe
