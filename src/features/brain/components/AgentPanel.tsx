@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { agentById, AGENTS, type AgentId } from '@config/agents';
+import { agentById, BRAIN_AGENTS, type AgentId } from '@config/agents';
 import { regionById } from '../data/regions';
 
 export type AgentRunState = 'idle' | 'running' | 'done' | 'error';
@@ -21,7 +21,7 @@ function fallbackDetail(agent: AgentStatus): string {
 }
 
 export const initialAgentStatuses = (): AgentStatus[] =>
-  AGENTS.map((agent) => ({
+  BRAIN_AGENTS.map((agent) => ({
     agentId: agent.id,
     label: agent.label,
     kind: agent.kind,

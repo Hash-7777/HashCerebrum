@@ -116,8 +116,7 @@ describe('paper request helpers', () => {
     expect(tasks.map((task) => task.agentId)).toEqual([
       'evidence_synthesis',
       'clinical_research',
-      'pharmacology',
-      'drug_interactions',
+      'pharmacist',
     ]);
   });
 
@@ -151,8 +150,8 @@ describe('paper request helpers', () => {
       evidence,
       [
         {
-          agentId: 'pharmacology',
-          label: 'Pharmacology',
+          agentId: 'pharmacist',
+          label: 'Pharmacist',
           subQuery: 'mechanism',
           findings: 'retrieved mechanism evidence',
           evidence,

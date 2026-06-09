@@ -141,8 +141,7 @@ describe('runSwarm', () => {
     expect(result.specialists.map((specialist) => specialist.agentId)).toEqual([
       'evidence_synthesis',
       'clinical_research',
-      'pharmacology',
-      'drug_interactions',
+      'pharmacist',
     ]);
     expect(result.evidence.length).toBeGreaterThan(0);
     // A paper request always yields a structured manuscript — even with the
@@ -203,7 +202,7 @@ describe('runSwarm', () => {
       if (lastMessage.includes('User message:')) {
         return {
           content:
-            '{"mode":"research","tasks":[{"agent":"pharmacology","subQuery":"drug safety"},{"agent":"clinical_research","subQuery":"trial status"}]}',
+            '{"mode":"research","tasks":[{"agent":"pharmacist","subQuery":"drug safety"},{"agent":"clinical_research","subQuery":"trial status"}]}',
           toolCalls: [],
         };
       }
@@ -219,7 +218,7 @@ describe('runSwarm', () => {
     });
     const requestedModels = new Map<string, string>([
       ['boss', 'cloud:openai:gpt-5'],
-      ['pharmacology', 'cloud:groq:llama-3.1-8b'],
+      ['pharmacist', 'cloud:groq:llama-3.1-8b'],
       ['clinical_research', 'cloud:gemini:gemini-2.5-flash'],
     ]);
     const modelFor = vi.fn((agentId: string) => requestedModels.get(agentId) ?? 'cloud:openai:gpt-5');
@@ -232,9 +231,9 @@ describe('runSwarm', () => {
     });
 
     expect(result.kind).toBe('research');
-    expect(result.specialists.map((specialist) => specialist.agentId).sort()).toEqual(['clinical_research', 'pharmacology']);
+    expect(result.specialists.map((specialist) => specialist.agentId).sort()).toEqual(['clinical_research', 'pharmacist']);
     expect(modelFor).toHaveBeenCalledWith('boss');
-    expect(modelFor).toHaveBeenCalledWith('pharmacology');
+    expect(modelFor).toHaveBeenCalledWith('pharmacist');
     expect(modelFor).toHaveBeenCalledWith('clinical_research');
   });
 });

@@ -8,7 +8,7 @@ import {
   streamWithModelChain,
   type FailoverProgress,
 } from '@core/llm/ProviderRegistry';
-import { SPECIALIST_AGENTS, type AgentId } from '@config/agents';
+import { BRAIN_SPECIALIST_AGENTS, type AgentId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
@@ -35,10 +35,10 @@ export interface BossPlan {
   tasks: SpecialistTask[];
 }
 
-const SPECIALIST_IDS = new Set<AgentId>(SPECIALIST_AGENTS.map((agent) => agent.id));
+const SPECIALIST_IDS = new Set<AgentId>(BRAIN_SPECIALIST_AGENTS.map((agent) => agent.id));
 
 function rosterText(): string {
-  return SPECIALIST_AGENTS.map((agent) => `- ${agent.id}: ${agent.specialty} (covers ${agent.topicHint})`).join(
+  return BRAIN_SPECIALIST_AGENTS.map((agent) => `- ${agent.id}: ${agent.specialty} (covers ${agent.topicHint})`).join(
     '\n',
   );
 }

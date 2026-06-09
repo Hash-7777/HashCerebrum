@@ -7,7 +7,7 @@ import type { MAX_AGENTS } from './constants';
 
 export type AgentId =
   | 'boss'
-  | 'pharmacology'
+  | 'pharmacist'
   | 'drug_interactions'
   | 'clinical_research'
   | 'evidence_synthesis'
@@ -80,15 +80,26 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     regionBinding: 'frontal', // executive / planning
   },
   {
-    id: 'pharmacology',
-    label: 'Pharmacology',
+    // The Pharmacist is the combined drug expert used in Brain mode — it covers
+    // both general pharmacology AND drug–drug interactions, so a brain research
+    // run delegates all medication questions to one capable specialist instead
+    // of two. (The standalone drug_interactions agent below is reserved for the
+    // dedicated Drug Interactions mode.)
+    id: 'pharmacist',
+    label: 'Pharmacist',
     kind: 'specialist',
-    specialty: 'Drugs, dosing, interactions, adverse effects, and drug safety.',
-    topicHint: 'drugs, medications, dosage, side effects, interactions, toxicology',
+    specialty:
+      'Drugs, dosing, pharmacokinetics, pharmacodynamics, adverse effects and drug safety, plus drug–drug, drug–food, and drug–herb interactions and contraindications.',
+    topicHint:
+      'drugs, medications, dosage, pharmacokinetics, pharmacodynamics, side effects, adverse effects, toxicology, drug interactions, contraindications, drug combinations, polypharmacy',
     tools: SPECIALIST_TOOLS,
     regionBinding: 'basal_ganglia', // neurochemistry
   },
   {
+    // Reserved for the dedicated Drug Interactions mode (runSwarm drugFocus
+    // path calls agentById('drug_interactions') directly). It is intentionally
+    // excluded from the Brain-mode planning pool so Brain routes drug questions
+    // to the Pharmacist instead.
     id: 'drug_interactions',
     label: 'Drug interactions',
     kind: 'specialist',
@@ -136,6 +147,14 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
 
 export const BOSS_AGENT: AgentDef = AGENTS[0];
 export const SPECIALIST_AGENTS: AgentDef[] = AGENTS.filter((agent) => agent.kind === 'specialist');
+
+// Brain-mode specialist pool: every specialist except drug_interactions, which
+// is reserved for the dedicated Drug Interactions mode (the Pharmacist covers
+// interactions inside Brain). Drives the boss's planner and the agent panel.
+export const BRAIN_SPECIALIST_AGENTS: AgentDef[] = SPECIALIST_AGENTS.filter(
+  (agent) => agent.id !== 'drug_interactions',
+);
+export const BRAIN_AGENTS: AgentDef[] = [BOSS_AGENT, ...BRAIN_SPECIALIST_AGENTS];
 
 export function agentById(id: AgentId): AgentDef {
   const found = AGENTS.find((agent) => agent.id === id);

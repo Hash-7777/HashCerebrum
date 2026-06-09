@@ -177,17 +177,17 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
     },
   ];
 
-  if (/\b(drug|medication|medicine|dose|dosage|pharmacolog|pharmacokinetic|pharmacodynamic|toxicity|adverse|warfarin|nsaid|opioid|antibiotic|anticoagulant|statin|insulin)\b/i.test(question)) {
+  // The Pharmacist covers both pharmacology and drug interactions in Brain mode,
+  // so a single task handles either trigger (drug_interactions is reserved for
+  // the dedicated Drug Interactions mode).
+  if (
+    /\b(drug|medication|medicine|dose|dosage|pharmacolog|pharmacokinetic|pharmacodynamic|toxicity|adverse|warfarin|nsaid|opioid|antibiotic|anticoagulant|statin|insulin|interaction|interactions|contraindicat|polypharmacy|co[-\s]?admin|combined with)\b/i.test(
+      question,
+    )
+  ) {
     tasks.push({
-      agentId: 'pharmacology',
-      subQuery: `${topic} — pharmacology, mechanism of action, pharmacokinetics, and adverse effects`,
-    });
-  }
-
-  if (/\b(interaction|interactions|contraindicat|polypharmacy|co[-\s]?admin|combined with|warfarin.*nsaid|nsaid.*warfarin)\b/i.test(question)) {
-    tasks.push({
-      agentId: 'drug_interactions',
-      subQuery: `${topic} — drug-drug interactions, contraindications, and adverse events`,
+      agentId: 'pharmacist',
+      subQuery: `${topic} — pharmacology, pharmacokinetics, adverse effects, and drug-drug interactions and contraindications`,
     });
   }
 
