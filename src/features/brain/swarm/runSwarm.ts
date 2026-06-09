@@ -111,6 +111,14 @@ const RELEVANCE_FILLER = new Set([
   'publishable', 'proper', 'reaserch', 'reasearch', 'reserch', 'manuscript', 'article', 'report',
   'document', 'regarding', 'concerning', 'statistics', 'statistical', 'stats', 'numbers', 'numeric',
   'data', 'analysis',
+  // conversational / context / verb words that are about the request, not the
+  // subject — these leaked into the evidence-gap note ("no records cover:
+  // building, already, memory, reuse" / "summarize, ignore, instead").
+  'building', 'build', 'already', 'memory', 'reuse', 'reusing', 'prior', 'previous', 'existing',
+  'findings', 'relevant', 'leverage', 'incorporate', 'drawing', 'based', 'publication', 'ready',
+  'assessing', 'assess', 'evaluate', 'evaluating', 'examine', 'explore', 'investigate', 'determine',
+  'identify', 'describe', 'discuss', 'outline', 'consider', 'including', 'include', 'summarize',
+  'summarise', 'summary', 'ignore', 'retrieved', 'instead', 'provide', 'explain',
 ]);
 
 // A few common medical concept synonyms so a record that uses "kidney" still

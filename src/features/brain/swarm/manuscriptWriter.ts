@@ -76,7 +76,7 @@ function isDraftFailure(body: string[]): boolean {
 }
 
 function keywordsFrom(question: string): string[] {
-  const words = question
+  const words = titleTopic(question)
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length >= 4 && !STOPWORDS.has(word));
@@ -84,9 +84,15 @@ function keywordsFrom(question: string): string[] {
 }
 
 function titleTopic(question: string): string {
-  const topic = question
-    .replace(/^\s*(make|write|draft|create|generate)\s+(a\s+)?(full\s+)?(research\s+)?paper\s+(about|on|for)\s+/i, '')
-    .replace(/^\s*(make|write|draft|create|generate)\s+/i, '')
+  // First sentence only, so a trailing instruction tail ("Use full IMRaD…") is
+  // dropped, then strip the leading request clause.
+  const firstSentence = question.split(/(?<=[.!?])\s+/)[0] ?? question;
+  const topic = firstSentence
+    .replace(
+      /^\s*(make|write|draft|create|generate|produce|compose|prepare)\s+(a\s+|an\s+|the\s+)?(complete\s+|full\s+|comprehensive\s+|publication[-\s]?ready\s+)*(research\s+|scientific\s+)?(paper|manuscript|article|review|report)\s+(about|on|for|assessing|evaluating|regarding|examining)\s+/i,
+      '',
+    )
+    .replace(/^\s*(make|write|draft|create|generate|produce)\s+/i, '')
     .replace(/\s+/g, ' ')
     .trim();
   return topic || question.trim() || 'the requested biomedical question';

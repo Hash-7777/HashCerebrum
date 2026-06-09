@@ -7,11 +7,35 @@ import {
   buildPaperBlueprint,
   buildPaperOutline,
   extractEvidenceFromRecords,
+  isSubstantiveAbstract,
   keywordsFrom,
   parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('isSubstantiveAbstract', () => {
+  it('rejects a blank or thin abstract so the manuscript never ships an empty one', () => {
+    expect(
+      isSubstantiveAbstract({ background: '', objective: '', methods: '', results: '', conclusions: '' }),
+    ).toBe(false);
+    expect(
+      isSubstantiveAbstract({ background: 'x', objective: '', methods: '', results: 'y', conclusions: 'z' }),
+    ).toBe(false);
+  });
+
+  it('accepts a populated abstract', () => {
+    expect(
+      isSubstantiveAbstract({
+        background: 'Heart failure with preserved ejection fraction is common and morbid in older adults worldwide.',
+        objective: 'To summarize the source-backed evidence on SGLT2 inhibitors in this population.',
+        methods: 'An automated literature search retrieved and synthesized records from guarded biomedical sources.',
+        results: 'The retrieved meta-analyses reported a consistent protective association across the included trials.',
+        conclusions: 'The draft requires expert review before any clinical or publication use.',
+      }),
+    ).toBe(true);
+  });
+});
 
 describe('buildPaperOutline', () => {
   const question = 'make a research paper about warfarin and NSAID bleeding risk';
@@ -53,6 +77,22 @@ describe('title & keyword cleanup', () => {
     expect(keywords).not.toContain('paper');
     expect(keywords).not.toContain('statistics');
     expect(keywords).toEqual(expect.arrayContaining(['nsaids', 'warfarin', 'digoxin']));
+  });
+
+  it('drops trailing instruction sentences and leading publication-ready meta', () => {
+    const multi =
+      'Write a complete, publication-ready research paper assessing the association between SGLT2 inhibitor use and cardiovascular outcomes in HFpEF. Use full IMRaD structure with an abstract and a numbered Vancouver reference list. Compute the statistics and flag any evidence gaps honestly.';
+    const topic = titleTopic(multi).toLowerCase();
+    expect(topic).toContain('sglt2');
+    expect(topic).not.toContain('publication');
+    expect(topic).not.toContain('imrad');
+    expect(topic).not.toContain('vancouver');
+    expect(topic).not.toContain('flag any evidence');
+    const kw = keywordsFrom(multi);
+    for (const junk of ['publication', 'ready', 'assessing', 'paper', 'research']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw).toContain('sglt2');
   });
 
   it('leaves an already-clean topic intact', () => {

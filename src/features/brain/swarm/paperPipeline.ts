@@ -119,6 +119,12 @@ const META_INSTRUCTION_WORDS = new Set([
   'publishable', 'proper', 'research', 'reaserch', 'reasearch', 'reserch', 'paper', 'manuscript',
   'article', 'report', 'document', 'about', 'regarding', 'concerning', 'statistics', 'statistical',
   'stats', 'numbers', 'numeric', 'data',
+  // publication-ready / ready / assessing leaked into the title and keywords
+  // because the leading-meta strip stopped at the first unrecognised word.
+  'publication', 'publicationready', 'ready', 'assessing', 'assess', 'assessment', 'evaluating',
+  'evaluate', 'evaluation', 'analysing', 'analyzing', 'analyse', 'analyze', 'investigating',
+  'investigate', 'examining', 'examine', 'summarize', 'summarise', 'summary', 'overview', 'building',
+  'build', 'using', 'reuse', 'leverage', 'incorporate',
 ]);
 
 // Common typos corrected before a token reaches a title or keyword list.
@@ -653,8 +659,17 @@ export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedger
 }
 
 export function titleTopic(question: string): string {
-  const subject = stripTrailingMeta(stripLeadingMeta(question)).replace(/\s+/g, ' ').trim();
-  return fixTypos(subject || question.trim());
+  // A title is a single subject phrase, never the formatting instructions. Take
+  // the first sentence so a trailing "Use full IMRaD structure… Compute the
+  // statistics… flag any evidence gaps honestly." tail is dropped, then strip the
+  // leading request words and any trailing presentation clause.
+  const firstSentence = question.split(/(?<=[.!?])\s+/)[0] ?? question;
+  const subject = stripTrailingMeta(stripLeadingMeta(firstSentence)).replace(/\s+/g, ' ').trim();
+  if (subject.split(/\s+/).filter(Boolean).length >= 3) return fixTypos(subject);
+  // The first sentence was too thin (e.g. an abbreviation period) — fall back to
+  // stripping the whole question.
+  const full = stripTrailingMeta(stripLeadingMeta(question)).replace(/\s+/g, ' ').trim();
+  return fixTypos(full || question.trim());
 }
 
 function blueprintTitle(question: string): string {
@@ -1369,6 +1384,16 @@ async function draftAbstract(opts: {
   const context = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'context').length;
   const numeric = opts.extractions.reduce((sum, item) => sum + item.effectValues.length + (item.sampleSize ? 1 : 0), 0);
   const digest = opts.sections.map((section) => `${section.heading}\n${section.body.join(' ')}`).join('\n\n').slice(0, 7000);
+  // Deterministic fallback abstract — always non-empty, so the manuscript never
+  // ships with a blank ABSTRACT (which happened when the model replied without
+  // the labelled fields and the parse came back empty).
+  const fallback: Manuscript['abstract'] = {
+    background: 'This evidence-review draft was generated from guarded biomedical source retrieval and structured extraction.',
+    objective: `To summarize source-backed evidence for ${opts.title.replace(/^Evidence Review of\s+/i, '')}.`,
+    methods: `The pipeline extracted ${opts.extractions.length} retrieved record(s), built ${opts.claimLedger.length} claim-led entry or entries, and blocked unsupported statistics.`,
+    results: `The claim ledger included ${strong} strong, ${moderate} moderate, ${weak} weak, and ${context} context claim(s); ${numeric} numeric statistic or sample-size field(s) were extracted from source text.`,
+    conclusions: 'The draft should be reviewed against full source records before submission or clinical use.',
+  };
   try {
     const reply = await callModel(
       opts.model,
@@ -1382,16 +1407,30 @@ Manuscript body:
 ${digest}`,
       1200,
     );
-    return parseAbstract(reply);
+    const parsed = parseAbstract(reply);
+    // A model can reply without the labelled fields, leaving the parse empty —
+    // never ship that. Backfill any thin field from the deterministic fallback.
+    return isSubstantiveAbstract(parsed)
+      ? {
+          background: parsed.background.trim() || fallback.background,
+          objective: parsed.objective.trim() || fallback.objective,
+          methods: parsed.methods.trim() || fallback.methods,
+          results: parsed.results.trim() || fallback.results,
+          conclusions: parsed.conclusions.trim() || fallback.conclusions,
+        }
+      : fallback;
   } catch {
-    return {
-      background: 'This evidence-review draft was generated from guarded biomedical source retrieval and structured extraction.',
-      objective: `To summarize source-backed evidence for ${opts.title.replace(/^Evidence Review of\s+/i, '')}.`,
-      methods: `The pipeline extracted ${opts.extractions.length} retrieved record(s), built ${opts.claimLedger.length} claim-led entry or entries, and blocked unsupported statistics.`,
-      results: `The claim ledger included ${strong} strong, ${moderate} moderate, ${weak} weak, and ${context} context claim(s); ${numeric} numeric statistic or sample-size field(s) were extracted from source text.`,
-      conclusions: 'The draft should be reviewed against full source records before submission or clinical use.',
-    };
+    return fallback;
   }
+}
+
+// An abstract is substantive only when its core fields carry real content; a
+// blank or near-blank parse falls back to the deterministic abstract.
+export function isSubstantiveAbstract(abstract: Manuscript['abstract']): boolean {
+  const core = [abstract.background, abstract.results, abstract.conclusions].map((field) => field.trim());
+  if (core.some((field) => field.length === 0)) return false;
+  const words = Object.values(abstract).join(' ').split(/\s+/).filter(Boolean).length;
+  return words >= 40;
 }
 
 function repairableSectionNames(issues: ValidationIssue[]): string[] {

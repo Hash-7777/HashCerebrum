@@ -230,6 +230,16 @@ describe('assessEvidenceSufficiency', () => {
     expect(uncovered).toContain('digoxin');
   });
 
+  it('never reports conversational / context words as uncovered concepts', () => {
+    const rawPrompt =
+      'Building on the SGLT2 inhibitor evidence already in memory, evaluate dapagliflozin and renal outcomes and reuse the relevant prior findings';
+    const evidence = [titled('Dapagliflozin and renal outcomes', 'dapagliflozin renal kidney sglt2')];
+    const { uncovered } = assessEvidenceSufficiency(rawPrompt, evidence);
+    for (const junk of ['building', 'already', 'memory', 'reuse', 'evaluate', 'relevant', 'prior', 'findings']) {
+      expect(uncovered).not.toContain(junk);
+    }
+  });
+
   it('returns no note when every concept is covered', () => {
     const evidence = [
       titled('NSAIDs, warfarin and digoxin in young patients', 'nsaids warfarin digoxin young population'),
