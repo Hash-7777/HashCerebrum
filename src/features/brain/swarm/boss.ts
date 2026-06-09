@@ -259,9 +259,12 @@ export async function bossChat(
   onToken: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
+  // Plain chat only needs recent context, not the whole research history — a
+  // greeting in a long session otherwise carried ~10k tokens and 413'd on a
+  // small-TPM model. Cap to the last few turns.
   const messages: LlmMessage[] = [
     { role: 'system', content: BOSS_CHAT_SYSTEM_PROMPT },
-    ...conversation,
+    ...conversation.slice(-8),
     { role: 'user', content: question },
   ];
   const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken, signal }, emitFailover);

@@ -150,6 +150,14 @@ const STOP = new Set([
   'report', 'shown', 'show', 'found', 'based', 'included', 'including', 'within', 'without', 'both',
   'each', 'other', 'overall', 'total', 'mean', 'median', 'value', 'values', 'observed', 'these',
   'those', 'their', 'when', 'which', 'while', 'been', 'will', 'may', 'might', 'could', 'should',
+  // Instruction / conversational / request words that leak from saved query text
+  // into labels ("Sglt2 · Already", "Assessing · Complete", "Already · Building",
+  // "Amitriptyline · Dose · Exact") — they describe the request, not the topic.
+  'already', 'building', 'build', 'assessing', 'assess', 'complete', 'exact', 'evaluate',
+  'evaluating', 'memory', 'reuse', 'prior', 'previous', 'existing', 'relevant', 'summarize',
+  'summarise', 'summary', 'publication', 'ready', 'publishable', 'write', 'make', 'create',
+  'generate', 'draft', 'produce', 'comprehensive', 'detailed', 'dose', 'doses', 'exactly',
+  'lethal', 'overdose', 'want', 'need', 'please', 'tell', 'give', 'provide', 'explain',
 ]);
 
 /**

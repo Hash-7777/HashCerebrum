@@ -119,4 +119,31 @@ describe('kmeans clustering', () => {
     expect(label.toLowerCase()).not.toContain('analyze');
     expect(label.toLowerCase()).toContain('digoxin');
   });
+
+  it('drops request/instruction words that leak from saved query text', () => {
+    // From real runs: labels like "Sglt2 · Already", "Already · Building",
+    // "Amitriptyline · Dose · Exact" — the request words must not become labels.
+    const label = clusterLabel([
+      'Building on the SGLT2 inhibitor evidence already in memory',
+      'evaluate dapagliflozin already in memory and reuse prior findings',
+      'SGLT2 inhibitor dapagliflozin renal outcomes',
+      'SGLT2 inhibitor cardiovascular outcomes',
+    ]);
+    const lower = label.toLowerCase();
+    for (const junk of ['already', 'building', 'memory', 'reuse', 'evaluate', 'prior']) {
+      expect(lower).not.toContain(junk);
+    }
+    expect(lower).toContain('sglt2');
+
+    const dose = clusterLabel([
+      'exact lethal overdose dose of amitriptyline',
+      'amitriptyline exact dose to overdose',
+      'amitriptyline toxicity case series',
+      'amitriptyline cardiotoxicity management',
+    ]);
+    expect(dose.toLowerCase()).toContain('amitriptyline');
+    for (const junk of ['exact', 'dose', 'lethal', 'overdose']) {
+      expect(dose.toLowerCase()).not.toContain(junk);
+    }
+  });
 });

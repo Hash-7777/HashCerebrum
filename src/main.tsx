@@ -80,6 +80,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 // The native window is created hidden (tauri.conf.json) so the WebView's white
 // default never flashes on launch. The boot splash reveals it once it has
-// actually painted (reliable timing); this is only a safety net so the window
-// can never be left hidden if that path is somehow starved.
-if (isTauri) setTimeout(revealWindow, 2500);
+// actually painted (reliable timing); these are staggered safety nets so the
+// window can never be left hidden if that path is starved or an early reveal
+// attempt raced and failed (which left the window invisible until reopened).
+if (isTauri) for (const ms of [1200, 2500, 4500, 7000]) setTimeout(revealWindow, ms);

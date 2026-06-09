@@ -9,6 +9,9 @@
   z-index: 61;
   inset: 14px 14px 14px auto;
   width: min(520px, calc(100% - 28px));
+  /* Belt-and-suspenders height bound so the body always has a scrollable area on
+     a short window — otherwise the Danger zone (last section) was unreachable. */
+  max-height: calc(100vh - 28px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -60,12 +63,14 @@
 .settings-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 2px 2px 4px;
+  /* Extra bottom padding so the final section (Danger zone) is fully scrollable
+     into view and never sits flush against the clipped panel edge. */
+  padding: 2px 2px 16px;
 }
 
 .settings-status,
