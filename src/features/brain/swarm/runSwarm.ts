@@ -44,7 +44,7 @@ import { manuscriptToReadableText } from './manuscript';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
 import { runSpecialist } from './specialist';
-import type { SpecialistResult, SpecialistTask, SwarmOptions, SwarmResult } from './types';
+import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
 export function evidenceKey(record: EvidenceItem): string {
   return (
@@ -428,18 +428,34 @@ async function libraryEvidence(question: string, model?: string): Promise<{ evid
 // structured association evidence — and therefore the association-confidence
 // score — never depends on the LLM specialist happening to pick the right tool.
 // (A real run showed the specialist querying only PubMed/Europe PMC, leaving the
-// score with no structured data and forced to 0%.) Failures are non-fatal.
-async function geneticDatabaseEvidence(question: string): Promise<EvidenceItem[]> {
+// score with no structured data and forced to 0%.) The calls are reported
+// through the trace callbacks so GWAS Catalog and ClinVar are visible in the
+// execution trace, not hidden behind the deterministic fetch. Failures are
+// non-fatal.
+async function geneticDatabaseEvidence(
+  question: string,
+  callbacks: SwarmCallbacks,
+): Promise<EvidenceItem[]> {
   const med = platform().medical;
-  const results = await Promise.allSettled([
-    med.gwas_catalog({ query: question, maxResults: 25 }),
-    med.clinvar({ query: question, maxResults: 25 }),
+  const fetchOne = async (
+    tool: string,
+    run: () => Promise<{ results: EvidenceItem[] }>,
+  ): Promise<EvidenceItem[]> => {
+    callbacks.onToolCall('genetics', tool);
+    try {
+      const { results } = await run();
+      callbacks.onToolResult('genetics', tool, results.length);
+      return results;
+    } catch {
+      callbacks.onToolResult('genetics', tool, 0);
+      return [];
+    }
+  };
+  const [gwas, clinvar] = await Promise.all([
+    fetchOne('gwas_catalog_search', () => med.gwas_catalog({ query: question, maxResults: 25 })),
+    fetchOne('clinvar_search', () => med.clinvar({ query: question, maxResults: 25 })),
   ]);
-  const out: EvidenceItem[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') out.push(...r.value.results);
-  }
-  return out;
+  return [...gwas, ...clinvar];
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
@@ -598,7 +614,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       // genetic-database fetch in parallel.
       [specialist, dbEvidence] = await Promise.all([
         runSpecialist(agentById('genetics'), modelFor('genetics'), researchQuestion, callbacks),
-        geneticDatabaseEvidence(researchQuestion),
+        geneticDatabaseEvidence(researchQuestion, callbacks),
       ]);
     } finally {
       setMemoryScope(null);
@@ -609,7 +625,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       subQuery: researchQuestion,
       findings: '',
       evidence: dbEvidence,
-      toolCalls: 0,
+      toolCalls: 2,
     };
     const evidence = rankEvidenceByRelevance(
       researchQuestion,
