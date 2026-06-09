@@ -2,8 +2,9 @@
 
 .brain-side {
   display: grid;
-  /* Brain model on top, agent swarm fills the rest of the column */
-  grid-template-rows: minmax(240px, 1fr) minmax(200px, 1fr);
+  /* Brain model takes the flexible space; the agent swarm sizes to its content
+     so a short roster does not leave an empty gap at the bottom of the panel. */
+  grid-template-rows: minmax(240px, 1fr) minmax(0, auto);
   gap: 10px;
   min-height: 0;
   /* Panel itself does NOT scroll — only inner widgets scroll */
