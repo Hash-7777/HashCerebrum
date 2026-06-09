@@ -94,6 +94,23 @@ pub fn run() {
             telemetry::init(app.handle())?;
             let supervisor = swarm::init(app.handle())?;
             app.manage(supervisor);
+            // First launch only (no saved window state yet): center the main
+            // window. On later launches the window-state plugin restores the saved
+            // geometry, so we must NOT re-center — that is what made the window
+            // forget its position. `center: true` in tauri.conf.json was removed
+            // for the same reason (it re-centered on every launch).
+            if let Some(win) = app.get_webview_window("main") {
+                let has_saved_state = app
+                    .path()
+                    .app_config_dir()
+                    .map(|dir| {
+                        dir.join(".window-state.json").exists() || dir.join("window-state.json").exists()
+                    })
+                    .unwrap_or(false);
+                if !has_saved_state {
+                    let _ = win.center();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -139,8 +156,16 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
     {
-        Ok(app) => app.run(|_app_handle, event| {
+        Ok(app) => app.run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                // Guarantee the window geometry is persisted on exit, independent
+                // of window close-event timing — so size and position are
+                // remembered on the next launch.
+                let _ = tauri_plugin_window_state::AppHandleExt::save_window_state(
+                    app_handle,
+                    tauri_plugin_window_state::StateFlags::all()
+                        .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
+                );
                 if let Err(e) = cache::close_connection() {
                     tracing::warn!("Cache close error on exit: {}", e);
                 }
