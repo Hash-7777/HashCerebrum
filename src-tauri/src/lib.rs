@@ -104,7 +104,8 @@ pub fn run() {
                     .path()
                     .app_config_dir()
                     .map(|dir| {
-                        dir.join(".window-state.json").exists() || dir.join("window-state.json").exists()
+                        dir.join(".window-state.json").exists()
+                            || dir.join("window-state.json").exists()
                     })
                     .unwrap_or(false);
                 if !has_saved_state {
