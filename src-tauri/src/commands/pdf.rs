@@ -83,12 +83,14 @@ pub async fn pdf_extract_text_bytes(filename: String, bytes: Vec<u8>) -> AppResu
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    if let Err(e) = crate::audit::store::append(
-        "upload",
-        &filename,
-        "extract_pdf_text",
-        &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint }),
-    ) {
+    if let Err(e) = crate::audit::store::append_async(
+        "upload".into(),
+        filename.clone(),
+        "extract_pdf_text".into(),
+        serde_json::json!({ "bytes": byte_len, "sha256": fingerprint }),
+    )
+    .await
+    {
         tracing::error!("audit append failed for pdf_extract_text_bytes: {e}");
     }
 
@@ -119,12 +121,14 @@ pub async fn pdf_extract_pages_bytes(filename: String, bytes: Vec<u8>) -> AppRes
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    if let Err(e) = crate::audit::store::append(
-        "upload",
-        &filename,
-        "extract_pdf_pages",
-        &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "pages": pages.len() }),
-    ) {
+    if let Err(e) = crate::audit::store::append_async(
+        "upload".into(),
+        filename.clone(),
+        "extract_pdf_pages".into(),
+        serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "pages": pages.len() }),
+    )
+    .await
+    {
         tracing::error!("audit append failed for pdf_extract_pages_bytes: {e}");
     }
 
@@ -152,12 +156,14 @@ pub async fn fetch_open_access_pdf(url: String) -> AppResult<String> {
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    if let Err(e) = crate::audit::store::append(
-        "net",
-        &url,
-        "fetch_open_access_pdf",
-        &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "chars": extracted.len() }),
-    ) {
+    if let Err(e) = crate::audit::store::append_async(
+        "net".into(),
+        url.clone(),
+        "fetch_open_access_pdf".into(),
+        serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "chars": extracted.len() }),
+    )
+    .await
+    {
         tracing::error!("audit append failed for fetch_open_access_pdf: {e}");
     }
 

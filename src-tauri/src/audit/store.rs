@@ -22,6 +22,72 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
+// ---------------------------------------------------------------------------
+// Async wrappers (E1: RUST-002)
+// All SQLite ops run on tokio's spawn_blocking pool so the sync std::Mutex
+// never blocks an async worker thread under parallel load.
+// ---------------------------------------------------------------------------
+
+pub async fn append_async(
+    category: String,
+    subject: String,
+    action: String,
+    payload: serde_json::Value,
+) -> AppResult<AuditEntry> {
+    tokio::task::spawn_blocking(move || append(&category, &subject, &action, &payload))
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+pub async fn read_recent_async(limit: u64) -> AppResult<Vec<AuditEntry>> {
+    tokio::task::spawn_blocking(move || read_recent(limit))
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+pub async fn read_page_async(offset: u64, limit: u64) -> AppResult<Vec<AuditEntry>> {
+    tokio::task::spawn_blocking(move || read_page(offset, limit))
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+pub async fn count_async() -> AppResult<u64> {
+    tokio::task::spawn_blocking(count)
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+pub async fn verify_async() -> AppResult<Option<u64>> {
+    tokio::task::spawn_blocking(verify)
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+pub async fn reset_async() -> AppResult<()> {
+    tokio::task::spawn_blocking(reset)
+        .await
+        .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
+/// Run a closure with the global connection on the blocking thread pool.
+pub async fn with_connection_async<F, R>(f: F) -> AppResult<R>
+where
+    F: FnOnce(&mut Connection) -> AppResult<R> + Send + 'static,
+    R: Send + 'static,
+{
+    tokio::task::spawn_blocking(move || {
+        let mut guard = DB
+            .lock()
+            .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))?;
+        let conn = guard
+            .as_mut()
+            .ok_or(AppError::Audit("not initialized".into()))?;
+        f(conn)
+    })
+    .await
+    .map_err(|e| AppError::Audit(format!("spawn_blocking: {e}")))?
+}
+
 static DB: Mutex<Option<Connection>> = Mutex::new(None);
 
 /// Retention cap. After each append the oldest rows beyond this many are
@@ -349,6 +415,7 @@ fn verify_entries(entries: &[AuditEntry]) -> Option<u64> {
     None
 }
 
+#[allow(dead_code)]
 pub fn connection() -> AppResult<std::sync::MutexGuard<'static, Option<Connection>>> {
     DB.lock()
         .map_err(|e| AppError::Audit(format!("mutex poisoned: {e}")))

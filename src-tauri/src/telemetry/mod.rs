@@ -103,39 +103,43 @@ pub fn end_span(span_id: i64, status: String) -> AppResult<()> {
 
 #[tauri::command]
 pub async fn trace_read(trace_id: Option<String>) -> AppResult<Vec<TraceSpan>> {
-    let mut guard = DB
-        .lock()
-        .map_err(|e| AppError::Cache(format!("mutex: {e}")))?;
-    let conn = guard
-        .as_mut()
-        .ok_or(AppError::Cache("traces not initialised".into()))?;
-    let sql = if trace_id.is_some() {
-        "SELECT id, trace_id, parent_id, name, started_at, ended_at, status, attributes
-         FROM traces WHERE trace_id = ?1 ORDER BY started_at"
-    } else {
-        "SELECT id, trace_id, parent_id, name, started_at, ended_at, status, attributes
-         FROM traces ORDER BY started_at DESC LIMIT 200"
-    };
-    let mut stmt = conn.prepare(sql)?;
-    let params_slice: &[&dyn rusqlite::ToSql] = match trace_id.as_ref() {
-        Some(t) => &[t],
-        None => &[],
-    };
-    let rows = stmt.query_map(params_slice, |r| {
-        Ok(TraceSpan {
-            id: r.get(0)?,
-            trace_id: r.get(1)?,
-            parent_id: r.get(2)?,
-            name: r.get(3)?,
-            started_at: r.get(4)?,
-            ended_at: r.get(5)?,
-            status: r.get(6)?,
-            attributes: r.get(7)?,
-        })
-    })?;
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
-    }
-    Ok(out)
+    tokio::task::spawn_blocking(move || {
+        let mut guard = DB
+            .lock()
+            .map_err(|e| AppError::Cache(format!("mutex: {e}")))?;
+        let conn = guard
+            .as_mut()
+            .ok_or(AppError::Cache("traces not initialised".into()))?;
+        let sql = if trace_id.is_some() {
+            "SELECT id, trace_id, parent_id, name, started_at, ended_at, status, attributes
+             FROM traces WHERE trace_id = ?1 ORDER BY started_at"
+        } else {
+            "SELECT id, trace_id, parent_id, name, started_at, ended_at, status, attributes
+             FROM traces ORDER BY started_at DESC LIMIT 200"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let params_slice: &[&dyn rusqlite::ToSql] = match trace_id.as_ref() {
+            Some(t) => &[t],
+            None => &[],
+        };
+        let rows = stmt.query_map(params_slice, |r| {
+            Ok(TraceSpan {
+                id: r.get(0)?,
+                trace_id: r.get(1)?,
+                parent_id: r.get(2)?,
+                name: r.get(3)?,
+                started_at: r.get(4)?,
+                ended_at: r.get(5)?,
+                status: r.get(6)?,
+                attributes: r.get(7)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| AppError::Cache(format!("spawn_blocking: {e}")))?
 }

@@ -167,17 +167,19 @@ pub async fn llm_http_get(
     redacted.set_query(None);
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
-    if let Err(e) = audit::append(
-        "llm",
-        &provider,
-        "models",
-        &serde_json::json!({
+    if let Err(e) = audit::append_async(
+        "llm".into(),
+        provider.clone(),
+        "models".into(),
+        serde_json::json!({
             "url": redacted.as_str(),
             "query_hash": parsed.query().map(|q| sha256_hex(q.as_bytes())),
             "status": status,
             "bytes": body.len(),
         }),
-    ) {
+    )
+    .await
+    {
         tracing::error!("audit append failed for llm_http_get: {e}");
     }
 
@@ -250,16 +252,18 @@ pub async fn llm_http_post(
     redacted.set_query(None);
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
-    if let Err(e) = audit::append(
-        "llm",
-        &provider,
-        "chat",
-        &serde_json::json!({
+    if let Err(e) = audit::append_async(
+        "llm".into(),
+        provider.clone(),
+        "chat".into(),
+        serde_json::json!({
             "url": redacted.as_str(),
             "status": status,
             "bytes": resp_body.len(),
         }),
-    ) {
+    )
+    .await
+    {
         tracing::error!("audit append failed for llm_http_post: {e}");
     }
 
@@ -346,16 +350,18 @@ pub async fn llm_chat_stream(
         let _ = on_event.send(StreamEvent::Error {
             message: format!("HTTP {}: {}", status.as_u16(), truncate(text.trim(), 240)),
         });
-        if let Err(e) = audit::append(
-            "llm",
-            &provider,
-            "chat-stream",
-            &serde_json::json!({
+        if let Err(e) = audit::append_async(
+            "llm".into(),
+            provider.clone(),
+            "chat-stream".into(),
+            serde_json::json!({
                 "url": redacted.as_str(),
                 "status": status.as_u16(),
                 "bytes": text.len(),
             }),
-        ) {
+        )
+        .await
+        {
             tracing::error!("audit append failed for llm_chat_stream error path: {e}");
         }
         return Ok(()); // _guard drops here, removing the STREAM_ABORTS entry
@@ -420,16 +426,18 @@ pub async fn llm_chat_stream(
 
     // _guard drops at end of function, removing the STREAM_ABORTS entry.
 
-    if let Err(e) = audit::append(
-        "llm",
-        &provider,
-        "chat-stream",
-        &serde_json::json!({
+    if let Err(e) = audit::append_async(
+        "llm".into(),
+        provider.clone(),
+        "chat-stream".into(),
+        serde_json::json!({
             "url": redacted.as_str(),
             "status": status.as_u16(),
             "bytes": total,
         }),
-    ) {
+    )
+    .await
+    {
         tracing::error!("audit append failed for llm_chat_stream success path: {e}");
     }
 

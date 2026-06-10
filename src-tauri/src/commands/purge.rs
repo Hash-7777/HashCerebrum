@@ -48,7 +48,7 @@ pub async fn purge_project_data(
     // 2. Redact audit entries mentioning this project_id
     // Audit is append-only; we UPDATE the subject to [REDACTED] while
     // preserving the chain structure (seq, prev_hash, entry_hash stay).
-    let audit_count = redact_audit_for_project(&app, &project_id)?;
+    let audit_count = redact_audit_for_project(&project_id).await?;
     results.insert("audit_redacted".into(), audit_count);
 
     // 3. Delete project-specific SQLite files if they exist
@@ -66,36 +66,39 @@ pub async fn purge_project_data(
         results.insert("chat_file_deleted".into(), 1);
     }
 
-    if let Err(e) = audit::append(
-        "purge",
-        &project_id,
-        "purge_project_data",
-        &serde_json::json!({ "results": results }),
-    ) {
+    if let Err(e) = audit::append_async(
+        "purge".into(),
+        project_id.clone(),
+        "purge_project_data".into(),
+        serde_json::json!({ "results": results }),
+    )
+    .await
+    {
         tracing::error!("audit append failed for purge_project_data: {e}");
     }
 
     Ok(results)
 }
 
-fn redact_audit_for_project(_app: &AppHandle, project_id: &str) -> AppResult<u64> {
-    let mut guard = audit::connection()?;
-    let conn = guard
-        .as_mut()
-        .ok_or(AppError::Audit("not initialized".into()))?;
+async fn redact_audit_for_project(project_id: &str) -> AppResult<u64> {
     let redacted = "[REDACTED]";
     let pattern = format!("%{}%", project_id);
-    let count = conn.execute(
-        "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL WHERE subject LIKE ?2 OR action LIKE ?2 OR category LIKE ?2",
-        params![redacted, pattern],
-    )?;
+    let project_id = project_id.to_string();
+    let count = audit::with_connection_async(move |conn| {
+        let count = conn.execute(
+            "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL WHERE subject LIKE ?2 OR action LIKE ?2 OR category LIKE ?2",
+            params![redacted, pattern],
+        )?;
+        Ok(count)
+    }).await?;
     // Append a tombstone entry so auditors can see *that* a redaction happened,
     // when it happened, and which project was erased, without revealing content.
-    let _ = audit::append(
-        "purge",
-        project_id,
-        "audit_redacted",
-        &serde_json::json!({ "rows": count, "timestamp": chrono::Utc::now().to_rfc3339() }),
-    );
+    let _ = audit::append_async(
+        "purge".into(),
+        project_id.clone(),
+        "audit_redacted".into(),
+        serde_json::json!({ "rows": count, "timestamp": chrono::Utc::now().to_rfc3339() }),
+    )
+    .await;
     Ok(count as u64)
 }
