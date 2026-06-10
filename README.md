@@ -251,7 +251,7 @@ HashCerebrum is designed so that **your data stays yours**. It is a single-user 
 | Projects, chat history, saved findings (memory) | Local app storage on your device | **Never** |
 | Learning data (beliefs, graph, episodes, reliability) | Local app storage on your device | **Never** |
 | Retrieved-evidence cache, audit log | Local SQLite in the app data dir | **Never** |
-| Provider API keys | Renderer `localStorage`, isolated by the app's bundle identifier | **Never** committed, logged, or cached |
+| Provider API keys | Renderer `localStorage` inside the app's WebKit data directory (isolated by bundle identifier). OS-keychain storage is available via Settings for opt-in migration | **Never** committed, logged, or cached |
 | Generated papers / PDFs | Written to your Downloads folder | Only if you export them |
 | Your question + retrieved evidence | Sent **only** to the one LLM provider you configure | Yes — to that provider, unless you use a local model |
 
@@ -427,7 +427,7 @@ Open **Settings** (gear icon), find the provider row, paste your API key, and cl
 
 `OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `MiniMax` · `xAI (Grok)` · `Together AI` · `Fireworks AI` · `DeepInfra` · `Ollama (local)`
 
-Keys are stored in renderer `localStorage`, isolated per-app by the WebKit bundle identifier. They are never committed, never written to the audit log, and never stored in the response cache.
+Keys are stored in renderer `localStorage` inside the app's WebKit data directory (isolated by the Tauri bundle identifier). They are never committed, never written to the audit log, and never stored in the response cache. If you prefer OS-keychain storage, use **Settings → Migrate keys to keychain** (Rust keychain commands are registered and audited).
 
 > **For maximum privacy, choose `Ollama (local)`.** Your prompts are then served by a model running on your own machine and the app makes no external LLM call at all. With any cloud provider, the prompt (question + retrieved evidence) is sent to that provider under their terms — see [Privacy & data locality](#privacy--data-locality).
 
