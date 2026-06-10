@@ -1333,6 +1333,15 @@ async function compileSections(opts: {
       sections.map((section) => `${section.heading}: ${(section.body[0] ?? '').slice(0, 220)}`).join('\n') ||
       '(none yet)';
     const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
+    // Evidence gap is injected into ONE section only so it does not leak into
+    // every section and repeat the same honesty note 9× (I3).
+    const isLimitations = blueprintSection.heading.toLowerCase().includes('limitation');
+    const isMethods = blueprintSection.heading.toLowerCase().includes('method');
+    const shouldInjectGap =
+      opts.evidenceGap &&
+      (isLimitations ||
+        (!opts.paperBlueprint.sections.some((s) => s.heading.toLowerCase().includes('limitation')) &&
+          isMethods));
     let body: string[];
     try {
       body = await draftLedgerSection({
@@ -1345,7 +1354,7 @@ async function compileSections(opts: {
         datasetBlock,
         priorDigest,
         ...(existing ? { currentBody: existing.body } : {}),
-        ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+        ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
         mini: opts.mini ?? false,
       });
     } catch (error) {
@@ -1379,7 +1388,7 @@ async function compileSections(opts: {
           datasetBlock,
           priorDigest,
           currentBody: body,
-          ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+          ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
           mini: opts.mini ?? false,
         });
       } catch {

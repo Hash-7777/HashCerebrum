@@ -191,11 +191,27 @@ export function conceptCoverage(record: EvidenceItem, groups: string[][]): numbe
 // honest gaps. These are surfaced to the user and named for the drafting model
 // so the output states the gap plainly instead of implying depth that the
 // sources do not support.
+/** Strip structured data blocks and instruction sentences from the question so
+ *  they do not pollute concept extraction (fixes I3 gap-word leak). */
+function questionForConceptExtraction(question: string): string {
+  let q = question;
+  // Drop structured data blocks (reuses the same heuristic as promptEffectData).
+  const dataBlock = /(?:data|trials?|studies?|effect sizes?)\s*[:\-]\s*[\s\S]*?(?:\n\n|\n(?:requirements?|instructions?|context|outline|must|should)\b|$)/i;
+  q = q.replace(dataBlock, ' ');
+  // Drop trailing instruction sentences — only when they start a line or follow
+  // a newline, so mid-sentence words like "use" / "with" are not stripped.
+  const instructionLine =
+    /(?:^|\n)\s*(?:requirements?|instructions?|context|outline|must|should|write|draft|generate|produce|including)\b[^\n]*/gim;
+  q = q.replace(instructionLine, ' ');
+  return q;
+}
+
 export function assessEvidenceSufficiency(
   question: string,
   evidence: EvidenceItem[],
 ): { uncovered: string[]; note: string | null } {
-  const groups = conceptGroups(question);
+  const cleaned = questionForConceptExtraction(question);
+  const groups = coreConceptGroups(cleaned);
   if (groups.length === 0) return { uncovered: [], note: null };
   const uncovered = groups
     .filter((group) => {
@@ -231,7 +247,7 @@ export function assessEvidenceSufficiency(
  * specific enough that an off-topic paper will not match them. Generic words
  * like "effect", "impact", "patients" are excluded.
  */
-function coreConceptGroups(question: string): string[][] {
+export function coreConceptGroups(question: string): string[][] {
   const generic = new Set([
     'effect', 'effects', 'impact', 'impacts', 'influence', 'role', 'use', 'using',
     'long', 'term', 'short', 'run', 'time', 'duration', 'patient', 'patients',
