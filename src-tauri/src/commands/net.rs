@@ -17,7 +17,7 @@ static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
     match reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent("HashCerebrum/0.1 (research-app)")
+        .user_agent("HashCerebrum/1.1 (research-app; mailto:support@hashcerebrum.com)")
         .build()
     {
         Ok(client) => Some(client),

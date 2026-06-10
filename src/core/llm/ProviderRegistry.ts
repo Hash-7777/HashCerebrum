@@ -155,7 +155,7 @@ async function completeOllama(req: LlmRequest): Promise<LlmResponse> {
     model: req.model,
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
     stream: false,
-    keep_alive: -1,
+    keep_alive: 300, // LLM-002: finite keep-alive (5 min), never pin forever
     options: ollamaOptions(req),
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
@@ -285,7 +285,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
     model: req.model,
     messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
-    keep_alive: -1,
+    keep_alive: 300, // LLM-002: finite keep-alive (5 min), never pin forever
     options: ollamaOptions(req),
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
@@ -587,7 +587,7 @@ export async function streamWithModelChain(
       const retries = providerRetries.get(parsed.provider) ?? 0;
       if (shouldRetrySameProvider(error) && retries < 1) {
         providerRetries.set(parsed.provider, retries + 1);
-        await delay(RETRY_WAIT_MS, opts.signal);
+        await delayWithJitter(RETRY_WAIT_MS, opts.signal);
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
@@ -747,6 +747,12 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Retry delay with ±25 % jitter so parallel clients don't thunder-herd. */
+function delayWithJitter(baseMs: number, signal?: AbortSignal): Promise<void> {
+  const jitter = baseMs * 0.25 * (Math.random() * 2 - 1);
+  return delay(Math.max(100, Math.round(baseMs + jitter)), signal);
+}
+
 async function hasStoredKey(provider: LlmProviderId): Promise<boolean> {
   const keyName = providerKeyName(provider);
   if (!keyName) return false;
@@ -821,7 +827,7 @@ export async function completeWithModelChain(
       const retries = providerRetries.get(parsed.provider) ?? 0;
       if (shouldRetrySameProvider(error) && retries < 1) {
         providerRetries.set(parsed.provider, retries + 1);
-        await delay(RETRY_WAIT_MS);
+        await delayWithJitter(RETRY_WAIT_MS);
         continue;
       }
       if (!isRetriableError(error) && !isHardProviderError(error)) break;
