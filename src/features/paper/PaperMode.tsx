@@ -4,6 +4,7 @@ import { agentModelFor } from '@core/store/agentModelStore';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
+import { useToastStore } from '@core/store/toastStore';
 import { classifyEvidenceStrength } from '@core/rag';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
 import { notify } from '@platform/notify';
@@ -11,6 +12,11 @@ import { runSwarm } from '@features/brain/swarm/runSwarm';
 import { memoryTopicLabel, citedEvidenceFor } from '@features/brain/memoryTopic';
 import { isMetaOrAppQuestion } from '@features/brain/swarm/paper';
 import { manuscriptToReadableText } from '@features/brain/swarm/manuscript';
+import { buildPaperOutline } from '@features/brain/swarm/paperPipeline';
+import type { PaperOutline } from '@features/brain/swarm/paperPipeline';
+import { summarizeDatasetText, summarizeDatasetXlsx } from '@features/brain/swarm/statistics';
+import type { UploadedDatasetSummary } from '@features/brain/swarm/publicationTypes';
+import { MarkdownText } from '@ui/MarkdownText';
 import { Icon } from '@ui/icons';
 import type { PaperJobSpec, EffectRow } from './types';
 import { PAPER_TYPES, paperTypeById } from './paperTypeRegistry';
@@ -38,26 +44,65 @@ function emptySpec(): PaperJobSpec {
   };
 }
 
+function sanitizeField(s: string): string {
+  return s.replace(/[`\\]/g, '').replace(/\n/g, ' ').trim();
+}
+
 function buildSyntheticQuestion(spec: PaperJobSpec): string {
-  const parts: string[] = [];
-  parts.push(spec.title || spec.question);
-  if (spec.pico.population) parts.push(`Population: ${spec.pico.population}`);
-  if (spec.pico.intervention) parts.push(`Intervention: ${spec.pico.intervention}`);
-  if (spec.pico.comparator) parts.push(`Comparator: ${spec.pico.comparator}`);
-  if (spec.pico.outcomes.some((o) => o.trim())) {
-    parts.push(`Outcomes: ${spec.pico.outcomes.filter(Boolean).join(', ')}`);
-  }
+  const data: Record<string, unknown> = {
+    title: sanitizeField(spec.title),
+    question: sanitizeField(spec.question),
+    pico: {
+      population: sanitizeField(spec.pico.population),
+      intervention: sanitizeField(spec.pico.intervention),
+      comparator: sanitizeField(spec.pico.comparator),
+      outcomes: spec.pico.outcomes.map(sanitizeField).filter(Boolean),
+    },
+    paperType: paperTypeById(spec.paperType)?.label ?? spec.paperType,
+    citationStyle: spec.citationStyle,
+  };
   if (spec.effectData.length > 0) {
-    parts.push('Data:');
-    for (const row of spec.effectData) {
-      const n = row.sampleSize ? ` (n=${row.sampleSize})` : '';
-      parts.push(`- ${row.label}${n}: ${row.measure} ${row.point} (95% CI ${row.ciLow}-${row.ciHigh})`);
-    }
+    data.effectData = spec.effectData.map((row) => ({
+      label: sanitizeField(row.label),
+      measure: row.measure,
+      point: row.point,
+      ciLow: row.ciLow,
+      ciHigh: row.ciHigh,
+      ...(row.sampleSize != null ? { sampleSize: row.sampleSize } : {}),
+    }));
   }
-  parts.push(`Paper type: ${paperTypeById(spec.paperType)?.label ?? spec.paperType}`);
-  parts.push(`Citation style: ${spec.citationStyle}`);
-  parts.push('Requirements: write a full research paper with numbered citations, honest reporting, and source-grounded claims.');
-  return parts.join('\n');
+  const json = JSON.stringify(data, null, 2);
+  return `Produce a full ${spec.citationStyle}-style research paper for this structured specification:\n\n${json}\n\nRequirements: write with numbered citations, honest reporting, and source-grounded claims.`;
+}
+
+function canStepAdvance(step: StepIndex, spec: PaperJobSpec): boolean {
+  switch (step) {
+    case 0:
+      return spec.title.trim().length > 0 || spec.question.trim().length > 0;
+    case 1:
+      return true;
+    case 2:
+      return spec.pico.population.trim().length > 0;
+    case 3: {
+      const pt = paperTypeById(spec.paperType);
+      if (!pt?.requiresDataStep) return true;
+      const minRows = spec.paperType === 'systematic_review' ? 2 : 1;
+      return (
+        spec.effectData.length >= minRows &&
+        spec.effectData.every(
+          (r) =>
+            r.label.trim() &&
+            Number.isFinite(r.point) &&
+            r.ciLow < r.ciHigh &&
+            r.point >= 0,
+        )
+      );
+    }
+    case 4:
+      return true;
+    case 5:
+      return true;
+  }
 }
 
 export function PaperMode() {
@@ -67,9 +112,12 @@ export function PaperMode() {
   const [manuscript, setManuscript] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outlineProposal, setOutlineProposal] = useState<PaperOutline | null>(null);
+  const [dataset, setDataset] = useState<UploadedDatasetSummary | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const isMounted = useRef(true);
+  const runAborted = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -77,6 +125,18 @@ export function PaperMode() {
       abortRef.current?.abort();
     };
   }, []);
+
+  // Global Escape stops a running paper pipeline
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isRunning) {
+        e.preventDefault();
+        stopRun();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isRunning]);
 
   const modelGroups = useModelCatalogStore((s) => s.groups);
   const availableModels = useMemo(() => modelGroups.flatMap((g) => g.models), [modelGroups]);
@@ -130,27 +190,24 @@ export function PaperMode() {
     }));
   }, []);
 
-  const canAdvance = useMemo(() => {
-    switch (step) {
-      case 0:
-        return spec.title.trim().length > 0 || spec.question.trim().length > 0;
-      case 1:
-        return true;
-      case 2:
-        return spec.pico.population.trim().length > 0;
-      case 3: {
-        const pt = paperTypeById(spec.paperType);
-        if (!pt?.requiresDataStep) return true;
-        return spec.effectData.length >= 2 && spec.effectData.every((r) => r.label.trim() && r.point > 0 && r.ciLow > 0 && r.ciHigh > r.ciLow);
-      }
-      case 4:
-        return true;
-      case 5:
-        return true;
+  const attachDataset = useCallback(async (file: File) => {
+    try {
+      const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+      const summary = isExcel
+        ? await summarizeDatasetXlsx(file.name, await file.arrayBuffer())
+        : await summarizeDatasetText(file.name, await file.text());
+      setDataset(summary);
+      useToastStore.getState().show(`Dataset attached: ${summary.rows} rows`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      useToastStore.getState().show(`Dataset rejected: ${detail}`, 'error');
     }
-  }, [step, spec]);
+  }, []);
+
+  const canAdvance = useMemo(() => canStepAdvance(step, spec), [step, spec]);
 
   const stopRun = useCallback(() => {
+    runAborted.current = true;
     abortRef.current?.abort();
     if (isMounted.current) {
       setIsRunning(false);
@@ -158,151 +215,199 @@ export function PaperMode() {
     }
   }, []);
 
-  const runPaper = useCallback(async () => {
-    if (isRunning || availableModels.length === 0) return;
-    setIsRunning(true);
-    setManuscript(null);
-    setError(null);
-    setProgress('Starting…');
+  const runPaper = useCallback(
+    async (forceDraft = false) => {
+      if (isRunning || availableModels.length === 0) return;
+      setIsRunning(true);
+      setManuscript(null);
+      setError(null);
+      setOutlineProposal(null);
+      setProgress('Starting…');
+      runAborted.current = false;
 
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    const signal = abortRef.current.signal;
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      const signal = abortRef.current.signal;
 
-    const syntheticQuestion = buildSyntheticQuestion(spec);
-    const cleanQuery = syntheticQuestion;
-    const conversation: LlmMessage[] = [{ role: 'user', content: cleanQuery }];
+      const syntheticQuestion = buildSyntheticQuestion(spec);
+      const cleanQuery = syntheticQuestion;
 
-    const traceEntries: import('@core/store/chatHistoryStore').TurnTraceEntry[] = [];
-    let activeRunId: string | null = null;
-    const ensureResearchRun = () => {
-      if (!activeRunId) activeRunId = runs.startRun(cleanQuery, []).id;
-      return activeRunId;
-    };
-
-    const callbacks = {
-      onBossPhase: (phase: string) => {
-        if (!isMounted.current) return;
-        const detail = phase === 'delegating' || phase === 'synthesizing' ? ensureResearchRun() : '';
-        traceEntries.push({ agent: 'boss', phase: phase as string, detail: String(detail) });
-        setProgress(phase);
-      },
-      onSpecialistStart: (agentId: string, subQuery: string) => {
-        if (!isMounted.current) return;
-        ensureResearchRun();
-        traceEntries.push({ agent: agentId, phase: 'start', detail: subQuery });
-        setProgress(`${agentId}: ${subQuery}`);
-      },
-      onSpecialistDone: (agentId: string, recordCount: number) => {
-        if (!isMounted.current) return;
-        traceEntries.push({ agent: agentId, phase: 'done', detail: `${recordCount} records` });
-      },
-      onSpecialistError: (agentId: string, message: string) => {
-        if (!isMounted.current) return;
-        traceEntries.push({ agent: agentId, phase: 'error', detail: message });
-      },
-      onToolCall: (agentId: string, toolName: string) => {
-        traceEntries.push({ agent: agentId, phase: 'tool_call', detail: toolName });
-      },
-      onToolResult: (agentId: string, toolName: string, count: number) => {
-        traceEntries.push({ agent: agentId, phase: 'tool_result', detail: `${toolName}: ${count}` });
-      },
-      onAnswerToken: (_delta: string) => {
-        // streaming not used for paper pipeline
-      },
-      onManuscriptSection: (heading: string) => {
-        if (!isMounted.current) return;
-        setProgress(heading);
-        traceEntries.push({ agent: 'boss', phase: 'manuscript', detail: heading });
-      },
-    };
-
-    try {
-      const result = await runSwarm({
-        question: cleanQuery,
-        conversation,
-        modelFor: agentModelFor,
-        callbacks,
-        signal,
-        mini: spec.options.mini,
-        onPaperDraftComplete: (res) => {
-          if (!isMounted.current) return;
-          const text = res.manuscript
-            ? manuscriptToReadableText(res.manuscript)
-            : res.answer || 'Drafting completed.';
-          setManuscript(text);
-          setProgress(null);
+      // Outline-first: show deterministic structure, no tokens spent
+      if (!forceDraft && spec.options.outlineFirst) {
+        const outline = buildPaperOutline(cleanQuery, spec.options.mini);
+        if (isMounted.current) {
+          setOutlineProposal(outline);
           setIsRunning(false);
-          if (res.manuscript) {
-            void notify('Manuscript complete', 'Your paper is ready for review and export.');
-          }
-          if (res.evidence.length > 0 && activeProjectId) {
-            const runId = ensureResearchRun();
-            runs.storeEvidence(runId, res.evidence);
-            runs.storeSummary(runId, text, res.modelUsed);
-            const memoryTopic = memoryTopicLabel(cleanQuery);
-            const citableForMemory = citedEvidenceFor(text, res.evidence);
-            if (memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
-              const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
-                const strength = classifyEvidenceStrength([item.title, item.snippet ?? ''].join(' '), item.source);
-                return {
-                  kind: 'evidence',
-                  title: item.title,
-                  text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
-                  source: item.source,
+          setProgress(null);
+        }
+        return;
+      }
+
+      const conversation: LlmMessage[] = [{ role: 'user', content: cleanQuery }];
+
+      let activeRunId: string | null = null;
+      const ensureResearchRun = () => {
+        if (!activeRunId) activeRunId = runs.startRun(cleanQuery, []).id;
+        return activeRunId;
+      };
+
+      const callbacks = {
+        onBossPhase: (phase: string) => {
+          if (!isMounted.current || runAborted.current) return;
+          if (phase === 'delegating' || phase === 'synthesizing') ensureResearchRun();
+          setProgress(phase);
+        },
+        onSpecialistStart: (agentId: string, subQuery: string) => {
+          if (!isMounted.current || runAborted.current) return;
+          ensureResearchRun();
+          setProgress(`${agentId}: ${subQuery}`);
+        },
+        onSpecialistDone: () => {
+          /* no-op — trace removed to avoid memory leak */
+        },
+        onSpecialistError: () => {
+          /* no-op */
+        },
+        onToolCall: () => {
+          /* no-op */
+        },
+        onToolResult: () => {
+          /* no-op */
+        },
+        onAnswerToken: () => {
+          /* streaming not used for paper pipeline */
+        },
+        onManuscriptSection: (heading: string) => {
+          if (!isMounted.current || runAborted.current) return;
+          setProgress(heading);
+        },
+      };
+
+      try {
+        const result = await runSwarm({
+          question: cleanQuery,
+          conversation,
+          modelFor: agentModelFor,
+          callbacks,
+          signal,
+          mini: spec.options.mini,
+          ...(dataset ? { dataset } : {}),
+          onPaperDraftComplete: (res) => {
+            if (!isMounted.current || runAborted.current) return;
+            const text = res.manuscript
+              ? manuscriptToReadableText(res.manuscript)
+              : res.answer || 'Drafting completed.';
+            setManuscript(text);
+            setProgress(null);
+            setIsRunning(false);
+            if (res.manuscript) {
+              void notify('Manuscript complete', 'Your paper is ready for review and export.');
+            }
+            if (res.evidence.length > 0 && activeProjectId) {
+              const runId = ensureResearchRun();
+              runs.storeEvidence(runId, res.evidence);
+              runs.storeSummary(runId, text, res.modelUsed);
+              const memoryTopic = memoryTopicLabel(cleanQuery);
+              const citableForMemory = citedEvidenceFor(text, res.evidence);
+              if (memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
+                const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
+                  const strength = classifyEvidenceStrength(
+                    [item.title, item.snippet ?? ''].join(' '),
+                    item.source,
+                  );
+                  return {
+                    kind: 'evidence',
+                    title: item.title,
+                    text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
+                    source: item.source,
+                    runId,
+                    query: memoryTopic,
+                    ...(item.url ? { url: item.url } : {}),
+                    ...(item.year != null ? { year: item.year } : {}),
+                    ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
+                    ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
+                    ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
+                    ...(strength ? { evidenceStrength: strength } : {}),
+                  };
+                });
+                const answerChunk: NewRagChunk = {
+                  kind: 'answer',
+                  title: memoryTopic,
+                  text,
+                  source: 'answer',
                   runId,
                   query: memoryTopic,
-                  ...(item.url ? { url: item.url } : {}),
-                  ...(item.year != null ? { year: item.year } : {}),
-                  ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
-                  ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
-                  ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
-                  ...(strength ? { evidenceStrength: strength } : {}),
                 };
-              });
-              const answerChunk: NewRagChunk = {
-                kind: 'answer',
-                title: memoryTopic,
-                text,
-                source: 'answer',
-                runId,
-                query: memoryTopic,
-              };
-              useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+                useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+              }
             }
-          }
-        },
-      });
+          },
+        });
 
-      if (result.kind !== 'drafting') {
-        const text =
-          result.manuscript
+        if (result.kind !== 'drafting') {
+          if (!isMounted.current || runAborted.current) return;
+          const text = result.manuscript
             ? manuscriptToReadableText(result.manuscript)
             : result.answer || 'No response returned.';
-        if (isMounted.current) {
           setManuscript(text);
           setProgress(null);
           setIsRunning(false);
         }
+      } catch (err) {
+        if (!isMounted.current) return;
+        const detail = err instanceof Error ? err.message : String(err);
+        setError(detail);
+        setProgress(null);
+        setIsRunning(false);
       }
-    } catch (err) {
-      if (!isMounted.current) return;
-      const detail = err instanceof Error ? err.message : String(err);
-      setError(detail);
-      setProgress(null);
-      setIsRunning(false);
-    }
-  }, [isRunning, availableModels, spec, runs, activeProjectId]);
+    },
+    [isRunning, availableModels, spec, dataset, runs, activeProjectId],
+  );
 
   const exportMarkdown = useCallback(() => {
     if (!manuscript) return;
     const blob = new Blob([manuscript], { type: 'text/markdown' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${spec.title.replace(/\s+/g, '_') || 'paper'}.md`;
+    const url = URL.createObjectURL(blob);
+    const safeName = (spec.title.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'paper').slice(0, 60);
+    a.href = url;
+    a.download = `${safeName}.md`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 100);
   }, [manuscript, spec.title]);
+
+  const handleStepClick = useCallback(
+    (target: StepIndex) => {
+      if (isRunning) return;
+      // Allow clicking completed steps, current step, or next step if valid
+      if (target <= step) {
+        setStep(target);
+        return;
+      }
+      if (target === step + 1 && canAdvance) {
+        setStep(target);
+      }
+    },
+    [isRunning, step, canAdvance],
+  );
+
+  const handleNext = useCallback(() => {
+    if (step < 5 && canAdvance) setStep((s) => (s + 1) as StepIndex);
+  }, [step, canAdvance]);
+
+  const handlePanelKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        handleNext();
+      }
+    },
+    [handleNext],
+  );
 
   return (
     <div className="mode paper-mode">
@@ -319,7 +424,8 @@ export function PaperMode() {
             role="tab"
             aria-selected={i === step}
             className={`paper-step${i === step ? ' active' : ''}${i < step ? ' done' : ''}`}
-            onClick={() => !isRunning && setStep(i as StepIndex)}
+            onClick={() => handleStepClick(i as StepIndex)}
+            disabled={isRunning}
           >
             <span className="step-num">{i + 1}</span>
             <span className="step-label">{label}</span>
@@ -329,7 +435,7 @@ export function PaperMode() {
 
       <div className="paper-body">
         {step === 0 && (
-          <div className="paper-step-panel">
+          <div className="paper-step-panel" onKeyDown={handlePanelKeyDown}>
             <h2>Research question & title</h2>
             <label>
               Title
@@ -353,13 +459,16 @@ export function PaperMode() {
         )}
 
         {step === 1 && (
-          <div className="paper-step-panel">
+          <div className="paper-step-panel" onKeyDown={handlePanelKeyDown}>
             <h2>Paper type</h2>
-            <div className="paper-type-grid">
+            <div className="paper-type-grid" role="radiogroup" aria-label="Paper type">
               {PAPER_TYPES.map((pt) => (
                 <button
                   key={pt.id}
                   type="button"
+                  role="radio"
+                  aria-checked={spec.paperType === pt.id}
+                  aria-pressed={spec.paperType === pt.id}
                   className={`paper-type-card${spec.paperType === pt.id ? ' active' : ''}`}
                   onClick={() => updateSpec({ paperType: pt.id })}
                 >
@@ -372,7 +481,7 @@ export function PaperMode() {
         )}
 
         {step === 2 && (
-          <div className="paper-step-panel">
+          <div className="paper-step-panel" onKeyDown={handlePanelKeyDown}>
             <h2>PICO & citation style</h2>
             <label>
               Population
@@ -438,101 +547,139 @@ export function PaperMode() {
         )}
 
         {step === 3 && (
-          <div className="paper-step-panel">
+          <div className="paper-step-panel" onKeyDown={handlePanelKeyDown}>
             <h2>Data — effect-size rows</h2>
             {!paperTypeById(spec.paperType)?.requiresDataStep && (
-              <p className="paper-hint">This paper type does not require structured data, but you may add rows if you have them.</p>
+              <p className="paper-hint">
+                This paper type does not require structured data, but you may add rows if you have them.
+              </p>
             )}
             {spec.effectData.length === 0 ? (
-              <p className="paper-hint">Add effect-size rows (HR/OR/RR + 95% CI) so the pipeline can compute pooled estimates and forest plots deterministically.</p>
+              <p className="paper-hint">
+                Add effect-size rows (HR/OR/RR + 95% CI) so the pipeline can compute pooled estimates and
+                forest plots deterministically.
+              </p>
             ) : (
-              <table className="paper-data-table">
-                <thead>
-                  <tr>
-                    <th>Label</th>
-                    <th>Measure</th>
-                    <th>Point</th>
-                    <th>CI low</th>
-                    <th>CI high</th>
-                    <th>n</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {spec.effectData.map((row, i) => (
-                    <tr key={i}>
-                      <td>
-                        <input
-                          type="text"
-                          value={row.label}
-                          onChange={(e) => updateEffectRow(i, { label: e.target.value })}
-                          placeholder="Trial name"
-                        />
-                      </td>
-                      <td>
-                        <select
-                          value={row.measure}
-                          onChange={(e) => updateEffectRow(i, { measure: e.target.value as EffectRow['measure'] })}
-                        >
-                          <option value="HR">HR</option>
-                          <option value="OR">OR</option>
-                          <option value="RR">RR</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.point}
-                          onChange={(e) => updateEffectRow(i, { point: Number.parseFloat(e.target.value) || 0 })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.ciLow}
-                          onChange={(e) => updateEffectRow(i, { ciLow: Number.parseFloat(e.target.value) || 0 })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.ciHigh}
-                          onChange={(e) => updateEffectRow(i, { ciHigh: Number.parseFloat(e.target.value) || 0 })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          value={row.sampleSize ?? ''}
-                          onChange={(e) =>
-                            updateEffectRow(i, {
-                              sampleSize: e.target.value ? Number.parseInt(e.target.value, 10) : undefined,
-                            })
-                          }
-                          placeholder="n"
-                        />
-                      </td>
-                      <td>
-                        <button type="button" onClick={() => removeEffectRow(i)} aria-label="Remove row">
-                          <Icon name="minus" size={14} />
-                        </button>
-                      </td>
+              <div className="paper-data-table-wrap">
+                <table className="paper-data-table">
+                  <thead>
+                    <tr>
+                      <th>Label</th>
+                      <th>Measure</th>
+                      <th>Point</th>
+                      <th>CI low</th>
+                      <th>CI high</th>
+                      <th>n</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {spec.effectData.map((row, i) => (
+                      <tr key={i}>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.label}
+                            onChange={(e) => updateEffectRow(i, { label: e.target.value })}
+                            placeholder="Trial name"
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={row.measure}
+                            onChange={(e) => updateEffectRow(i, { measure: e.target.value as EffectRow['measure'] })}
+                          >
+                            <option value="HR">HR</option>
+                            <option value="OR">OR</option>
+                            <option value="RR">RR</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.point}
+                            onChange={(e) => updateEffectRow(i, { point: Number.parseFloat(e.target.value) || 0 })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.ciLow}
+                            onChange={(e) => updateEffectRow(i, { ciLow: Number.parseFloat(e.target.value) || 0 })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.ciHigh}
+                            onChange={(e) => updateEffectRow(i, { ciHigh: Number.parseFloat(e.target.value) || 0 })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="1"
+                            max="999999"
+                            value={row.sampleSize ?? ''}
+                            onChange={(e) =>
+                              updateEffectRow(i, {
+                                sampleSize: e.target.value ? Number.parseInt(e.target.value, 10) : undefined,
+                              })
+                            }
+                            placeholder="n"
+                          />
+                        </td>
+                        <td>
+                          <button type="button" onClick={() => removeEffectRow(i)} aria-label="Remove row">
+                            <Icon name="minus" size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <button type="button" className="btn sm ghost" onClick={addEffectRow}>
               <Icon name="plus" size={13} /> Add row
             </button>
+
+            {spec.paperType === 'original_research' && (
+              <div className="paper-dataset-upload">
+                <label className="paper-toggle">
+                  <input
+                    type="file"
+                    accept=".csv,.tsv,.txt,.xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void attachDataset(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  Upload dataset (CSV/TSV/Excel) for original research
+                </label>
+                {dataset && (
+                  <div className="paper-dataset-badge">
+                    <Icon name="document" size={13} /> {dataset.filename} — {dataset.rows} rows ·{' '}
+                    {dataset.columns.length} columns
+                    <button type="button" className="btn sm ghost" onClick={() => setDataset(null)}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {step === 4 && (
-          <div className="paper-step-panel">
+          <div className="paper-step-panel" onKeyDown={handlePanelKeyDown}>
             <h2>Sources & options</h2>
             <label className="paper-toggle">
               <input
@@ -551,7 +698,8 @@ export function PaperMode() {
               Outline first — propose structure before drafting
             </label>
             <p className="paper-hint">
-              The pipeline will search PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, and other trusted sources.
+              The pipeline will search PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, and other trusted
+              sources.
             </p>
           </div>
         )}
@@ -588,11 +736,43 @@ export function PaperMode() {
                 <span className="review-key">Data rows</span>
                 <span className="review-val">{spec.effectData.length}</span>
               </div>
+              {dataset && (
+                <div className="review-row">
+                  <span className="review-key">Dataset</span>
+                  <span className="review-val">
+                    {dataset.filename} ({dataset.rows} rows)
+                  </span>
+                </div>
+              )}
               <div className="review-row">
                 <span className="review-key">Citation style</span>
                 <span className="review-val">{spec.citationStyle}</span>
               </div>
             </div>
+
+            {outlineProposal && !isRunning && (
+              <div className="paper-outline-proposal">
+                <h3>Proposed outline</h3>
+                <div className="paper-outline-content">
+                  <strong>{outlineProposal.title}</strong>
+                  <ol>
+                    {outlineProposal.sections.map((s) => (
+                      <li key={s.heading}>
+                        <strong>{s.heading}</strong> — {s.intent}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="paper-outline-actions">
+                  <button type="button" className="btn primary" onClick={() => runPaper(true)}>
+                    <Icon name="send" size={14} /> Draft full paper
+                  </button>
+                  <button type="button" className="btn ghost" onClick={() => setOutlineProposal(null)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
 
             {isRunning ? (
               <div className="paper-run-status">
@@ -605,9 +785,12 @@ export function PaperMode() {
                 </button>
               </div>
             ) : (
-              <button type="button" className="btn primary" onClick={runPaper} disabled={!canAdvance}>
-                <Icon name="send" size={14} /> Run paper pipeline
-              </button>
+              !outlineProposal && (
+                <button type="button" className="btn primary" onClick={() => runPaper()} disabled={!canAdvance}>
+                  <Icon name="send" size={14} />{' '}
+                  {spec.options.outlineFirst ? 'Propose outline' : 'Run paper pipeline'}
+                </button>
+              )
             )}
 
             {error && (
@@ -623,7 +806,7 @@ export function PaperMode() {
         <button type="button" className="btn ghost" disabled={step === 0 || isRunning} onClick={() => setStep((s) => (s - 1) as StepIndex)}>
           Back
         </button>
-        <button type="button" className="btn" disabled={step === 5 || isRunning || !canAdvance} onClick={() => setStep((s) => (s + 1) as StepIndex)}>
+        <button type="button" className="btn" disabled={step === 5 || isRunning || !canAdvance} onClick={handleNext}>
           Next
         </button>
       </div>
@@ -636,7 +819,9 @@ export function PaperMode() {
               <Icon name="download" size={13} /> Export MD
             </button>
           </div>
-          <pre className="paper-manuscript">{manuscript}</pre>
+          <div className="paper-manuscript">
+            <MarkdownText content={manuscript} />
+          </div>
         </div>
       )}
     </div>
