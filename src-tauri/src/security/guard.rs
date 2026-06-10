@@ -156,8 +156,21 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
 /// public hosts remain blocked even for ollama, so this is not a general SSRF
 /// hole: the ollama path can only ever reach local/LAN targets.
 pub fn check_llm_net(provider: &str, host: &str, port: Option<u16>) -> AppResult<()> {
-    if provider == "ollama" && is_lan_ollama_host(host) {
-        return Ok(());
+    if provider == "ollama" {
+        // Localhost must pass the port restriction BEFORE the LAN fast-return,
+        // otherwise any localhost port is reachable via the Ollama path.
+        if is_localhost(host) {
+            let p = port.unwrap_or(0);
+            if !LOCALHOST_PORTS.contains(&p) {
+                return Err(AppError::PermissionDenied(
+                    "localhost port not allowed".into(),
+                ));
+            }
+            return Ok(());
+        }
+        if is_lan_ollama_host(host) {
+            return Ok(());
+        }
     }
     check(Action::Net { host, port })
 }

@@ -10,6 +10,7 @@ use crate::error::{AppError, AppResult};
 use lopdf::Document;
 
 const MAX_PDF_BYTES: u64 = 50 * 1024 * 1024; // 50 MB
+const MAX_EXTRACT_CHARS: usize = 10 * 1024 * 1024; // 10 MB of text
 
 fn extract_text_from_document(doc: Document) -> String {
     let pages = doc.get_pages();
@@ -18,6 +19,11 @@ fn extract_text_from_document(doc: Document) -> String {
         if let Ok(text) = doc.extract_text(&[page_num]) {
             out.push_str(&text);
             out.push_str("\n\n");
+            if out.len() >= MAX_EXTRACT_CHARS {
+                out.truncate(MAX_EXTRACT_CHARS);
+                out.push_str("\n[truncated]");
+                break;
+            }
         }
     }
     out
@@ -36,7 +42,22 @@ fn extract_pages_from_document(doc: Document) -> Vec<String> {
         })
         .collect();
     pages.sort_by_key(|(n, _)| *n);
-    pages.into_iter().map(|(_, text)| text).collect()
+    let mut pages: Vec<String> = pages.into_iter().map(|(_, text)| text).collect();
+    // Enforce the same per-document char cap across the page array.
+    let mut total = 0usize;
+    for page in &mut pages {
+        if total.saturating_add(page.len()) > MAX_EXTRACT_CHARS {
+            let allowed = MAX_EXTRACT_CHARS.saturating_sub(total);
+            page.truncate(allowed);
+            if total < MAX_EXTRACT_CHARS {
+                page.push_str("\n[truncated]");
+            }
+            total = MAX_EXTRACT_CHARS;
+        } else {
+            total = total.saturating_add(page.len());
+        }
+    }
+    pages
 }
 
 #[tauri::command]
@@ -62,12 +83,14 @@ pub async fn pdf_extract_text_bytes(filename: String, bytes: Vec<u8>) -> AppResu
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    let _ = crate::audit::store::append(
+    if let Err(e) = crate::audit::store::append(
         "upload",
         &filename,
         "extract_pdf_text",
         &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint }),
-    );
+    ) {
+        tracing::error!("audit append failed for pdf_extract_text_bytes: {e}");
+    }
 
     Ok(extracted)
 }
@@ -96,12 +119,14 @@ pub async fn pdf_extract_pages_bytes(filename: String, bytes: Vec<u8>) -> AppRes
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    let _ = crate::audit::store::append(
+    if let Err(e) = crate::audit::store::append(
         "upload",
         &filename,
         "extract_pdf_pages",
         &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "pages": pages.len() }),
-    );
+    ) {
+        tracing::error!("audit append failed for pdf_extract_pages_bytes: {e}");
+    }
 
     Ok(pages)
 }
@@ -127,12 +152,14 @@ pub async fn fetch_open_access_pdf(url: String) -> AppResult<String> {
     .map_err(|e| AppError::Pdf(format!("join: {e}")))?
     .map_err(|e| AppError::Pdf(format!("parse: {e}")))?;
 
-    let _ = crate::audit::store::append(
+    if let Err(e) = crate::audit::store::append(
         "net",
         &url,
         "fetch_open_access_pdf",
         &serde_json::json!({ "bytes": byte_len, "sha256": fingerprint, "chars": extracted.len() }),
-    );
+    ) {
+        tracing::error!("audit append failed for fetch_open_access_pdf: {e}");
+    }
 
     Ok(extracted)
 }

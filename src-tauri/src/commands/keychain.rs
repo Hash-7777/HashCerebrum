@@ -85,7 +85,7 @@ pub async fn keychain_store(key: String, value: String) -> AppResult<()> {
     check(Action::Keychain { key: &key })?;
     validate_secret(&value)?;
     store_secret(&key, &value)?;
-    let _ = audit::append("keychain", &key, "store", &serde_json::Value::Null);
+    audit::append("keychain", &key, "store", &serde_json::Value::Null)?;
     Ok(())
 }
 
@@ -94,7 +94,7 @@ pub async fn keychain_retrieve(key: String) -> AppResult<Option<String>> {
     check(Action::Keychain { key: &key })?;
     let value = retrieve_secret(&key)?;
     if value.is_some() {
-        let _ = audit::append("keychain", &key, "retrieve", &serde_json::Value::Null);
+        audit::append("keychain", &key, "retrieve", &serde_json::Value::Null)?;
     }
     Ok(value)
 }
@@ -103,6 +103,6 @@ pub async fn keychain_retrieve(key: String) -> AppResult<Option<String>> {
 pub async fn keychain_delete(key: String) -> AppResult<()> {
     check(Action::Keychain { key: &key })?;
     delete_secret(&key)?;
-    let _ = audit::append("keychain", &key, "delete", &serde_json::Value::Null);
+    audit::append("keychain", &key, "delete", &serde_json::Value::Null)?;
     Ok(())
 }

@@ -167,7 +167,7 @@ pub async fn llm_http_get(
     redacted.set_query(None);
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "llm",
         &provider,
         "models",
@@ -177,10 +177,17 @@ pub async fn llm_http_get(
             "status": status,
             "bytes": body.len(),
         }),
-    );
+    ) {
+        tracing::error!("audit append failed for llm_http_get: {e}");
+    }
 
     Ok(LlmHttpResponse { status, body })
 }
+
+const MAX_LLM_BODY_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+const MAX_LLM_HEADERS: usize = 32;
+const MAX_HEADER_NAME_LEN: usize = 256;
+const MAX_HEADER_VALUE_LEN: usize = 8192;
 
 /// Authenticated non-streaming POST for chat completions.
 #[tauri::command]
@@ -190,6 +197,24 @@ pub async fn llm_http_post(
     headers: HashMap<String, String>,
     body: String,
 ) -> AppResult<LlmHttpResponse> {
+    if body.len() > MAX_LLM_BODY_BYTES {
+        return Err(AppError::InvalidInput(format!(
+            "request body exceeds {} MB",
+            MAX_LLM_BODY_BYTES / 1024 / 1024
+        )));
+    }
+    if headers.len() > MAX_LLM_HEADERS {
+        return Err(AppError::InvalidInput(format!(
+            "too many headers (max {MAX_LLM_HEADERS})"
+        )));
+    }
+    for (name, value) in &headers {
+        if name.len() > MAX_HEADER_NAME_LEN || value.len() > MAX_HEADER_VALUE_LEN {
+            return Err(AppError::InvalidInput(
+                "header name or value exceeds maximum length".into(),
+            ));
+        }
+    }
     check(Action::Llm {
         provider: &provider,
     })?;
@@ -225,7 +250,7 @@ pub async fn llm_http_post(
     redacted.set_query(None);
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "llm",
         &provider,
         "chat",
@@ -234,7 +259,9 @@ pub async fn llm_http_post(
             "status": status,
             "bytes": resp_body.len(),
         }),
-    );
+    ) {
+        tracing::error!("audit append failed for llm_http_post: {e}");
+    }
 
     Ok(LlmHttpResponse {
         status,
@@ -255,6 +282,24 @@ pub async fn llm_chat_stream(
     stream_id: String,
     on_event: Channel<StreamEvent>,
 ) -> AppResult<()> {
+    if body.len() > MAX_LLM_BODY_BYTES {
+        return Err(AppError::InvalidInput(format!(
+            "request body exceeds {} MB",
+            MAX_LLM_BODY_BYTES / 1024 / 1024
+        )));
+    }
+    if headers.len() > MAX_LLM_HEADERS {
+        return Err(AppError::InvalidInput(format!(
+            "too many headers (max {MAX_LLM_HEADERS})"
+        )));
+    }
+    for (name, value) in &headers {
+        if name.len() > MAX_HEADER_NAME_LEN || value.len() > MAX_HEADER_VALUE_LEN {
+            return Err(AppError::InvalidInput(
+                "header name or value exceeds maximum length".into(),
+            ));
+        }
+    }
     check(Action::Llm {
         provider: &provider,
     })?;
@@ -301,7 +346,7 @@ pub async fn llm_chat_stream(
         let _ = on_event.send(StreamEvent::Error {
             message: format!("HTTP {}: {}", status.as_u16(), truncate(text.trim(), 240)),
         });
-        let _ = audit::append(
+        if let Err(e) = audit::append(
             "llm",
             &provider,
             "chat-stream",
@@ -310,7 +355,9 @@ pub async fn llm_chat_stream(
                 "status": status.as_u16(),
                 "bytes": text.len(),
             }),
-        );
+        ) {
+            tracing::error!("audit append failed for llm_chat_stream error path: {e}");
+        }
         return Ok(()); // _guard drops here, removing the STREAM_ABORTS entry
     }
 
@@ -373,7 +420,7 @@ pub async fn llm_chat_stream(
 
     // _guard drops at end of function, removing the STREAM_ABORTS entry.
 
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "llm",
         &provider,
         "chat-stream",
@@ -382,7 +429,9 @@ pub async fn llm_chat_stream(
             "status": status.as_u16(),
             "bytes": total,
         }),
-    );
+    ) {
+        tracing::error!("audit append failed for llm_chat_stream success path: {e}");
+    }
 
     Ok(())
 }

@@ -26,7 +26,7 @@ const HARD_BLOCKED_HOSTS: &[&str] = &[
 
 /// Link-local prefixes (incl. all cloud metadata at 169.254/16). Always blocked,
 /// even for the Ollama LAN path — link-local is not a legitimate Ollama target.
-const HARD_BLOCKED_PREFIXES: &[&str] = &["169.254.", "fe80:"];
+const HARD_BLOCKED_PREFIXES: &[&str] = &["169.254.", "fe80:", "fd00:ec2:"];
 
 /// Always-blocked targets — cloud metadata, link-local, 0.0.0.0.
 pub fn is_hard_blocked(host: &str) -> bool {

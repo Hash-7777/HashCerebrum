@@ -103,7 +103,7 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
 
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "net",
         host,
         "get",
@@ -113,7 +113,9 @@ pub async fn net_get(url: String) -> AppResult<HttpResponse> {
             "status": status,
             "bytes": body.len()
         }),
-    );
+    ) {
+        tracing::error!("audit append failed for net_get: {e}");
+    }
 
     Ok(HttpResponse { status, body })
 }
@@ -154,7 +156,7 @@ pub async fn net_get_bytes(url: String) -> AppResult<Vec<u8>> {
     let _ = redacted.set_username("");
     let _ = redacted.set_password(None);
 
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "net",
         host,
         "get_bytes",
@@ -163,7 +165,9 @@ pub async fn net_get_bytes(url: String) -> AppResult<Vec<u8>> {
             "status": status,
             "bytes": bytes.len()
         }),
-    );
+    ) {
+        tracing::error!("audit append failed for net_get_bytes: {e}");
+    }
 
     Ok(bytes)
 }

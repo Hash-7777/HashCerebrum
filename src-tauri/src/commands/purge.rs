@@ -17,6 +17,16 @@ fn app_data_path(app: &AppHandle, filename: &str) -> AppResult<PathBuf> {
     Ok(dir.join(filename))
 }
 
+fn is_valid_project_id(id: &str) -> bool {
+    // Alphanumeric, hyphen, underscore only — prevents path traversal and
+    // directory separators in filenames.
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 /// Purge all data associated with a project ID across stores.
 /// Returns counts of rows affected per store.
 #[tauri::command]
@@ -24,6 +34,11 @@ pub async fn purge_project_data(
     app: AppHandle,
     project_id: String,
 ) -> AppResult<std::collections::HashMap<String, u64>> {
+    if !is_valid_project_id(&project_id) {
+        return Err(AppError::InvalidInput(
+            "project_id must be alphanumeric/hyphen/underscore".into(),
+        ));
+    }
     let mut results: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
 
     // 1. Purge cache entries tagged with project_id (if any were tagged)
@@ -39,22 +54,26 @@ pub async fn purge_project_data(
     // 3. Delete project-specific SQLite files if they exist
     let rag_path = app_data_path(&app, &format!("rag_{}.sqlite", project_id))?;
     if rag_path.exists() {
-        std::fs::remove_file(&rag_path).ok();
+        std::fs::remove_file(&rag_path)
+            .map_err(|e| AppError::File(format!("rag delete failed: {e}")))?;
         results.insert("rag_file_deleted".into(), 1);
     }
 
     let chat_path = app_data_path(&app, &format!("chat_{}.sqlite", project_id))?;
     if chat_path.exists() {
-        std::fs::remove_file(&chat_path).ok();
+        std::fs::remove_file(&chat_path)
+            .map_err(|e| AppError::File(format!("chat delete failed: {e}")))?;
         results.insert("chat_file_deleted".into(), 1);
     }
 
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "purge",
         &project_id,
         "purge_project_data",
         &serde_json::json!({ "results": results }),
-    );
+    ) {
+        tracing::error!("audit append failed for purge_project_data: {e}");
+    }
 
     Ok(results)
 }
@@ -70,5 +89,13 @@ fn redact_audit_for_project(_app: &AppHandle, project_id: &str) -> AppResult<u64
         "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL WHERE subject LIKE ?2 OR action LIKE ?2 OR category LIKE ?2",
         params![redacted, pattern],
     )?;
+    // Append a tombstone entry so auditors can see *that* a redaction happened,
+    // when it happened, and which project was erased, without revealing content.
+    let _ = audit::append(
+        "purge",
+        project_id,
+        "audit_redacted",
+        &serde_json::json!({ "rows": count, "timestamp": chrono::Utc::now().to_rfc3339() }),
+    );
     Ok(count as u64)
 }

@@ -13,6 +13,7 @@ static POOL: std::sync::OnceLock<Pool> = std::sync::OnceLock::new();
 /// MAX_CACHE_ROWS are evicted oldest-first so the cache file cannot grow without
 /// limit. Combined with purge_expired this keeps the cache bounded over time.
 const MAX_CACHE_ROWS: i64 = 2_000;
+const MAX_CACHE_PAYLOAD_BYTES: usize = 1024 * 1024; // 1 MB
 
 fn cache_path(app: &AppHandle) -> AppResult<PathBuf> {
     let dir = app
@@ -197,6 +198,13 @@ pub fn get(key: &str) -> AppResult<Option<Vec<u8>>> {
 /// Write or overwrite a cached entry.
 /// Silently no-ops when the cache is unavailable — the caller's request still completes.
 pub fn set(key: &str, host: &str, payload: &[u8], ttl_seconds: i64) -> AppResult<()> {
+    if payload.len() > MAX_CACHE_PAYLOAD_BYTES {
+        return Err(AppError::Cache(format!(
+            "payload {} bytes exceeds max {} bytes",
+            payload.len(),
+            MAX_CACHE_PAYLOAD_BYTES
+        )));
+    }
     let pool = match POOL.get() {
         Some(p) => p,
         None => return Ok(()),

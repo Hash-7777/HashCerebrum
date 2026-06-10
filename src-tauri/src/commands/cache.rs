@@ -13,23 +13,27 @@ pub async fn cache_stats() -> AppResult<cache::CacheStats> {
 #[tauri::command]
 pub async fn cache_clear() -> AppResult<u64> {
     let removed = cache::purge_all()?;
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "cache",
         "user",
         "clear_all",
         &serde_json::json!({ "removed": removed }),
-    );
+    ) {
+        tracing::error!("audit append failed for cache_clear: {e}");
+    }
     Ok(removed)
 }
 
 #[tauri::command]
 pub async fn cache_clear_expired() -> AppResult<u64> {
     let removed = cache::purge_expired()?;
-    let _ = audit::append(
+    if let Err(e) = audit::append(
         "cache",
         "user",
         "clear_expired",
         &serde_json::json!({ "removed": removed }),
-    );
+    ) {
+        tracing::error!("audit append failed for cache_clear_expired: {e}");
+    }
     Ok(removed)
 }
