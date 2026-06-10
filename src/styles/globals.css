@@ -12,6 +12,7 @@
 @import './sections/claim-ledger.css';
 @import './sections/boot-splash.css';
 @import './sections/system.css';
+@import './sections/paper-mode.css';
 @import './sections/dev.css';
 
 /* Global reduced-motion: disable transitions and animations for users who

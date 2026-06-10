@@ -54,6 +54,12 @@ export const MODES = defineModes([
     shortcut: '⌘5',
     description: 'A gene-expert checker — gene variant × disease → association-confidence score and a cited correlation report',
   },
+  {
+    id: 'paper',
+    label: 'Paper',
+    shortcut: '⌘6',
+    description: 'Guided paper-production studio — structured inputs, deterministic stats, publishable manuscript + PDF',
+  },
 ]);
 
 export type ModeId = (typeof MODES)[number]['id'];
