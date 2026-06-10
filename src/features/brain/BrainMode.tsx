@@ -89,7 +89,7 @@ export function BrainMode({
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId));
   const clearActive = useChatHistoryStore((s) => s.clearActive);
-  const exportTitle = activeChat?.title || 'The Cerebrum';
+  const exportTitle = activeChat?.title || 'The Brain';
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -780,7 +780,7 @@ export function BrainMode({
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">
-            <h1 className="cerebrum-title"><em>The</em> Cerebrum</h1>
+            <h1 className="brain-title"><em>The</em> Brain</h1>
             <div className="chat-meta">
               <span className="chat-meta-line">
                 <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>

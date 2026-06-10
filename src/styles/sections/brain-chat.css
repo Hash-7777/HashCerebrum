@@ -24,30 +24,14 @@
 /* ── Chat header ──────────────────────────────────────────── */
 
 .chat-header {
-  padding: 7px 22px 6px;
+  padding: 5px 22px 4px;
   background: var(--ink-1);
   border-bottom: 1px solid var(--line-strong);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   position: relative;
   flex-shrink: 0;
-}
-.chat-header::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: var(--line);
-}
-.chat-header::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 22px;
-  width: 48px;
-  height: 1px;
-  background: var(--accent);
 }
 
 .chat-header-row {
@@ -58,17 +42,17 @@
   min-width: 0;
 }
 
-.cerebrum-title {
+.brain-title {
   margin: 0;
   font-family: "Newsreader", "Source Serif 4", Georgia, serif;
-  font-size: clamp(22px, 2.2vw, 32px);
+  font-size: clamp(20px, 2vw, 28px);
   font-weight: 400;
   letter-spacing: -0.018em;
   line-height: 1;
   color: var(--text-1);
   font-variation-settings: "opsz" 48;
 }
-.cerebrum-title em {
+.brain-title em {
   font-style: italic;
   font-weight: 300;
   color: var(--text-2);
