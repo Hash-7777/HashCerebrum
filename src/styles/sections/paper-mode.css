@@ -13,15 +13,17 @@
 
 .paper-header h1 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.6rem;
+  font-weight: 700;
   color: var(--text-1);
+  letter-spacing: -0.01em;
 }
 
 .paper-subtitle {
-  margin: 0.25rem 0 0;
-  color: var(--text-3);
+  margin: 0.35rem 0 0;
+  color: var(--text-2);
   font-size: 0.9rem;
+  font-weight: 400;
 }
 
 /* Stepper */
@@ -44,11 +46,13 @@
   font-size: 0.85rem;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .paper-step:hover:not(:disabled) {
   background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text-2);
 }
 
 .paper-step:disabled {
@@ -65,7 +69,8 @@
   border-color: var(--accent);
   background: var(--surface-2);
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .paper-step.done .step-num {
@@ -130,6 +135,43 @@
 .paper-step-panel select:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Example prompts */
+.paper-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.examples-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.example-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.example-chip {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-1);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.example-chip:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text-1);
 }
 
 /* Paper type cards */
@@ -147,28 +189,31 @@
   background: var(--surface-1);
   color: var(--text-1);
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .paper-type-card:hover {
   border-color: var(--accent);
+  background: var(--surface-2);
 }
 
 .paper-type-card.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--surface-2);
 }
 
 .paper-type-title {
   font-weight: 600;
   font-size: 0.9rem;
   margin-bottom: 0.25rem;
+  color: var(--text-1);
 }
 
 .paper-type-desc {
   font-size: 0.8rem;
-  color: var(--text-3);
-  line-height: 1.3;
+  color: var(--text-2);
+  line-height: 1.35;
 }
 
 /* Outcomes */
@@ -201,17 +246,17 @@
 
 .paper-data-table th,
 .paper-data-table td {
-  padding: 0.4rem 0.3rem;
+  padding: 0.45rem 0.4rem;
   border-bottom: 1px solid var(--border-1);
   text-align: left;
 }
 
 .paper-data-table th {
-  color: var(--text-3);
-  font-weight: 500;
+  color: var(--text-2);
+  font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 
 .paper-data-table input,
@@ -298,15 +343,17 @@
   justify-content: space-between;
   gap: 1rem;
   font-size: 0.9rem;
+  padding: 0.15rem 0;
 }
 
 .review-key {
   color: var(--text-3);
+  font-weight: 500;
 }
 
 .review-val {
   color: var(--text-1);
-  font-weight: 500;
+  font-weight: 600;
   text-align: right;
 }
 
@@ -357,25 +404,55 @@
 
 /* Output */
 .paper-output {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   border: 1px solid var(--border-1);
   border-radius: 0.5rem;
   background: var(--surface-1);
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 
 .paper-output-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid var(--border-1);
+  background: var(--surface-1);
 }
 
 .paper-output-header h3 {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
+  color: var(--text-1);
+}
+
+.paper-output-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.paper-output-actions button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border-1);
+  background: var(--surface-0);
+  color: var(--text-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.paper-output-actions button:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text-1);
 }
 
 .paper-manuscript {
@@ -397,8 +474,9 @@
 
 .paper-hint {
   margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-3);
+  font-size: 0.82rem;
+  color: var(--text-2);
+  line-height: 1.45;
 }
 
 .paper-toggle {
@@ -408,10 +486,12 @@
   gap: 0.5rem;
   font-size: 0.9rem;
   color: var(--text-1);
+  font-weight: 500;
 }
 
 .paper-toggle input[type="checkbox"] {
   width: auto;
+  accent-color: var(--accent);
 }
 
 /* Responsive */

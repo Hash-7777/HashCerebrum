@@ -56,7 +56,7 @@ export const MODES = defineModes([
   },
   {
     id: 'paper',
-    label: 'Paper',
+    label: 'Paper Engine',
     shortcut: '⌘6',
     description: 'Guided paper-production studio — structured inputs, deterministic stats, publishable manuscript + PDF',
   },

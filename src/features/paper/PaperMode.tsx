@@ -12,12 +12,25 @@ import { runSwarm } from '@features/brain/swarm/runSwarm';
 import { memoryTopicLabel, citedEvidenceFor } from '@features/brain/memoryTopic';
 import { isMetaOrAppQuestion } from '@features/brain/swarm/paper';
 import { manuscriptToReadableText } from '@features/brain/swarm/manuscript';
+import type { Manuscript } from '@features/brain/swarm/manuscript';
 import { buildPaperOutline } from '@features/brain/swarm/paperPipeline';
 import type { PaperOutline } from '@features/brain/swarm/paperPipeline';
 import { summarizeDatasetText, summarizeDatasetXlsx } from '@features/brain/swarm/statistics';
 import type { UploadedDatasetSummary } from '@features/brain/swarm/publicationTypes';
 import { MarkdownText } from '@ui/MarkdownText';
 import { Icon } from '@ui/icons';
+import { PdfGlyph } from '@ui/icons/PdfGlyph';
+import {
+  buildMessagePdfBlob,
+  buildMarkdownExport,
+  exportMessageDocx,
+  downloadBlob,
+} from '@features/brain/export/messageExport';
+import { exportMessageLatex } from '@features/brain/export/latexExport';
+import {
+  DocumentPreviewWindow,
+  type PreviewDocument,
+} from '@features/brain/components/DocumentPreviewWindow';
 import type { PaperJobSpec, EffectRow } from './types';
 import { PAPER_TYPES, paperTypeById } from './paperTypeRegistry';
 
@@ -31,6 +44,32 @@ const STEPS = [
 ] as const;
 
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+const EXAMPLE_PROMPTS: { title: string; question: string; label: string }[] = [
+  {
+    label: 'SGLT2 inhibitors in heart failure',
+    title: 'SGLT2 inhibitors in heart failure with mildly reduced ejection fraction',
+    question:
+      'In patients with HFrEF, do SGLT2 inhibitors reduce cardiovascular mortality compared with placebo?',
+  },
+  {
+    label: 'GLP-1 agonists and weight loss',
+    title: 'GLP-1 receptor agonists for obesity: a systematic review',
+    question:
+      'What is the efficacy and safety of GLP-1 receptor agonists for weight loss in adults with obesity?',
+  },
+  {
+    label: 'Anticoagulants in atrial fibrillation',
+    title: 'Direct oral anticoagulants versus warfarin in atrial fibrillation',
+    question:
+      'In patients with non-valvular atrial fibrillation, are DOACs superior to warfarin for stroke prevention?',
+  },
+  {
+    label: 'Statins and dementia risk',
+    title: 'Statin therapy and risk of dementia: a meta-analysis',
+    question: 'Does statin use reduce the risk of dementia or cognitive decline in older adults?',
+  },
+];
 
 function emptySpec(): PaperJobSpec {
   return {
@@ -75,34 +114,10 @@ function buildSyntheticQuestion(spec: PaperJobSpec): string {
   return `Produce a full ${spec.citationStyle}-style research paper for this structured specification:\n\n${json}\n\nRequirements: write with numbered citations, honest reporting, and source-grounded claims.`;
 }
 
-function canStepAdvance(step: StepIndex, spec: PaperJobSpec): boolean {
-  switch (step) {
-    case 0:
-      return spec.title.trim().length > 0 || spec.question.trim().length > 0;
-    case 1:
-      return true;
-    case 2:
-      return spec.pico.population.trim().length > 0;
-    case 3: {
-      const pt = paperTypeById(spec.paperType);
-      if (!pt?.requiresDataStep) return true;
-      const minRows = spec.paperType === 'systematic_review' ? 2 : 1;
-      return (
-        spec.effectData.length >= minRows &&
-        spec.effectData.every(
-          (r) =>
-            r.label.trim() &&
-            Number.isFinite(r.point) &&
-            r.ciLow < r.ciHigh &&
-            r.point >= 0,
-        )
-      );
-    }
-    case 4:
-      return true;
-    case 5:
-      return true;
-  }
+function canStepAdvance(_step: StepIndex, _spec: PaperJobSpec): boolean {
+  // All fields are optional — the user can run the pipeline with any
+  // level of detail and let the swarm fill gaps from retrieved evidence.
+  return true;
 }
 
 export function PaperMode() {
@@ -110,10 +125,13 @@ export function PaperMode() {
   const [spec, setSpec] = useState<PaperJobSpec>(emptySpec);
   const [isRunning, setIsRunning] = useState(false);
   const [manuscript, setManuscript] = useState<string | null>(null);
+  const [manuscriptObj, setManuscriptObj] = useState<Manuscript | null>(null);
+  const [modelUsed, setModelUsed] = useState<string>('');
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outlineProposal, setOutlineProposal] = useState<PaperOutline | null>(null);
   const [dataset, setDataset] = useState<UploadedDatasetSummary | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<PreviewDocument | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const isMounted = useRef(true);
@@ -190,6 +208,14 @@ export function PaperMode() {
     }));
   }, []);
 
+  const loadExample = useCallback((ex: (typeof EXAMPLE_PROMPTS)[number]) => {
+    setSpec((s) => ({
+      ...s,
+      title: ex.title,
+      question: ex.question,
+    }));
+  }, []);
+
   const attachDataset = useCallback(async (file: File) => {
     try {
       const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
@@ -220,6 +246,8 @@ export function PaperMode() {
       if (isRunning || availableModels.length === 0) return;
       setIsRunning(true);
       setManuscript(null);
+      setManuscriptObj(null);
+      setModelUsed('');
       setError(null);
       setOutlineProposal(null);
       setProgress('Starting…');
@@ -298,6 +326,10 @@ export function PaperMode() {
               ? manuscriptToReadableText(res.manuscript)
               : res.answer || 'Drafting completed.';
             setManuscript(text);
+            if (res.manuscript) {
+              setManuscriptObj(res.manuscript);
+            }
+            setModelUsed(res.modelUsed);
             setProgress(null);
             setIsRunning(false);
             if (res.manuscript) {
@@ -350,6 +382,10 @@ export function PaperMode() {
             ? manuscriptToReadableText(result.manuscript)
             : result.answer || 'No response returned.';
           setManuscript(text);
+          if (result.manuscript) {
+            setManuscriptObj(result.manuscript);
+          }
+          setModelUsed(result.modelUsed);
           setProgress(null);
           setIsRunning(false);
         }
@@ -364,21 +400,88 @@ export function PaperMode() {
     [isRunning, availableModels, spec, dataset, runs, activeProjectId],
   );
 
+  // ── Exports & preview ───────────────────────────────────────────
+
+  const safeFilename = useMemo(
+    () => (spec.title.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'paper_engine').slice(0, 60),
+    [spec.title],
+  );
+
+  const buildExportable = useCallback((): import('@features/brain/export/messageExport').ExportableMessage | null => {
+    if (!manuscript) return null;
+    const base: import('@features/brain/export/messageExport').ExportableMessage = {
+      title: spec.title || 'Paper Engine Export',
+      role: 'assistant',
+      content: manuscript,
+      modelLabel: modelUsed,
+    };
+    if (manuscriptObj) {
+      base.manuscript = manuscriptObj;
+      base.citations = manuscriptObj.publication?.references.map((r) => r.evidence) ?? [];
+    }
+    return base;
+  }, [manuscript, spec.title, modelUsed, manuscriptObj]);
+
+  const openPdfPreview = useCallback(async () => {
+    const msg = buildExportable();
+    if (!msg) return;
+    try {
+      const blob = await buildMessagePdfBlob(msg);
+      const doc: PreviewDocument = {
+        title: msg.title,
+        filename: `${safeFilename}.pdf`,
+        kind: 'pdf',
+        typeLabel: 'PDF',
+        blob,
+        copyText: manuscript ?? '',
+      };
+      setPreviewDoc(doc);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`PDF preview failed: ${detail}`, 'error');
+    }
+  }, [buildExportable, safeFilename, manuscript]);
+
   const exportMarkdown = useCallback(() => {
-    if (!manuscript) return;
-    const blob = new Blob([manuscript], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    const safeName = (spec.title.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'paper').slice(0, 60);
-    a.href = url;
-    a.download = `${safeName}.md`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      a.remove();
-    }, 100);
-  }, [manuscript, spec.title]);
+    const msg = buildExportable();
+    if (!msg) return;
+    const md = buildMarkdownExport(msg);
+    downloadBlob(`${safeFilename}.md`, new Blob([md], { type: 'text/markdown;charset=utf-8' }));
+  }, [buildExportable, safeFilename]);
+
+  const exportPdf = useCallback(async () => {
+    const msg = buildExportable();
+    if (!msg) return;
+    try {
+      const blob = await buildMessagePdfBlob(msg);
+      downloadBlob(`${safeFilename}.pdf`, blob);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`PDF export failed: ${detail}`, 'error');
+    }
+  }, [buildExportable, safeFilename]);
+
+  const exportDocx = useCallback(async () => {
+    const msg = buildExportable();
+    if (!msg) return;
+    try {
+      await exportMessageDocx(msg);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`Word export failed: ${detail}`, 'error');
+    }
+  }, [buildExportable]);
+
+  const exportLatex = useCallback(() => {
+    const msg = buildExportable();
+    if (!msg) return;
+    try {
+      exportMessageLatex(msg);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      useToastStore.getState().show(`LaTeX export failed: ${detail}`, 'error');
+    }
+  }, [buildExportable]);
 
   const handleStepClick = useCallback(
     (target: StepIndex) => {
@@ -412,8 +515,8 @@ export function PaperMode() {
   return (
     <div className="mode paper-mode">
       <header className="paper-header">
-        <h1>Paper Studio</h1>
-        <p className="paper-subtitle">Structured inputs → deterministic stats → publishable manuscript</p>
+        <h1>Paper Engine</h1>
+        <p className="paper-subtitle">Structured research → evidence synthesis → publishable manuscript</p>
       </header>
 
       <div className="paper-stepper" role="tablist" aria-label="Paper steps">
@@ -455,6 +558,22 @@ export function PaperMode() {
                 rows={4}
               />
             </label>
+            <div className="paper-examples">
+              <span className="examples-label">Example prompts</span>
+              <div className="example-chips">
+                {EXAMPLE_PROMPTS.map((ex) => (
+                  <button
+                    key={ex.label}
+                    type="button"
+                    className="example-chip"
+                    onClick={() => loadExample(ex)}
+                    title={`${ex.title} — ${ex.question}`}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -786,7 +905,7 @@ export function PaperMode() {
               </div>
             ) : (
               !outlineProposal && (
-                <button type="button" className="btn primary" onClick={() => runPaper()} disabled={!canAdvance}>
+                <button type="button" className="btn primary" onClick={() => runPaper()}>
                   <Icon name="send" size={14} />{' '}
                   {spec.options.outlineFirst ? 'Propose outline' : 'Run paper pipeline'}
                 </button>
@@ -815,14 +934,35 @@ export function PaperMode() {
         <div className="paper-output">
           <div className="paper-output-header">
             <h3>Manuscript</h3>
-            <button type="button" className="btn sm ghost" onClick={exportMarkdown}>
-              <Icon name="download" size={13} /> Export MD
-            </button>
+            <div className="paper-output-actions">
+              <button type="button" className="btn sm ghost" onClick={openPdfPreview}>
+                <PdfGlyph size={13} /> Preview PDF
+              </button>
+              <button type="button" className="btn sm ghost" onClick={exportMarkdown}>
+                <Icon name="download" size={13} /> MD
+              </button>
+              <button type="button" className="btn sm ghost" onClick={() => void exportPdf()}>
+                <Icon name="download" size={13} /> PDF
+              </button>
+              <button type="button" className="btn sm ghost" onClick={() => void exportDocx()}>
+                <Icon name="download" size={13} /> Word
+              </button>
+              <button type="button" className="btn sm ghost" onClick={exportLatex}>
+                <Icon name="download" size={13} /> LaTeX
+              </button>
+            </div>
           </div>
           <div className="paper-manuscript">
             <MarkdownText content={manuscript} />
           </div>
         </div>
+      )}
+
+      {previewDoc && (
+        <DocumentPreviewWindow
+          document={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
       )}
     </div>
   );
