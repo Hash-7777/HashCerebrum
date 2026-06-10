@@ -183,6 +183,7 @@ function cslReference(record: EvidenceItem, id: string): CslReference {
 function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
   const cited = citedSourceNumbers(manuscript);
   const byIdentity = new Map<string, CanonicalReference>();
+  const byTitleYear = new Map<string, CanonicalReference>();
   const references: CanonicalReference[] = [];
   const citationMap: Record<string, CitationMapEntry> = {};
 
@@ -193,6 +194,17 @@ function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
 
     const identity = evidenceIdentity(record);
     let reference = byIdentity.get(identity);
+
+    // I5: cross-source fuzzy dedup — if primary identifiers differ but
+    // normalized title+year match, merge into the same reference.
+    if (!reference) {
+      const titleYearKey = `title:${normalizeText(record.title).toLowerCase()}-${record.year ?? ''}`;
+      reference = byTitleYear.get(titleYearKey);
+      if (reference) {
+        byIdentity.set(identity, reference);
+      }
+    }
+
     if (!reference) {
       const vancouverNumber = references.length + 1;
       const id = `ref-${stableHash(identity)}`;
@@ -207,6 +219,8 @@ function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
         text: formatReference(record, 'vancouver'),
       };
       byIdentity.set(identity, reference);
+      const titleYearKey = `title:${normalizeText(record.title).toLowerCase()}-${record.year ?? ''}`;
+      byTitleYear.set(titleYearKey, reference);
       references.push(reference);
     }
 

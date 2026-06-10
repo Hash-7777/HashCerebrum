@@ -43,6 +43,8 @@ import {
   SELF_HARM_MESSAGE,
 } from './paper';
 import type { LlmMessage } from '@core/llm/types';
+import { isProviderOnCooldown } from '@core/llm/failover';
+import { parseModelRef } from '@core/llm/modelCatalog';
 import { manuscriptToReadableText } from './manuscript';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
@@ -490,7 +492,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const mini = opts.mini ?? false;
   const drugFocus = opts.drugFocus ?? false;
   const geneticsFocus = opts.geneticsFocus ?? false;
-  const bossModel = modelFor('boss');
+  let bossModel = modelFor('boss');
 
   // Identity / "what model are you" questions get a fixed, branded answer so the
   // underlying language model is never disclosed — The Cerebrum of HashCerebrum,
@@ -579,6 +581,13 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const researchQuestion = normalizeMedicalSpelling(
     await contextualizeQuestion(bossModel, question, conversation),
   );
+
+  // If the boss model's provider was cooled down during contextualization,
+  // re-resolve it so planResearch doesn't start with a dead provider.
+  if (isProviderOnCooldown(parseModelRef(bossModel).provider)) {
+    const fresh = modelFor('boss');
+    if (fresh !== bossModel) bossModel = fresh;
+  }
 
   // Drug-Interactions focus: a single specialist gathers interaction evidence
   // from trusted sources and the boss writes a focused interaction report —

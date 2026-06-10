@@ -18,6 +18,7 @@ import {
 import { formatEvidenceList } from './evidenceFormat';
 import { buildPublicationArtifact } from './publication';
 import { datasetSummaryForPrompt } from './statistics';
+import { keywordsFrom } from './paperPipeline';
 import type { ManuscriptStandard, UploadedDatasetSummary } from './publicationTypes';
 import type { SpecialistResult } from './types';
 
@@ -25,12 +26,6 @@ const MAX_EVIDENCE = 64;
 const SECTION_TOKENS = 5200;
 const MAX_SECTION_PASSES = 4;
 const MAX_REPAIR_PASSES = 3;
-
-const STOPWORDS = new Set([
-  'about', 'after', 'against', 'and', 'are', 'between', 'during', 'from', 'into',
-  'over', 'their', 'them', 'then', 'there', 'these', 'this', 'those', 'with',
-  'within', 'what', 'which', 'while', 'review', 'research', 'paper', 'study',
-]);
 
 const SECTION_SYSTEM = `You are a biomedical research writer drafting ONE section of a biomedical manuscript for HashCerebrum.
 - Write only polished academic prose in full paragraphs for the requested section. Do not write other sections, a title, or a heading line.
@@ -73,14 +68,6 @@ function bodyWordCount(body: string[]): number {
 function isDraftFailure(body: string[]): boolean {
   const text = body.join(' ').toLowerCase();
   return text.includes('could not be drafted') || text.includes('could not complete');
-}
-
-function keywordsFrom(question: string): string[] {
-  const words = titleTopic(question)
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 4 && !STOPWORDS.has(word));
-  return [...new Set(words)].slice(0, 6);
 }
 
 function titleTopic(question: string): string {

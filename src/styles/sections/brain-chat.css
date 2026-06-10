@@ -116,6 +116,11 @@
   gap: 8px;
   margin-top: 4px;
 }
+/* When the tip is the only child (0-turn empty state), left-align it
+   instead of pushing it to the right edge next to "0 TURNS". */
+.chat-export-actions:has(> .chat-tip:first-child:last-child) {
+  justify-content: flex-start;
+}
 .chat-export-actions button {
   font-family: var(--f-mono);
   font-size: 9px;

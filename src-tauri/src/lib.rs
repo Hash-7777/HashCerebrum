@@ -111,6 +111,19 @@ pub fn run() {
                 if !has_saved_state {
                     let _ = win.center();
                 }
+                // Save geometry to disk immediately when the window closes,
+                // before the app exits (macOS Cmd+Q may destroy the window
+                // before RunEvent::Exit fires, leaving stale cache).
+                let app_handle = app.handle().clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { .. } = event {
+                        let _ = tauri_plugin_window_state::AppHandleExt::save_window_state(
+                            &app_handle,
+                            tauri_plugin_window_state::StateFlags::all()
+                                .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
+                        );
+                    }
+                });
             }
             Ok(())
         })

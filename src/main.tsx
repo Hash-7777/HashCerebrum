@@ -83,4 +83,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // actually painted (reliable timing); these are staggered safety nets so the
 // window can never be left hidden if that path is starved or an early reveal
 // attempt raced and failed (which left the window invisible until reopened).
-if (isTauri) for (const ms of [1200, 2500, 4500, 7000]) setTimeout(revealWindow, ms);
+// Timers are short (100–1200 ms) because the BootSplash fast-path (double RAF)
+// should handle normal opens; these only catch pathological cases.
+if (isTauri) for (const ms of [100, 250, 500, 1200]) setTimeout(revealWindow, ms);

@@ -28,6 +28,9 @@ const SPELLING_FIXES: Record<string, string> = {
   anticoagualtion: 'anticoagulation',
   anticoagualant: 'anticoagulant',
   // common condition misspellings
+  cardiovascual: 'cardiovascular',
+  cardiovasclar: 'cardiovascular',
+  cardivascular: 'cardiovascular',
   diabetis: 'diabetes',
   diabetese: 'diabetes',
   diabets: 'diabetes',
@@ -39,7 +42,16 @@ const SPELLING_FIXES: Record<string, string> = {
   arrhythmias: 'arrhythmia',
   alzheimers: 'alzheimer',
   parkinsons: 'parkinson',
+  // common research / mechanism misspellings
+  reaserch: 'research',
+  reasearch: 'research',
+  reserch: 'research',
+  mecanism: 'mechanism',
+  mechanim: 'mechanism',
+  pharmacolgy: 'pharmacology',
   // common drug misspellings
+  digoxine: 'digoxin',
+  warafin: 'warfarin',
   metaformin: 'metformin',
   ibuprofin: 'ibuprofen',
   ibruprofen: 'ibuprofen',

@@ -156,7 +156,7 @@ export function cooldownProvider(provider: LlmProviderId, error: unknown): void 
   const ms = BILLING_DEAD.test(message)
     ? 5 * 60_000 // credits exhausted — skip for 5 minutes
     : RATE_LIMIT.test(message)
-      ? 45_000 // rate limited — skip for 45 seconds
+      ? 15_000 // rate limited — skip for 15 seconds (was 45s; routing stalls were ~95s)
       : 0;
   if (ms > 0) providerCooldownUntil.set(provider, Date.now() + ms);
 }

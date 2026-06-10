@@ -25,6 +25,8 @@ import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
+import { coreConceptGroups } from './runSwarm';
+import { normalizeMedicalSpelling } from './queryNormalize';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -113,7 +115,7 @@ const SECTION_TOKENS = 5800;
 const MINI_SECTION_TOKENS = 1600;
 const MAX_SECTION_PASSES = 2;
 const MAX_QA_REPAIR_SECTIONS = 4;
-const MAX_QA_REPAIR_PASSES = 1;
+const MAX_QA_REPAIR_PASSES = 2;
 /** When true, the pipeline allows export even with residual repairable blockers
  *  after all repair passes are exhausted — the manuscript is flagged with a
  *  prominent warning rather than being hard-blocked. This prevents free-tier
@@ -160,34 +162,6 @@ FORMAT — deviations corrupt the pipeline:
 - Cite approved [S#] markers for every factual claim.
 - Do not invent PMIDs, DOIs, p-values, CIs, ORs, HRs, or pooled estimates.
 - Use numeric statistics ONLY from the extracted numeric support block or uploaded dataset.`;
-
-const STOPWORDS = new Set([
-  'about',
-  'after',
-  'against',
-  'analysis',
-  'and',
-  'are',
-  'between',
-  'during',
-  'from',
-  'generate',
-  'into',
-  'make',
-  'paper',
-  'research',
-  'review',
-  'study',
-  'their',
-  'them',
-  'there',
-  'these',
-  'this',
-  'those',
-  'what',
-  'which',
-  'with',
-]);
 
 // Words that describe the REQUEST or the deliverable ("make a full research
 // paper about ...") rather than the subject. Stripped from the fallback title
@@ -697,10 +671,16 @@ function sectionForExtraction(extraction: EvidenceExtraction): string {
   return 'Evidence Base and Search Yield';
 }
 
+/** Fix erratic internal capitalization from OCR / model output:
+ *  e.g. "acUte heart faiLure … StabilizEd" → "Acute heart failure … Stabilized" */
+function fixOcrCasing(text: string): string {
+  return text
+    .replace(/\b[a-z]*[a-z][A-Z][a-z]*\b/g, (word) => word.toLowerCase())
+    .replace(/^([a-z])/, (_, c) => c.toUpperCase());
+}
+
 function claimForExtraction(extraction: EvidenceExtraction): string {
-  const finding = clean(extraction.keyFinding || extraction.title);
-  const design = extraction.studyDesign === 'indexed biomedical record' ? 'record' : extraction.studyDesign;
-  return `${extraction.sourceMarker} ${design} evidence reports: ${finding}`;
+  return fixOcrCasing(clean(extraction.keyFinding || extraction.title));
 }
 
 export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedgerEntry[] {
@@ -714,13 +694,23 @@ export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedger
       ...extraction.effectValues.map((effect) => `${effect.label} ${effect.value}`),
     ].filter(Boolean);
     if (existing) {
-      existing.supportingSources = [...new Set([...existing.supportingSources, extraction.sourceMarker])];
-      existing.numericSupport = [...new Set([...existing.numericSupport, ...numericSupport])];
-      existing.contradictionNotes = [...new Set([...existing.contradictionNotes, ...extraction.limitations])];
-      if (existing.evidenceStrength === 'context' && strengthFor(extraction) !== 'context') {
-        existing.evidenceStrength = strengthFor(extraction);
+      // Guard I11: do not merge user-supplied trial data ([P#]) with retrieved
+      // abstracts ([S#]) — prevents the model from importing population details
+      // or eligibility criteria from a retrieved source into a named trial.
+      const isSynthetic = (marker: string) => marker.startsWith('[P');
+      const hasSynthetic = existing.supportingSources.some(isSynthetic);
+      const isNewSynthetic = isSynthetic(extraction.sourceMarker);
+      if (hasSynthetic !== isNewSynthetic) {
+        // Fall through to create a new claim entry instead of merging.
+      } else {
+        existing.supportingSources = [...new Set([...existing.supportingSources, extraction.sourceMarker])];
+        existing.numericSupport = [...new Set([...existing.numericSupport, ...numericSupport])];
+        existing.contradictionNotes = [...new Set([...existing.contradictionNotes, ...extraction.limitations])];
+        if (existing.evidenceStrength === 'context' && strengthFor(extraction) !== 'context') {
+          existing.evidenceStrength = strengthFor(extraction);
+        }
+        continue;
       }
-      continue;
     }
     const id = `claim-${byClaim.size + 1}`;
     byClaim.set(key, {
@@ -881,28 +871,17 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
 // Generic academic connective nouns that carry no indexing value on their own
 // — dropped so the keyword list reads as real subject terms ("asthma",
 // "pharmacist", "inhaler") rather than "role" / "approach" / "use".
-const GENERIC_KEYWORDS = new Set([
-  'role', 'roles', 'approach', 'approaches', 'overview', 'use', 'uses', 'using',
-  'toward', 'towards', 'various', 'based', 'study', 'studies', 'paper', 'report',
-  'general', 'related', 'among', 'within',
-]);
-
 export function keywordsFrom(question: string): string[] {
-  return [
-    ...new Set(
-      titleTopic(question)
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .map((word) => TYPO_FIXES[word] ?? word)
-        .filter(
-          (word) =>
-            word.length >= 4 &&
-            !STOPWORDS.has(word) &&
-            !META_INSTRUCTION_WORDS.has(word) &&
-            !GENERIC_KEYWORDS.has(word),
-        ),
-    ),
-  ].slice(0, 8);
+  // Use coreConceptGroups (already used for relevance ranking) to extract real
+  // medical subject terms, instead of tokenising the raw prompt. This drops
+  // generic words like "effect", "versus", "systematic" automatically.
+  // Pre-normalise spelling so typos like "cardiovascual" are corrected before
+  // concept extraction.
+  const groups = coreConceptGroups(normalizeMedicalSpelling(question));
+  const keywords = groups
+    .map((g) => g[0])
+    .filter((k): k is string => !!k && k.length >= 3);
+  return [...new Set(keywords)].slice(0, 8);
 }
 
 function wordCount(value: string): number {
@@ -1315,6 +1294,12 @@ async function draftLedgerSection(opts: {
     opts.methodsNotes && opts.section.heading.toLowerCase() === 'methods'
       ? `\nDETERMINISTIC PIPELINE FACTS — expand these; do not invent alternatives:\n${opts.methodsNotes}\n`
       : '';
+  const hasSynthetic = opts.extractions.some((e) => e.sourceMarker.startsWith('[P'));
+  const syntheticIsolation = hasSynthetic
+    ? `
+AUTHOR-SUPPLIED TRIALS ([P#]):
+These trials were supplied by the user, not retrieved from a database. Describe them using ONLY their provided statistics and title. Do NOT import population details, eligibility criteria, or subgroup descriptions from retrieved [S#] sources into an [P#] trial description.`
+    : '';
   const userPrompt = `Topic: ${opts.question}
 ${gapNote}
 Section: ${opts.section.heading}
@@ -1327,6 +1312,7 @@ ${claimsBlock || 'No direct claims. Write a transparent evidence-gap section.'}
 
 EXTRACTIONS:
 ${extractionBlock || 'No direct extractions.'}
+${syntheticIsolation}
 
 Source yield: ${sourceYieldBlock(opts.extractions)}
 
@@ -1601,7 +1587,16 @@ function repairableSectionNames(issues: ValidationIssue[]): string[] {
   const names = issues
     .filter((issueItem) =>
       issueItem.section &&
-      ['section-too-short', 'section-missing-citation', 'unsupported-statistic', 'clinical-results-uncited'].includes(issueItem.code),
+      [
+        'section-too-short',
+        'section-missing-citation',
+        'unsupported-statistic',
+        'clinical-results-uncited',
+        'fabricated-primary-study',
+        'prompt-leakage',
+        'missing-required-section',
+        'model-owned-references',
+      ].includes(issueItem.code),
     )
     .map((issueItem) => issueItem.section!);
   return [...new Set(names)].slice(0, MAX_QA_REPAIR_SECTIONS);
