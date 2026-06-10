@@ -112,6 +112,24 @@ export function BrainMode({
     };
   }, []);
 
+  const stopRun = () => {
+    abortRef.current?.abort();
+    if (isMounted.current) {
+      setIsRunning(false);
+      setDraftProgress(null);
+      setMessages((current) => {
+        const last = current[current.length - 1];
+        if (last && last.role === 'assistant' && last.isStreaming) {
+          return [
+            ...current.slice(0, -1),
+            { ...last, content: 'Run stopped by user.', isStreaming: false },
+          ];
+        }
+        return current;
+      });
+    }
+  };
+
   const attachDataset = async (file: File) => {
     try {
       const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
@@ -840,6 +858,7 @@ export function BrainMode({
               setQuery('');
             }}
             onSubmit={submit}
+            onStop={stopRun}
             onOpenSettings={() => window.dispatchEvent(new CustomEvent('hc:open-settings'))}
             {...(drugFocus
               ? { placeholder: 'Ask about a drug interaction — e.g. “warfarin and grapefruit”. Get a cited interaction report.' }

@@ -1218,7 +1218,9 @@ async function callModel(
   user: string,
   maxTokens: number,
   noPause = false,
+  signal?: AbortSignal,
 ): Promise<string> {
+  if (signal?.aborted) throw new Error('Run stopped by user');
   // Surface a silent boss-model failover in the trace so a mid-run provider
   // outage is visible rather than only changing the model label afterwards.
   const onProgress = (progress: { to: { shortLabel: string }; reason: string }) => {
@@ -1300,7 +1302,9 @@ async function draftLedgerSection(opts: {
   evidenceGap?: string;
   mini?: boolean;
   methodsNotes?: string;
+  signal?: AbortSignal;
 }): Promise<string[]> {
+  if (opts.signal?.aborted) throw new Error('Run stopped by user');
   const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
   const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
   const claimsBlock = opts.claims.map(formatClaim).join('\n');
@@ -1339,6 +1343,7 @@ Write ${opts.section.heading} now. Start with the first sentence — no heading,
     userPrompt,
     opts.mini ? MINI_SECTION_TOKENS : SECTION_TOKENS,
     opts.mini ?? false,
+    opts.signal,
   );
 
   // Reject replies that look like the model wrote a complete document instead of
@@ -1391,12 +1396,14 @@ async function compileSections(opts: {
   existingSections?: ManuscriptSection[];
   evidenceGap?: string;
   mini?: boolean;
+  signal?: AbortSignal;
 }): Promise<ManuscriptSection[]> {
   const sections: ManuscriptSection[] = [];
   const roleDigest = specialistRoleDigest(opts.specialists);
   const datasetBlock = opts.dataset ? datasetSummaryForPrompt(opts.dataset) : '(no uploaded dataset was supplied)';
 
   for (const blueprintSection of opts.paperBlueprint.sections) {
+    if (opts.signal?.aborted) throw new Error('Run stopped by user');
     if (opts.repairTargets && !opts.repairTargets.has(blueprintSection.heading)) {
       const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
       if (existing) {
@@ -1446,6 +1453,7 @@ async function compileSections(opts: {
         ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
         mini: opts.mini ?? false,
         ...(methodsNotes ? { methodsNotes } : {}),
+        ...(opts.signal ? { signal: opts.signal } : {}),
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -1507,6 +1515,7 @@ async function compileSections(opts: {
           ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
           mini: opts.mini ?? false,
           ...(methodsNotes ? { methodsNotes } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
         });
       } catch {
         break;
@@ -1528,7 +1537,9 @@ async function draftAbstract(opts: {
   sections: ManuscriptSection[];
   claimLedger: ClaimLedgerEntry[];
   extractions: EvidenceExtraction[];
+  signal?: AbortSignal;
 }): Promise<Manuscript['abstract']> {
+  if (opts.signal?.aborted) throw new Error('Run stopped by user');
   const strong = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'strong').length;
   const moderate = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'moderate').length;
   const weak = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'weak').length;
@@ -1557,6 +1568,8 @@ Extracted numeric statistic/sample-size fields: ${numeric}.
 Manuscript body:
 ${digest}`,
       1200,
+      false,
+      opts.signal,
     );
     const parsed = parseAbstract(reply);
     // A model can reply without the labelled fields, leaving the parse empty —
@@ -1613,6 +1626,7 @@ function safePublicationArtifact(
 }
 
 export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promise<Manuscript> {
+  if (opts.signal?.aborted) throw new Error('Run stopped by user');
   opts.onStage?.('Drafting');
   let sections = await compileSections({
     question: opts.question,
@@ -1626,6 +1640,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     mini: opts.mini ?? false,
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
   let abstract = await draftAbstract({
     model: opts.bossModel,
@@ -1633,6 +1648,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     sections,
     claimLedger: opts.claimLedger,
     extractions: opts.evidenceExtractions,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
   let manuscript: Manuscript = {
     title: opts.paperBlueprint.title,
@@ -1662,6 +1678,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
 
   // Multi-pass QA repair with graceful degradation
   for (let repairPass = 1; repairPass <= MAX_QA_REPAIR_PASSES; repairPass += 1) {
+    if (opts.signal?.aborted) throw new Error('Run stopped by user');
     const repairTargets = repairableSectionNames(manuscript.publication?.validation.blockers ?? []);
     if (repairTargets.length === 0) break;
     opts.onStage?.(`QA repair (pass ${repairPass})`);
@@ -1680,6 +1697,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
       ...(opts.onStage ? { onStage: opts.onStage } : {}),
       repairTargets: sectionMap,
       existingSections: sections,
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
     const repairedNames = new Set(repairTargets);
     sections = sections.map((section) => (repairedNames.has(section.heading) ? repaired.find((candidate) => candidate.heading === section.heading) ?? section : section));
@@ -1689,6 +1707,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
       sections,
       claimLedger: opts.claimLedger,
       extractions: opts.evidenceExtractions,
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
     manuscript = {
       title: opts.paperBlueprint.title,
@@ -1735,6 +1754,7 @@ export interface PaperLedgerPrep {
   evidenceGap?: string | undefined;
   mini?: boolean | undefined;
   onStage?: ((stage: string) => void) | undefined;
+  signal?: AbortSignal;
 }
 
 /** Blocking phase: title generation, evidence extraction, claim ledger build,
@@ -1750,7 +1770,9 @@ export async function preparePaperLedger(opts: {
   evidenceGap?: string;
   mini?: boolean;
   onClaimLedger?: (ledger: ClaimLedgerEntry[]) => Promise<ClaimLedgerEntry[]>;
+  signal?: AbortSignal;
 }): Promise<PaperLedgerPrep> {
+  if (opts.signal?.aborted) throw new Error('Run stopped by user');
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
   opts.onStage?.('Title');
@@ -1762,6 +1784,7 @@ export async function preparePaperLedger(opts: {
       `Write a manuscript title for a ${opts.dataset ? 'original-dataset' : 'evidence-review'} biomedical manuscript addressing: ${opts.question}`,
       150,
       opts.mini ?? false,
+      opts.signal,
     );
     const candidate = (reply.split('\n')[0] ?? '')
       .replace(/^[#\s"']+|[#\s"']+$/g, '')
@@ -1809,6 +1832,7 @@ export async function preparePaperLedger(opts: {
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     mini: opts.mini ?? false,
     onStage: opts.onStage,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   };
 }
 

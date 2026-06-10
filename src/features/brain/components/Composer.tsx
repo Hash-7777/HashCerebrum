@@ -11,6 +11,7 @@ export function Composer({
   editing = false,
   onCancelEdit,
   onSubmit,
+  onStop,
   onOpenSettings,
   datasetLabel,
   datasetDetail,
@@ -25,6 +26,7 @@ export function Composer({
   editing?: boolean;
   onCancelEdit?: () => void;
   onSubmit: (event: FormEvent) => void;
+  onStop?: () => void;
   onOpenSettings: () => void;
   datasetLabel?: string | null;
   datasetDetail?: string | null;
@@ -207,16 +209,27 @@ export function Composer({
             <button type="button" className="btn ghost sm" onClick={onOpenSettings}>
               <Icon name="settings" size={13} /> Settings
             </button>
-            <button
-              type="submit"
-              className="send-btn"
-              disabled={isRunning || !canSubmit}
-              data-running={isRunning ? 'true' : 'false'}
-              aria-label={isRunning ? 'Running' : editing ? 'Save edit' : 'Send'}
-            >
-              {isRunning ? 'Running' : editing ? 'Save' : 'Send'}
-              <Icon name={isRunning ? 'spinner' : 'send'} size={14} />
-            </button>
+            {isRunning ? (
+              <button
+                type="button"
+                className="send-btn stop-btn"
+                onClick={onStop}
+                aria-label="Stop"
+              >
+                Stop
+                <Icon name="close" size={14} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="send-btn"
+                disabled={!canSubmit}
+                aria-label={editing ? 'Save edit' : 'Send'}
+              >
+                {editing ? 'Save' : 'Send'}
+                <Icon name="send" size={14} />
+              </button>
+            )}
           </div>
         </div>
       </form>

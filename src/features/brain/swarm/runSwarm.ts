@@ -777,6 +777,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       mini,
       onStage: (stage) => callbacks.onManuscriptSection?.(stage),
       ...(opts.onClaimLedger ? { onClaimLedger: opts.onClaimLedger } : {}),
+      ...(signal ? { signal } : {}),
     });
 
     // Phase 2: async drafting so the UI frees immediately after claim review.
