@@ -8,8 +8,9 @@ import type { RagChunk } from '@core/store/ragStore';
 import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
 import { regionForChunk } from '../../brain/data/memoryRegions';
-import { buildMemoryGraph, type MemoryGraphCluster } from './memoryGraph';
-import { graphBounds, layoutMemoryGraph, type GraphBounds, type NodePosition } from './layout';
+import { type MemoryGraphCluster } from './memoryGraph';
+import { graphBounds, type GraphBounds, type NodePosition } from './layout';
+import { useMemoryGraph } from './memoryGraphWorkerClient';
 
 const EXCERPT_CHARS = 280;
 const LABEL_CHARS = 30;
@@ -69,40 +70,38 @@ export function MemoryGraphView({
   chunks: RagChunk[];
   onRemove: (id: string) => void;
 }) {
-  const graph = useMemo(() => buildMemoryGraph(chunks), [chunks]);
+  const { graph: rawGraph, positions: layout, span, loading } = useMemoryGraph(chunks);
+  const graph = rawGraph ?? { nodes: [], edges: [], clusters: [], stats: { savedChunks: 0, capsuleCount: 0, mergedChunks: 0, duplicateGroups: 0 } };
+
+  // Loading state: show a subtle spinner overlay while the worker computes.
+  const showLoading = loading && graph.nodes.length === 0;
+
   const clusterById = useMemo(
-    () => new Map(graph.clusters.map((cluster) => [cluster.id, cluster])),
-    [graph.clusters],
+    () => new Map((graph?.clusters ?? []).map((cluster) => [cluster.id, cluster])),
+    [graph?.clusters],
   );
   const nodeById = useMemo(
-    () => new Map(graph.nodes.map((node) => [node.id, node])),
-    [graph.nodes],
+    () => new Map((graph?.nodes ?? []).map((node) => [node.id, node])),
+    [graph?.nodes],
   );
   const clusterIndexById = useMemo(
-    () => new Map(graph.clusters.map((cluster, index) => [cluster.id, index])),
-    [graph.clusters],
+    () => new Map((graph?.clusters ?? []).map((cluster, index) => [cluster.id, index])),
+    [graph?.clusters],
   );
 
   // The few biggest clusters keep their label even at fit-zoom, as anchors.
   const anchorClusterIds = useMemo(
     () =>
       new Set(
-        [...graph.clusters]
+        [...(graph?.clusters ?? [])]
           .sort((a, b) => b.chunkCount - a.chunkCount)
           .slice(0, ANCHOR_CLUSTER_COUNT)
           .map((cluster) => cluster.id),
       ),
-    [graph.clusters],
+    [graph?.clusters],
   );
 
-  // Lay the graph out in a virtual square sized by topic count and node count,
-  // so the simulation never reruns on container resize — only fit changes.
-  const span = useMemo(
-    () => Math.max(1200, Math.sqrt(graph.nodes.length) * 110, Math.sqrt(graph.clusters.length) * 540),
-    [graph.clusters.length, graph.nodes.length],
-  );
-  const layout = useMemo(() => layoutMemoryGraph(graph, span), [graph, span]);
-  const bounds = useMemo(() => graphBounds(layout, span), [layout, span]);
+  const bounds = useMemo(() => graphBounds(layout ?? new Map(), span), [layout, span]);
 
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -114,14 +113,14 @@ export function MemoryGraphView({
       }
       set.add(to);
     };
-    for (const edge of graph.edges) {
+    for (const edge of graph?.edges ?? []) {
       link(edge.source, edge.target);
       link(edge.target, edge.source);
     }
     return map;
-  }, [graph.edges]);
+  }, [graph?.edges]);
 
-  const [positions, setPositions] = useState<Map<string, NodePosition>>(layout);
+  const [positions, setPositions] = useState<Map<string, NodePosition>>(layout ?? new Map());
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -157,9 +156,11 @@ export function MemoryGraphView({
 
   // Reset node positions whenever the underlying graph relays out.
   useEffect(() => {
-    setPositions(new Map(layout));
-    setSelectedId(null);
-    setSelectedClusterId(null);
+    if (layout) {
+      setPositions(new Map(layout));
+      setSelectedId(null);
+      setSelectedClusterId(null);
+    }
   }, [layout]);
 
   // Frame the graph once the viewport is measured and after every relayout.
@@ -185,7 +186,7 @@ export function MemoryGraphView({
   graphRef.current = graph;
 
   useEffect(() => {
-    const node = selectedId ? graphRef.current.nodes.find((n) => n.id === selectedId) : null;
+    const node = selectedId ? graphRef.current?.nodes.find((n) => n.id === selectedId) : null;
     useBrainStore.getState().setFocusRegion(node ? regionForChunk(node.chunk) : null);
     return () => {
       useBrainStore.getState().setFocusRegion(null);
@@ -314,6 +315,11 @@ export function MemoryGraphView({
 
   return (
     <div className="memory-graph" ref={wrapperRef}>
+      {showLoading ? (
+        <div className="memory-graph-loading">
+          <Icon name="spinner" size={18} /> Building memory map…
+        </div>
+      ) : null}
       <svg
         ref={svgRef}
         className="memory-graph-canvas"
