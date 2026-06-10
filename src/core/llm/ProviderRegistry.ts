@@ -2,11 +2,13 @@ import { platform } from '@platform/index';
 import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from './modelCatalog';
 import {
   cooldownProvider,
+  deadProvidersThisSession,
   findBestFailover,
   isBillingError,
   isHardProviderError,
   isProviderOnCooldown,
   isRetriableError,
+  markProviderBillingDead,
   shouldRetrySameProvider,
   type FailoverCandidate,
 } from './failover';
@@ -575,6 +577,7 @@ export async function streamWithModelChain(
       if (isBillingError(error)) {
         // A billing/credit failure is account-wide — abandon every model
         // from this provider so the chain escapes to a working one.
+        markProviderBillingDead(parsed.provider);
         for (const group of modelGroups) {
           if (group.provider === parsed.provider) {
             for (const model of group.models) tried.add(model.value);
@@ -582,7 +585,7 @@ export async function streamWithModelChain(
         }
       }
       let next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
-      while (next && isProviderOnCooldown(next.provider)) {
+      while (next && (isProviderOnCooldown(next.provider) || deadProvidersThisSession().has(next.provider))) {
         tried.add(next.value);
         next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }
@@ -770,6 +773,7 @@ export async function completeWithModelChain(
       if (isBillingError(error)) {
         // A billing/credit failure is account-wide — abandon every model
         // from this provider so the chain escapes to a working one.
+        markProviderBillingDead(parsed.provider);
         for (const group of modelGroups) {
           if (group.provider === parsed.provider) {
             for (const model of group.models) tried.add(model.value);
@@ -777,7 +781,7 @@ export async function completeWithModelChain(
         }
       }
       let next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
-      while (next && isProviderOnCooldown(next.provider)) {
+      while (next && (isProviderOnCooldown(next.provider) || deadProvidersThisSession().has(next.provider))) {
         tried.add(next.value);
         next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       }

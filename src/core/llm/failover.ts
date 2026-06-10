@@ -170,3 +170,21 @@ export function isProviderOnCooldown(provider: LlmProviderId): boolean {
   }
   return true;
 }
+
+// ── Session-permanent billing-dead providers ────────────────────────────────
+// A provider that returns a hard 402 / "insufficient credits" is dead for the
+// whole session — not just a 5-minute cooldown. This prevents auto-assignment
+// and failover from repeatedly routing onto an unfunded provider.
+const billingDeadProviders = new Set<LlmProviderId>();
+
+export function markProviderBillingDead(provider: LlmProviderId): void {
+  billingDeadProviders.add(provider);
+}
+
+export function deadProvidersThisSession(): ReadonlySet<LlmProviderId> {
+  return billingDeadProviders;
+}
+
+export function clearBillingDeadProviders(): void {
+  billingDeadProviders.clear();
+}

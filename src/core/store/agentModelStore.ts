@@ -6,6 +6,7 @@
 
 import { create } from 'zustand';
 import { AGENTS, type AgentId } from '@config/agents';
+import { deadProvidersThisSession } from '@core/llm/failover';
 import { modelStrengthScore } from '@core/llm/modelRanking';
 import { DEFAULT_MODEL, parseModelRef, type ModelOption } from '@core/llm/modelCatalog';
 import { platform } from '@platform/index';
@@ -59,12 +60,18 @@ export function autoAssignModels(models: ModelOption[]): Record<AgentId, string>
     if (!isCompleteAgentMap(result)) throw new Error('autoAssignModels failed to populate all agents');
     return result;
   }
+  // Exclude providers that are dead-for-session (hard 402 / no credits) so we
+  // never auto-assign an unfunded provider. If that empties the pool, fall back
+  // to all models rather than break.
+  const dead = deadProvidersThisSession();
+  const alive = models.filter((model) => !dead.has(parseModelRef(model.value).provider));
+  const alivePool = alive.length > 0 ? alive : models;
   // Every agent here calls tools (the boss orchestrates + synthesises, the
   // specialists query sources), so exclude models we positively know lack tool
   // calling. Unknown (`supportsTools === undefined`) stays in — we never demote
   // on a guess. If that would empty the pool, keep all models rather than break.
-  const toolCapable = models.filter((model) => model.supportsTools !== false);
-  const pool = toolCapable.length > 0 ? toolCapable : models;
+  const toolCapable = alivePool.filter((model) => model.supportsTools !== false);
+  const pool = toolCapable.length > 0 ? toolCapable : alivePool;
   const ranked = [...pool].sort((a, b) => selectionScore(b) - selectionScore(a));
   // Group ranked models by provider, preserving strength order; providers are
   // ordered by their strongest model (insertion order of `ranked`).

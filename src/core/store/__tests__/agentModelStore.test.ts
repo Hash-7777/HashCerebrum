@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { clearBillingDeadProviders, markProviderBillingDead } from '@core/llm/failover';
 import { DEFAULT_MODEL, parseModelRef, type ModelGroup, type ModelOption } from '@core/llm/modelCatalog';
 import { agentModelFor, autoAssignModels, isConnectedModelValue, useAgentModelStore } from '../agentModelStore';
 import { initialModelStatuses } from '@core/llm/modelDiscovery';
@@ -88,6 +89,32 @@ describe('autoAssignModels — provider spreading', () => {
       model('cloud:openrouter:deepseek/deepseek-v3', 'DeepSeek V3'),
     ]);
     expect(assigned.boss).toBe('cloud:openrouter:deepseek/deepseek-v3');
+  });
+
+  it('excludes billing-dead providers from assignment', () => {
+    clearBillingDeadProviders();
+    markProviderBillingDead('openrouter');
+    const assigned = autoAssignModels([
+      model('cloud:openrouter:qwen3-vl-235b', 'Qwen3 VL'),
+      model('cloud:groq:llama-3.3-70b', 'Llama 3.3 70B'),
+    ]);
+    expect(parseModelRef(assigned.boss!).provider).toBe('groq');
+    for (const agent of AGENTS) {
+      expect(parseModelRef(assigned[agent.id]!).provider).not.toBe('openrouter');
+    }
+  });
+
+  it('falls back to all models when every provider is billing-dead', () => {
+    clearBillingDeadProviders();
+    markProviderBillingDead('groq');
+    markProviderBillingDead('openai');
+    const assigned = autoAssignModels([
+      model('cloud:groq:llama-3.3-70b', 'Llama 3.3 70B'),
+      model('cloud:openai:gpt-5', 'GPT-5'),
+    ]);
+    // Fallback: assign from the full pool rather than breaking.
+    expect(assigned.boss).toBeDefined();
+    expect(Object.keys(assigned).length).toBe(AGENTS.length);
   });
 });
 

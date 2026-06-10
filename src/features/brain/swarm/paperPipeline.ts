@@ -1107,6 +1107,19 @@ function isCallRateLimited(err: unknown): boolean {
   );
 }
 
+// A hard billing failure (402 / insufficient credits). The failover chain has
+// already abandoned the dead provider; if this error reaches callModel it means
+// every provider in the chain is billing-dead — do not retry, surface immediately.
+function isCallBillingDead(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes('402') ||
+    m.includes('insufficient credits') ||
+    m.includes('payment required') ||
+    m.includes('billing')
+  );
+}
+
 const MIN_CALL_CHARS = 4_000;
 const MAX_CALL_RATE_RETRIES = 3;
 
@@ -1163,6 +1176,17 @@ async function callModel(
           detail: `section prompt too large — retrying smaller (${content.length} chars)`,
         });
         continue;
+      }
+      // Hard billing failure — the failover chain has already excluded the dead
+      // provider. If this surfaces here, every provider in the chain is dead.
+      // Surface immediately; do not stall in retry loops.
+      if (isCallBillingDead(err)) {
+        bus.emit('agent:activity', {
+          agentId: 'boss',
+          phase: 'error',
+          detail: `all providers billing-dead — section draft aborted`,
+        });
+        throw err;
       }
       // Brain Mini deliberately does NOT pause on rate limits — it fails fast
       // (the section gets flagged) so a low-quota run never stalls in backoff.

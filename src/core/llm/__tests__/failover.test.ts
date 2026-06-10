@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  clearBillingDeadProviders,
   cooldownProvider,
+  deadProvidersThisSession,
   findBestFailover,
   isBillingError,
   isHardProviderError,
   isProviderOnCooldown,
   isRetriableError,
+  markProviderBillingDead,
   shouldRetrySameProvider,
 } from '../failover';
 import type { ModelGroup } from '../modelCatalog';
@@ -125,5 +128,25 @@ describe('LLM failover', () => {
   it('treats model incompatibility as failover-worthy', () => {
     expect(isHardProviderError(new Error('model not found'))).toBe(true);
     expect(isHardProviderError(new Error('tool calling not supported'))).toBe(true);
+  });
+});
+
+describe('session billing-dead providers', () => {
+  beforeEach(() => {
+    clearBillingDeadProviders();
+  });
+
+  it('marks a provider billing-dead and exposes the set', () => {
+    expect(deadProvidersThisSession().has('openrouter')).toBe(false);
+    markProviderBillingDead('openrouter');
+    expect(deadProvidersThisSession().has('openrouter')).toBe(true);
+    expect(deadProvidersThisSession().has('groq')).toBe(false);
+  });
+
+  it('clears the dead set', () => {
+    markProviderBillingDead('openrouter');
+    markProviderBillingDead('gemini');
+    clearBillingDeadProviders();
+    expect(deadProvidersThisSession().size).toBe(0);
   });
 });
