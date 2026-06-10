@@ -82,15 +82,29 @@ pub async fn openalex_query(
                         .as_str()
                         .map(str::to_string)
                 });
-            evidence(
-                "openalex",
-                title,
-                item["publication_year"].as_i64().map(|y| y.to_string()),
-                authors,
-                serde_json::json!({ "openalex": item["id"].as_str(), "doi": item["doi"].as_str(), "journal": item["primary_location"]["source"]["display_name"].as_str() }),
-                item["id"].as_str().map(str::to_string),
-                snippet,
-            )
+            {
+                let biblio = &item["biblio"];
+                let mut ev = evidence(
+                    "openalex",
+                    title,
+                    item["publication_year"].as_i64().map(|y| y.to_string()),
+                    authors,
+                    serde_json::json!({ "openalex": item["id"].as_str(), "doi": item["doi"].as_str(), "journal": item["primary_location"]["source"]["display_name"].as_str() }),
+                    item["id"].as_str().map(str::to_string),
+                    snippet,
+                );
+                ev.volume = biblio["volume"].as_str().map(str::to_string);
+                ev.issue = biblio["issue"].as_str().map(str::to_string);
+                let first_page = biblio["first_page"].as_str();
+                let last_page = biblio["last_page"].as_str();
+                ev.pages = match (first_page, last_page) {
+                    (Some(f), Some(l)) => Some(format!("{f}-{l}")),
+                    (Some(f), None) => Some(f.to_string()),
+                    (None, Some(l)) => Some(l.to_string()),
+                    (None, None) => None,
+                };
+                ev
+            }
         })
         .collect())
 }

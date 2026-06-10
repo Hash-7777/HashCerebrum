@@ -20,7 +20,7 @@ pub async fn semantic_scholar_search(
         .append_pair("query", &query)
         .append_pair(
             "fields",
-            "title,authors,year,abstract,openAccessPdf,externalIds,publicationDate,journal,isRetracted",
+            "title,authors,year,abstract,openAccessPdf,externalIds,publicationDate,journal,journal.volume,journal.pages,isRetracted",
         )
         .append_pair("limit", &limit.to_string());
 
@@ -75,20 +75,27 @@ pub async fn semantic_scholar_search(
                             }
                         })
                         .or_else(|| paper["journal"]["name"].as_str().map(str::to_string));
-                    Some(evidence(
-                        "semantic_scholar",
-                        title,
-                        year,
-                        authors,
-                        serde_json::json!({
-                            "doi": doi,
-                            "pmid": pmid,
-                            "openAccessPdf": open_access_pdf,
-                            "retracted": if is_retracted { "true" } else { "false" },
-                        }),
-                        url,
-                        snippet,
-                    ))
+                    {
+                        let journal = &paper["journal"];
+                        let mut ev = evidence(
+                            "semantic_scholar",
+                            title,
+                            year,
+                            authors,
+                            serde_json::json!({
+                                "doi": doi,
+                                "pmid": pmid,
+                                "openAccessPdf": open_access_pdf,
+                                "retracted": if is_retracted { "true" } else { "false" },
+                                "journal": journal["name"].as_str(),
+                            }),
+                            url,
+                            snippet,
+                        );
+                        ev.volume = journal["volume"].as_str().map(str::to_string);
+                        ev.pages = journal["pages"].as_str().map(str::to_string);
+                        Some(ev)
+                    }
                 })
                 .collect::<Vec<_>>()
         })

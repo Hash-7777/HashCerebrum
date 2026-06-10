@@ -149,16 +149,16 @@ export function detectPaperRequest(question: string): PaperRequest | null {
   const verbNounIntent = PAPER_INTENT_VERB_RX.test(question) && PAPER_DOC_NOUN_RX.test(question);
   if (!PAPER_RX.test(question) && !verbNounIntent && !ANALYTICAL_RX.test(question)) return null;
   if (/\b(systematic\s+reviews?|meta[-\s]?analys[ie]s|prisma)\b/i.test(question)) {
-    return { standard: 'prisma_review', label: 'PRISMA-style evidence review manuscript' };
+    return { standard: 'prisma_review', label: 'Systematic evidence review manuscript' };
   }
   if (/\b(randomi[sz]ed|trial|consort)\b/i.test(question)) {
-    return { standard: 'consort_trial', label: 'CONSORT-aware trial report draft' };
+    return { standard: 'consort_trial', label: 'Clinical trial report manuscript' };
   }
   if (/\b(cohort|case[-\s]?control|cross[-\s]?sectional|observational|strobe)\b/i.test(question)) {
-    return { standard: 'strobe_observational', label: 'STROBE-aware observational manuscript' };
+    return { standard: 'strobe_observational', label: 'Observational study manuscript' };
   }
   if (/\b(case\s+report|care\s+guideline)\b/i.test(question)) {
-    return { standard: 'care_case', label: 'CARE-aware case-report manuscript' };
+    return { standard: 'care_case', label: 'Case report manuscript' };
   }
   return { standard: 'imrad_review', label: 'IMRaD narrative review manuscript' };
 }

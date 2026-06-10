@@ -126,7 +126,7 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
             .get(&id)
             .cloned()
             .or_else(|| item["fulljournalname"].as_str().map(str::to_string));
-        out.push(evidence(
+        let mut ev = evidence(
             "pubmed",
             title,
             year,
@@ -138,7 +138,11 @@ pub async fn pubmed_search(query: String, max_results: u32) -> AppResult<Vec<Evi
             }),
             url,
             snippet,
-        ));
+        );
+        ev.volume = item["volume"].as_str().map(str::to_string);
+        ev.issue = item["issue"].as_str().map(str::to_string);
+        ev.pages = item["pages"].as_str().map(str::to_string);
+        out.push(ev);
     }
     Ok(out)
 }

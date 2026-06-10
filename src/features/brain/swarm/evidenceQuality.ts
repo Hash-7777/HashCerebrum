@@ -177,6 +177,53 @@ export function buildSoFTable(assessments: GradeAssessment[]): SoFTable {
   };
 }
 
+function strengthToGrade(strength: 'strong' | 'moderate' | 'weak' | 'context'): GradeRating {
+  switch (strength) {
+    case 'strong': return 'high';
+    case 'moderate': return 'moderate';
+    case 'weak': return 'low';
+    case 'context': return 'very_low';
+    default: return 'very_low';
+  }
+}
+
+import type { ClaimLedgerEntry, EvidenceExtraction } from './publicationTypes';
+
+/** Build a Summary-of-Findings table from the claim ledger and extractions
+ *  actually produced by the pipeline. This is a rapid automated summary,
+ *  not a formal GRADE assessment. */
+export function buildSoFTableFromPipeline(
+  claimLedger: ClaimLedgerEntry[],
+  extractions: EvidenceExtraction[],
+): SoFTable {
+  const extractionByMarker = new Map<string, EvidenceExtraction[]>();
+  for (const e of extractions) {
+    const arr = extractionByMarker.get(e.sourceMarker) ?? [];
+    arr.push(e);
+    extractionByMarker.set(e.sourceMarker, arr);
+  }
+
+  const rows: SoFRow[] = claimLedger.map((entry) => {
+    let participants = 0;
+    for (const marker of entry.supportingSources) {
+      const exs = extractionByMarker.get(marker) ?? [];
+      for (const ex of exs) {
+        const n = parseInt(ex.sampleSize ?? '', 10);
+        if (Number.isFinite(n)) participants += n;
+      }
+    }
+    return {
+      outcome: entry.claim,
+      studies: entry.supportingSources.length,
+      participants,
+      certainty: strengthToGrade(entry.evidenceStrength),
+      importance: 'critical',
+    };
+  });
+
+  return { title: 'Summary of Findings', outcomes: rows };
+}
+
 // ─── NNT / NNH from risk difference ─────────────────────────────────────────
 
 export function nntFromRiskDifference(rd: number): number | null {

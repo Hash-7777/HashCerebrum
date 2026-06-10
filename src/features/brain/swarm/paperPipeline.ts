@@ -28,6 +28,86 @@ import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
+
+// ── C5: deterministic Methods notes ─────────────────────────────────────────
+// The Methods section must narrate the REAL pipeline, not a hallucinated one.
+// These notes are injected into the Methods prompt so the model has exact
+// sources, counts, query terms, and run date to expand — not invent.
+function deterministicMethodsNotes(
+  question: string,
+  evidence: EvidenceItem[],
+  extractions: EvidenceExtraction[],
+): string {
+  const sourceCounts = new Map<string, number>();
+  for (const e of evidence) {
+    sourceCounts.set(e.source, (sourceCounts.get(e.source) ?? 0) + 1);
+  }
+  const sourceList = [...sourceCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `${s.replace(/_/g, ' ')} (${n})`)
+    .join(', ');
+  const uniqueRecords = evidence.length;
+  const extractionCount = extractions.length;
+  const runDate = new Date().toISOString().slice(0, 10);
+  return (
+    `SEARCHED: ${sourceList}. ` +
+    `RETRIEVED: ${uniqueRecords} unique records. ` +
+    `EXTRACTED: ${extractionCount} structured evidence items. ` +
+    `QUERY: "${question.replace(/"/g, "'")}". ` +
+    `RUN DATE: ${runDate}. ` +
+    `DEDUPLICATION: identity hash on title + first author + year. ` +
+    `ELIGIBILITY: English-language biomedical records with title and abstract or structured metadata.`
+  );
+}
+
+// ── C3: validate identifiers in draft prose ─────────────────────────────────
+// Scan drafted text for PMID / DOI / NCT tokens and flag any that do not
+// appear in the retrieved evidence set — prevents hallucinated citations.
+function validateDraftIdentifiers(
+  text: string,
+  evidence: EvidenceItem[],
+): string[] {
+  const issues: string[] = [];
+  const pmids = new Set(evidence.map((e) => e.identifiers?.pmid).filter(Boolean));
+  const dois = new Set(evidence.map((e) => e.identifiers?.doi).filter(Boolean));
+  const ncts = new Set(evidence.map((e) => e.identifiers?.nct).filter(Boolean));
+
+  for (const m of text.matchAll(/\bPMID:\s*(\d+)\b/gi)) {
+    if (!pmids.has(m[1])) issues.push(`PMID:${m[1]}`);
+  }
+  for (const m of text.matchAll(/\bDOI:\s*([\S]+)\b/gi)) {
+    if (!dois.has(m[1])) issues.push(`DOI:${m[1]}`);
+  }
+  for (const m of text.matchAll(/\b(NCT\d{8,})\b/gi)) {
+    if (!ncts.has(m[1])) issues.push(m[1]!);
+  }
+  return issues;
+}
+
+// ── C6: claim↔source fidelity gate ──────────────────────────────────────────
+// Simple keyword overlap between a claim and its supporting source texts.
+// Flags claims whose wording drifts far from the evidence they cite.
+function claimSourceFidelity(
+  claim: string,
+  sourceTexts: string[],
+): { score: number; flag: boolean } {
+  const claimWords = new Set(
+    claim.toLowerCase().split(/\W+/).filter((w) => w.length > 3),
+  );
+  if (claimWords.size === 0) return { score: 0, flag: true };
+  let bestOverlap = 0;
+  for (const text of sourceTexts) {
+    const textWords = new Set(
+      text.toLowerCase().split(/\W+/).filter((w) => w.length > 3),
+    );
+    let overlap = 0;
+    for (const w of claimWords) {
+      if (textWords.has(w)) overlap++;
+    }
+    bestOverlap = Math.max(bestOverlap, overlap / claimWords.size);
+  }
+  return { score: bestOverlap, flag: bestOverlap < 0.15 };
+}
 const SECTION_TOKENS = 5800;
 // Brain Mini drafts shorter sections so a small / free model finishes quickly.
 const MINI_SECTION_TOKENS = 1600;
@@ -1219,6 +1299,7 @@ async function draftLedgerSection(opts: {
   currentBody?: string[];
   evidenceGap?: string;
   mini?: boolean;
+  methodsNotes?: string;
 }): Promise<string[]> {
   const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
   const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
@@ -1226,13 +1307,17 @@ async function draftLedgerSection(opts: {
   const extractionBlock = relevantExtractions.map(formatExtraction).join('\n');
   const current = opts.currentBody?.length ? `\nCurrent draft to repair:\n${opts.currentBody.join('\n\n')}\n` : '';
   const gapNote = opts.evidenceGap ? `\nEVIDENCE GAP — MANDATORY HONESTY:\n${opts.evidenceGap}\n` : '';
+  const methodsNote =
+    opts.methodsNotes && opts.section.heading.toLowerCase() === 'methods'
+      ? `\nDETERMINISTIC PIPELINE FACTS — expand these; do not invent alternatives:\n${opts.methodsNotes}\n`
+      : '';
   const userPrompt = `Topic: ${opts.question}
 ${gapNote}
 Section: ${opts.section.heading}
 Intent: ${opts.section.intent}
 Target: ${opts.section.targetWords} | Min: ${opts.section.minWords}
 Markers: ${[...sourceMarkers].join(', ') || '(none)'}
-
+${methodsNote}
 CLAIM LEDGER:
 ${claimsBlock || 'No direct claims. Write a transparent evidence-gap section.'}
 
@@ -1296,6 +1381,7 @@ async function compileSections(opts: {
   question: string;
   bossModel: string;
   specialists: SpecialistResult[];
+  evidence: EvidenceItem[];
   extractions: EvidenceExtraction[];
   claimLedger: ClaimLedgerEntry[];
   paperBlueprint: PaperBlueprint;
@@ -1342,6 +1428,9 @@ async function compileSections(opts: {
       (isLimitations ||
         (!opts.paperBlueprint.sections.some((s) => s.heading.toLowerCase().includes('limitation')) &&
           isMethods));
+    const methodsNotes = isMethods
+      ? deterministicMethodsNotes(opts.question, opts.evidence, opts.extractions)
+      : undefined;
     let body: string[];
     try {
       body = await draftLedgerSection({
@@ -1356,6 +1445,7 @@ async function compileSections(opts: {
         ...(existing ? { currentBody: existing.body } : {}),
         ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
         mini: opts.mini ?? false,
+        ...(methodsNotes ? { methodsNotes } : {}),
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -1369,6 +1459,32 @@ async function compileSections(opts: {
       body = [
         `${SECTION_REVIEW_FLAG} this section could not be drafted from the claim ledger because the language-model call failed (${detail.slice(0, 160)}). It needs to be written or regenerated before submission. The available claim ledger should be reviewed directly ${assignedMarkers.slice(0, 3).join(' ')}.`,
       ];
+    }
+
+    // C3: validate identifiers in the drafted prose against retrieved evidence.
+    const draftText = body.join(' ');
+    const idIssues = validateDraftIdentifiers(draftText, opts.evidence);
+    if (idIssues.length > 0) {
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'tool_call',
+        detail: `${blueprintSection.heading}: unverifiable identifiers flagged — ${idIssues.join(', ')}`,
+      });
+    }
+
+    // C6: claim↔source fidelity gate — flag claims whose wording drifts from evidence.
+    for (const claim of claims) {
+      const sourceTexts = opts.extractions
+        .filter((e) => claim.supportingSources.includes(e.sourceMarker))
+        .map((e) => `${e.title} ${e.keyFinding}`);
+      const fidelity = claimSourceFidelity(claim.claim, sourceTexts);
+      if (fidelity.flag) {
+        bus.emit('agent:activity', {
+          agentId: 'boss',
+          phase: 'tool_call',
+          detail: `${blueprintSection.heading} claim fidelity low (${Math.round(fidelity.score * 100)}%) for "${claim.claim.slice(0, 80)}…"`,
+        });
+      }
     }
 
     // Skip expansion if the initial draft already failed — don't burn calls
@@ -1390,6 +1506,7 @@ async function compileSections(opts: {
           currentBody: body,
           ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
           mini: opts.mini ?? false,
+          ...(methodsNotes ? { methodsNotes } : {}),
         });
       } catch {
         break;
@@ -1501,6 +1618,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     question: opts.question,
     bossModel: opts.bossModel,
     specialists: opts.specialists,
+    evidence: opts.evidence,
     extractions: opts.evidenceExtractions,
     claimLedger: opts.claimLedger,
     paperBlueprint: opts.paperBlueprint,
@@ -1552,6 +1670,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
       question: opts.question,
       bossModel: opts.bossModel,
       specialists: opts.specialists,
+      evidence: opts.evidence,
       extractions: opts.evidenceExtractions,
       claimLedger: opts.claimLedger,
       paperBlueprint: opts.paperBlueprint,

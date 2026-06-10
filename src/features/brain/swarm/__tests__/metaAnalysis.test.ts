@@ -114,6 +114,37 @@ describe('buildRatioMeta', () => {
       ]),
     ).toBeUndefined();
   });
+
+  it('pools HR shorthand with semicolon separator (HR 0.80; 95% CI 0.74-0.86)', () => {
+    const r = buildRatioMeta([
+      makeRatio('[S1]', 'HR 0.80; 95% CI 0.74-0.86'),
+      makeRatio('[S2]', 'HR 0.76; 95% CI 0.72 to 0.81'),
+      makeRatio('[S3]', 'HR 0.90; 95% CI 0.79-1.02'),
+    ]);
+    expect(r).toBeDefined();
+    expect(r!.kind).toBe('hr');
+    expect(r!.studies).toBe(3);
+  });
+
+  it('pools OR shorthand (OR 1.5, 95% CI 1.2-1.9)', () => {
+    const r = buildRatioMeta([
+      makeRatio('[S1]', 'OR 1.5, 95% CI 1.2-1.9'),
+      makeRatio('[S2]', 'OR 1.3 (95% CI 1.1-1.6)'),
+    ]);
+    expect(r).toBeDefined();
+    expect(r!.kind).toBe('or');
+    expect(r!.studies).toBe(2);
+  });
+
+  it('pools RR shorthand (RR 0.65; 95% CI 0.50-0.85)', () => {
+    const r = buildRatioMeta([
+      makeRatio('[S1]', 'RR 0.65; 95% CI 0.50-0.85'),
+      makeRatio('[S2]', 'RR 0.70 (95% CI 0.55-0.90)'),
+    ]);
+    expect(r).toBeDefined();
+    expect(r!.kind).toBe('rr');
+    expect(r!.studies).toBe(2);
+  });
 });
 
 describe('buildEvidenceMeta', () => {

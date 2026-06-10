@@ -58,15 +58,21 @@ pub async fn europepmc_fetch(
                 .map(|s| truncate_chars(&strip_html(s), 2000))
                 .filter(|s| !s.is_empty())
                 .or_else(|| item["journalTitle"].as_str().map(str::to_string));
-            evidence(
-                "europepmc",
-                title,
-                year,
-                authors,
-                serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str(), "journal": item["journalTitle"].as_str() }),
-                url,
-                snippet,
-            )
+            {
+                let mut ev = evidence(
+                    "europepmc",
+                    title,
+                    year,
+                    authors,
+                    serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str(), "journal": item["journalTitle"].as_str() }),
+                    url,
+                    snippet,
+                );
+                ev.volume = item["journalVolume"].as_str().map(str::to_string);
+                ev.issue = item["issue"].as_str().map(str::to_string);
+                ev.pages = item["pageInfo"].as_str().map(str::to_string);
+                ev
+            }
         })
         .collect())
 }

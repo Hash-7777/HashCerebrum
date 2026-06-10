@@ -120,7 +120,25 @@ function vancouver(record: EvidenceItem): string {
   const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
   const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
   const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  return `${vancouverAuthors(record)}. ${record.title}.${year ? ` ${year}.` : ''} ${venueText(record)}.${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  // Build volume/issue/pages segment per ICMJE Vancouver:
+  //   Journal. Year;Vol(Issue):Pages.
+  let biblio = '';
+  if (year || record.volume || record.issue || record.pages) {
+    const volIssue = [
+      record.volume,
+      record.issue ? `(${record.issue})` : undefined,
+    ]
+      .filter(Boolean)
+      .join('');
+    const pages = record.pages ? `:${record.pages}` : '';
+    const segment = [volIssue, pages].filter(Boolean).join('');
+    if (segment) {
+      biblio = year ? `${year};${segment}.` : `${segment}.`;
+    } else if (year) {
+      biblio = `${year}.`;
+    }
+  }
+  return `${vancouverAuthors(record)}. ${record.title}. ${venueText(record)}.${biblio ? ` ${biblio}` : ''}${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -141,29 +141,31 @@ type RatioFamily = 'hr' | 'or' | 'rr';
 
 function ratioFamily(token: string): RatioFamily | undefined {
   const t = token.toLowerCase();
-  if (t.includes('hazard')) return 'hr';
-  if (t.includes('odds')) return 'or';
-  if (t.includes('risk ratio') || t.includes('relative risk')) return 'rr';
+  if (t === 'hr' || t.includes('hazard')) return 'hr';
+  if (t === 'or' || t.includes('odds')) return 'or';
+  if (t === 'rr' || t.includes('risk ratio') || t.includes('relative risk')) return 'rr';
   return undefined;
 }
 
 /**
  * Parse a ratio effect measure together with its 95% CI from free text, e.g.
- * "hazard ratio 0.80 (95% CI 0.74-0.86)". Only the unambiguous long forms are
- * matched (never the bare abbreviations HR/OR/RR, since "or" is also an English
- * word — the exact false-positive that produced phantom effect estimates).
+ * "hazard ratio 0.80 (95% CI 0.74-0.86)" or "HR 0.80; 95% CI 0.74-0.86".
+ * Matches both long forms (hazard ratio, odds ratio, risk ratio, relative risk)
+ * and uppercase abbreviations (HR, OR, RR). The abbreviation OR is safe here
+ * because the regex requires a numeric point estimate and a matched CI — the
+ * English conjunction "or" never appears immediately before a digit+CI pair.
  */
 function extractRatioWithCi(
   text: string,
 ): { family: RatioFamily; point: number; ciLow: number; ciHigh: number } | undefined {
-  const measureRx = /\b(hazard ratio|odds ratio|risk ratio|relative risk)\b\s*(?:of|was|were|=|:|,|approximately)?\s*(\d+(?:\.\d+)?)/i;
+  const measureRx = /\b(hazard ratio|odds ratio|risk ratio|relative risk|hr|or|rr)\b\s*(?:of|was|were|=|:|;|,|approximately)?\s*(\d+(?:\.\d+)?)/i;
   const m = measureRx.exec(text);
   if (!m) return undefined;
   const family = ratioFamily(m[1]!);
   const point = safeNumber(m[2]);
   if (!family || point === undefined || point <= 0 || point > 100) return undefined;
   // Look for a 95% CI after the point estimate (accepts "CI" or the spelled-out
-  // "confidence interval", and "to" / dash / comma separators).
+  // "confidence interval", and "to" / dash / comma / semicolon separators).
   const tail = text.slice(m.index);
   const ciRx =
     /(?:95\s*%\s*)?(?:ci|confidence interval)\s*[:=]?\s*(?:of\s*)?\(?\s*(\d+(?:\.\d+)?)\s*(?:to|[-–—]|,)\s*(\d+(?:\.\d+)?)/i;

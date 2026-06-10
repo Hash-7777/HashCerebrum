@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import type { EvidenceItem } from '@platform/index';
+import { buildSoFTableFromPipeline } from './evidenceQuality';
 import {
   containsPromptLeakage,
   SECTION_PLAN,
@@ -179,35 +180,6 @@ function cslReference(record: EvidenceItem, id: string): CslReference {
   };
 }
 
-function formatAuthors(record: EvidenceItem): string {
-  if (record.authors.length === 0) return SOURCE_LABELS[record.source];
-  const authors = record.authors.slice(0, 6).map((author) => author.trim()).filter(Boolean);
-  if (authors.length === 0) return SOURCE_LABELS[record.source];
-  const suffix = record.authors.length > authors.length ? ' et al.' : '';
-  return `${authors.join(', ')}${suffix}`;
-}
-
-function referenceVenue(record: EvidenceItem): string {
-  const venue =
-    record.identifiers?.journal || record.identifiers?.venue || record.identifiers?.containerTitle;
-  return venue && venue.trim() ? venue.trim() : SOURCE_LABELS[record.source];
-}
-
-function vancouverText(record: EvidenceItem): string {
-  const year = record.year ? ` ${record.year}.` : '';
-  const doi = record.identifiers?.doi ? ` doi:${record.identifiers.doi}.` : '';
-  const pmid = record.identifiers?.pmid ? ` PMID:${record.identifiers.pmid}.` : '';
-  const url = !doi && !pmid && record.url ? ` Available from: ${record.url}` : '';
-  // A record dated after the current year is an advance online publication —
-  // label it so a valid ahead-of-print reference does not read as fabricated.
-  const yearNum = typeof record.year === 'number' ? record.year : Number(record.year);
-  const aheadOfPrint = Number.isFinite(yearNum) && yearNum > new Date().getFullYear() ? ' Advance online publication.' : '';
-  // Use the journal name when an adapter captured it; fall back to the database
-  // label only when no real venue is known (so refs read "… N Engl J Med. 2024."
-  // rather than "… PubMed.").
-  return normalizeText(`${formatAuthors(record)}. ${record.title}.${year} ${referenceVenue(record)}.${doi}${pmid}${url}${aheadOfPrint}`);
-}
-
 function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
   const cited = citedSourceNumbers(manuscript);
   const byIdentity = new Map<string, CanonicalReference>();
@@ -232,7 +204,7 @@ function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
         evidenceIndex,
         evidence: record,
         csl: cslReference(record, id),
-        text: vancouverText(record),
+        text: formatReference(record, 'vancouver'),
       };
       byIdentity.set(identity, reference);
       references.push(reference);
@@ -282,7 +254,7 @@ function sourceYieldSvg(counts: Record<string, number>): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
 }
 
-function prismaSvg(total: number, unique: number, cited: number): string {
+function sourceFlowSvg(total: number, unique: number, cited: number): string {
   const box = (x: number, y: number, label: string, value: string) =>
     `<rect x="${x}" y="${y}" width="250" height="58" rx="10" fill="#111c2b" stroke="#2a3951"/><text x="${x + 125}" y="${y + 24}" text-anchor="middle" fill="#f1f6fc" font-size="13" font-weight="700">${escXml(label)}</text><text x="${x + 125}" y="${y + 44}" text-anchor="middle" fill="#3dd1bf" font-size="14">${escXml(value)}</text>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="720" height="310" rx="14" fill="#08111d"/>${box(235, 28, 'Records identified', String(total))}<path d="M360 86 L360 118" stroke="#7f8ea8" stroke-width="2"/>${box(235, 118, 'Unique source records', String(unique))}<path d="M360 176 L360 208" stroke="#7f8ea8" stroke-width="2"/>${box(235, 208, 'Records cited in draft', String(cited))}</svg>`;
@@ -434,9 +406,9 @@ function buildFigures(
       id: 'fig-prisma-flow',
       kind: 'prisma_flow',
       title: 'Automated evidence flow',
-      caption: `Automated source flow from retrieved records to unique records and cited references. This is not a formal human-screened PRISMA diagram.`,
+      caption: `Automated source flow from retrieved records to unique records and cited references. This diagram reflects automated deduplication and citation selection, not a formal human-screened systematic-review flow.`,
       alt: 'Three-box flow diagram from identified records to unique records to cited records.',
-      svg: prismaSvg(total, unique, referenceCount),
+      svg: sourceFlowSvg(total, unique, referenceCount),
       data: { totalRecords: total, uniqueRecords: unique, citedReferences: referenceCount },
     },
   ];
@@ -673,6 +645,32 @@ function buildTables(
           ['Prediction interval', `${meta.predictionCiLow.toFixed(2)} to ${meta.predictionCiHigh.toFixed(2)}`],
           ['Study effects', meta.studyEffects.map((e) => `${e.sourceMarker}: ${e.point.toFixed(2)} (SE ${e.se.toFixed(2)})`).join('; ')],
         ],
+      });
+    } else if (pipeline.evidenceExtractions.length >= 2) {
+      // Honest insufficient-data path: extractions exist but are not comparable.
+      tables.push({
+        id: 'table-meta-analysis',
+        title: 'Quantitative synthesis',
+        caption: 'Too few comparable effect estimates with confidence intervals were available for pooled meta-analysis. The individual study statistics are narrated in the Results section.',
+        columns: ['Parameter', 'Value'],
+        rows: [['Status', 'Insufficient comparable data for pooling']],
+      });
+    }
+  }
+  if (pipeline?.claimLedger?.length && pipeline?.evidenceExtractions?.length) {
+    const sof = buildSoFTableFromPipeline(pipeline.claimLedger, pipeline.evidenceExtractions);
+    if (sof.outcomes.length > 0) {
+      tables.push({
+        id: 'table-summary-of-findings',
+        title: sof.title,
+        caption: 'Summary of findings derived from the automated claim ledger. Study counts and participant totals are extracted directly from the pipeline evidence; certainty reflects the automated strength rating, not a formal GRADE assessment.',
+        columns: ['Outcome', 'Studies', 'Participants', 'Certainty'],
+        rows: sof.outcomes.map((r) => [
+          r.outcome,
+          String(r.studies),
+          r.participants > 0 ? String(r.participants) : 'not reported',
+          r.certainty,
+        ]),
       });
     }
   }

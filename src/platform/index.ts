@@ -20,6 +20,9 @@ export interface EvidenceItem {
   year?: number | string | null;
   authors: string[];
   identifiers: Record<string, string>;
+  volume?: string | null;
+  issue?: string | null;
+  pages?: string | null;
   url?: string | null;
   snippet?: string | null;
   fetchedAt: string;

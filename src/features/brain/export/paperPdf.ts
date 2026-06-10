@@ -4,6 +4,7 @@
 // on demand so it never weighs down the main bundle.
 
 import type { EvidenceItem } from '@platform/index';
+import { formatReference } from './citationStyles';
 import type { Manuscript } from '../swarm/manuscript';
 
 export interface PaperPdfInput {
@@ -290,41 +291,10 @@ export function splitPdfTextToSize(doc: PdfTextWrapper, text: string, width: num
   return baseLines.flatMap((line) => reflowPdfLine(doc, String(line), width));
 }
 
-// The publication venue (journal) when an adapter captured it, else a readable
-// database label — so a reference reads "… N Engl J Med. 2024." not "… PUBMED.".
-function referenceVenue(record: EvidenceItem): string {
-  const venue =
-    record.identifiers?.journal || record.identifiers?.venue || record.identifiers?.containerTitle;
-  if (venue && venue.trim()) return venue.trim();
-  const labels: Record<string, string> = {
-    pubmed: 'PubMed',
-    europepmc: 'Europe PMC',
-    openalex: 'OpenAlex',
-    ctgov: 'ClinicalTrials.gov',
-    openfda: 'openFDA',
-    rxnorm: 'RxNorm',
-    semantic_scholar: 'Semantic Scholar',
-    gwas_catalog: 'GWAS Catalog',
-    clinvar: 'ClinVar',
-    library: 'Imported document',
-  };
-  return labels[record.source] ?? record.source;
-}
-
-function formatReference(record: EvidenceItem, index: number, _style: 'source' | 'vancouver' = 'source'): string {
-  const year = record.year ? ` ${record.year}.` : '';
-  const id = record.identifiers?.pmid
-    ? ` PMID: ${record.identifiers.pmid}.`
-    : record.identifiers?.doi
-      ? ` doi: ${record.identifiers.doi}.`
-      : '';
-  const authors =
-    record.authors.length > 0
-      ? record.authors.slice(0, 6).join(', ') + (record.authors.length > 6 ? ' et al.' : '') + '.'
-      : referenceVenue(record) + '.';
-  // Vancouver order: Authors. Title. Journal. Year. PMID/doi. The leading "[n]"
-  // marker is drawn separately in accent colour, so it is not prepended here.
-  return `[${index + 1}] ${authors} ${record.title}. ${referenceVenue(record)}.${year}${id}`;
+function formatReferenceIndexed(record: EvidenceItem, index: number): string {
+  // Delegate to the single source of truth in citationStyles.ts, then prepend
+  // the numbered bracket marker used by the PDF renderer.
+  return `[${index + 1}] ${formatReference(record, 'vancouver')}`;
 }
 
 // Accent mint colour (#82e0c2) used across headings and decorative elements.
@@ -591,7 +561,6 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
   // back to listing every attached citation record in source order.
   if (input.citations && input.citations.length > 0) {
     const citedNumbers = new Set<number>();
-    const markerStyle = input.manuscript?.publication ? 'vancouver' : 'source';
     for (const match of input.content.matchAll(/\[(?:S)?(\d+)\]/g)) {
       citedNumbers.add(Number(match[1]));
     }
@@ -608,7 +577,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     cited.forEach((number, listIndex) => {
       const record = input.citations![number - 1];
       if (!record) return;
-      const refText = winAnsiSafe(formatReference(record, listIndex, markerStyle));
+      const refText = winAnsiSafe(formatReferenceIndexed(record, listIndex));
       const lines = splitPdfTextToSize(doc, refText, contentW - 22);
       // Accent-coloured bracket marker on first line
       lines.forEach((line, li) => {
