@@ -122,6 +122,31 @@ interface RagStore {
 const quantized = new Map<string, QuantizedVector>();
 const floatCache = new Map<string, Float32Array>();
 
+// --- LRU query-vector cache (RAG-003) ---
+// Re-embedding identical queries wastes compute and worker IPC. Cache the most
+// recent query→vector mappings with a small bounded size.
+const QUERY_CACHE_MAX = 64;
+const queryVectorCache = new Map<string, Float32Array>();
+function getCachedQueryVector(query: string): Float32Array | undefined {
+  const key = query.trim().toLowerCase();
+  const vec = queryVectorCache.get(key);
+  if (vec) {
+    // LRU: re-touch moves to end
+    queryVectorCache.delete(key);
+    queryVectorCache.set(key, vec);
+  }
+  return vec;
+}
+function setCachedQueryVector(query: string, vec: Float32Array): void {
+  const key = query.trim().toLowerCase();
+  if (queryVectorCache.has(key)) queryVectorCache.delete(key);
+  while (queryVectorCache.size >= QUERY_CACHE_MAX) {
+    const first = queryVectorCache.keys().next().value;
+    if (first !== undefined) queryVectorCache.delete(first);
+  }
+  queryVectorCache.set(key, vec);
+}
+
 // Snapshot of the most recent pruneChunks call, so it can be undone. Holds the
 // removed chunks and their quantised vectors; replaced on each prune, cleared on
 // undo. Module-scoped because the vectors live here, not in the zustand state.
@@ -295,20 +320,24 @@ export const useRagStore = create<RagStore>((set, get) => ({
     // search for one surface form ("Tylenol", "MI") matches findings written
     // with another. Feeds both the embedding and the lexical match.
     const expanded = expandQuery(query);
-    let queryVector: Float32Array | null = null;
-    try {
-      const provider = getEmbeddingProvider();
-      await provider.warmup();
-      if (provider.ready) {
-        // Embed the ORIGINAL query, not the synonym-expanded one: appending a
-        // long list of brand/generic synonyms drifts the meaning vector away
-        // from what the user actually asked, blunting semantic retrieval. The
-        // expansion still widens the LEXICAL match below.
-        const [vec] = await provider.embed([query]);
-        queryVector = vec ?? null;
+    // RAG-003: check LRU query-vector cache before hitting the worker.
+    let queryVector: Float32Array | null = getCachedQueryVector(query) ?? null;
+    if (!queryVector) {
+      try {
+        const provider = getEmbeddingProvider();
+        await provider.warmup();
+        if (provider.ready) {
+          // Embed the ORIGINAL query, not the synonym-expanded one: appending a
+          // long list of brand/generic synonyms drifts the meaning vector away
+          // from what the user actually asked, blunting semantic retrieval. The
+          // expansion still widens the LEXICAL match below.
+          const [vec] = await provider.embed([query]);
+          queryVector = vec ?? null;
+          if (queryVector) setCachedQueryVector(query, queryVector);
+        }
+      } catch {
+        queryVector = null; // lexical-only fallback
       }
-    } catch {
-      queryVector = null; // lexical-only fallback
     }
     return hybridSearch({ chunks, query: expanded, queryVector, vectorFor, activeProjectId, limit, diversify: true });
   },

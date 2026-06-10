@@ -3,13 +3,21 @@
 // retrieval returns ONLY that mode's own trusted findings — it is never fed by
 // other modes' saved research. Other runs leave it null and read the whole
 // library (so they still benefit from the drug-interaction findings).
+//
+// RAG-004 fix: replaced the mutable module-global with a stack so concurrent
+// runs cannot overwrite each other's scope.
 
-let scope: string | null = null;
+const scopeStack: (string | null)[] = [];
 
 export function setMemoryScope(tag: string | null): void {
-  scope = tag;
+  scopeStack.push(tag);
+}
+
+export function clearMemoryScope(): void {
+  scopeStack.pop();
 }
 
 export function getMemoryScope(): string | null {
-  return scope;
+  if (scopeStack.length === 0) return null;
+  return scopeStack[scopeStack.length - 1] ?? null;
 }

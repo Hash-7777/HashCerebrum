@@ -40,6 +40,12 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
       this.worker.addEventListener('message', (event) => this.onMessage(event));
       this.worker.addEventListener('error', () => {
         this._ready = false;
+        // RAG-001: reject all pending promises so they don't hang forever.
+        const err = new Error('embedding worker crashed');
+        for (const pending of this.pending.values()) {
+          pending.reject(err);
+        }
+        this.pending.clear();
       });
       return this.worker;
     } catch {

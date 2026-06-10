@@ -6,7 +6,7 @@
 
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
-import { setMemoryScope } from '@core/tools/memoryScope';
+import { setMemoryScope, clearMemoryScope } from '@core/tools/memoryScope';
 import { retrieve, smartRetrieve } from '@core/rag';
 import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
@@ -599,7 +599,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
         callbacks,
       );
     } finally {
-      setMemoryScope(null);
+      clearMemoryScope();
     }
     // Keep the drug-label (OpenFDA) and terminology (RxNorm) records here — for
     // an interaction question they are authoritative trusted sources, not just
@@ -665,7 +665,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
         geneticDatabaseEvidence(researchQuestion, callbacks),
       ]);
     } finally {
-      setMemoryScope(null);
+      clearMemoryScope();
     }
     const dbSpecialist: SpecialistResult = {
       agentId: 'genetics',
