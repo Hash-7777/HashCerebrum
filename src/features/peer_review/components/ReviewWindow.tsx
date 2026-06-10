@@ -23,7 +23,7 @@ import { askPaper, citedPassageNumbers, type PaperPassage } from '../askPaper';
 import { continueWriting } from '../continueWriting';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { notify } from '@platform/notify';
-import { streamWithModelChain } from '@core/llm/ProviderRegistry';
+import { streamWithModelSafe } from '@core/llm/ProviderRegistry';
 
 // ── Editor helpers ────────────────────────────────────────────────────────
 
@@ -1006,7 +1006,7 @@ export function ReviewWindow({ paper, onClose }: { paper: ReviewedPaper; onClose
         ? `Issue: ${s.description}\nOriginal: "${s.originalText}"\n\nContext:\n${context}\n\nProvide a concise replacement.`
         : `Issue: ${s.description}\n\nDocument excerpt:\n${context}\n\nFind the exact passage and provide a replacement.`;
 
-      await streamWithModelChain(
+      await streamWithModelSafe(
         model,
         {
           messages: [

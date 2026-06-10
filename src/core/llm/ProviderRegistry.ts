@@ -26,6 +26,14 @@ import {
   parseOpenAiStreamLine,
 } from './streamParsers';
 import type { LlmProvider, LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, LlmToolSpec } from './types';
+import {
+  isJailbreakAttempt,
+  isOffTopicQuestion,
+  isSelfHarmQuery,
+  isHarmfulRequest,
+  SELF_HARM_MESSAGE,
+  HARMFUL_REQUEST_REFUSAL,
+} from './safety';
 
 export { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from './providerSettings';
 
@@ -619,6 +627,44 @@ export async function streamWithModelChain(
     return { content: acc, toolCalls: [], modelUsed: current, failover: { attempted: switchedTo.length, switchedTo } };
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'unknown LLM error'));
+}
+
+/**
+ * Safety-wrapped variant of `streamWithModelChain`.
+ * All prompts are scanned for self-harm, harmful requests, jailbreak, and
+ * off-topic patterns BEFORE any token is streamed. If a violation is found,
+ * a deterministic refusal is returned immediately (no model call, no cost,
+ * no leakage to downstream evidence extraction). This is the single choke-point
+ * for safety across Brain, Peer Review, editor, and rewrite paths.
+ */
+export async function streamWithModelSafe(
+  modelValue: string,
+  req: Omit<LlmRequest, 'model'>,
+  opts: StreamOptions,
+  onProgress?: (progress: FailoverProgress) => void,
+): Promise<FailoverResult> {
+  const text = (req.messages ?? [])
+    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+    .join('\n');
+
+  if (isSelfHarmQuery(text)) {
+    return {
+      content: SELF_HARM_MESSAGE,
+      toolCalls: [],
+      modelUsed: 'safety_gate',
+      failover: { attempted: 0, switchedTo: [] },
+    };
+  }
+  if (isHarmfulRequest(text) || isJailbreakAttempt(text) || isOffTopicQuestion(text)) {
+    return {
+      content: HARMFUL_REQUEST_REFUSAL,
+      toolCalls: [],
+      modelUsed: 'safety_gate',
+      failover: { attempted: 0, switchedTo: [] },
+    };
+  }
+
+  return streamWithModelChain(modelValue, req, opts, onProgress);
 }
 
 // Default-model resolver — used by BrainMode on mount. Order:

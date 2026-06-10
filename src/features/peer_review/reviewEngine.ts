@@ -1,7 +1,7 @@
 // AI peer review engine — calls the boss model with a structured critic
 // prompt to produce a scored, section-by-section critique of a research paper.
 
-import { streamWithModelChain } from '@core/llm/ProviderRegistry';
+import { streamWithModelSafe } from '@core/llm/ProviderRegistry';
 import type { PaperReview } from '@core/store/peerReviewStore';
 
 const MAX_TEXT_CHARS = 18_000;
@@ -138,7 +138,7 @@ export async function runPeerReview(
   ];
 
   let fullText = '';
-  const res = await streamWithModelChain(
+  const res = await streamWithModelSafe(
     model,
     { messages, temperature: 0.3, maxTokens: 1800 },
     {

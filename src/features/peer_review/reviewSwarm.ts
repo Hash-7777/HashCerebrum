@@ -2,7 +2,7 @@
 // parallel. Each streams its own output; the orchestrator result is also
 // parsed into the full PaperReview shape.
 
-import { streamWithModelChain } from '@core/llm/ProviderRegistry';
+import { streamWithModelSafe } from '@core/llm/ProviderRegistry';
 import { useAgentStore } from '@core/store/agentStore';
 import type { AgentReviewResult, PaperReview } from '@core/store/peerReviewStore';
 import { parseReviewResponse } from './reviewEngine';
@@ -394,7 +394,7 @@ export async function runReviewSwarm(
       let acc = '';
       try {
         const res = await withTimeout(
-          streamWithModelChain(
+          streamWithModelSafe(
             model,
             {
               messages: [
