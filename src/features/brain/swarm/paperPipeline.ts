@@ -24,6 +24,7 @@ import type {
 import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
+import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -1653,7 +1654,12 @@ export async function preparePaperLedger(opts: {
   }
 
   opts.onStage?.('Extracting');
-  const evidenceExtractions = extractEvidenceFromRecords(opts.evidence);
+  resetSyntheticIds();
+  const recordExtractions = extractEvidenceFromRecords(opts.evidence);
+  const promptRows = parsePromptEffectRows(opts.question);
+  const syntheticExtractions =
+    promptRows.length >= 2 ? toSyntheticExtractions(promptRows) : [];
+  const evidenceExtractions = [...syntheticExtractions, ...recordExtractions];
   opts.onStage?.('Building claims');
   let claimLedger = buildClaimLedger(evidenceExtractions);
   if (opts.onClaimLedger) {
