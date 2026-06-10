@@ -441,7 +441,7 @@
   padding: 5px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--hc-radius-pill);
-  background: rgba(3, 7, 12, 0.66);
+  background: color-mix(in srgb, var(--ink-0) 66%, transparent);
   backdrop-filter: blur(10px);
   font: 10px var(--hc-font-mono);
   letter-spacing: 0.05em;
@@ -472,7 +472,7 @@
   max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--hc-radius-pill);
-  background: rgba(3, 7, 12, 0.66);
+  background: color-mix(in srgb, var(--ink-0) 66%, transparent);
   backdrop-filter: blur(10px);
   font-size: 11px;
   color: var(--hc-fg);
@@ -490,7 +490,7 @@
 .memory-vec3d-cluster:hover { border-color: rgba(255, 255, 255, 0.28); }
 .memory-vec3d-cluster[data-active='true'] {
   border-color: var(--accent);
-  background: rgba(3, 7, 12, 0.85);
+  background: color-mix(in srgb, var(--ink-0) 85%, transparent);
 }
 .memory-vec3d-cluster[data-muted='true'] { opacity: 0.4; }
 .memory-vec3d-swatch {
@@ -519,7 +519,7 @@
   padding: 3px 8px;
   border-radius: var(--hc-radius-sm);
   border: 1px solid var(--hc-border);
-  background: rgba(3, 7, 12, 0.82);
+  background: color-mix(in srgb, var(--ink-0) 82%, transparent);
   color: var(--hc-fg-strong);
   font-size: 11px;
   white-space: nowrap;
@@ -646,7 +646,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: var(--hc-radius);
-  background: rgba(3, 7, 12, 0.68);
+  background: color-mix(in srgb, var(--ink-0) 68%, transparent);
   box-shadow: var(--hc-shadow-inset);
   backdrop-filter: blur(12px);
   font: 10px var(--hc-font-mono);
@@ -672,7 +672,7 @@
   padding: 5px 6px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: var(--hc-radius);
-  background: rgba(3, 7, 12, 0.56);
+  background: color-mix(in srgb, var(--ink-0) 56%, transparent);
   box-shadow: var(--hc-shadow-inset);
   backdrop-filter: blur(12px);
 }
@@ -695,7 +695,7 @@
 }
 .memory-graph-topics button[data-active='true'] {
   border-color: color-mix(in srgb, var(--cluster-color, var(--hc-accent)) 48%, var(--hc-border));
-  background: color-mix(in srgb, var(--cluster-color, var(--hc-accent)) 12%, rgba(3, 7, 12, 0.68));
+  background: color-mix(in srgb, var(--cluster-color, var(--hc-accent)) 12%, color-mix(in srgb, var(--ink-0) 68%, transparent));
   color: var(--hc-fg);
 }
 .memory-graph-topic-label {
@@ -726,7 +726,7 @@
   padding: 3px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: var(--hc-radius);
-  background: rgba(3, 7, 12, 0.68);
+  background: color-mix(in srgb, var(--ink-0) 68%, transparent);
   box-shadow: var(--hc-shadow-inset);
   backdrop-filter: blur(12px);
   max-width: calc(100% - 24px);
@@ -794,7 +794,7 @@
   padding: 11px;
   border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: var(--hc-radius);
-  background: rgba(3, 7, 12, 0.72);
+  background: color-mix(in srgb, var(--ink-0) 72%, transparent);
   color: var(--hc-fg-muted);
   box-shadow: var(--hc-shadow-1);
   backdrop-filter: blur(10px);
@@ -1222,7 +1222,7 @@
   height: 30px;
   border: 1px solid var(--hc-border);
   border-radius: 8px;
-  background: rgba(3, 7, 12, 0.66);
+  background: color-mix(in srgb, var(--ink-0) 66%, transparent);
   backdrop-filter: blur(10px);
   color: var(--hc-fg-muted);
   cursor: pointer;
@@ -1247,7 +1247,7 @@
   padding: 0 12px;
   border: 1px solid rgba(255, 122, 138, 0.3);
   border-radius: var(--hc-radius-pill);
-  background: rgba(3, 7, 12, 0.66);
+  background: color-mix(in srgb, var(--ink-0) 66%, transparent);
   backdrop-filter: blur(10px);
   color: var(--hc-fg-muted);
   font-size: 11px;

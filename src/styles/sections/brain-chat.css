@@ -897,7 +897,15 @@
   --accent: #9b8cff;
   --accent-strong: #b6abff;
   --accent-soft: rgba(155, 140, 255, 0.13);
+  --accent-line: rgba(155, 140, 255, 0.3);
+  --accent-glow: rgba(155, 140, 255, 0.22);
   --accent-ink: #0a0a14;
+  /* Mode-tinted raised surfaces/borders for cohesion */
+  --ink-3: color-mix(in srgb, #1a1a2e 92%, #9b8cff);
+  --ink-4: color-mix(in srgb, #252540 92%, #9b8cff);
+  --line-soft: rgba(180, 170, 255, 0.06);
+  --line: rgba(180, 170, 255, 0.13);
+  --line-strong: rgba(180, 170, 255, 0.22);
 }
 
 /* Drug-Interactions home screen mark (capsule) */
@@ -1332,7 +1340,15 @@
   --accent: #43e0d0;
   --accent-strong: #7af0ff;
   --accent-soft: rgba(67, 224, 208, 0.13);
+  --accent-line: rgba(67, 224, 208, 0.3);
+  --accent-glow: rgba(67, 224, 208, 0.22);
   --accent-ink: #04121a;
+  /* Mode-tinted raised surfaces/borders for cohesion */
+  --ink-3: color-mix(in srgb, #0f1f2e 92%, #43e0d0);
+  --ink-4: color-mix(in srgb, #162a3a 92%, #43e0d0);
+  --line-soft: rgba(160, 230, 220, 0.06);
+  --line: rgba(160, 230, 220, 0.13);
+  --line-strong: rgba(160, 230, 220, 0.22);
 }
 
 /* Genetics home-screen mark — the DNA glyph on a glowing ring that slowly

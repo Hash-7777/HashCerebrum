@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ThemeId = 'obsidian' | 'aurora' | 'petrol' | 'sandstone' | 'forest' | 'parchment';
+export type ThemeId = 'obsidian' | 'aurora' | 'petrol' | 'sandstone' | 'forest' | 'parchment' | 'moss' | 'ember';
 
 export const THEMES: { id: ThemeId; label: string; swatch: string }[] = [
   { id: 'obsidian',  label: 'Obsidian',  swatch: '#16181e' },
@@ -10,6 +10,8 @@ export const THEMES: { id: ThemeId; label: string; swatch: string }[] = [
   { id: 'sandstone', label: 'Sandstone', swatch: '#1c1814' },
   { id: 'forest',    label: 'Forest',    swatch: '#131a14' },
   { id: 'parchment', label: 'Parchment', swatch: '#ede5d2' },
+  { id: 'moss',      label: 'Moss',      swatch: '#1A2517' },
+  { id: 'ember',     label: 'Ember',     swatch: '#233D4C' },
 ];
 
 interface ThemeState {

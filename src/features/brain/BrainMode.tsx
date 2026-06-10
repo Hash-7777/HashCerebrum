@@ -82,7 +82,10 @@ export function BrainMode({
   const [dataset, setDataset] = useState<UploadedDatasetSummary | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const activeChatId = useChatHistoryStore((s) => s.activeChatId);
-  const activeChat = useChatHistoryStore((s) => s.chats.find((c) => c.id === s.activeChatId));
+  const activeChat = useMemo(
+    () => useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId),
+    [activeChatId],
+  );
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeProject = useProjectStore((s) => s.projects.find((p) => p.id === s.activeProjectId));
   const clearActive = useChatHistoryStore((s) => s.clearActive);

@@ -149,7 +149,7 @@ function EmptyState({
           <span className="di-empty-mark" aria-hidden="true">
             <Icon name="pill" size={30} />
           </span>
-          <h2 className="brain-empty-title">Drug Interactions</h2>
+          <h2 className="brain-empty-title">Pharmacist</h2>
           <p className="brain-empty-sub">Grade any combination A–X from trusted label &amp; literature sources</p>
         </div>
         <div className="brain-empty-prompts">

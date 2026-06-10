@@ -34,16 +34,16 @@ export function TitleBar() {
       </div>
       <div className="spacer" />
       <div className="titlebar-right">
-        <button className="icon-btn" type="button" title="Search (⌘F)" onClick={focusSearch}>
+        <button className="icon-btn" type="button" title="Search (⌘F)" aria-label="Search" onClick={focusSearch}>
           <Icon name="search" size={15} />
         </button>
-        <button className="icon-btn" type="button" title="Execution trace" onClick={toggleTrace}>
+        <button className="icon-btn" type="button" title="Execution trace" aria-label="Execution trace" onClick={toggleTrace}>
           <Icon name="activity" size={15} />
         </button>
-        <button className="icon-btn" type="button" title="Settings (⌘,)" onClick={openSettings}>
+        <button className="icon-btn" type="button" title="Settings (⌘,)" aria-label="Settings" onClick={openSettings}>
           <Icon name="settings" size={15} />
         </button>
-        <button className="icon-btn" type="button" title="Restart app" onClick={restartApp}>
+        <button className="icon-btn" type="button" title="Restart app" aria-label="Restart app" onClick={restartApp}>
           <Icon name="refresh" size={15} />
         </button>
       </div>

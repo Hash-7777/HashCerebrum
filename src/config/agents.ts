@@ -101,7 +101,7 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     // excluded from the Brain-mode planning pool so Brain routes drug questions
     // to the Pharmacist instead.
     id: 'drug_interactions',
-    label: 'Drug interactions',
+    label: 'Pharmacist',
     kind: 'specialist',
     specialty:
       'Drug-drug interactions, contraindications, adverse drug events, and pharmacokinetic conflicts sourced from FDA labels and peer-reviewed safety literature.',

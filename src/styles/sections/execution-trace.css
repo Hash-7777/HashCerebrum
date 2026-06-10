@@ -2,7 +2,7 @@
   flex: 0 0 auto;
   height: 32px;
   border-top: 1px solid var(--hc-border);
-  background: rgba(3, 7, 12, 0.97);
+  background: color-mix(in srgb, var(--ink-0) 97%, transparent);
   display: flex;
   flex-direction: column;
   overflow: hidden;

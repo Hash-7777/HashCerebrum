@@ -13,3 +13,16 @@
 @import './sections/boot-splash.css';
 @import './sections/system.css';
 @import './sections/dev.css';
+
+/* Global reduced-motion: disable transitions and animations for users who
+   prefer reduced motion. This is a WCAG 2.1 AAA requirement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -33,7 +33,7 @@ export function DrugInteractionPanel() {
           <Icon name="pill" size={16} />
         </span>
         <div>
-          <h2>Drug Interactions</h2>
+          <h2>Pharmacist</h2>
           <p>Each drug pair is graded from trusted label &amp; literature sources.</p>
         </div>
       </header>
