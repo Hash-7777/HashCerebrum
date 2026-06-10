@@ -293,6 +293,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               <code>11434</code> through its firewall so this machine can reach it.
             </p>
 
+            <div className="settings-tip">
+              <span className="tip-badge">Tip</span>
+              <span>Set a large Boss model for the best manuscript and evidence-synthesis results.</span>
+            </div>
+
             <div className="settings-model-tools">
               <span>
                 {refreshingModels

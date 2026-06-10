@@ -809,14 +809,7 @@ export function BrainMode({
                       Clear
                     </button>
                   </>
-                ) : (
-                  // Empty state: the onboarding tip (there are no export buttons yet,
-                  // so there is room for the full hint).
-                  <span className="chat-tip">
-                    <span className="tip">Tip</span>
-                    <span>Set a large Boss model in Settings for the best results.</span>
-                  </span>
-                )}
+                ) : null}
               </span>
               {evidence.length > 0 && (
                 <span className="chat-meta-evidence">
