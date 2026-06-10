@@ -34,6 +34,38 @@ describe('LLM stream parsers', () => {
     expect(parsed).toEqual({ delta: 'chunk', toolCalls: [] });
   });
 
+  it('parses Anthropic tool_use start and delta chunks', () => {
+    const start = parseAnthropicStreamLine(
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_abc","name":"pubmed_search","input":{}}}',
+    );
+    expect(start?.toolCallDeltas).toEqual([{ index: 0, id: 'toolu_abc', name: 'pubmed_search' }]);
+
+    const delta = parseAnthropicStreamLine(
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"glioma\\"}"}}',
+    );
+    expect(delta?.toolCallDeltas).toEqual([{ index: 0, argsFragment: '{"q":"glioma"}' }]);
+  });
+
+  it('accumulates Anthropic tool_use fragments via ToolCallAccumulator', () => {
+    const acc = new ToolCallAccumulator();
+    acc.ingest(
+      parseAnthropicStreamLine(
+        'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_abc","name":"pubmed_search","input":{}}}',
+      )?.toolCallDeltas,
+    );
+    acc.ingest(
+      parseAnthropicStreamLine(
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"q\\":\\"glio"}}',
+      )?.toolCallDeltas,
+    );
+    acc.ingest(
+      parseAnthropicStreamLine(
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"ma\\"}"}}',
+      )?.toolCallDeltas,
+    );
+    expect(acc.collect()).toEqual([{ id: 'toolu_abc', name: 'pubmed_search', args: { q: 'glioma' } }]);
+  });
+
   it('parses Gemini streamGenerateContent SSE chunks', () => {
     const parsed = parseGeminiStreamLine(
       'data: {"candidates":[{"content":{"parts":[{"text":"The image displays"}],"role":"model"},"index":0}]}',

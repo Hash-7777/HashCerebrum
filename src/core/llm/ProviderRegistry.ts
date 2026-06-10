@@ -361,8 +361,16 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
     ...(system ? { system } : {}),
     ...(typeof req.temperature === 'number' ? { temperature: req.temperature } : {}),
   };
+  if (req.tools?.length) {
+    body.tools = req.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.parameters,
+    }));
+  }
   let content = '';
   let finishReason: string | undefined;
+  const accumulator = new ToolCallAccumulator();
   await chatStream(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
@@ -377,13 +385,15 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
       const parsed = parseAnthropicStreamLine(line);
       if (!parsed) return;
       if (parsed.finishReason) finishReason = parsed.finishReason;
-      if (!parsed.delta) return;
-      content += parsed.delta;
-      opts.onToken(parsed.delta);
+      if (parsed.delta) {
+        content += parsed.delta;
+        opts.onToken(parsed.delta);
+      }
+      accumulator.ingest(parsed.toolCallDeltas);
     },
     opts.signal,
   );
-  return { content, toolCalls: [], ...(finishReason ? { finishReason } : {}) };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
 }
 
 async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -506,6 +516,7 @@ export async function streamWithModelChain(
         ],
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
         ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),
+        ...(req.tools?.length ? { tools: req.tools } : {}),
       };
     }
 

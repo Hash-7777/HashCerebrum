@@ -147,6 +147,29 @@ export function parseOpenAiStreamLine(line: string): StreamParseResult | null {
   }
 }
 
+function extractAnthropicToolCallDeltas(json: Record<string, unknown>): OpenAiToolCallDelta[] {
+  if (json.type === 'content_block_start' && json.content_block && typeof json.content_block === 'object') {
+    const block = json.content_block as Record<string, unknown>;
+    if (block.type === 'tool_use') {
+      const out: OpenAiToolCallDelta = {};
+      if (typeof json.index === 'number') out.index = json.index;
+      if (typeof block.id === 'string') out.id = block.id;
+      if (typeof block.name === 'string') out.name = block.name;
+      return [out];
+    }
+  }
+  if (json.type === 'content_block_delta' && json.delta && typeof json.delta === 'object') {
+    const delta = json.delta as Record<string, unknown>;
+    if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+      const out: OpenAiToolCallDelta = {};
+      if (typeof json.index === 'number') out.index = json.index;
+      out.argsFragment = delta.partial_json;
+      return [out];
+    }
+  }
+  return [];
+}
+
 export function parseAnthropicStreamLine(line: string): StreamParseResult | null {
   if (!line.startsWith('data:')) return null;
   const payload = line.slice(5).trim();
@@ -156,6 +179,10 @@ export function parseAnthropicStreamLine(line: string): StreamParseResult | null
     // message_delta carries the stop_reason (e.g. 'max_tokens') at the end.
     if (json.type === 'message_delta' && typeof json.delta?.stop_reason === 'string') {
       return { delta: '', toolCalls: [], finishReason: json.delta.stop_reason };
+    }
+    const toolDeltas = extractAnthropicToolCallDeltas(json);
+    if (toolDeltas.length > 0) {
+      return { delta: '', toolCalls: [], toolCallDeltas: toolDeltas };
     }
     if (json.type !== 'content_block_delta' || json.delta?.type !== 'text_delta') return null;
     return { delta: json.delta.text ?? '', toolCalls: [] };

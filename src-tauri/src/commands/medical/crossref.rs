@@ -74,9 +74,14 @@ pub async fn crossref_lookup(doi: String) -> AppResult<CrossrefMeta> {
         .map(|arr| {
             arr.iter()
                 .filter_map(|a| {
-                    let given = a["given"].as_str()?;
-                    let family = a["family"].as_str()?;
-                    Some(format!("{given} {family}"))
+                    let given = a["given"].as_str();
+                    let family = a["family"].as_str();
+                    match (given, family) {
+                        (Some(g), Some(f)) => Some(format!("{g} {f}")),
+                        (Some(g), None) => Some(g.to_string()),
+                        (None, Some(f)) => Some(f.to_string()),
+                        (None, None) => None,
+                    }
                 })
                 .take(8)
                 .collect()
@@ -98,4 +103,34 @@ pub async fn crossref_lookup(doi: String) -> AppResult<CrossrefMeta> {
         authors,
         url,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn crossref_author_mononym_fallback() {
+        let json = serde_json::json!({
+            "author": [
+                { "family": "Plato" },
+                { "given": "Aristotle" },
+                { "given": "John", "family": "Smith" }
+            ]
+        });
+        let authors: Vec<String> = json["author"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|a| {
+                let given = a["given"].as_str();
+                let family = a["family"].as_str();
+                match (given, family) {
+                    (Some(g), Some(f)) => Some(format!("{g} {f}")),
+                    (Some(g), None) => Some(g.to_string()),
+                    (None, Some(f)) => Some(f.to_string()),
+                    (None, None) => None,
+                }
+            })
+            .collect();
+        assert_eq!(authors, vec!["Plato", "Aristotle", "John Smith"]);
+    }
 }

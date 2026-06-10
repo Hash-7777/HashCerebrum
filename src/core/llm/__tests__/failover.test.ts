@@ -129,6 +129,12 @@ describe('LLM failover', () => {
     expect(isHardProviderError(new Error('model not found'))).toBe(true);
     expect(isHardProviderError(new Error('tool calling not supported'))).toBe(true);
   });
+
+  it('treats JSON parse errors as retriable, not hard provider', () => {
+    expect(isHardProviderError(new Error('JSONDecodeError: malformed response'))).toBe(false);
+    expect(isHardProviderError(new Error('expecting property name enclosed in double quotes'))).toBe(false);
+    expect(isRetriableError(new Error('JSONDecodeError: malformed response'))).toBe(true);
+  });
 });
 
 describe('session billing-dead providers', () => {

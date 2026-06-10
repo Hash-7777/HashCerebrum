@@ -33,13 +33,19 @@ fn openfda_search(endpoint: &str, query: &str) -> String {
 
     terms
         .iter()
-        .flat_map(|term| {
-            fields
+        .map(|term| {
+            let clauses: Vec<String> = fields
                 .iter()
-                .map(move |field| format!("{field}:\"{term}\""))
+                .map(|field| format!("{field}:\"{term}\""))
+                .collect();
+            if clauses.len() == 1 {
+                clauses.into_iter().next().unwrap()
+            } else {
+                format!("({})", clauses.join(" OR "))
+            }
         })
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" AND ")
 }
 
 #[tauri::command]
@@ -50,7 +56,11 @@ pub async fn openfda_query(
 ) -> AppResult<Vec<EvidenceItem>> {
     let safe_endpoint = match endpoint.as_str() {
         "drug/event" | "drug/label" | "drug/drugsfda" | "device/event" => endpoint,
-        _ => "drug/event".to_string(),
+        _ => {
+            return Err(AppError::InvalidInput(
+                format!("endpoint '{endpoint}' is not supported. Use drug/event, drug/label, drug/drugsfda, or device/event.")
+            ));
+        }
     };
     let limit = clamp_max_results(max_results.unwrap_or(5), 5, 10);
     let mut url = Url::parse(&format!("https://api.fda.gov/{safe_endpoint}.json"))
@@ -73,8 +83,10 @@ pub async fn openfda_query(
             .or_else(|| item["openfda"]["brand_name"].as_array().and_then(|arr| arr.first()).and_then(|v| v.as_str()))
             .unwrap_or("OpenFDA record")
             .to_string();
-        let snippet = item["serious"].as_str()
-            .map(|s| format!("serious: {s}"))
+        let snippet = item["patient"]["reaction"].as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|r| r["reactionmeddrapt"].as_str())
+            .map(|s| format!("reaction: {s}"))
             .or_else(|| item["purpose"].as_array().and_then(|arr| arr.first()).and_then(|v| v.as_str()).map(str::to_string));
         evidence(
             "openfda",
@@ -112,5 +124,25 @@ mod tests {
         assert!(search.contains("openfda.brand_name:\"aspirin\""));
         assert!(search.contains("indications_and_usage:\"warning\""));
         assert!(!search.contains("patient.drug.medicinalproduct"));
+    }
+
+    #[test]
+    fn openfda_search_groups_terms_with_and_fields_with_or() {
+        let search = openfda_search("drug/event", "warfarin bleeding");
+
+        // Each term should be grouped in parentheses with OR across fields.
+        assert!(search.contains("(patient.drug.medicinalproduct:\"warfarin\" OR patient.drug.openfda.generic_name:\"warfarin\" OR patient.reaction.reactionmeddrapt:\"warfarin\")"));
+        assert!(search.contains("(patient.drug.medicinalproduct:\"bleeding\" OR patient.drug.openfda.generic_name:\"bleeding\" OR patient.reaction.reactionmeddrapt:\"bleeding\")"));
+        // Terms should be joined with AND.
+        assert!(search.contains(" AND "));
+    }
+
+    #[test]
+    fn openfda_search_multi_field_endpoint_uses_parens() {
+        // device/event has two fields, so parentheses should be used.
+        let search = openfda_search("device/event", "pacemaker");
+        assert!(search.contains('('));
+        assert!(search.contains(')'));
+        assert!(search.contains("device.brand_name:\"pacemaker\""));
     }
 }
