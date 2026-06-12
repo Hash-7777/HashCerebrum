@@ -493,6 +493,20 @@ I built HashCerebrum on top of my earlier local-first agentic desktop app, **Has
 
 ---
 
+## The Hash ecosystem
+
+HashCerebrum is one of three local-first, privacy-first apps by the same developer — no cloud, no telemetry, your data stays on your machine:
+
+| App | What it is |
+|---|---|
+| **[HashCerebrum](https://github.com/Hash-7777/HashCerebrum)** *(this app)* | A local-first medical-research workbench with a 3D brain interface for searching, citing, and peer-reviewing research. |
+| **[HashCortX](https://github.com/Hash-7777/HashCortX)** | The local-first AI workspace — eleven modes, ten providers, zero telemetry. |
+| **[HashMeterAi](https://github.com/Hash-7777/HashMeterAi)** | See how much AI you really use — the honest local usage meter for AI coding tools. |
+
+HashCerebrum writes a local token-usage log that **HashMeterAi** reads, so your usage across the whole ecosystem is measured accurately in one place.
+
+---
+
 ## License
 
 AGPL-3.0. See [LICENSE](LICENSE).
