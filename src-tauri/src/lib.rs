@@ -51,6 +51,7 @@ use commands::{
     pdf::{fetch_open_access_pdf, pdf_extract_pages_bytes, pdf_extract_text_bytes},
     purge::purge_project_data,
     swarm::{swarm_cancel_job, swarm_get_job, swarm_list_jobs, swarm_start_job},
+    usage_log::usage_log_append,
 };
 
 /// Restart the application. Invoked from the titlebar restart button.
@@ -156,6 +157,7 @@ pub fn run() {
             pdf_extract_pages_bytes,
             fetch_open_access_pdf,
             write_file_bytes,
+            usage_log_append,
             render_manuscript_pdf,
             cache_stats,
             cache_clear,

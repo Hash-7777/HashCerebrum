@@ -18,3 +18,4 @@ pub mod net;
 pub mod pdf;
 pub mod purge;
 pub mod swarm;
+pub mod usage_log;
