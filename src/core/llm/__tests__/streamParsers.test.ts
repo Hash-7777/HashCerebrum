@@ -172,3 +172,45 @@ describe('OpenAI tool-call fragmentation', () => {
     ]);
   });
 });
+
+describe('stream usage extraction', () => {
+  it('extracts Ollama token counts from the final done chunk', () => {
+    const parsed = parseOllamaStreamLine(
+      JSON.stringify({ done: true, done_reason: 'stop', prompt_eval_count: 1200, eval_count: 340 }),
+    );
+    expect(parsed?.usage).toEqual({ inputTokens: 1200, outputTokens: 340 });
+  });
+
+  it('extracts OpenAI usage from the include_usage final chunk (empty choices)', () => {
+    const parsed = parseOpenAiStreamLine('data: {"choices":[],"usage":{"prompt_tokens":410,"completion_tokens":88}}');
+    expect(parsed?.delta).toBe('');
+    expect(parsed?.usage).toEqual({ inputTokens: 410, outputTokens: 88 });
+  });
+
+  it('extracts Anthropic input tokens from message_start', () => {
+    const parsed = parseAnthropicStreamLine(
+      'data: {"type":"message_start","message":{"usage":{"input_tokens":512,"output_tokens":0}}}',
+    );
+    expect(parsed?.usage).toEqual({ inputTokens: 512 });
+  });
+
+  it('extracts Anthropic output tokens and stop_reason from message_delta', () => {
+    const parsed = parseAnthropicStreamLine(
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":140}}',
+    );
+    expect(parsed?.finishReason).toBe('end_turn');
+    expect(parsed?.usage).toEqual({ outputTokens: 140 });
+  });
+
+  it('extracts Gemini token counts from usageMetadata', () => {
+    const parsed = parseGeminiStreamLine(
+      'data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":300,"candidatesTokenCount":50}}',
+    );
+    expect(parsed?.usage).toEqual({ inputTokens: 300, outputTokens: 50 });
+  });
+
+  it('omits usage on ordinary token chunks', () => {
+    expect(parseOpenAiStreamLine('data: {"choices":[{"delta":{"content":"x"}}]}')?.usage).toBeUndefined();
+    expect(parseOllamaStreamLine(JSON.stringify({ message: { content: 'x' } }))?.usage).toBeUndefined();
+  });
+});

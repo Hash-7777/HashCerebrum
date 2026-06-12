@@ -59,6 +59,19 @@ export interface CacheStats {
   hosts: CacheHostStat[];
 }
 
+// One measured token-usage record, appended to usage.jsonl for the HashMeter
+// ecosystem. Snake_case keys ARE the on-disk contract shared with HashCortx and
+// read by HashMeterAi — never carries any message content.
+export interface UsageLogRecord {
+  ts: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read?: number;
+  cache_write?: number;
+  cost?: number;
+}
+
 export interface Platform {
   // Keychain — secret values are stored in the OS keychain at rest.
   keychain: {
@@ -126,6 +139,13 @@ export interface Platform {
     get<T>(key: string): Promise<T | null>;
     set<T>(key: string, value: T): Promise<void>;
     delete(key: string): Promise<void>;
+  };
+
+  // Token-usage log — one measured record per model response, appended to
+  // usage.jsonl in the app data dir so HashMeterAi can report HashCerebrum
+  // usage accurately. Best-effort: callers must not let a failure break a run.
+  usageLog: {
+    append(record: UsageLogRecord): Promise<void>;
   };
 
   // LLM provider HTTP — proxied through Rust so the guard, rate limiter,

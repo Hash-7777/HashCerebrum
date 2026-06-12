@@ -167,6 +167,10 @@ export const tauriPlatform: Platform = {
     clearExpired: () => invoke<number>('cache_clear_expired'),
   },
 
+  usageLog: {
+    append: (record) => invoke<void>('usage_log_append', { record }),
+  },
+
   storage: {
     get: async <T,>(key: string) => {
       const s = await store();

@@ -149,6 +149,10 @@ export const browserPlatform: Platform = {
     clear: async () => 0,
     clearExpired: async () => 0,
   },
+  // No on-disk usage log in browser dev — the desktop build records real usage.
+  usageLog: {
+    append: async () => {},
+  },
   storage: {
     get: async <T,>(key: string) => {
       const raw = localStorage.getItem(storageKey(key));

@@ -34,6 +34,26 @@ import {
   SELF_HARM_MESSAGE,
   HARMFUL_REQUEST_REFUSAL,
 } from './safety';
+import { logModelUsage } from './usageLog';
+
+// Token usage arrives across several stream chunks (and Anthropic splits input
+// vs output between events), so callers accumulate it and these helpers fold
+// partials in and build the final, fully-populated usage for the response.
+function mergeUsage(
+  into: { inputTokens?: number; outputTokens?: number },
+  from?: { inputTokens?: number; outputTokens?: number },
+): void {
+  if (!from) return;
+  if (typeof from.inputTokens === 'number') into.inputTokens = from.inputTokens;
+  if (typeof from.outputTokens === 'number') into.outputTokens = from.outputTokens;
+}
+
+function usageResponse(
+  acc: { inputTokens?: number; outputTokens?: number },
+): { usage: { inputTokens: number; outputTokens: number } } | Record<string, never> {
+  if (acc.inputTokens === undefined && acc.outputTokens === undefined) return {};
+  return { usage: { inputTokens: acc.inputTokens ?? 0, outputTokens: acc.outputTokens ?? 0 } };
+}
 
 export { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from './providerSettings';
 
@@ -159,16 +179,19 @@ async function completeOllama(req: LlmRequest): Promise<LlmResponse> {
     options: ollamaOptions(req),
   };
   if (req.tools?.length) body.tools = asOpenAiTools(req.tools);
-  const data = await postJson<{ message?: { content?: string; tool_calls?: unknown[] } }>(
-    'ollama',
-    `${getOllamaHost()}/api/chat`,
-    { 'Content-Type': 'application/json' },
-    body,
-  );
+  const data = await postJson<{
+    message?: { content?: string; tool_calls?: unknown[] };
+    prompt_eval_count?: number;
+    eval_count?: number;
+  }>('ollama', `${getOllamaHost()}/api/chat`, { 'Content-Type': 'application/json' }, body);
   const message = data.message ?? {};
+  const acc: { inputTokens?: number; outputTokens?: number } = {};
+  if (typeof data.prompt_eval_count === 'number') acc.inputTokens = data.prompt_eval_count;
+  if (typeof data.eval_count === 'number') acc.outputTokens = data.eval_count;
   return {
     content: message.content || '',
     toolCalls: normalizeOpenAiToolCalls(message.tool_calls),
+    ...usageResponse(acc),
   };
 }
 
@@ -197,6 +220,7 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
   }
   const data = await postJson<{
     content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
   }>(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
@@ -209,7 +233,10 @@ async function completeAnthropic(req: LlmRequest): Promise<LlmResponse> {
     if (block.type === 'text') content += block.text;
     if (block.type === 'tool_use') toolCalls.push({ id: block.id ?? '', name: block.name ?? '', args: block.input ?? {} });
   }
-  return { content, toolCalls };
+  const acc: { inputTokens?: number; outputTokens?: number } = {};
+  if (typeof data.usage?.input_tokens === 'number') acc.inputTokens = data.usage.input_tokens;
+  if (typeof data.usage?.output_tokens === 'number') acc.outputTokens = data.usage.output_tokens;
+  return { content, toolCalls, ...usageResponse(acc) };
 }
 
 // Gemini's functionDeclarations schema is a restricted OpenAPI subset that
@@ -263,7 +290,9 @@ async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
     toGeminiBody(req),
   );
   const parsed = parseGeminiResponse(data);
-  return { content: parsed.delta, toolCalls: parsed.toolCalls };
+  const acc: { inputTokens?: number; outputTokens?: number } = {};
+  mergeUsage(acc, parsed.usage);
+  return { content: parsed.delta, toolCalls: parsed.toolCalls, ...usageResponse(acc) };
 }
 
 // ----- Streaming ------------------------------------------------------
@@ -292,6 +321,7 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   let content = '';
   let finishReason: string | undefined;
   const accumulator = new ToolCallAccumulator();
+  const usageAcc: { inputTokens?: number; outputTokens?: number } = {};
   await chatStream(
     'ollama',
     `${getOllamaHost()}/api/chat`,
@@ -305,11 +335,12 @@ async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
         opts.onToken(parsed.delta);
       }
       if (parsed.finishReason) finishReason = parsed.finishReason;
+      mergeUsage(usageAcc, parsed.usage);
       accumulator.ingest(parsed.toolCallDeltas);
     },
     opts.signal,
   );
-  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}), ...usageResponse(usageAcc) };
 }
 
 async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -330,6 +361,9 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
     messages: toTextMessages(req),
     temperature: req.temperature ?? 0.4,
     stream: true,
+    // Ask for a final usage chunk with the real token counts. Most
+    // OpenAI-compatible providers honour this; the rest ignore the field.
+    stream_options: { include_usage: true },
   };
   if (req.maxTokens) body.max_tokens = req.maxTokens;
   if (req.tools?.length) {
@@ -339,6 +373,7 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
   let content = '';
   let finishReason: string | undefined;
   const accumulator = new ToolCallAccumulator();
+  const usageAcc: { inputTokens?: number; outputTokens?: number } = {};
   await chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
     const parsed = parseOpenAiStreamLine(line);
     if (!parsed) return;
@@ -347,9 +382,10 @@ async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest
       opts.onToken(parsed.delta);
     }
     if (parsed.finishReason) finishReason = parsed.finishReason;
+    mergeUsage(usageAcc, parsed.usage);
     accumulator.ingest(parsed.toolCallDeltas);
   }, opts.signal);
-  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}), ...usageResponse(usageAcc) };
 }
 
 async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -379,6 +415,7 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
   let content = '';
   let finishReason: string | undefined;
   const accumulator = new ToolCallAccumulator();
+  const usageAcc: { inputTokens?: number; outputTokens?: number } = {};
   await chatStream(
     'anthropic',
     'https://api.anthropic.com/v1/messages',
@@ -397,11 +434,12 @@ async function streamAnthropic(req: LlmRequest, opts: StreamOptions): Promise<Ll
         content += parsed.delta;
         opts.onToken(parsed.delta);
       }
+      mergeUsage(usageAcc, parsed.usage);
       accumulator.ingest(parsed.toolCallDeltas);
     },
     opts.signal,
   );
-  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}) };
+  return { content, toolCalls: accumulator.collect(), ...(finishReason ? { finishReason } : {}), ...usageResponse(usageAcc) };
 }
 
 async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -409,6 +447,7 @@ async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
   let content = '';
   let finishReason: string | undefined;
   const toolCalls: LlmToolCall[] = [];
+  const usageAcc: { inputTokens?: number; outputTokens?: number } = {};
   await chatStream(
     'gemini',
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`,
@@ -426,11 +465,12 @@ async function streamGemini(req: LlmRequest, opts: StreamOptions): Promise<LlmRe
         opts.onToken(parsed.delta);
       }
       if (parsed.finishReason) finishReason = parsed.finishReason;
+      mergeUsage(usageAcc, parsed.usage);
       toolCalls.push(...parsed.toolCalls);
     },
     opts.signal,
   );
-  return { content, toolCalls, ...(finishReason ? { finishReason } : {}) };
+  return { content, toolCalls, ...(finishReason ? { finishReason } : {}), ...usageResponse(usageAcc) };
 }
 
 export async function streamWithModel(
@@ -492,6 +532,11 @@ export async function streamWithModelChain(
   let acc = ''; // everything emitted so far, across every model leg
   let resuming = false; // true once we are continuing a cut-off response
   let lengthContinuations = 0; // bounded resumes after hitting a model output cap
+  // Real token usage summed across every leg — each failover/continuation is a
+  // separate API call that costs its own input+output tokens.
+  let chainIn = 0;
+  let chainOut = 0;
+  let measured = false;
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
@@ -538,6 +583,11 @@ export async function streamWithModelChain(
         },
         signal: opts.signal,
       });
+      if (response.usage) {
+        chainIn += response.usage.inputTokens;
+        chainOut += response.usage.outputTokens;
+        measured = true;
+      }
       // Free-tier models often cap output and stop cleanly mid-answer
       // (finish_reason 'length'/'max_tokens'). Resume on the SAME model from
       // what was written so far, so a small output cap doesn't truncate a long
@@ -553,6 +603,7 @@ export async function streamWithModelChain(
         resuming = true;
         continue; // same model continues from acc
       }
+      if (measured) logModelUsage(current, { inputTokens: chainIn, outputTokens: chainOut });
       return {
         ...response,
         content: acc, // full answer across all legs, not just the last one
@@ -816,6 +867,7 @@ export async function completeWithModelChain(
     tried.add(current);
     try {
       const response = await completeWithModel(current, req);
+      logModelUsage(current, response.usage);
       return {
         ...response,
         modelUsed: current,

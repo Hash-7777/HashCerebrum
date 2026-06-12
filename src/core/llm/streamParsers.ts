@@ -15,6 +15,10 @@ export interface StreamParseResult {
   // OpenAI 'length'/'stop', Anthropic 'max_tokens'/'end_turn', Gemini
   // 'MAX_TOKENS'/'STOP', Ollama done_reason 'length'/'stop'.
   finishReason?: string;
+  // Real token usage, when the provider reports it on a chunk (usually the
+  // final one). Anthropic splits it — input on message_start, output on
+  // message_delta — so a field may arrive alone; callers merge across chunks.
+  usage?: { inputTokens?: number; outputTokens?: number };
 }
 
 export function parseToolArgs(args: unknown): Record<string, unknown> {
@@ -123,6 +127,13 @@ export function parseOllamaStreamLine(line: string): StreamParseResult | null {
       json.message?.tool_calls,
     );
     if (typeof json.done_reason === 'string') result.finishReason = json.done_reason;
+    // Ollama reports real token counts on the final (done) chunk.
+    if (typeof json.prompt_eval_count === 'number' || typeof json.eval_count === 'number') {
+      result.usage = {
+        ...(typeof json.prompt_eval_count === 'number' ? { inputTokens: json.prompt_eval_count } : {}),
+        ...(typeof json.eval_count === 'number' ? { outputTokens: json.eval_count } : {}),
+      };
+    }
     return result;
   } catch {
     return null;
@@ -141,6 +152,14 @@ export function parseOpenAiStreamLine(line: string): StreamParseResult | null {
       choice?.delta?.tool_calls,
     );
     if (typeof choice?.finish_reason === 'string') result.finishReason = choice.finish_reason;
+    // With stream_options.include_usage the final chunk carries token counts
+    // (and an empty choices array, so delta stays '').
+    if (json.usage && typeof json.usage === 'object') {
+      result.usage = {
+        ...(typeof json.usage.prompt_tokens === 'number' ? { inputTokens: json.usage.prompt_tokens } : {}),
+        ...(typeof json.usage.completion_tokens === 'number' ? { outputTokens: json.usage.completion_tokens } : {}),
+      };
+    }
     return result;
   } catch {
     return null;
@@ -176,9 +195,16 @@ export function parseAnthropicStreamLine(line: string): StreamParseResult | null
   if (!payload || payload === '[DONE]') return null;
   try {
     const json = JSON.parse(payload);
-    // message_delta carries the stop_reason (e.g. 'max_tokens') at the end.
-    if (json.type === 'message_delta' && typeof json.delta?.stop_reason === 'string') {
-      return { delta: '', toolCalls: [], finishReason: json.delta.stop_reason };
+    // message_start carries the prompt (input) token count up front.
+    if (json.type === 'message_start' && typeof json.message?.usage?.input_tokens === 'number') {
+      return { delta: '', toolCalls: [], usage: { inputTokens: json.message.usage.input_tokens } };
+    }
+    // message_delta carries the stop_reason and the output token count at the end.
+    if (json.type === 'message_delta') {
+      const out: StreamParseResult = { delta: '', toolCalls: [] };
+      if (typeof json.delta?.stop_reason === 'string') out.finishReason = json.delta.stop_reason;
+      if (typeof json.usage?.output_tokens === 'number') out.usage = { outputTokens: json.usage.output_tokens };
+      return out;
     }
     const toolDeltas = extractAnthropicToolCallDeltas(json);
     if (toolDeltas.length > 0) {
@@ -218,10 +244,22 @@ function parseGeminiParts(parts: unknown[]): StreamParseResult {
 }
 
 export function parseGeminiResponse(data: unknown): StreamParseResult {
-  const json = data as { candidates?: Array<{ content?: { parts?: unknown[] }; finishReason?: string }> };
+  const json = data as {
+    candidates?: Array<{ content?: { parts?: unknown[] }; finishReason?: string }>;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  };
   const candidate = json.candidates?.[0];
   const result = parseGeminiParts(candidate?.content?.parts ?? []);
   if (typeof candidate?.finishReason === 'string') result.finishReason = candidate.finishReason;
+  // Gemini reports cumulative token counts in usageMetadata (present on the
+  // final streamed chunk and on the non-streaming response).
+  const meta = json.usageMetadata;
+  if (meta && (typeof meta.promptTokenCount === 'number' || typeof meta.candidatesTokenCount === 'number')) {
+    result.usage = {
+      ...(typeof meta.promptTokenCount === 'number' ? { inputTokens: meta.promptTokenCount } : {}),
+      ...(typeof meta.candidatesTokenCount === 'number' ? { outputTokens: meta.candidatesTokenCount } : {}),
+    };
+  }
   return result;
 }
 
