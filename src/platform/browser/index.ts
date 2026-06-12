@@ -235,6 +235,8 @@ export const browserPlatform: Platform = {
     relaunch: async () => { window.location.reload(); },
   },
 
+  openExternal: async (url: string) => { window.open(url, '_blank', 'noopener'); },
+
   compliance: {
     purgeProjectData: async () => ({ audit_redacted: 0 }),
   },

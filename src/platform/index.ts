@@ -181,6 +181,10 @@ export interface Platform {
     relaunch(): Promise<void>;
   };
 
+  // Open a URL in the system's default browser — the desktop build hands off to
+  // the OS via the opener plugin (no in-app navigation); the browser opens a tab.
+  openExternal(url: string): Promise<void>;
+
   // Compliance
   compliance: {
     purgeProjectData(projectId: string): Promise<Record<string, number>>;

@@ -374,6 +374,65 @@
 .settings-status ul li span:first-child {
   color: var(--hc-fg-dim);
 }
+/* The Hash ecosystem — sibling apps in Settings > System */
+.settings-eco header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-eco header strong { font-size: 12px; color: var(--hc-fg); }
+.settings-eco header span { font-size: 10px; color: var(--hc-fg-muted); letter-spacing: .03em; }
+.settings-eco ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+.settings-eco ul li button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: .15s;
+  font: inherit;
+}
+.settings-eco ul li button:hover {
+  border-color: var(--hc-accent, #14a89a);
+  background: rgba(20, 168, 154, 0.07);
+  transform: translateY(-1px);
+}
+.settings-eco .eco-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hc-fg);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.settings-eco .eco-name em {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--hc-accent, #14a89a);
+  border: 1px solid color-mix(in srgb, var(--hc-accent, #14a89a) 40%, transparent);
+  border-radius: 9px;
+  padding: 1px 6px;
+  font-weight: 700;
+}
+.settings-eco .eco-desc {
+  font-size: 11px;
+  color: var(--hc-fg-muted);
+  line-height: 1.45;
+}
 .settings-cache header,
 .settings-audit header {
   display: flex;

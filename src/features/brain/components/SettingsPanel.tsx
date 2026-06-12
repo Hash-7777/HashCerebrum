@@ -570,6 +570,35 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </section>
         )}
 
+        {tab === 'dev' && (
+          <section className="settings-eco" aria-label="The Hash ecosystem">
+            <header>
+              <strong>The Hash ecosystem</strong>
+              <span>Sibling apps by the same developer</span>
+            </header>
+            <ul>
+              <li>
+                <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashCerebrum')}>
+                  <span className="eco-name">HashCerebrum <em>this app</em></span>
+                  <span className="eco-desc">Local-first medical-research workbench with a 3D brain interface.</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashCortX')}>
+                  <span className="eco-name">HashCortX</span>
+                  <span className="eco-desc">The local-first AI workspace — eleven modes, ten providers, zero telemetry.</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashMeterAi')}>
+                  <span className="eco-name">HashMeterAi</span>
+                  <span className="eco-desc">See how much AI you really use — the honest local usage meter. Reads HashCerebrum's usage log.</span>
+                </button>
+              </li>
+            </ul>
+          </section>
+        )}
+
         {tab === 'dev' && <ErrorConsole />}
       </div>
 

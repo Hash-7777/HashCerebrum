@@ -220,6 +220,8 @@ export const tauriPlatform: Platform = {
     relaunch: () => invoke<void>('app_relaunch'),
   },
 
+  openExternal: (url: string) => invoke<void>('plugin:opener|open_url', { url }),
+
   compliance: {
     purgeProjectData: (projectId: string) =>
       invoke<Record<string, number>>('purge_project_data', { projectId }),
