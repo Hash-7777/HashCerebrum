@@ -39,13 +39,13 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Paths — cross-platform data dirs (audit log, sqlite cache)
-dirs        = "5"
+dirs        = "6"
 shellexpand = "3"
 
 # OS keychain — keyring crate for Linux/Windows; macOS uses
 # security-framework directly (see target block) to avoid
 # binary-bound ACLs that lose keys after each rebuild.
-keyring = "3"
+keyring = "4"
 
 # HTTP — all external network goes through Rust, never the renderer
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
@@ -64,7 +64,7 @@ dashmap     = "6"
 uuid        = { version = "1", features = ["v4"] }
 
 # Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
-sha2 = "0.10"
+sha2 = "0.11"
 hex  = "0.4"
 
 # Logging — structured, never prints secrets
@@ -72,7 +72,7 @@ tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Error handling
-thiserror = "1"
+thiserror = "2"
 anyhow    = "1"
 
 # URL parsing for net guard host allowlist
@@ -80,7 +80,7 @@ url = "2"
 
 # PDF text extraction — Librarian agent feeds extracted text back to
 # the model for citation grounding. lopdf is pure-Rust, no native deps.
-lopdf = "0.34"
+lopdf = "0.41"
 
 # Typst — embedded typesetting engine for journal-grade manuscript PDFs.
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
@@ -92,7 +92,7 @@ typst-assets = { version = "0.14", features = ["fonts"] }
 
 # macOS: direct keychain access (avoid binary-bound ACL)
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2"
+security-framework = "3"
 
 [profile.release]
 strip         = true
