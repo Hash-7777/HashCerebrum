@@ -330,8 +330,10 @@ export const useRagStore = create<RagStore>((set, get) => ({
           // Embed the ORIGINAL query, not the synonym-expanded one: appending a
           // long list of brand/generic synonyms drifts the meaning vector away
           // from what the user actually asked, blunting semantic retrieval. The
-          // expansion still widens the LEXICAL match below.
-          const [vec] = await provider.embed([query]);
+          // expansion still widens the LEXICAL match below. 'query' kind applies
+          // the model's asymmetric-retrieval instruction (a no-op for models
+          // that define none).
+          const [vec] = await provider.embed([query], 'query');
           queryVector = vec ?? null;
           if (queryVector) setCachedQueryVector(query, queryVector);
         }

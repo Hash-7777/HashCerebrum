@@ -69,6 +69,8 @@ export interface EmbeddingProvider {
   readonly ready: boolean;
   /** Begin loading the model. Safe to call repeatedly; resolves when ready. */
   warmup(): Promise<void>;
-  /** Embed texts into normalised vectors, in input order. */
-  embed(texts: string[]): Promise<EmbeddingVector[]>;
+  /** Embed texts into normalised vectors, in input order. `kind` selects the
+   *  asymmetric-retrieval treatment: 'query' applies the model's query
+   *  instruction, 'passage' (default) embeds bare. */
+  embed(texts: string[], kind?: 'query' | 'passage'): Promise<EmbeddingVector[]>;
 }

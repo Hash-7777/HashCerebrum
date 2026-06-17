@@ -79,7 +79,7 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
     return this.warmPromise;
   }
 
-  async embed(texts: string[]): Promise<EmbeddingVector[]> {
+  async embed(texts: string[], kind: 'query' | 'passage' = 'passage'): Promise<EmbeddingVector[]> {
     if (texts.length === 0) return [];
     const worker = this.ensureWorker();
     if (!worker) return [];
@@ -89,7 +89,7 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
     const id = (this.seq += 1);
     return new Promise<EmbeddingVector[]>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      worker.postMessage({ type: 'embed', id, texts });
+      worker.postMessage({ type: 'embed', id, texts, kind });
     });
   }
 

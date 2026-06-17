@@ -6,7 +6,13 @@
 // fully offline and zero-egress. The model weights ship with the app.
 
 import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
-import { EMBED_LOCAL_PATH, EMBED_MODEL, EMBED_MODEL_FALLBACK } from '../core/rag/model.config';
+import {
+  EMBED_LOCAL_PATH,
+  EMBED_MODEL,
+  EMBED_MODEL_FALLBACK,
+  applyQueryInstruction,
+  type EmbeddingModelConfig,
+} from '../core/rag/model.config';
 
 // Never reach the network: only the bundled local model is allowed.
 env.allowRemoteModels = false;
@@ -23,14 +29,17 @@ const ctx = globalThis as unknown as WorkerScope;
 
 let extractor: FeatureExtractionPipeline | null = null;
 let loadFailed = false;
+// Which config actually loaded — its queryInstruction is applied to query text.
+let loadedConfig: EmbeddingModelConfig = EMBED_MODEL;
 
 async function ensureModel(): Promise<FeatureExtractionPipeline> {
   if (extractor) return extractor;
   let lastError: unknown;
-  for (const id of [EMBED_MODEL.id, EMBED_MODEL_FALLBACK.id]) {
+  for (const config of [EMBED_MODEL, EMBED_MODEL_FALLBACK]) {
     try {
       // q8 = the int8-quantised ONNX (~33 MB) rather than the fp32 weights.
-      extractor = await pipeline('feature-extraction', id, { dtype: 'q8' });
+      extractor = await pipeline('feature-extraction', config.id, { dtype: 'q8' });
+      loadedConfig = config;
       return extractor;
     } catch (error) {
       lastError = error;
@@ -41,7 +50,7 @@ async function ensureModel(): Promise<FeatureExtractionPipeline> {
 }
 
 ctx.addEventListener('message', (event: MessageEvent) => {
-  const msg = event.data as { type?: string; id?: number; texts?: string[] } | null;
+  const msg = event.data as { type?: string; id?: number; texts?: string[]; kind?: 'query' | 'passage' } | null;
   if (!msg || typeof msg.type !== 'string') return;
 
   if (msg.type === 'warmup') {
@@ -58,9 +67,14 @@ ctx.addEventListener('message', (event: MessageEvent) => {
 
   if (msg.type === 'embed' && typeof msg.id === 'number' && Array.isArray(msg.texts)) {
     const id = msg.id;
-    const texts = msg.texts;
+    const rawTexts = msg.texts;
+    const kind = msg.kind ?? 'passage';
     ensureModel()
       .then(async (model) => {
+        // Asymmetric retrieval: apply the loaded model's query instruction to
+        // query text only; passages are always embedded bare.
+        const texts =
+          kind === 'query' ? rawTexts.map((t) => applyQueryInstruction(t, loadedConfig)) : rawTexts;
         const output = await model(texts, { pooling: 'mean', normalize: true });
         const dims = output.dims as number[];
         const data = output.data as Float32Array;
