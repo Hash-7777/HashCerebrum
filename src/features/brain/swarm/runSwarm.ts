@@ -10,6 +10,7 @@ import { setMemoryScope, clearMemoryScope } from '@core/tools/memoryScope';
 import { retrieve, smartRetrieve } from '@core/rag';
 import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
+import { studyTopGaps } from '@core/rag/agentic/studyEngine';
 import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { platform, type EvidenceItem } from '@platform/index';
@@ -870,6 +871,19 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
         .filter((h): h is string => !!h),
     });
     useLearningStore.getState().addEpisode(episode);
+
+    // Autonomous study: when memory is on, drain this project's top open gaps in
+    // the background so the next query on those topics finds the agent already
+    // prepared. Fire-and-forget on idle; failures are silent. Gated by memory so
+    // a clean "from scratch" session never triggers background fetches.
+    if (useMemorySettingsStore.getState().enabled) {
+      const study = () => {
+        void studyTopGaps(projectId).catch(() => {});
+      };
+      const w = typeof window !== 'undefined' ? window : undefined;
+      if (w && typeof w.requestIdleCallback === 'function') w.requestIdleCallback(study, { timeout: 4000 });
+      else setTimeout(study, 0);
+    }
   }
 
   return {
