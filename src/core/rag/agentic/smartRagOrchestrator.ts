@@ -21,6 +21,7 @@ import { graphFromChunk, mergeGraph } from './knowledgeGraph';
 import { updateReliabilityMap } from './sourceReliability';
 import { enqueueGap } from './learningQueue';
 import { useLearningStore } from './learningStore';
+import { applyLearnedPriors } from './learnedPriors';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
 import { detectConflicts, type ClaimConflict } from './conflictDetector';
@@ -120,7 +121,15 @@ export async function smartRetrieve(
 
   let hits = mergeHits(pools);
   hits = scoreHits(hits, plan);
-  hits.sort((a, b) => b.score - a.score);
+  // Close the learning loop: re-weight the candidates by what prior runs have
+  // learned (source reliability, corroborated beliefs, knowledge-graph
+  // centrality) before truncating to the final set. A cold store is a no-op.
+  const learned = useLearningStore.getState();
+  hits = applyLearnedPriors(hits, {
+    beliefs: learned.beliefs,
+    sourceReliability: learned.sourceReliability,
+    graphNodes: learned.graphNodes,
+  });
   hits = hits.slice(0, limit);
 
   // 3. Coverage assessment
