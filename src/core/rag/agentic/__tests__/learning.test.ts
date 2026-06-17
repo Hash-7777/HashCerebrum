@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { claimFingerprint, createBelief, mergeBelief, updateBeliefs, topBeliefs } from '../beliefState';
 import { buildBuckets, detectFlips, buildConsensusSummary } from '../consensusTimeline';
-import { extractEntities, extractRelations, graphFromChunk, mergeGraph } from '../knowledgeGraph';
+import { extractEntities, extractRelations, extractGeneSymbols, graphFromChunk, mergeGraph } from '../knowledgeGraph';
 import { updateReliabilityMap, flagRetraction } from '../sourceReliability';
 import { createEpisode, findSimilarEpisodes, hasSignificantGapChange } from '../episodicMemory';
 import { enqueueGap, resolveItem, topPending } from '../learningQueue';
@@ -170,6 +170,35 @@ describe('extractRelations', () => {
   it('finds treatment relations', () => {
     const rels = extractRelations('Metformin reduces diabetes risk.', 'c1');
     expect(rels.some((r) => r.relation === 'treats')).toBe(true);
+  });
+});
+
+describe('extractGeneSymbols', () => {
+  it('catches an arbitrary gene in a gene-context window (MICA)', () => {
+    expect(extractGeneSymbols('The MICA gene polymorphism was associated with risk.')).toContain('mica');
+  });
+
+  it('catches digit-bearing gene symbols without context (TP53, BRCA1)', () => {
+    const genes = extractGeneSymbols('Mutations in TP53 and BRCA1 were frequent.');
+    expect(genes).toContain('tp53');
+    expect(genes).toContain('brca1');
+  });
+
+  it('does not hallucinate genes from study/stat acronyms', () => {
+    const genes = extractGeneSymbols('The RCT used PCR and ELISA; the 95% CI was reported.');
+    expect(genes).not.toContain('rct');
+    expect(genes).not.toContain('pcr');
+    expect(genes).not.toContain('elisa');
+  });
+
+  it('requires gene context for a bare uppercase token', () => {
+    // "MICA" with no gene-context language nearby is not flagged.
+    expect(extractGeneSymbols('The MICA results were unclear here.')).not.toContain('mica');
+  });
+
+  it('types a contextual gene as a gene node via extractEntities', () => {
+    const entities = extractEntities('The MTHFR gene variant raised homocysteine.');
+    expect(entities.some((e) => e.word === 'mthfr' && e.type === 'gene')).toBe(true);
   });
 });
 

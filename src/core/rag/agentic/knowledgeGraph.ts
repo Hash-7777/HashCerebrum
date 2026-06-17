@@ -123,15 +123,74 @@ function classifyEntity(word: string): GraphNodeType {
   return 'unknown';
 }
 
+// --- General gene-symbol detection ----------------------------------------
+// The fixed word-lists above cannot grow to every gene that exists, so the
+// graph was blind to any gene outside the hardcoded biomarker list (e.g. MICA,
+// MTHFR, HLA-B27) — silently breaking the gene-agnostic promise. This catches
+// arbitrary HUGO-style symbols deterministically (no model, Ollama-friendly):
+// an uppercase token is treated as a gene when it either carries a digit (TP53,
+// BRCA1, IL6) or sits next to gene-context language ("MICA gene polymorphism").
+
+// Acronyms that look gene-shaped but are study/stat/assay terms, never genes.
+const NON_GENE = new Set([
+  'DNA', 'RNA', 'MRNA', 'CDNA', 'PCR', 'QPCR', 'ELISA', 'RCT', 'SNP', 'SNPS',
+  'BMI', 'LDL', 'HDL', 'VLDL', 'ECG', 'EKG', 'EEG', 'MRI', 'PET', 'USA', 'WHO',
+  'FDA', 'NIH', 'PMID', 'DOI', 'ICU', 'HBA1C', 'A1C', 'T2DM', 'T1DM', 'COVID',
+  'SARS', 'HIV', 'AIDS', 'COPD', 'CKD', 'CAD', 'CHF', 'GERD', 'NSAID', 'NSAIDS',
+  'GFR', 'CI', 'SD', 'SEM', 'IQR', 'NNT', 'NNH',
+]);
+
+// A gene-symbol-shaped token: starts with a letter, 3–10 upper-alphanumerics,
+// optional hyphenated allele suffix (HLA-B27, IL-6R).
+const GENE_SHAPE = /^[A-Z][A-Z0-9]{2,9}(?:-[A-Z0-9]{1,4})?$/;
+const GENE_CONTEXT =
+  /\b(?:gene|genes|polymorphism|polymorphisms|variant|variants|allele|alleles|genotype|genotypes|mutation|mutations|locus|loci|haplotype|haplotypes)\b/i;
+const TOKEN_RX = /\b[A-Z][A-Za-z0-9-]{2,11}\b/g;
+
+function looksLikeGene(token: string): boolean {
+  if (!GENE_SHAPE.test(token)) return false;
+  if (NON_GENE.has(token)) return false;
+  // Exclude hyphenated acronyms whose base is a non-gene term (e.g. COVID-19).
+  const base = token.split('-')[0]!;
+  if (NON_GENE.has(base)) return false;
+  return true;
+}
+
+/** Gene symbols carrying a digit (TP53) or appearing in a gene context window. */
+export function extractGeneSymbols(text: string): string[] {
+  const out = new Set<string>();
+  let m: RegExpExecArray | null;
+  TOKEN_RX.lastIndex = 0;
+  while ((m = TOKEN_RX.exec(text)) !== null) {
+    const token = m[0]!;
+    if (!looksLikeGene(token)) continue;
+    const hasDigit = /[0-9]/.test(token);
+    if (hasDigit) {
+      out.add(token.toLowerCase());
+      continue;
+    }
+    // No digit → require nearby gene-context language to avoid acronym noise.
+    const window = text.slice(Math.max(0, m.index - 40), m.index + token.length + 40);
+    if (GENE_CONTEXT.test(window)) out.add(token.toLowerCase());
+  }
+  return [...out];
+}
+
 export function extractEntities(text: string): Array<{ word: string; type: GraphNodeType }> {
-  const words = new Set<string>();
-  for (const w of extractMatches(text, DRUG_RX)) words.add(w);
-  for (const w of extractMatches(text, CONDITION_RX)) words.add(w);
-  for (const w of extractMatches(text, OUTCOME_RX)) words.add(w);
-  for (const w of extractMatches(text, POPULATION_RX)) words.add(w);
-  for (const w of extractMatches(text, BIOMARKER_RX)) words.add(w);
-  for (const w of extractMatches(text, INTERVENTION_RX)) words.add(w);
-  return [...words].map((w) => ({ word: w, type: classifyEntity(w) }));
+  const typed = new Map<string, GraphNodeType>();
+  const add = (w: string, t: GraphNodeType) => {
+    if (!typed.has(w)) typed.set(w, t);
+  };
+  for (const w of extractMatches(text, DRUG_RX)) add(w, 'drug');
+  for (const w of extractMatches(text, CONDITION_RX)) add(w, classifyEntity(w));
+  for (const w of extractMatches(text, OUTCOME_RX)) add(w, classifyEntity(w));
+  for (const w of extractMatches(text, POPULATION_RX)) add(w, classifyEntity(w));
+  for (const w of extractMatches(text, BIOMARKER_RX)) add(w, classifyEntity(w));
+  for (const w of extractMatches(text, INTERVENTION_RX)) add(w, classifyEntity(w));
+  // General gene symbols, but never override a term the curated lists already
+  // typed (e.g. a digit-bearing condition like t2dm stays a condition).
+  for (const w of extractGeneSymbols(text)) add(w, 'gene');
+  return [...typed.entries()].map(([word, type]) => ({ word, type: type === 'unknown' ? classifyEntity(word) : type }));
 }
 
 export function extractRelations(text: string, _chunkId: string): Array<{ source: string; target: string; relation: GraphEdgeRelation }> {
