@@ -22,6 +22,7 @@ import { updateReliabilityMap } from './sourceReliability';
 import { enqueueGap } from './learningQueue';
 import { useLearningStore } from './learningStore';
 import { applyLearnedPriors } from './learnedPriors';
+import { recallPriorBeliefs } from './priorRecall';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
 import { detectConflicts, type ClaimConflict } from './conflictDetector';
@@ -37,6 +38,8 @@ export interface SmartRetrieveResult {
   gapNote: string | null;
   /** True when a gap-filling re-retrieval round was triggered for this query. */
   reRetrieved: boolean;
+  /** What the agent already believes about the touched chunks (or null). */
+  priorMemoryNote: string | null;
 }
 
 export interface SmartRetrieveOptions {
@@ -200,6 +203,13 @@ export async function smartRetrieve(
   if (reRetrieved) {
     parts.push('Ran a gap-filling re-retrieval round for under-covered concepts.');
   }
+  // Recall what the agent already believes about the chunks in this set, so the
+  // answering model can corroborate or challenge prior conclusions.
+  const priorMemoryNote = recallPriorBeliefs(
+    chunks.map((c) => c.id),
+    learned.beliefs,
+  );
+  if (priorMemoryNote) parts.push(priorMemoryNote);
 
   const gapNote = parts.length > 0 ? parts.join(' ') : null;
 
@@ -215,6 +225,7 @@ export async function smartRetrieve(
     citations,
     gapNote,
     reRetrieved,
+    priorMemoryNote,
   };
 }
 
