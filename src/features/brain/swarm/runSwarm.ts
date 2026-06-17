@@ -7,7 +7,7 @@
 import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { setMemoryScope, clearMemoryScope } from '@core/tools/memoryScope';
-import { retrieve, smartRetrieve } from '@core/rag';
+import { retrieve, smartRetrieve, useRagStore, parentWindowText } from '@core/rag';
 import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { studyTopGaps } from '@core/rag/agentic/studyEngine';
@@ -428,6 +428,9 @@ async function libraryEvidence(question: string, model?: string): Promise<{ evid
   } catch {
     return { evidence: [], gapNote: null };
   }
+  // The whole corpus, so each retrieved passage can be expanded with its
+  // immediate same-document neighbours (parent window) before it is cited.
+  const allChunks = useRagStore.getState().chunks;
   const seen = new Set<string>();
   const out: EvidenceItem[] = [];
   for (const { chunk } of hits) {
@@ -444,7 +447,7 @@ async function libraryEvidence(question: string, model?: string): Promise<{ evid
         ...(chunk.doi ? { doi: chunk.doi } : {}),
         ...(chunk.page ? { page: String(chunk.page) } : {}),
       },
-      snippet: chunk.text.slice(0, 600),
+      snippet: parentWindowText(chunk, allChunks, 1).slice(0, 900),
       ...(chunk.year != null ? { year: chunk.year } : {}),
       ...(chunk.url ? { url: chunk.url } : {}),
       fetchedAt: chunk.createdAt,

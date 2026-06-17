@@ -20,6 +20,7 @@ export type {
 
 export { useRagStore, getChunkVectors, type LibraryDocument } from './store/ragStore';
 export { lexicalSearch, tokenize } from './search/lexical';
+export { parentWindowText } from './search/parentWindow';
 export { getEmbeddingProvider } from './embeddings/workerClient';
 export { classifyEvidenceStrength } from './search/ranking';
 export {
