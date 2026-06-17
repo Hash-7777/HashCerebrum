@@ -25,8 +25,8 @@ vi.mock('../learningStore', () => ({
 
 import { smartRetrieve } from '../smartRagOrchestrator';
 
-function chunk(id: string, text: string): RagChunk {
-  return { id, projectId: 'p1', kind: 'evidence', title: '', text, source: 'pubmed', createdAt: '2024-01-01' };
+function chunk(id: string, text: string, year?: number): RagChunk {
+  return { id, projectId: 'p1', kind: 'evidence', title: '', text, source: 'pubmed', createdAt: '2024-01-01', ...(year ? { year } : {}) };
 }
 
 function hit(c: RagChunk): RagSearchHit {
@@ -35,6 +35,7 @@ function hit(c: RagChunk): RagSearchHit {
 
 beforeEach(() => {
   searchHybrid.mockReset();
+  learningState.beliefs = [];
 });
 
 describe('smartRetrieve gap-filling round', () => {
@@ -69,5 +70,37 @@ describe('smartRetrieve gap-filling round', () => {
     });
 
     expect(result.reRetrieved).toBe(false);
+  });
+});
+
+describe('smartRetrieve consensus-over-time note', () => {
+  it('reports how consensus shifted across years', async () => {
+    learningState.beliefs = [
+      {
+        id: 'b1', claimFingerprint: 'b1', representativeText: 'aspirin improved outcomes with lower risk',
+        beliefScore: 0.8, supportingChunks: ['p2010'], conflictingChunks: [], revisionCount: 3,
+        firstSeenAt: '', lastUpdatedAt: '',
+      },
+      {
+        id: 'b2', claimFingerprint: 'b2', representativeText: 'aspirin increased risk with no benefit',
+        beliefScore: 0.8, supportingChunks: ['p2020'], conflictingChunks: [], revisionCount: 3,
+        firstSeenAt: '', lastUpdatedAt: '',
+      },
+    ];
+    searchHybrid.mockResolvedValue([
+      hit(chunk('p2010', 'aspirin primary prevention improved outcomes lower risk', 2010)),
+      hit(chunk('p2020', 'aspirin primary prevention increased risk no benefit', 2020)),
+    ]);
+
+    const result = await smartRetrieve('aspirin primary prevention', { activeProjectId: 'p1', limit: 8 });
+
+    expect(result.consensusNote).toBeTruthy();
+    expect(result.consensusNote).toContain('consensus');
+  });
+
+  it('returns no consensus note without multi-year data', async () => {
+    searchHybrid.mockResolvedValue([hit(chunk('c1', 'aspirin primary prevention benefit'))]);
+    const result = await smartRetrieve('aspirin primary prevention', { activeProjectId: 'p1', limit: 8 });
+    expect(result.consensusNote).toBeNull();
   });
 });

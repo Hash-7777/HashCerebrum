@@ -14,6 +14,7 @@
  */
 
 import type { RagChunk, RagSearchHit } from '../types';
+import type { BeliefState } from './types';
 import { useRagStore } from '../store/ragStore';
 import { planQuery, type QueryPlan } from './queryPlanner';
 import { updateBeliefs } from './beliefState';
@@ -23,6 +24,7 @@ import { enqueueGap } from './learningQueue';
 import { useLearningStore } from './learningStore';
 import { applyLearnedPriors } from './learnedPriors';
 import { recallPriorBeliefs } from './priorRecall';
+import { buildBuckets, buildConsensusSummary } from './consensusTimeline';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
 import { detectConflicts, type ClaimConflict } from './conflictDetector';
@@ -40,6 +42,8 @@ export interface SmartRetrieveResult {
   reRetrieved: boolean;
   /** What the agent already believes about the touched chunks (or null). */
   priorMemoryNote: string | null;
+  /** How the evidence consensus on this topic shifted over time (or null). */
+  consensusNote: string | null;
 }
 
 export interface SmartRetrieveOptions {
@@ -211,6 +215,12 @@ export async function smartRetrieve(
   );
   if (priorMemoryNote) parts.push(priorMemoryNote);
 
+  // Consensus over time — bucket the beliefs this set touches by publication
+  // year and report how the dominant direction shifted. A genuine edge: a
+  // stateless retriever cannot tell the model "consensus flipped in 2019".
+  const consensusNote = buildConsensusNote(chunks, learned.beliefs);
+  if (consensusNote) parts.push(consensusNote);
+
   const gapNote = parts.length > 0 ? parts.join(' ') : null;
 
   // 8. Update learning store (beliefs, graph, reliability, gaps)
@@ -226,7 +236,25 @@ export async function smartRetrieve(
     gapNote,
     reRetrieved,
     priorMemoryNote,
+    consensusNote,
   };
+}
+
+/**
+ * Build a consensus-over-time note from the beliefs the retrieved chunks touch,
+ * dated by each chunk's publication year. Returns null unless at least two
+ * distinct years are represented (a single year is not a trend).
+ */
+function buildConsensusNote(chunks: RagChunk[], beliefs: BeliefState[]): string | null {
+  const years: Record<string, number> = {};
+  for (const c of chunks) {
+    const y = typeof c.year === 'string' ? Number.parseInt(c.year, 10) : c.year;
+    if (y && Number.isFinite(y)) years[c.id] = y;
+  }
+  if (Object.keys(years).length === 0) return null;
+  const buckets = buildBuckets(beliefs, years);
+  if (buckets.length < 2) return null;
+  return buildConsensusSummary(buckets);
 }
 
 function updateLearningState(
