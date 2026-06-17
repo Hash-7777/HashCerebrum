@@ -17,6 +17,7 @@ import type {
   LearningQueueItem,
   SemanticDriftRecord,
 } from './types';
+import { reinforceSources, reinforceBeliefs, type Reinforcement } from './reinforcement';
 
 const LEARNING_KEY = 'hc.learning.v1';
 
@@ -48,6 +49,8 @@ interface LearningStore extends LearningStoreState {
   // Source reliability
   setSourceReliability: (map: Record<string, SourceReliability>) => void;
   reliabilityScore: (source: string) => number;
+  // Reinforcement from explicit user curation (prune = penalty, undo = reward)
+  reinforceFromChunks: (chunks: { id: string; source: string }[], dir: Reinforcement) => void;
   // Episodes
   addEpisode: (episode: ResearchEpisode) => void;
   similarEpisodes: (query: string, limit?: number) => ResearchEpisode[];
@@ -148,6 +151,17 @@ export const useLearningStore = create<LearningStore>((set, get) => ({
     persist(get());
   },
   reliabilityScore: (source) => get().sourceReliability[source]?.score ?? 0.5,
+
+  reinforceFromChunks: (chunks, dir) => {
+    if (chunks.length === 0) return;
+    const sources = chunks.map((c) => c.source);
+    const ids = chunks.map((c) => c.id);
+    set((state) => ({
+      sourceReliability: reinforceSources(state.sourceReliability, sources, dir),
+      beliefs: reinforceBeliefs(state.beliefs, ids, dir),
+    }));
+    persist(get());
+  },
 
   addEpisode: (episode) => {
     set((state) => ({ episodes: [episode, ...state.episodes].slice(0, 500) }));

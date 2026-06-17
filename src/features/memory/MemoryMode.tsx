@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getChunkVectors, lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
 import { getEmbeddingProvider } from '@core/rag/embeddings/workerClient';
+import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
@@ -104,6 +105,9 @@ export function MemoryMode() {
   const [pruneComputing, setPruneComputing] = useState(false);
   const [pruneBusy, setPruneBusy] = useState(false);
   const [undoCount, setUndoCount] = useState<number | null>(null);
+  // Descriptors of the most recently pruned chunks, so an undo can reverse the
+  // reinforcement signal it sent to the learning layer.
+  const lastPrunedRef = useRef<{ id: string; source: string }[]>([]);
 
   const prunePlan = useMemo(
     () =>
@@ -158,11 +162,18 @@ export function MemoryMode() {
 
   const confirmPrune = (ids: string[]) => {
     setPruneBusy(true);
+    // Capture what is being pruned BEFORE removal, so the learning layer can
+    // treat the user's curation as an explicit negative reward signal.
+    const idSet = new Set(ids);
+    const pruned = chunks.filter((c) => idSet.has(c.id)).map((c) => ({ id: c.id, source: c.source }));
     const removed = pruneChunks(ids);
     setPruneBusy(false);
     setPruneCtx(null);
-    if (removed > 0) setUndoCount(removed);
-    else useToastStore.getState().show('Nothing was pruned', 'info');
+    if (removed > 0) {
+      setUndoCount(removed);
+      lastPrunedRef.current = pruned;
+      useLearningStore.getState().reinforceFromChunks(pruned, 'penalty');
+    } else useToastStore.getState().show('Nothing was pruned', 'info');
   };
 
   const deleteAll = () => {
@@ -178,6 +189,11 @@ export function MemoryMode() {
   const handleUndo = () => {
     const restored = undoLastPrune();
     setUndoCount(null);
+    if (restored > 0 && lastPrunedRef.current.length > 0) {
+      // Undoing a prune reverses the signal: the user values these after all.
+      useLearningStore.getState().reinforceFromChunks(lastPrunedRef.current, 'reward');
+      lastPrunedRef.current = [];
+    }
     useToastStore.getState().show(
       restored > 0 ? `Restored ${restored} ${restored === 1 ? 'finding' : 'findings'}` : 'Nothing to restore',
       'info',
