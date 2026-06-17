@@ -35,6 +35,8 @@ export interface SmartRetrieveResult {
   conflicts: ClaimConflict[];
   citations: TraversalResult;
   gapNote: string | null;
+  /** True when a gap-filling re-retrieval round was triggered for this query. */
+  reRetrieved: boolean;
 }
 
 export interface SmartRetrieveOptions {
@@ -47,6 +49,9 @@ export interface SmartRetrieveOptions {
 
 const SUBQUERY_LIMIT = 6;
 const MAX_SUB_QUERIES = 3;
+// How many missing concepts get their own gap-filling search in the single
+// re-retrieval round. Keeps the extra latency/token cost bounded.
+const MAX_GAP_QUERIES = 2;
 
 function dedupeHits(hits: RagSearchHit[]): RagSearchHit[] {
   const seen = new Set<string>();
@@ -119,22 +124,53 @@ export async function smartRetrieve(
     }
   }
 
-  let hits = mergeHits(pools);
-  hits = scoreHits(hits, plan);
   // Close the learning loop: re-weight the candidates by what prior runs have
   // learned (source reliability, corroborated beliefs, knowledge-graph
   // centrality) before truncating to the final set. A cold store is a no-op.
   const learned = useLearningStore.getState();
-  hits = applyLearnedPriors(hits, {
+  const learnedState = {
     beliefs: learned.beliefs,
     sourceReliability: learned.sourceReliability,
     graphNodes: learned.graphNodes,
-  });
-  hits = hits.slice(0, limit);
+  };
+  const rankPools = (): RagSearchHit[] => {
+    const merged = applyLearnedPriors(scoreHits(mergeHits(pools), plan), learnedState);
+    return merged.slice(0, limit);
+  };
+
+  let hits = rankPools();
 
   // 3. Coverage assessment
-  const chunks = hits.map((h) => h.chunk);
-  const coverage = assessCoverage(query, chunks);
+  let chunks = hits.map((h) => h.chunk);
+  let coverage = assessCoverage(query, chunks);
+  let reRetrieved = false;
+
+  // 3b. Gap-filling round — make retrieval actually agentic. When coverage is
+  // poor, fire ONE more bounded round of searches aimed squarely at the missing
+  // concepts, fold the results into the candidate pool, and re-rank. Single
+  // extra round keeps the token/latency budget fixed; deterministic, so it runs
+  // the same on Ollama as on cloud models.
+  if (coverage.needsReRetrieve && coverage.missingConcepts.length > 0) {
+    const gapQueries = coverage.missingConcepts
+      .slice(0, MAX_GAP_QUERIES)
+      .map((concept) => `${concept} ${query}`);
+    const gapResults = await Promise.allSettled(
+      gapQueries.map((gq) => doRetrieve(gq, retrieveLimit, tag)),
+    );
+    let widened = false;
+    for (const r of gapResults) {
+      if (r.status === 'fulfilled' && r.value.length > 0) {
+        pools.push(r.value);
+        widened = true;
+      }
+    }
+    if (widened) {
+      reRetrieved = true;
+      hits = rankPools();
+      chunks = hits.map((h) => h.chunk);
+      coverage = assessCoverage(query, chunks);
+    }
+  }
 
   // 4. Claim extraction
   const claims = chunks.flatMap((chunk) => extractClaims(chunk));
@@ -161,6 +197,9 @@ export async function smartRetrieve(
   if (citations.resolvedHits.length > 0) {
     parts.push(`Followed ${citations.resolvedHits.length} in-memory citation${citations.resolvedHits.length === 1 ? '' : 's'}.`);
   }
+  if (reRetrieved) {
+    parts.push('Ran a gap-filling re-retrieval round for under-covered concepts.');
+  }
 
   const gapNote = parts.length > 0 ? parts.join(' ') : null;
 
@@ -175,6 +214,7 @@ export async function smartRetrieve(
     conflicts,
     citations,
     gapNote,
+    reRetrieved,
   };
 }
 
