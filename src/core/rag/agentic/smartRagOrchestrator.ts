@@ -25,6 +25,7 @@ import { useLearningStore } from './learningStore';
 import { applyLearnedPriors } from './learnedPriors';
 import { recallPriorBeliefs } from './priorRecall';
 import { buildBuckets, buildConsensusSummary } from './consensusTimeline';
+import { reasoningRerank, conflictedChunkIds } from './reasoningRerank';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
 import { detectConflicts, type ClaimConflict } from './conflictDetector';
@@ -184,6 +185,13 @@ export async function smartRetrieve(
 
   // 5. Conflict detection
   const conflicts = detectConflicts(claims);
+
+  // 5b. Reasoning rerank — a final, model-free rerank that refines the order of
+  // the retrieved set by claim density, conflict salience, and source diversity
+  // (the kind of signal a cross-encoder adds, without the cost). Reorders the
+  // same hits, so claims/conflicts/coverage computed above stay valid.
+  hits = reasoningRerank(hits, { claims, conflictedChunkIds: conflictedChunkIds(claims, conflicts) });
+  chunks = hits.map((h) => h.chunk);
 
   // 6. Citation traversal
   const citations = traverseCitations(chunks);
