@@ -6,8 +6,13 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: height 220ms var(--hc-ease);
+  /* Slow, smooth ease-in-out so opening/closing glides instead of snapping. */
+  transition: height 420ms cubic-bezier(0.33, 0, 0.2, 1);
+  will-change: height;
   z-index: 30;
+}
+@media (prefers-reduced-motion: reduce) {
+  .execution-trace { transition: none; }
 }
 .execution-trace.collapsed { height: 32px; }
 .execution-trace.expanded { height: 202px; }
