@@ -300,11 +300,24 @@ function PdfCanvasView({
     void (async () => {
       try {
         const { renderPdfToCanvases } = await import('@ui/pdf/pdfCanvas');
-        const { rendered } = await renderPdfToCanvases(url, host, () => cancelled, {
+        const { rendered, pageCount } = await renderPdfToCanvases(url, host, () => cancelled, {
           canvasClassName: 'document-preview-page',
         });
-        if (!cancelled) setStatus(rendered > 0 ? 'ready' : 'error');
-      } catch {
+        if (!cancelled) {
+          if (rendered > 0) setStatus('ready');
+          else {
+            // Rasterised zero pages — surface why instead of silently dropping
+            // to the HTML render (a real failure, not debug noise).
+            console.warn(`[pdf-preview] rasterised 0 of ${pageCount} page(s); falling back to HTML.`);
+            setStatus('error');
+          }
+        }
+      } catch (err) {
+        // The PDF could not be parsed/rendered — most often the blob is actually
+        // the HTML fallback produced when PDF generation failed, or the pdf.js
+        // worker did not load under the app CSP. Log the real reason so it is not
+        // an invisible regression.
+        console.warn('[pdf-preview] pdf.js rasterisation failed, falling back to HTML:', err);
         if (!cancelled) setStatus('error');
       }
     })();
