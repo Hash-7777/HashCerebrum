@@ -33,6 +33,14 @@ describe('errorLogStore', () => {
     expect(useErrorLogStore.getState().errors[0]!.message).toBe('Unknown error');
   });
 
+  it('records the level, defaulting to error and accepting warn', () => {
+    const { push } = useErrorLogStore.getState();
+    push({ source: 'console', message: 'an error' });
+    expect(useErrorLogStore.getState().errors[0]!.level).toBe('error');
+    push({ source: 'console', message: 'a warning', level: 'warn' });
+    expect(useErrorLogStore.getState().errors[0]!.level).toBe('warn');
+  });
+
   it('clear empties the log', () => {
     useErrorLogStore.getState().push({ source: 'window', message: 'x' });
     useErrorLogStore.getState().clear();
