@@ -29,6 +29,7 @@ import type {
   ValidationIssue,
 } from './publicationTypes';
 import { expandCitationMarkers } from './citationMarkers';
+import { applyHonestyPass } from './honestyGuard';
 import { forestPlotFigure } from './stats/forestPlot';
 import { formatReference, type CitationStyle } from '../export/citationStyles';
 import type { MetaAnalysisResult } from './metaAnalysis';
@@ -1229,7 +1230,7 @@ export function normalizeManuscriptForPublication(
     .map((section) => ({
       heading: exportText(section.heading),
       body: section.body
-        .map((paragraph) => replaceCitations(exportText(paragraph), artifact.citationMap))
+        .map((paragraph) => applyHonestyPass(replaceCitations(exportText(paragraph), artifact.citationMap)))
         .filter(Boolean),
     }));
 
@@ -1243,11 +1244,11 @@ export function normalizeManuscriptForPublication(
     ...manuscript,
     title: exportText(manuscript.title) || 'HashCerebrum Research Manuscript',
     abstract: {
-      background: replaceCitations(exportText(manuscript.abstract.background), artifact.citationMap),
-      objective: replaceCitations(exportText(manuscript.abstract.objective), artifact.citationMap),
-      methods: replaceCitations(exportText(manuscript.abstract.methods), artifact.citationMap),
-      results: replaceCitations(exportText(manuscript.abstract.results), artifact.citationMap),
-      conclusions: replaceCitations(exportText(manuscript.abstract.conclusions), artifact.citationMap),
+      background: applyHonestyPass(replaceCitations(exportText(manuscript.abstract.background), artifact.citationMap)),
+      objective: applyHonestyPass(replaceCitations(exportText(manuscript.abstract.objective), artifact.citationMap)),
+      methods: applyHonestyPass(replaceCitations(exportText(manuscript.abstract.methods), artifact.citationMap)),
+      results: applyHonestyPass(replaceCitations(exportText(manuscript.abstract.results), artifact.citationMap)),
+      conclusions: applyHonestyPass(replaceCitations(exportText(manuscript.abstract.conclusions), artifact.citationMap)),
     },
     sections: includeSupplementalSection
       ? [
