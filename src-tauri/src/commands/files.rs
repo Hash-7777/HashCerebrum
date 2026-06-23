@@ -30,6 +30,12 @@ fn validate_write_path(path: &str) -> AppResult<()> {
     let s = path.to_lowercase();
     #[cfg(unix)]
     {
+        // NOTE: do NOT list "/users" or "/volumes" here. On macOS the user's
+        // home — and therefore Downloads, Desktop, and Documents, the only places
+        // anyone exports to — lives under /Users, and external drives mount under
+        // /Volumes. Blocking those made every export silently fail. The path is
+        // already chosen by the native save dialog and the OS enforces real file
+        // permissions, so this list only needs to cover true OS directories.
         let sensitive = [
             "/etc",
             "/proc",
@@ -48,8 +54,6 @@ fn validate_write_path(path: &str) -> AppResult<()> {
             "/private/tmp",
             "/system",
             "/library",
-            "/users",
-            "/volumes",
         ];
         if sensitive.iter().any(|prefix| s.starts_with(prefix)) {
             return Err(AppError::PermissionDenied(
@@ -97,4 +101,36 @@ pub async fn write_file_bytes(path: String, bytes: Vec<u8>) -> AppResult<()> {
         .map_err(|e| AppError::File(format!("join: {e}")))?
         .map_err(|e| AppError::File(format!("write: {e}")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_write_path;
+
+    #[cfg(unix)]
+    #[test]
+    fn allows_user_home_and_volumes_exports() {
+        // The reported bug: every export under the user's home was rejected.
+        assert!(validate_write_path("/Users/alice/Downloads/report.pdf").is_ok());
+        assert!(validate_write_path("/Users/alice/Desktop/notes.md").is_ok());
+        assert!(validate_write_path("/Users/alice/Documents/paper.docx").is_ok());
+        assert!(validate_write_path("/Volumes/USB/export.txt").is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn still_blocks_real_system_dirs() {
+        assert!(validate_write_path("/etc/passwd").is_err());
+        assert!(validate_write_path("/System/Library/x").is_err());
+        assert!(validate_write_path("/usr/local/bin/x").is_err());
+        assert!(validate_write_path("/private/etc/hosts").is_err());
+    }
+
+    #[test]
+    fn blocks_traversal_and_empty() {
+        assert!(validate_write_path("../escape.txt").is_err());
+        assert!(validate_write_path("/Users/a/../../etc/x").is_err());
+        assert!(validate_write_path("   ").is_err());
+        assert!(validate_write_path("a\0b").is_err());
+    }
 }
