@@ -26,6 +26,7 @@ import { applyLearnedPriors } from './learnedPriors';
 import { recallPriorBeliefs } from './priorRecall';
 import { buildBuckets, buildConsensusSummary } from './consensusTimeline';
 import { reasoningRerank, conflictedChunkIds } from './reasoningRerank';
+import { ragDebug } from './debug';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
 import { detectConflicts, type ClaimConflict } from './conflictDetector';
@@ -234,6 +235,19 @@ export async function smartRetrieve(
   // 8. Update learning store (beliefs, graph, reliability, gaps)
   updateLearningState(activeProjectId, hits, claims, conflicts, coverage);
 
+  ragDebug('smartRetrieve', {
+    query,
+    hits: hits.length,
+    topSources: summarizeSources(chunks),
+    reRetrieved,
+    coveragePct: Math.round(coverage.coverageScore * 100),
+    missingConcepts: coverage.missingConcepts,
+    conflicts: conflicts.length,
+    priorMemoryNote: priorMemoryNote ?? '(none)',
+    consensusNote: consensusNote ?? '(none)',
+    beliefsKnown: learned.beliefs.length,
+  });
+
   return {
     hits,
     plan,
@@ -246,6 +260,16 @@ export async function smartRetrieve(
     priorMemoryNote,
     consensusNote,
   };
+}
+
+/** Compact "pubmed×3, answer×1" summary of a hit set's sources, for diagnostics. */
+function summarizeSources(chunks: RagChunk[]): string {
+  const counts = new Map<string, number>();
+  for (const c of chunks) counts.set(c.source, (counts.get(c.source) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `${s}×${n}`)
+    .join(', ');
 }
 
 /**

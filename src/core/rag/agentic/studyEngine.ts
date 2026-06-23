@@ -21,6 +21,7 @@ import { classifyEvidenceStrength } from '../search/ranking';
 import { useRagStore } from '../store/ragStore';
 import { useLearningStore } from './learningStore';
 import { topPending, resolveItem, queueForProject } from './learningQueue';
+import { ragDebug } from './debug';
 import type { LearningQueueItem } from './types';
 
 /** Findings the agent gathered on its own are tagged so they stay inspectable. */
@@ -104,6 +105,7 @@ export async function studyTopGaps(projectId: string, limit = 3): Promise<StudyR
   const queue = useLearningStore.getState().learningQueue;
   const gaps = topPending(queueForProject(queue, projectId), limit);
   if (gaps.length === 0) return { resolvedIds: [], savedChunks: 0, attempted: 0 };
+  ragDebug('study:start', { projectId, gaps: gaps.map((g) => g.concept) });
 
   const med = platform().medical;
   const fetchEvidence = async (query: string): Promise<EvidenceItem[]> => {
@@ -125,5 +127,6 @@ export async function studyTopGaps(projectId: string, limit = 3): Promise<StudyR
     for (const id of result.resolvedIds) next = resolveItem(next, id);
     useLearningStore.getState().setLearningQueue(next);
   }
+  ragDebug('study:done', { attempted: result.attempted, gapsFilled: result.resolvedIds.length, savedChunks: result.savedChunks });
   return result;
 }
