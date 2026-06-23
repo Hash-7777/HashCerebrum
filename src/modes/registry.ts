@@ -9,7 +9,6 @@ const MODE_COMPONENTS: Record<ModeId, ModeComponent> = {
   peer_review: lazy(() => import('@features/peer_review')),
   drug_interactions: lazy(() => import('@features/brain/DrugInteractionsMode')),
   genetics: lazy(() => import('@features/brain/GeneticsMode')),
-  paper: lazy(() => import('@features/paper')),
 };
 
 export function getModeComponent(mode: ModeId): ModeComponent {
