@@ -395,31 +395,36 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
 
   // ---- Title block -------------------------------------------------------
   const documentTitle = plain(input.manuscript?.title ?? input.title) || 'HashCerebrum Research Manuscript';
+  // Title — centred bold, sized to match the Typst manuscript (19pt) so the
+  // jsPDF and Typst renderers produce a visually consistent paper.
   doc.setFont(FONT, 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(12, 22, 37);
+  doc.setFontSize(19);
+  doc.setTextColor(15, 27, 45); // #0f1b2d, the Typst level-1 heading colour
   for (const line of splitPdfTextToSize(doc, documentTitle, contentW)) {
-    ensureSpace(28);
+    ensureSpace(24);
     doc.text(line, pageW / 2, y, { align: 'center' });
-    y += 28;
+    y += 24;
   }
 
-  y += 5;
+  // Byline — centred, muted, normal case (matches Typst's italic byline tone).
+  y += 6;
   doc.setFont(FONT, 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(135, 155, 180);
+  doc.setTextColor(110, 116, 128); // #6e7480
   const meta = winAnsiSafe(`HashCerebrum${input.modelLabel ? ` · ${input.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`);
-  doc.text(meta.toUpperCase(), pageW / 2, y, { align: 'center' });
-  y += 6;
+  doc.text(meta, pageW / 2, y, { align: 'center' });
+  y += 12;
 
-  // Thin accent rule below meta
-  doc.setFillColor(ACCENT_R, ACCENT_G, ACCENT_B);
-  doc.rect(marginX + contentW * 0.3, y + 4, contentW * 0.4, 1.5, 'F');
-  y += 22;
+  // Full-width hairline rule under the title block, like the Typst paper.
+  doc.setDrawColor(203, 213, 225); // #cbd5e1
+  doc.setLineWidth(0.5);
+  doc.line(marginX, y, pageW - marginX, y);
+  y += 20;
 
   // ---- Body --------------------------------------------------------------
   const heading = (text: string, level: 1 | 2 | 3) => {
-    const size = level === 1 ? 15 : level === 2 ? 12.5 : 11;
+    // Heading sizes matched to the Typst manuscript (level-1 13pt, level-2 ~10.5pt).
+    const size = level === 1 ? 13 : level === 2 ? 11.5 : 10.5;
     y += level === 3 ? 13 : 20;
     ensureSpace(size + 12);
     doc.setFont(FONT, 'bold');
@@ -603,11 +608,19 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
     });
   }
 
-  // ---- Page numbers ------------------------------------------------------
+  // ---- Running header + page numbers -------------------------------------
+  // A muted, right-aligned short title in the top margin (from page 2) plus a
+  // centred "n / total" footer — the journal-style framing the Typst paper uses.
   const pages = doc.getNumberOfPages();
+  const shortTitle = winAnsiSafe(documentTitle.length > 64 ? `${documentTitle.slice(0, 63).trimEnd()}…` : documentTitle);
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page);
     doc.setFont(FONT, 'normal');
+    if (page > 1) {
+      doc.setFontSize(8);
+      doc.setTextColor(154, 163, 178); // #9aa3b2
+      doc.text(shortTitle, pageW - marginX, 38, { align: 'right' });
+    }
     doc.setFontSize(8.5);
     doc.setTextColor(140, 146, 158);
     doc.text(`${page} / ${pages}`, pageW / 2, pageH - 34, { align: 'center' });
