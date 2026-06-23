@@ -155,3 +155,5 @@
 .trace-wait .trace-msg { color: var(--hc-fg-muted); }
 .trace-err svg,
 .trace-err .trace-msg { color: var(--hc-danger); }
+.trace-warn svg,
+.trace-warn .trace-msg { color: var(--hc-warning, #d6a02a); }

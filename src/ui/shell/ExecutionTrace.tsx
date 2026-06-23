@@ -11,12 +11,31 @@ const STICK_THRESHOLD = 28;
 
 const TRACE_LIMIT = 120;
 
+// Persist the scope choice so a user who wants the full persistent log (with
+// every captured error) keeps it across restarts instead of resetting to 'run'.
+const SCOPE_KEY = 'hc.trace.scope.v1';
+function loadScope(): TraceScope {
+  try {
+    return window.localStorage.getItem(SCOPE_KEY) === 'all' ? 'all' : 'run';
+  } catch {
+    return 'run';
+  }
+}
+function saveScope(scope: TraceScope): void {
+  try {
+    window.localStorage.setItem(SCOPE_KEY, scope);
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 const PHASE_ICON: Record<string, IconName> = {
   start: 'pulse',
   tool_call: 'search',
   tool_result: 'check',
   token: 'pulse',
   done: 'check',
+  warn: 'alert',
   error: 'alert',
 };
 
@@ -26,6 +45,7 @@ const PHASE_CLASS: Record<string, string> = {
   tool_result: 'ok',
   token: 'run',
   done: 'ok',
+  warn: 'warn',
   error: 'err',
 };
 
@@ -73,7 +93,7 @@ export function ExecutionTrace() {
   const clearAll = useTraceLogStore((s) => s.clear);
   // "run" shows the current run (cleared each run); "all" shows the persistent,
   // cross-chat, survives-restart log for debugging background steps and failures.
-  const [scope, setScope] = useState<TraceScope>('run');
+  const [scope, setScope] = useState<TraceScope>(loadScope);
   const activity = scope === 'all' ? persistent : liveActivity;
   const clear = scope === 'all' ? clearAll : clearRun;
   const [expanded, setExpanded] = useState(false);
@@ -137,7 +157,11 @@ export function ExecutionTrace() {
           className="execution-trace-scope"
           onClick={(event) => {
             event.stopPropagation();
-            setScope((value) => (value === 'run' ? 'all' : 'run'));
+            setScope((value) => {
+              const next = value === 'run' ? 'all' : 'run';
+              saveScope(next);
+              return next;
+            });
           }}
           title={scope === 'all' ? 'Showing the full persistent log — click for this run only' : 'Showing this run — click for the full persistent log'}
         >
