@@ -192,6 +192,11 @@ function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
     const evidenceIndex = number - 1;
     const record = evidence[evidenceIndex];
     if (!record) continue;
+    // An untitled record is not a verifiable citation — it renders as a bare
+    // ". pubmed." reference. Skip it so it never enters the reference list; its
+    // marker then resolves to nothing and is dropped from the body by
+    // replaceCitations, keeping the numbering sequential and honest.
+    if (!record.title || !record.title.trim()) continue;
 
     const identity = evidenceIdentity(record);
     let reference = byIdentity.get(identity);

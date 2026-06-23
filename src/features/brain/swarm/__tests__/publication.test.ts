@@ -72,6 +72,23 @@ describe('publication artifact contract', () => {
     expect(normalized.sections[0]?.body.join(' ')).not.toContain('[S1]');
   });
 
+  it('drops an untitled cited record from the reference list', () => {
+    const withUntitled: EvidenceItem[] = [
+      { source: 'pubmed', title: 'A real titled study', year: 2024, authors: ['A'], identifiers: { pmid: '1' }, snippet: 'text', fetchedAt: new Date(0).toISOString(), provenanceHash: 'p1' },
+      { source: 'pubmed', title: '   ', year: 2015, authors: ['B'], identifiers: { pmid: '2' }, snippet: 'text', fetchedAt: new Date(0).toISOString(), provenanceHash: 'p2' },
+    ];
+    const ms: Manuscript = {
+      ...manuscript,
+      sections: [{ heading: 'Introduction', body: ['Cites a real record [S1] and an untitled one [S2].'] }],
+    };
+    const artifact = buildPublicationArtifact(ms, withUntitled);
+    expect(artifact.references).toHaveLength(1);
+    expect(artifact.references[0]?.evidence.title).toBe('A real titled study');
+    // The untitled record's marker resolves to nothing and is stripped from the body.
+    const normalized = normalizeManuscriptForPublication(ms, artifact);
+    expect(normalized.sections[0]?.body.join(' ')).not.toContain('[S2]');
+  });
+
   it('normalizes legacy bare source markers into canonical references', () => {
     const artifact = buildPublicationArtifact(
       {
