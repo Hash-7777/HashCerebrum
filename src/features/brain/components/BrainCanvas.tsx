@@ -246,37 +246,17 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
   const hasActiveGlow = useBrainStore((store) =>
     Object.values(store.regions).some((region) => region.base > 0.01 || region.accent > 0.01),
   );
-  const invalidate = useThree((state) => state.invalidate);
   const lastTickRef = useRef(0);
   const parts = useBrainMeshParts();
 
-  const active = useWindowActive();
-
   // Efficiency model: the brain is STATIC by default and only animates while a
-  // run is in progress — agent activity lights regions (hasActiveGlow), which is
-  // our "a run is working" signal. While glowing AND the window is focused, we
-  // drive frames on demand (the canvas is in 'demand' frameloop); the moment the
-  // run finishes and the glow fades, the driver stops and the scene renders no
-  // more frames, so an idle brain costs no GPU. User interaction (orbit/zoom)
-  // still renders on demand via OrbitControls.
+  // run is in progress — agent activity lights regions (hasActiveGlow), our "a
+  // run is working" signal. The canvas frameloop (driven by the parent) runs
+  // 'always' while a run is active and through a short grace window after, so
+  // useFrame ticks at the native rAF cadence and the rotation is smooth; once
+  // the spin eases to a stop the parent drops to on-demand and an idle brain
+  // costs no GPU. User interaction (orbit/zoom) still renders on demand.
   const spinSpeedRef = useRef(0);
-  // "winding" keeps frames flowing through the smooth ease-OUT after a run ends,
-  // so the rotation glides to a stop instead of freezing mid-spin.
-  const [winding, setWinding] = useState(false);
-  useEffect(() => {
-    if (hasActiveGlow) setWinding(true);
-  }, [hasActiveGlow]);
-
-  useEffect(() => {
-    if (!(hasActiveGlow || winding) || !active) return;
-    let raf = 0;
-    const loop = () => {
-      invalidate();
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [hasActiveGlow, winding, active, invalidate]);
 
   useFrame((state, delta) => {
     // Clamp dt so the first frame after an idle gap (demand frameloop) cannot
@@ -299,12 +279,7 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
     const target = hasActiveGlow && rotateEnabled ? AUTO_ROTATE_SPEED : 0;
     spinSpeedRef.current += (target - spinSpeedRef.current) * Math.min(1, dt * 3);
     groupRef.current.rotation.y += spinSpeedRef.current * dt;
-    // Once eased to a near-stop and no longer running, end the wind-down so the
-    // frame driver can shut off and the brain rests statically.
-    if (!hasActiveGlow && spinSpeedRef.current < 0.002) {
-      spinSpeedRef.current = 0;
-      if (winding) setWinding(false);
-    }
+    if (!hasActiveGlow && spinSpeedRef.current < 0.002) spinSpeedRef.current = 0;
   });
 
   return (
@@ -414,6 +389,29 @@ function BrainCanvasInner(props: BrainCanvasProps) {
   // chat state) but is display:none'd when another mode is active; while hidden
   // we stop the render loop entirely instead of rendering at 60fps for nothing.
   const [visible, setVisible] = useState(true);
+  const windowActive = useWindowActive();
+  // A run is "working" when agent activity has lit any region. We drive the
+  // canvas at the native frameloop ('always') while that is true so the rotation
+  // is perfectly smooth, then keep it on through a short grace window so the spin
+  // can ease to a stop, and finally drop back to on-demand so an idle brain costs
+  // no GPU. Blurring the window also drops to on-demand to save energy.
+  const glowActive = useBrainStore((store) =>
+    Object.values(store.regions).some((region) => region.base > 0.01 || region.accent > 0.01),
+  );
+  const [spinning, setSpinning] = useState(false);
+  useEffect(() => {
+    if (glowActive) {
+      setSpinning(true);
+      return;
+    }
+    const timer = setTimeout(() => setSpinning(false), 1600);
+    return () => clearTimeout(timer);
+  }, [glowActive]);
+  const frameloop: 'always' | 'demand' | 'never' = !visible
+    ? 'never'
+    : spinning && windowActive
+      ? 'always'
+      : 'demand';
   const cameraRef = useRef<THREE.Camera | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
@@ -507,7 +505,7 @@ function BrainCanvasInner(props: BrainCanvasProps) {
       <Canvas
         camera={{ position: INITIAL_CAMERA, fov: 32 }}
         dpr={canvasDpr}
-        frameloop={visible ? 'demand' : 'never'}
+        frameloop={frameloop}
         gl={glOptions}
         shadows={!performanceMode}
         onPointerMissed={() => props.onSelectRegion(null)}
