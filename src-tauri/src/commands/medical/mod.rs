@@ -156,9 +156,19 @@ pub fn truncate_chars(text: &str, max_chars: usize) -> String {
 // (<h4>Background</h4>, <b>, <i>, <sub>…). Strip the tags and decode a few
 // common entities so the abstract reads as clean prose — otherwise the markup
 // leaks into snippets, extracted key findings, tables, and the PDF.
+fn is_heading_tag(tag: &str) -> bool {
+    matches!(
+        tag.trim_start_matches('/').split_whitespace().next().unwrap_or(""),
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+    )
+}
+
 pub fn strip_html(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
+    let mut tag = String::new();
+    let mut heading_buf = String::new();
     let mut in_tag = false;
+    let mut in_heading = false;
     for ch in text.chars() {
         match ch {
             // Emit a space where each tag was so a block tag like </h4> cannot
@@ -167,11 +177,37 @@ pub fn strip_html(text: &str) -> String {
             // the extra spaces an inline tag leaves around a word.
             '<' => {
                 in_tag = true;
-                out.push(' ');
+                tag.clear();
             }
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(ch),
-            _ => {}
+            '>' => {
+                in_tag = false;
+                let lower = tag.to_ascii_lowercase();
+                if is_heading_tag(&lower) {
+                    if lower.starts_with('/') {
+                        // Closing a heading — emit its text as an explicit section
+                        // label ("Results:") so a structured abstract keeps its
+                        // sections instead of dissolving into one run of words.
+                        let label = heading_buf.trim();
+                        if !label.is_empty() {
+                            out.push(' ');
+                            out.push_str(label);
+                            out.push_str(": ");
+                        }
+                        heading_buf.clear();
+                        in_heading = false;
+                    } else {
+                        in_heading = true;
+                        heading_buf.clear();
+                    }
+                } else if in_heading {
+                    heading_buf.push(' ');
+                } else {
+                    out.push(' ');
+                }
+            }
+            _ if in_tag => tag.push(ch),
+            _ if in_heading => heading_buf.push(ch),
+            _ => out.push(ch),
         }
     }
     let decoded = out
@@ -390,12 +426,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn strip_html_removes_tags_and_collapses_whitespace() {
+    fn strip_html_removes_tags_and_labels_sections() {
         let input = "<h4>Background</h4>We compared <b>543</b> cases\n  with 3,272 controls (OR&nbsp;1.20).";
+        // The h4 heading becomes an explicit "Background:" section label.
         assert_eq!(
             strip_html(input),
-            "Background We compared 543 cases with 3,272 controls (OR 1.20)."
+            "Background: We compared 543 cases with 3,272 controls (OR 1.20)."
         );
+    }
+
+    #[test]
+    fn strip_html_preserves_structured_abstract_sections() {
+        let input = "<h4>Methods</h4>We searched trials.<h4>Results</h4>The hazard ratio was 0.74 (95% CI 0.65-0.85).<h4>Conclusions</h4>SGLT2i reduce events.";
+        let out = strip_html(input);
+        assert!(out.contains("Methods: We searched"), "got: {out}");
+        assert!(out.contains("Results: The hazard ratio was 0.74"), "got: {out}");
+        assert!(out.contains("Conclusions: SGLT2i reduce"), "got: {out}");
     }
 
     #[test]
