@@ -19,11 +19,29 @@ export function splitSentences(text: string): string[] {
   return text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) ?? (text.trim() ? [text.trim()] : []);
 }
 
+// Dash class covering ASCII hyphen plus the dash variants the exporter emits —
+// notably the U+2011 NON-BREAKING HYPHEN in "risk‑of‑bias", "very‑low", "ROBINS‑I"
+// — so the appraisal patterns match the real document, not just ASCII text.
+const DASH = '[\\u2010-\\u2015\\u2212-]';
+
 // A clause that POSITIVELY asserts a formal appraisal/tool was applied. The
 // pipeline runs no formal GRADE / risk-of-bias appraisal on the manuscript, so
 // any such assertion is fabricated.
-const APPRAISAL_CLAIM_RX =
-  /\b(?:low|high|moderate|very[- ]low)\s+grade\s+(?:certainty|rating)\b|\bgrade\s+(?:certainty|rating|assessment)\b|\brobins-?i\b|\bamstar-?\s?2?\b|\bcochrane\s+ro?b\b|\brisk[- ]of[- ]bias\s+(?:assessment|rating|appraisal|tool|domains?)\b|\bflagged\s+(?:for|with)\s+["']?some\s+concerns\b|\brated\s+(?:with|as)\s+(?:low|high|moderate|very[- ]low)\b/i;
+const APPRAISAL_CLAIM_RX = new RegExp(
+  [
+    `\\b(?:low|high|moderate|some|very[\\s\\u2010-\\u2015\\u2212-]low)\\s+(?:grade\\s+)?(?:certaint(?:y|ies)|grading)\\b`,
+    `\\bgrade\\s+(?:certaint(?:y|ies)|ratings?|grading|assessment)\\b`,
+    `\\blow\\s+grade\\b`,
+    `\\brobins${DASH}?i\\b`,
+    `\\bamstar${DASH}?\\s?2?\\b`,
+    `\\bcochrane\\s+ro?b\\b`,
+    `\\brisk${DASH}of${DASH}bias\\s+(?:assessment|ratings?|appraisal|tool|concerns?|domains?)\\b`,
+    `["\\u2018\\u2019']\\s*some\\s+concerns\\s*["\\u2018\\u2019']`,
+    `\\bsome\\s+concerns\\b`,
+    `\\brated\\s+(?:with|as)\\s+(?:low|high|moderate)\\b`,
+  ].join('|'),
+  'i',
+);
 
 // …unless the same clause is explicitly stating the ABSENCE of such an
 // appraisal, which is the honest, allowed framing.

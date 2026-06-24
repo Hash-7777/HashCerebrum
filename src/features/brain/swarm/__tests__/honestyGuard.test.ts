@@ -37,6 +37,22 @@ describe('stripFabricatedAppraisal', () => {
     const text = 'Aspirin reduces ischemic stroke but increases bleeding risk in older adults.';
     expect(stripFabricatedAppraisal(text)).toBe(text);
   });
+
+  it('catches fabricated appraisals written with non-breaking hyphens (U+2011)', () => {
+    // The exporter emits "risk‑of‑bias" with U+2011, which ASCII patterns missed.
+    const text = 'The reductions held despite the low certainty grading and some concerns about risk‑of‑bias assessment in the trials.';
+    expect(stripFabricatedAppraisal(text)).toBe('');
+  });
+
+  it('catches "low GRADE ratings" and ROBINS‑I / AMSTAR‑2 forms', () => {
+    expect(stripFabricatedAppraisal('These were sources with low GRADE ratings.')).toBe('');
+    expect(stripFabricatedAppraisal('The ROBINS‑I and AMSTAR‑2 tools were used.')).toBe('');
+  });
+
+  it('still KEEPS the honest "no formal appraisal" sentence with U+2011', () => {
+    const honest = 'No formal risk‑of‑bias appraisal (Cochrane RoB, GRADE certainty) was applied in this automated review.';
+    expect(stripFabricatedAppraisal(honest)).toBe(honest);
+  });
 });
 
 describe('stripCounterfactualDataset', () => {
