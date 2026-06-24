@@ -95,6 +95,19 @@ describe('title & keyword cleanup', () => {
     expect(kw).toContain('sglt2');
   });
 
+  it('uses an explicit user-supplied title verbatim (no truncation)', () => {
+    const full =
+      'Write a full, publishable-quality research paper titled "Sodium-glucose cotransporter-2 inhibitors for heart failure across the ejection-fraction spectrum: efficacy, safety, and current consensus." Cover HFrEF, HFmrEF, and HFpEF separately.';
+    expect(titleTopic(full)).toBe(
+      'Sodium-glucose cotransporter-2 inhibitors for heart failure across the ejection-fraction spectrum: efficacy, safety, and current consensus',
+    );
+    const kw = keywordsFrom(full);
+    for (const junk of ['publishable-quality', 'publishable', 'titled', 'quality', 'across']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw).toEqual(expect.arrayContaining(['cotransporter-2', 'failure']));
+  });
+
   it('drops comparison and temporal question words from keywords', () => {
     const kw = keywordsFrom(
       'For aspirin in primary prevention in older adults, how does the effect differ for ischemic versus hemorrhagic stroke, and has the consensus changed over the last decade?',

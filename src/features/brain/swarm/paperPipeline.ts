@@ -734,7 +734,25 @@ export function buildClaimLedger(extractions: EvidenceExtraction[]): ClaimLedger
   return ledger;
 }
 
+// When the user explicitly names the paper — titled "...", entitled "...", or
+// title: "..." — use that title verbatim instead of letting the model draft
+// (and sometimes truncate) one. Honest and predictable: the document is titled
+// exactly what the user asked for. Handles straight and curly quotes.
+const EXPLICIT_TITLE_RX = /\b(?:titled|entitled|title)\s*:?\s*["“”']([^"“”']{8,200})["“”']/i;
+
+export function extractExplicitTitle(question: string): string | undefined {
+  const match = question.match(EXPLICIT_TITLE_RX);
+  if (!match) return undefined;
+  // Strip a trailing sentence period that sat inside the quotes — titles do not
+  // end in a full stop — but keep meaningful punctuation like a colon.
+  const title = (match[1] ?? '').replace(/\s+/g, ' ').replace(/\s*\.\s*$/, '').trim();
+  return title.length >= 8 ? title : undefined;
+}
+
 export function titleTopic(question: string): string {
+  // An explicit user-supplied title wins outright.
+  const explicit = extractExplicitTitle(question);
+  if (explicit) return fixTypos(explicit);
   // A title is a single subject phrase, never the formatting instructions. Take
   // the first sentence so a trailing "Use full IMRaD structure… Compute the
   // statistics… flag any evidence gaps honestly." tail is dropped, then strip the
@@ -883,15 +901,19 @@ const NON_TOPIC_KEYWORDS = new Set([
   'differ', 'differs', 'differed', 'difference', 'differences', 'differential',
   'compare', 'compared', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
   'decade', 'decades', 'recent', 'recently', 'trend', 'trends', 'last', 'over', 'past', 'consensus',
+  // Request/format words that leaked from "publishable-quality research paper
+  // titled …" into the keyword list.
+  'publishable', 'publishable-quality', 'quality', 'titled', 'across', 'spectrum', 'current',
 ]);
 
 export function keywordsFrom(question: string): string[] {
   // Use coreConceptGroups (already used for relevance ranking) to extract real
   // medical subject terms, instead of tokenising the raw prompt. This drops
-  // generic words like "effect", "versus", "systematic" automatically.
-  // Pre-normalise spelling so typos like "cardiovascual" are corrected before
-  // concept extraction.
-  const groups = coreConceptGroups(normalizeMedicalSpelling(question));
+  // generic words like "effect", "versus", "systematic" automatically. When the
+  // user gave an explicit title, keyword from the TITLE (the real subject) not
+  // the surrounding instruction. Pre-normalise spelling first.
+  const source = extractExplicitTitle(question) ?? question;
+  const groups = coreConceptGroups(normalizeMedicalSpelling(source));
   const keywords = groups
     .map((g) => g[0])
     .filter((k): k is string => !!k && k.length >= 3 && !NON_TOPIC_KEYWORDS.has(k));
@@ -1785,8 +1807,10 @@ export async function preparePaperLedger(opts: {
   // Generate a focused academic title before building the blueprint so the
   // manuscript title is a proper journal-style heading rather than a generic prefix.
   opts.onStage?.('Title');
-  let overrideTitle: string | undefined;
-  try {
+  // Prefer the user's explicit title verbatim; only ask the model to draft one
+  // when none was given, which also avoids the model truncating a long title.
+  let overrideTitle: string | undefined = extractExplicitTitle(opts.question);
+  if (!overrideTitle) try {
     const reply = await callModel(
       opts.bossModel,
       'You write concise, formal academic manuscript titles for peer-reviewed journals. Reply with the title only — no quotation marks, no extra text, no explanation.',
