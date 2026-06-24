@@ -11,6 +11,7 @@ import {
 } from './manuscript';
 import { buildPublicationArtifact } from './publication';
 import type {
+  BoundEffect,
   ClaimLedgerEntry,
   EvidenceExtraction,
   EvidenceStrength,
@@ -514,6 +515,57 @@ export function extractEffectValues(text: string): ExtractedEffectValue[] {
   });
 }
 
+// Bind each ratio to ITS OWN confidence interval and p-value by scanning only
+// the window that follows the estimate (the same parenthetical / clause), so an
+// HR from one study is never glued to a CI or p-value from another. Direction is
+// inferred from the point estimate, hardened by the interval: an interval that
+// excludes 1.0 confirms the direction; one that crosses 1.0 is 'no effect'.
+const BOUND_RATIO_RX = /\b(hazard ratio|odds ratio|risk ratio|relative risk|HR|OR|RR)\b\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)/gi;
+const WINDOW_CI_RX = /95%?\s*CI[\s:(]*([0-9]+(?:\.[0-9]+)?)\s*(?:-|–|—|‑|to|,)\s*([0-9]+(?:\.[0-9]+)?)/i;
+const WINDOW_P_RX = /\bp\s*(?:value\s+of\s+|[=<>])\s*(0?\.[0-9]+)/i;
+
+function effectDirection(value: number, ci: [number, number] | null): BoundEffect['direction'] {
+  if (ci && ci[0] < 1 && ci[1] > 1) return 'no effect'; // interval crosses unity
+  if (value < 0.95) return 'reduction';
+  if (value > 1.05) return 'increase';
+  return 'no effect';
+}
+
+export function extractBoundEffects(text: string): BoundEffect[] {
+  const out: BoundEffect[] = [];
+  const seen = new Set<string>();
+  BOUND_RATIO_RX.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = BOUND_RATIO_RX.exec(text)) !== null) {
+    const measure = (m[1] ?? '').toUpperCase();
+    const valueStr = m[2] ?? '';
+    const value = Number(valueStr);
+    // Reject the English word "or"/"rr"/"hr" in lowercase and implausible ratios.
+    if (isLowercaseWordAbbrev(m[1] ?? '') || !isPlausibleRatio(valueStr)) continue;
+    const window = text.slice(m.index + m[0].length, m.index + m[0].length + 90);
+    const ciM = window.match(WINDOW_CI_RX);
+    const lo = ciM ? Number(ciM[1]) : NaN;
+    const hi = ciM ? Number(ciM[2]) : NaN;
+    const validCi = !!ciM && Number.isFinite(lo) && Number.isFinite(hi) && lo > 0 && lo < hi;
+    // Keep the CI verbatim (source-faithful), use the parsed bounds for direction.
+    const ciStr = validCi ? `${ciM![1]}-${ciM![2]}` : null;
+    const ciNums: [number, number] | null = validCi ? [lo, hi] : null;
+    const pM = window.match(WINDOW_P_RX);
+    const key = `${measure}:${valueStr}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      measure,
+      value: valueStr,
+      ci: ciStr,
+      pValue: pM ? (pM[1] ?? null) : null,
+      direction: effectDirection(value, ciNums),
+      sourceText: clean(m[0] + (ciStr ? ` (95% CI ${ciStr})` : '')),
+    });
+  }
+  return out;
+}
+
 function limitationsFor(record: EvidenceItem, extraction: Pick<EvidenceExtraction, 'studyDesign' | 'effectValues' | 'sampleSize'>): string[] {
   const limitations: string[] = [];
   if (!isTrustedRecord(record)) limitations.push('context-only source, not primary clinical evidence');
@@ -545,6 +597,7 @@ export function extractEvidenceFromRecords(records: EvidenceItem[]): EvidenceExt
     const studyDesign = detectStudyDesign(record);
     const sampleSize = extractSampleSize(text);
     const effectValues = extractEffectValues(text);
+    const boundEffects = extractBoundEffects(text);
     const partial = { studyDesign, sampleSize, effectValues };
     return {
       id: `extraction-${stableHash(`${index}:${sourceIdentity(record)}`)}`,
@@ -561,11 +614,25 @@ export function extractEvidenceFromRecords(records: EvidenceItem[]): EvidenceExt
       outcomes: detectOutcomes(text),
       sampleSize,
       effectValues,
+      ...(boundEffects.length > 0 ? { boundEffects } : {}),
       limitations: limitationsFor(record, partial),
       keyFinding: firstSentence(record.snippet ?? record.title, record.title),
       trusted: isTrustedRecord(record),
     };
   });
+}
+
+/** Render bound effects for the drafting prompt — each estimate with its own CI,
+ *  p-value, and inferred direction, so the model cites them as units. */
+function formatBoundEffects(effects: BoundEffect[] | undefined): string {
+  if (!effects || effects.length === 0) return '';
+  return effects
+    .map((e) => {
+      const ci = e.ci ? `, 95% CI ${e.ci}` : '';
+      const p = e.pValue ? `, p=${e.pValue}` : '';
+      return `${e.measure} ${e.value}${ci}${p} (${e.direction})`;
+    })
+    .join('; ');
 }
 
 function numbers(value: string): string[] {
@@ -1135,6 +1202,7 @@ function formatExtraction(extraction: EvidenceExtraction): string {
     ...extraction.effectValues.map((effect) => `${effect.label} ${effect.value} (${effect.sourceText})`),
   ].filter(Boolean).join('; ');
   const rob = formatRobSummary(assessRiskOfBias(extraction));
+  const bound = formatBoundEffects(extraction.boundEffects);
   return [
     `${extraction.sourceMarker} ${extraction.source.toUpperCase()} ${extraction.year ?? 'year not reported'} ${extraction.title}`,
     `Identifiers: ${ids || 'not available'}`,
@@ -1144,6 +1212,7 @@ function formatExtraction(extraction: EvidenceExtraction): string {
     `Exposure: ${extraction.exposureOrIntervention}`,
     `Comparator: ${extraction.comparator}`,
     `Outcomes: ${extraction.outcomes.join(', ') || 'not reported'}`,
+    ...(bound ? [`Bound effects (cite each as a unit; do NOT mix CIs/p-values across studies): ${bound}`] : []),
     `Numeric: ${numeric || 'none extracted'}`,
     `Key finding: ${extraction.keyFinding}`,
     `Limits: ${extraction.limitations.join('; ') || 'none recorded'}`,

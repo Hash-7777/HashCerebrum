@@ -6,6 +6,7 @@ import {
   buildClaimLedger,
   buildPaperBlueprint,
   buildPaperOutline,
+  extractBoundEffects,
   extractEvidenceFromRecords,
   isSubstantiveAbstract,
   keywordsFrom,
@@ -120,6 +121,36 @@ describe('title & keyword cleanup', () => {
 
   it('leaves an already-clean topic intact', () => {
     expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
+  });
+});
+
+describe('extractBoundEffects', () => {
+  it('binds a ratio to its own CI and p-value and tags the direction', () => {
+    const [e] = extractBoundEffects('Mortality fell with a hazard ratio of 0.74 (95% CI 0.65-0.85; p = 0.0008).');
+    expect(e?.measure).toBe('HAZARD RATIO');
+    expect(e?.value).toBe('0.74');
+    expect(e?.ci).toBe('0.65-0.85');
+    expect(e?.pValue).toBe('0.0008');
+    expect(e?.direction).toBe('reduction');
+  });
+
+  it('marks a CI that crosses 1.0 as no effect', () => {
+    const [e] = extractBoundEffects('HR 0.90 (95% CI 0.79-1.02, p = 0.08)');
+    expect(e?.direction).toBe('no effect');
+  });
+
+  it('tags an increase and never glues another study’s numbers', () => {
+    // Two separate estimates; each keeps only its own CI.
+    const effects = extractBoundEffects('HR 1.35 (95% CI 1.10-1.66). A different review found RR 0.61 (95% CI 0.51-0.72).');
+    expect(effects[0]?.measure).toBe('HR');
+    expect(effects[0]?.ci).toBe('1.10-1.66');
+    expect(effects[0]?.direction).toBe('increase');
+    expect(effects[1]?.ci).toBe('0.51-0.72');
+    expect(effects[1]?.direction).toBe('reduction');
+  });
+
+  it('rejects the lowercase English word "or" as a statistic', () => {
+    expect(extractBoundEffects('aspirin or warfarin may be used')).toEqual([]);
   });
 
   it('corrects common medical typos in the topic and keywords', () => {

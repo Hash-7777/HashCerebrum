@@ -76,6 +76,18 @@ export interface ExtractedEffectValue {
   sourceText: string;
 }
 
+// An effect estimate bound to ITS OWN confidence interval and p-value from the
+// same clause of a single record — never recombined across studies. direction is
+// inferred deterministically from the point estimate and interval.
+export interface BoundEffect {
+  measure: string; // 'HR' | 'OR' | 'RR' | 'odds ratio' | …
+  value: string; // point estimate, e.g. '0.74'
+  ci: string | null; // e.g. '0.65-0.85'
+  pValue: string | null; // e.g. '0.0008'
+  direction: 'reduction' | 'increase' | 'no effect' | 'unknown';
+  sourceText: string; // verbatim bound span
+}
+
 export interface EvidenceExtraction {
   id: string;
   sourceMarker: string;
@@ -91,6 +103,8 @@ export interface EvidenceExtraction {
   outcomes: string[];
   sampleSize: string | null;
   effectValues: ExtractedEffectValue[];
+  /** Effect estimates bound to their own CI + p-value (no cross-study mixing). */
+  boundEffects?: BoundEffect[];
   limitations: string[];
   keyFinding: string;
   trusted: boolean;
