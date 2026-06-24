@@ -55,6 +55,10 @@ export function listCloudCandidates(
   for (const group of modelGroups) {
     if (group.provider === 'ollama') continue;
     if (group.keyName && !hasKey(group.provider)) continue;
+    // A provider that returned a hard 402 / "insufficient credits" is dead for
+    // the whole session — never offer it again to failover or auto-assignment,
+    // so the chain stops re-attempting an unfunded key on every section.
+    if (billingDeadProviders.has(group.provider)) continue;
     for (const model of group.models) {
       out.push({
         value: model.value,

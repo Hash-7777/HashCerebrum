@@ -540,7 +540,11 @@ export async function streamWithModelChain(
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
-    if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
+    if (
+      !tried.has(current) &&
+      (isProviderOnCooldown(parseModelRef(current).provider) ||
+        deadProvidersThisSession().has(parseModelRef(current).provider))
+    ) {
       let warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (warm && isProviderOnCooldown(warm.provider)) {
         tried.add(warm.value);
@@ -850,7 +854,11 @@ export async function completeWithModelChain(
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
-    if (!tried.has(current) && isProviderOnCooldown(parseModelRef(current).provider)) {
+    if (
+      !tried.has(current) &&
+      (isProviderOnCooldown(parseModelRef(current).provider) ||
+        deadProvidersThisSession().has(parseModelRef(current).provider))
+    ) {
       let warm = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
       while (warm && isProviderOnCooldown(warm.provider)) {
         tried.add(warm.value);

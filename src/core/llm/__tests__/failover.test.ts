@@ -155,4 +155,13 @@ describe('session billing-dead providers', () => {
     clearBillingDeadProviders();
     expect(deadProvidersThisSession().size).toBe(0);
   });
+
+  it('never offers a billing-dead provider to failover', () => {
+    // groq returned a hard 402 — failover from openai must skip it entirely and
+    // pick the next live provider, not keep re-attempting the dead one.
+    markProviderBillingDead('groq');
+    const next = findBestFailover('cloud:openai:gpt-5.2', new Set(['cloud:openai:gpt-5.2']), hasKey, groups);
+    expect(next?.provider).toBe('gemini');
+    expect(next?.value).not.toContain('groq');
+  });
 });
