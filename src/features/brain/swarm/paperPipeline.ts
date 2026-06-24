@@ -520,7 +520,7 @@ export function extractEffectValues(text: string): ExtractedEffectValue[] {
 // HR from one study is never glued to a CI or p-value from another. Direction is
 // inferred from the point estimate, hardened by the interval: an interval that
 // excludes 1.0 confirms the direction; one that crosses 1.0 is 'no effect'.
-const BOUND_RATIO_RX = /\b(hazard ratio|odds ratio|risk ratio|relative risk|HR|OR|RR)\b\s*(?:=|of|:)?\s*([0-9]+(?:\.[0-9]+)?)/gi;
+const BOUND_RATIO_RX = /\b(hazard ratio|odds ratio|risk ratio|relative risk|HR|OR|RR)\b\s*(?:=|of|was|at|:|,)?\s*([0-9]+(?:\.[0-9]+)?)/gi;
 const WINDOW_CI_RX = /95%?\s*CI[\s:(]*([0-9]+(?:\.[0-9]+)?)\s*(?:-|–|—|‑|to|,)\s*([0-9]+(?:\.[0-9]+)?)/i;
 const WINDOW_P_RX = /\bp\s*(?:value\s+of\s+|[=<>])\s*(0?\.[0-9]+)/i;
 
@@ -531,18 +531,45 @@ function effectDirection(value: number, ci: [number, number] | null): BoundEffec
   return 'no effect';
 }
 
+// Structured-abstract section labels (the Rust strip_html now emits "Results:")
+// so effect sizes are read from where a study reports them — the Results,
+// Findings, Outcomes, and Conclusions sections — not a Background or Methods
+// mention of a different study's number.
+const SECTION_LABEL_RX =
+  /\b(background|objectives?|aims?|introduction|methods?|design|setting|participants|results?|findings?|outcomes?|conclusions?|interpretation|discussion)\s*:/gi;
+const RESULT_SECTIONS = new Set([
+  'result', 'results', 'finding', 'findings', 'outcome', 'outcomes', 'conclusion', 'conclusions', 'interpretation',
+]);
+
+/** The Results/Findings/Conclusions sections of a labelled abstract, or null
+ *  when the text carries no recognised section labels. */
+export function resultsSectionText(text: string): string | null {
+  const matches = [...text.matchAll(SECTION_LABEL_RX)];
+  if (matches.length === 0) return null;
+  const segments: string[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const label = (matches[i]![1] ?? '').toLowerCase();
+    const start = matches[i]!.index! + matches[i]![0].length;
+    const end = i + 1 < matches.length ? matches[i + 1]!.index! : text.length;
+    if (RESULT_SECTIONS.has(label)) segments.push(text.slice(start, end).trim());
+  }
+  return segments.length > 0 ? segments.join(' ') : null;
+}
+
 export function extractBoundEffects(text: string): BoundEffect[] {
+  // Prefer the results/conclusions sections when the abstract is labelled.
+  const scope = resultsSectionText(text) ?? text;
   const out: BoundEffect[] = [];
   const seen = new Set<string>();
   BOUND_RATIO_RX.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = BOUND_RATIO_RX.exec(text)) !== null) {
+  while ((m = BOUND_RATIO_RX.exec(scope)) !== null) {
     const measure = (m[1] ?? '').toUpperCase();
     const valueStr = m[2] ?? '';
     const value = Number(valueStr);
     // Reject the English word "or"/"rr"/"hr" in lowercase and implausible ratios.
     if (isLowercaseWordAbbrev(m[1] ?? '') || !isPlausibleRatio(valueStr)) continue;
-    const window = text.slice(m.index + m[0].length, m.index + m[0].length + 90);
+    const window = scope.slice(m.index + m[0].length, m.index + m[0].length + 90);
     const ciM = window.match(WINDOW_CI_RX);
     const lo = ciM ? Number(ciM[1]) : NaN;
     const hi = ciM ? Number(ciM[2]) : NaN;

@@ -153,6 +153,21 @@ describe('extractBoundEffects', () => {
     expect(extractBoundEffects('aspirin or warfarin may be used')).toEqual([]);
   });
 
+  it('reads effect sizes from the Results section, not Background', () => {
+    // A prior different-drug HR sits in Background; the study's own HR is in Results.
+    const labelled =
+      'Background: An earlier review of drug X reported HR 1.80. Methods: We searched trials. Results: Drug Y reduced events, HR 0.74 (95% CI 0.65-0.85; p=0.001). Conclusions: Drug Y helps.';
+    const effects = extractBoundEffects(labelled);
+    expect(effects).toHaveLength(1);
+    expect(effects[0]?.value).toBe('0.74');
+    expect(effects[0]?.direction).toBe('reduction');
+  });
+
+  it('falls back to the whole text when no section labels are present', () => {
+    const plain = 'The pooled hazard ratio was 0.80 (95% CI 0.74-0.86).';
+    expect(extractBoundEffects(plain)[0]?.value).toBe('0.80');
+  });
+
   it('corrects common medical typos in the topic and keywords', () => {
     expect(titleTopic('MICA gene and cardiovascual disease in type 1 diabetis').toLowerCase()).toContain(
       'cardiovascular',
