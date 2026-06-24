@@ -67,6 +67,20 @@ export function stripCounterfactualDataset(text: string): string {
   return rejoin(splitSentences(text).filter((s) => !COUNTERFACTUAL_DATASET_RX.test(s)));
 }
 
+// Search-yield counts the model invents — and contradicts itself on ("320
+// records" in the abstract vs "159 entries" in the body; "strong=76, moderate=25,
+// weak=57" summing to 158, not 320). The real counts live in the deterministic
+// source-yield figure/table, so any in-prose total is removed. This targets only
+// counts of RECORDS / ENTRIES / CITATIONS / a corpus and evidence-strength
+// clusters — never study sample sizes ("8891 participants"), which are real data.
+const SEARCH_YIELD_RX =
+  /\b\d[\d,]*\s+(?:unique\s+)?(?:records|entries|citations|abstracts)\b|\b(?:corpus|pool)\s+of\s+\d[\d,]*\b|\b(?:strong|moderate|weak|context)\s*[=:]\s*\d+\b/i;
+
+/** Remove prose assertions of an invented search-yield record count. */
+export function stripSearchYieldCounts(text: string): string {
+  return rejoin(splitSentences(text).filter((s) => !SEARCH_YIELD_RX.test(s)));
+}
+
 // Over-confident phrasings → calibrated, honest equivalents. Applied verbatim
 // (case-insensitive) so a low-certainty, abstract-only synthesis never claims
 // more confidence than the evidence supports.
@@ -126,5 +140,7 @@ function rejoin(sentences: string[]): string {
 /** Full deterministic honesty pass over one block of manuscript prose. */
 export function applyHonestyPass(text: string): string {
   if (!text) return text;
-  return softenOverclaims(reconcileCrossingCI(stripCounterfactualDataset(stripFabricatedAppraisal(text))));
+  return softenOverclaims(
+    reconcileCrossingCI(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+  );
 }

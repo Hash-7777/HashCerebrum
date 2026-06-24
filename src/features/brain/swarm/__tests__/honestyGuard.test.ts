@@ -3,6 +3,7 @@ import {
   splitSentences,
   stripFabricatedAppraisal,
   stripCounterfactualDataset,
+  stripSearchYieldCounts,
   softenOverclaims,
   reconcileCrossingCI,
   applyHonestyPass,
@@ -63,6 +64,21 @@ describe('stripCounterfactualDataset', () => {
     expect(out).not.toMatch(/had a dataset been provided/i);
     expect(out).toContain('No external dataset was uploaded');
     expect(out).toContain('narrative review');
+  });
+});
+
+describe('stripSearchYieldCounts', () => {
+  it('removes invented/contradictory search-yield record counts', () => {
+    expect(stripSearchYieldCounts('The search yielded 320 records for analysis.')).toBe('');
+    expect(stripSearchYieldCounts('This produced a total corpus of 159 entries.')).toBe('');
+    expect(stripSearchYieldCounts('Records were classified by strength (strong = 76, moderate = 25, weak = 57).')).toBe('');
+  });
+
+  it('NEVER removes a real study sample size', () => {
+    const real = 'A meta-analysis of 8891 participants reported a benefit.';
+    expect(stripSearchYieldCounts(real)).toBe(real);
+    const real2 = 'A retrospective cohort of 20000 patients was analysed.';
+    expect(stripSearchYieldCounts(real2)).toBe(real2);
   });
 });
 
