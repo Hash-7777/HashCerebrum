@@ -127,6 +127,27 @@ export function reconcileCrossingCI(text: string): string {
   });
 }
 
+// A directional verb that contradicts the ratio it modifies — "reduced … HR 1.4"
+// or "increased … HR 0.6" — is a recombined or mis-narrated estimate (an HR > 1
+// is an increase, an HR < 1 a reduction). The ratio is the data, so the
+// contradictory verb is softened to a neutral association. The window stops at
+// clause boundaries (no comma/semicolon) so a ratio belonging to a different
+// clause cannot trigger a false correction.
+const DIRECTION_RX =
+  /\b(reduc(?:ed|es|tion)|lower(?:ed|s|ing)?|decreas(?:ed|es|ing)|increas(?:ed|es|ing)|rais(?:ed|es|ing)|elevat(?:ed|es))\b([^.,;]{0,45}?\b(?:hazard ratio|odds ratio|risk ratio|relative risk|HR|OR|RR)\b\s*(?:=|of|was|at|:|,)?\s*)([0-9]+(?:\.[0-9]+)?)/gi;
+const BENEFIT_VERB_RX = /^(?:reduc|lower|decreas)/i;
+const HARM_VERB_RX = /^(?:increas|rais|elevat)/i;
+
+export function reconcileDirection(text: string): string {
+  return text.replace(DIRECTION_RX, (full, verb: string, middle: string, valueStr: string) => {
+    const value = Number(valueStr);
+    if (!Number.isFinite(value)) return full;
+    const contradiction =
+      (BENEFIT_VERB_RX.test(verb) && value >= 1.1) || (HARM_VERB_RX.test(verb) && value <= 0.9);
+    return contradiction ? `was associated with${middle}${valueStr}` : full;
+  });
+}
+
 function rejoin(sentences: string[]): string {
   return sentences
     .map((s) => s.trim())
@@ -141,6 +162,8 @@ function rejoin(sentences: string[]): string {
 export function applyHonestyPass(text: string): string {
   if (!text) return text;
   return softenOverclaims(
-    reconcileCrossingCI(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+    reconcileDirection(
+      reconcileCrossingCI(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+    ),
   );
 }

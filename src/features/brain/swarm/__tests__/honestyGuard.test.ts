@@ -6,6 +6,7 @@ import {
   stripSearchYieldCounts,
   softenOverclaims,
   reconcileCrossingCI,
+  reconcileDirection,
   applyHonestyPass,
 } from '../honestyGuard';
 
@@ -118,6 +119,34 @@ describe('reconcileCrossingCI', () => {
   it('leaves a crossing CI with a consistent non-significant p-value', () => {
     const text = 'HR 0.95 (95% CI 0.80–1.12, p=0.42) showed no effect.';
     expect(reconcileCrossingCI(text)).toBe(text);
+  });
+});
+
+describe('reconcileDirection', () => {
+  it('neutralises a benefit verb paired with a ratio > 1', () => {
+    const out = reconcileDirection('SGLT2i reduced events with an HR of 1.35.');
+    expect(out).toContain('was associated with events with an HR of 1.35');
+    expect(out).not.toMatch(/reduced events/i);
+  });
+
+  it('neutralises a harm verb paired with a ratio < 1', () => {
+    expect(reconcileDirection('the drug increased benefit with RR 0.61')).toContain('was associated with');
+  });
+
+  it('leaves a consistent benefit (ratio < 1) untouched', () => {
+    const t = 'SGLT2i reduced events with an HR of 0.74.';
+    expect(reconcileDirection(t)).toBe(t);
+  });
+
+  it('leaves a consistent harm (ratio > 1) untouched', () => {
+    const t = 'aspirin increased bleeding (HR 1.94).';
+    expect(reconcileDirection(t)).toBe(t);
+  });
+
+  it('does not cross a clause boundary to a different ratio', () => {
+    // "reduced bleeding" is correct; the HR 1.20 belongs to the mortality clause.
+    const t = 'aspirin reduced bleeding, but increased mortality (HR 1.20).';
+    expect(reconcileDirection(t)).toBe(t);
   });
 });
 
