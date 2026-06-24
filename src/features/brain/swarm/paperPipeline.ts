@@ -876,6 +876,15 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
 // Generic academic connective nouns that carry no indexing value on their own
 // — dropped so the keyword list reads as real subject terms ("asthma",
 // "pharmacist", "inhaler") rather than "role" / "approach" / "use".
+// Comparison / temporal / question words that describe the QUESTION, not the
+// medical subject, so they must never become keywords ("how does the effect
+// DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
+const NON_TOPIC_KEYWORDS = new Set([
+  'differ', 'differs', 'differed', 'difference', 'differences', 'differential',
+  'compare', 'compared', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
+  'decade', 'decades', 'recent', 'recently', 'trend', 'trends', 'last', 'over', 'past', 'consensus',
+]);
+
 export function keywordsFrom(question: string): string[] {
   // Use coreConceptGroups (already used for relevance ranking) to extract real
   // medical subject terms, instead of tokenising the raw prompt. This drops
@@ -885,7 +894,7 @@ export function keywordsFrom(question: string): string[] {
   const groups = coreConceptGroups(normalizeMedicalSpelling(question));
   const keywords = groups
     .map((g) => g[0])
-    .filter((k): k is string => !!k && k.length >= 3);
+    .filter((k): k is string => !!k && k.length >= 3 && !NON_TOPIC_KEYWORDS.has(k));
   return [...new Set(keywords)].slice(0, 8);
 }
 

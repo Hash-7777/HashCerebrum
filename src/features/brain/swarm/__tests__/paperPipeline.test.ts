@@ -95,6 +95,16 @@ describe('title & keyword cleanup', () => {
     expect(kw).toContain('sglt2');
   });
 
+  it('drops comparison and temporal question words from keywords', () => {
+    const kw = keywordsFrom(
+      'For aspirin in primary prevention in older adults, how does the effect differ for ischemic versus hemorrhagic stroke, and has the consensus changed over the last decade?',
+    );
+    for (const junk of ['differ', 'versus', 'decade', 'consensus', 'changed', 'last', 'over']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw).toContain('aspirin');
+  });
+
   it('leaves an already-clean topic intact', () => {
     expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
   });
