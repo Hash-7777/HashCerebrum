@@ -151,8 +151,13 @@ DEPTH:
 
 INTEGRITY — this is a REVIEW of retrieved literature, NOT original research:
 - NEVER claim original data collection ("we conducted", "enrolled patients", "EHR analysis", "propensity-score matching", etc.).
-- Methods = automated search workflow ONLY.
+- Methods = automated search workflow ONLY. Describe the searches that actually ran (the sub-query concepts and the sources queried), not the user's question typed verbatim.
 - Report findings as what sources report ("study [S3] reported…"). Attribute every number.
+- NEVER claim a formal appraisal you did not run: do NOT write that records were "rated with GRADE certainty", assessed with "ROBINS-I" / "AMSTAR" / "Cochrane RoB", or "flagged for some concerns". You may only state that NO formal risk-of-bias or GRADE appraisal was applied.
+- A statistic belongs to ONE study: report an effect estimate together with the SAME study's confidence interval and p-value. NEVER pair an estimate from one record with a CI or p-value from another, and never call a confidence interval that crosses 1.0 "significant".
+- Do NOT state a specific total number of records or participants in prose (e.g. "60 records", "140 participants"); refer to the source-yield figure instead — invented counts contradict the deterministic figures.
+- Use ONE consistent population definition matching the question; do not drift between ≥60, ≥70, and ≥75.
+- Calibrate confidence to the evidence: for an abstract-only, low-certainty corpus, never assert a "confident" or "definitive" conclusion — hedge to what the retrieved evidence actually supports.
 
 FORMAT — deviations corrupt the pipeline:
 - Begin with the first word of the section body. No preamble, heading, number, or title.
