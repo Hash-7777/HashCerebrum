@@ -67,6 +67,34 @@ export function softenOverclaims(text: string): string {
   return out;
 }
 
+// A 95% confidence interval immediately followed by a significance claim. We
+// capture the two interval bounds and the p-value's operator + magnitude so the
+// corrector can act ONLY on a genuine contradiction. Hyphen class covers the
+// ASCII, en/em dash, and the U+2011 non-breaking hyphen models emit ("p‑value").
+const CI_THEN_P_RX =
+  /(95\s*%?\s*CI[\s:(]*([0-9]+(?:\.[0-9]+)?)\s*(?:-|–|—|‑|to|,)\s*([0-9]+(?:\.[0-9]+)?)\s*\)?)((?:[,;]?\s*(?:and\s+)?(?:a\s+)?p[\s‑-]*(?:value\s+of\s+|=\s*|<\s*|>\s*))(0?\.[0-9]+))/gi;
+
+/**
+ * Reconcile a statistical contradiction: an effect estimate whose 95% CI crosses
+ * 1.0 (i.e. is NOT statistically significant) presented alongside a significant
+ * p-value — the signature of a p-value scraped from a different study and glued
+ * on. The CI is authoritative for significance, so the false p-claim is replaced
+ * with an honest non-significance note. A CI that does not cross 1.0, or a p that
+ * does not assert significance, is left untouched.
+ */
+export function reconcileCrossingCI(text: string): string {
+  return text.replace(CI_THEN_P_RX, (full, ciPart: string, lo: string, hi: string, pPart: string, pValue: string) => {
+    const l = Number(lo);
+    const h = Number(hi);
+    const crosses = Number.isFinite(l) && Number.isFinite(h) && l < 1 && h > 1;
+    const claimsSignificance = !/>/.test(pPart) && Number(pValue) < 0.05;
+    if (crosses && claimsSignificance) {
+      return `${ciPart}, a non-significant result because the 95% CI crosses 1.0`;
+    }
+    return full;
+  });
+}
+
 function rejoin(sentences: string[]): string {
   return sentences
     .map((s) => s.trim())
@@ -80,5 +108,5 @@ function rejoin(sentences: string[]): string {
 /** Full deterministic honesty pass over one block of manuscript prose. */
 export function applyHonestyPass(text: string): string {
   if (!text) return text;
-  return softenOverclaims(stripCounterfactualDataset(stripFabricatedAppraisal(text)));
+  return softenOverclaims(reconcileCrossingCI(stripCounterfactualDataset(stripFabricatedAppraisal(text))));
 }

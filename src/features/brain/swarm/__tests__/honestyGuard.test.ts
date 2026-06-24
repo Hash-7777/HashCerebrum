@@ -4,6 +4,7 @@ import {
   stripFabricatedAppraisal,
   stripCounterfactualDataset,
   softenOverclaims,
+  reconcileCrossingCI,
   applyHonestyPass,
 } from '../honestyGuard';
 
@@ -60,6 +61,31 @@ describe('softenOverclaims', () => {
   it('leaves calibrated language alone', () => {
     const text = 'the available evidence suggests a modest benefit';
     expect(softenOverclaims(text)).toBe(text);
+  });
+});
+
+describe('reconcileCrossingCI', () => {
+  it('neutralises a significant p-value paired with a CI that crosses 1.0 (the real run)', () => {
+    const text = 'aspirin reduced new stroke with a hazard ratio of 0.87 (95 % CI 0.71–1.07) and a p‑value of 0.004.';
+    const out = reconcileCrossingCI(text);
+    expect(out).not.toMatch(/p[‑\s-]*value of 0\.004/i);
+    expect(out).toContain('non-significant result because the 95% CI crosses 1.0');
+    expect(out).toContain('hazard ratio of 0.87');
+  });
+
+  it('leaves a significant CI (not crossing 1.0) and its p-value alone', () => {
+    const text = 'major bleeding rose, hazard ratio 1.94 (95% CI 1.29–2.93), p=0.002.';
+    expect(reconcileCrossingCI(text)).toBe(text);
+  });
+
+  it('leaves a crossing CI alone when no significance is claimed', () => {
+    const text = 'the estimate was HR 0.87 (95% CI 0.71–1.07).';
+    expect(reconcileCrossingCI(text)).toBe(text);
+  });
+
+  it('leaves a crossing CI with a consistent non-significant p-value', () => {
+    const text = 'HR 0.95 (95% CI 0.80–1.12, p=0.42) showed no effect.';
+    expect(reconcileCrossingCI(text)).toBe(text);
   });
 });
 
