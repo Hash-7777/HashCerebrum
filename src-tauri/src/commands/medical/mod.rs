@@ -158,7 +158,10 @@ pub fn truncate_chars(text: &str, max_chars: usize) -> String {
 // leaks into snippets, extracted key findings, tables, and the PDF.
 fn is_heading_tag(tag: &str) -> bool {
     matches!(
-        tag.trim_start_matches('/').split_whitespace().next().unwrap_or(""),
+        tag.trim_start_matches('/')
+            .split_whitespace()
+            .next()
+            .unwrap_or(""),
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
     )
 }
@@ -440,7 +443,10 @@ mod tests {
         let input = "<h4>Methods</h4>We searched trials.<h4>Results</h4>The hazard ratio was 0.74 (95% CI 0.65-0.85).<h4>Conclusions</h4>SGLT2i reduce events.";
         let out = strip_html(input);
         assert!(out.contains("Methods: We searched"), "got: {out}");
-        assert!(out.contains("Results: The hazard ratio was 0.74"), "got: {out}");
+        assert!(
+            out.contains("Results: The hazard ratio was 0.74"),
+            "got: {out}"
+        );
         assert!(out.contains("Conclusions: SGLT2i reduce"), "got: {out}");
     }
 
