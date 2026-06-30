@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (private)
+    url: https://github.com/Hash-7777/HashCerebrum/security/advisories/new
+    about: Please report security issues privately via GitHub Security Advisories — never in a public issue.
+  - name: Questions & discussion
+    url: https://github.com/Hash-7777/HashCerebrum/discussions
+    about: Ask questions, share ideas, or discuss usage with the community.
