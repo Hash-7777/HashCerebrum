@@ -51,20 +51,12 @@
 .wf-meter-fill {
   display: block;
   height: 100%;
-  width: 0;
+  width: 0; /* actual width set inline from the computed percentage */
   border-radius: 4px;
   background: linear-gradient(90deg, #3ddc84, #3dd1bf 45%, #4f8cff);
   box-shadow: 0 0 12px rgba(61, 209, 191, 0.5);
   transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.wf[data-stage='0'] .wf-meter-fill { width: 17%; }
-.wf[data-stage='1'] .wf-meter-fill { width: 33%; }
-.wf[data-stage='2'] .wf-meter-fill { width: 50%; }
-.wf[data-stage='3'] .wf-meter-fill { width: 67%; }
-.wf[data-stage='4'] .wf-meter-fill { width: 84%; }
-.wf[data-stage='5'] .wf-meter-fill { width: 100%; }
-.wf[data-state='done'] .wf-meter-fill { width: 100%; }
-.wf[data-state='idle'] .wf-meter-fill { width: 0; }
 
 .wf-stages { list-style: none; margin: 0; padding: 0; }
 

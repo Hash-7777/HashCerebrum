@@ -27,7 +27,7 @@ import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
-import { BrainWorkflow2D } from './components/BrainWorkflow2D';
+import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow2D';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
@@ -95,6 +95,11 @@ export function BrainMode({
   const exportTitle = activeChat?.title || 'The Brain';
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(initialAgentStatuses);
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  // The intent resolved for the current/last turn, so the workflow view shows the
+  // right track (paper vs interactions vs genetics vs lookup).
+  const [activeIntent, setActiveIntent] = useState<WorkflowIntent>(
+    drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : 'evidence_review',
+  );
   const [isRunning, setIsRunning] = useState(false);
   const [claimLedgerOpen, setClaimLedgerOpen] = useState(false);
   const [pendingClaims, setPendingClaims] = useState<ClaimLedgerEntry[] | null>(null);
@@ -227,6 +232,7 @@ export function BrainMode({
     // Pharmacist/Genetics mode, that focus wins. `paper`/`lookup`/`rag`/
     // `evidence_review` all use the normal research path for now.
     const resolved = resolveIntent(cleanQuery, overrides);
+    setActiveIntent(resolved.intent);
     const turnDrugFocus = drugFocus || resolved.intent === 'drug_interactions';
     const turnGeneticsFocus = geneticsFocus || resolved.intent === 'genetics';
     const turnSoloFocus = turnDrugFocus || turnGeneticsFocus;
@@ -907,7 +913,7 @@ export function BrainMode({
           <>
             <FeatureBoundary name="Pipeline (2D)">
               <div className="brain-model-panel">
-                <BrainWorkflow2D statuses={agentStatuses} />
+                <BrainWorkflow2D statuses={agentStatuses} intent={activeIntent} />
               </div>
             </FeatureBoundary>
             <FeatureBoundary name="Agents">
