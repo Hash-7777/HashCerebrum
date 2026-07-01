@@ -124,6 +124,12 @@ const RELEVANCE_FILLER = new Set([
   'assessing', 'assess', 'evaluate', 'evaluating', 'examine', 'explore', 'investigate', 'determine',
   'identify', 'describe', 'discuss', 'outline', 'consider', 'including', 'include', 'summarize',
   'summarise', 'summary', 'ignore', 'retrieved', 'instead', 'provide', 'explain',
+  // proof / claim verbs and study-design descriptors — these qualify HOW the
+  // question is asked, not the medical subject, so they must never surface as an
+  // uncovered concept ("no records cover: cures / according / proving").
+  'according', 'cure', 'cures', 'cured', 'curing', 'prove', 'proves', 'proving', 'proven', 'proof',
+  'show', 'shows', 'showing', 'demonstrate', 'demonstrates', 'demonstrating', 'randomised',
+  'randomized', 'controlled', 'trial', 'trials', 'study', 'studies',
 ]);
 
 // A few common medical concept synonyms so a record that uses "kidney" still
