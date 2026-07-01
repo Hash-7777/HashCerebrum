@@ -60,6 +60,8 @@ export function listCloudCandidates(
     // so the chain stops re-attempting an unfunded key on every section.
     if (billingDeadProviders.has(group.provider)) continue;
     for (const model of group.models) {
+      // A model known to be gone/inaccessible this session is never a candidate.
+      if (unusableModels.has(model.value)) continue;
       out.push({
         value: model.value,
         label: model.label,
@@ -143,6 +145,46 @@ export function isBillingError(error: unknown): boolean {
 export function shouldRetrySameProvider(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
   return SAME_PROVIDER_RETRY.test(message) && !QUOTA.test(message);
+}
+
+// ── Unusable-model registry ──────────────────────────────────────────────────
+// A single model that is gone or not accessible to this key (decommissioned,
+// renamed, retired, or not exposed to the account) should never be offered
+// again — not to failover, not to auto-assignment, not in the picker. This is
+// per-MODEL and permanent for the session; it is deliberately NARROW: a transient
+// 429/503/overload/timeout does NOT mean the model is dead (it is just busy), so
+// those are excluded here and handled by the cooldown path instead. Provider-wide
+// auth failures (bad key → 401/403) are also excluded — that is a key problem,
+// not a model problem, and belongs to the billing/key handling.
+const MODEL_GONE =
+  /\bmodel.{0,10}not.{0,10}found\b|\bno such model\b|does not exist|has been (deprecated|decommissioned|retired|removed|sunset)|is (deprecated|decommissioned|retired|no longer available)|unknown model|invalid model|model_not_found|not a valid model|\b404\b/i;
+
+export function isModelUnusableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  // Never treat a transient/busy signal as a dead model.
+  if (SAME_PROVIDER_RETRY.test(message) || /overloaded|capacity|try again/i.test(message)) return false;
+  return MODEL_GONE.test(message);
+}
+
+const unusableModels = new Set<string>();
+
+/** Mark a specific model value (`provider:id`) as gone for the rest of the session. */
+export function markModelUnusable(modelValue: string): void {
+  if (modelValue) unusableModels.add(modelValue);
+}
+
+export function isModelUnusable(modelValue: string): boolean {
+  return unusableModels.has(modelValue);
+}
+
+/** Live view of the dead-model set, for catalog filtering. */
+export function unusableModelValues(): ReadonlySet<string> {
+  return unusableModels;
+}
+
+/** Test-only: reset session state between cases. */
+export function resetModelHealth(): void {
+  unusableModels.clear();
 }
 
 // ── Provider cooldown ───────────────────────────────────────────────────────

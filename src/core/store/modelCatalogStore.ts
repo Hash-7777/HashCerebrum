@@ -6,6 +6,7 @@ import {
   initialModelStatuses,
   type ProviderModelStatus,
 } from '@core/llm/modelDiscovery';
+import { unusableModelValues } from '@core/llm/failover';
 import type { LlmProviderId } from '@core/llm/types';
 
 interface ModelCatalogStore {
@@ -23,6 +24,44 @@ interface ModelCatalogStore {
 function sortGroups(groups: ModelGroup[]): ModelGroup[] {
   const order = new Map(PROVIDER_DEFS.map((def, index) => [def.provider, index]));
   return [...groups].sort((a, b) => (order.get(a.provider) ?? 999) - (order.get(b.provider) ?? 999));
+}
+
+// Drop models already known to be gone/inaccessible this session (runtime
+// failures or a prior probe), and any group left empty. Applied every time
+// groups are set so a model condemned at runtime disappears on the next refresh.
+function pruneUnusable(groups: ModelGroup[]): ModelGroup[] {
+  const dead = unusableModelValues();
+  if (dead.size === 0) return groups;
+  return groups
+    .map((group) => ({ ...group, models: group.models.filter((m) => !dead.has(m.value)) }))
+    .filter((group) => group.models.length > 0);
+}
+
+// How many of each provider's strongest models to liveness-probe on a refresh.
+// Groups are strength-sorted, so this covers the models actually offered to the
+// boss and specialists; anything past it is still caught at runtime.
+const PROBE_LIMIT = 16;
+const PROBE_CONCURRENCY = 4;
+
+// Probe the top models of every connected cloud provider with a 1-token call and
+// drop the ones that come back definitively unusable. Runs in the background
+// after a refresh (never blocks the picker from showing) and only ever removes
+// models — a transient/busy failure leaves the model in place.
+async function probeConnectedGroups(): Promise<void> {
+  const { probeModelUsable } = await import('@core/llm/ProviderRegistry');
+  const groups = useModelCatalogStore.getState().groups;
+  const targets = groups
+    .filter((group) => group.provider !== 'ollama')
+    .flatMap((group) => group.models.slice(0, PROBE_LIMIT).map((m) => m.value));
+  let condemned = false;
+  for (let i = 0; i < targets.length; i += PROBE_CONCURRENCY) {
+    const batch = targets.slice(i, i + PROBE_CONCURRENCY);
+    const results = await Promise.all(batch.map((value) => probeModelUsable(value)));
+    if (results.includes('unusable')) condemned = true;
+  }
+  if (condemned) {
+    useModelCatalogStore.setState((state) => ({ ...state, groups: pruneUnusable(state.groups) }));
+  }
 }
 
 export const useModelCatalogStore = create<ModelCatalogStore>((set, get) => ({
@@ -48,13 +87,14 @@ export const useModelCatalogStore = create<ModelCatalogStore>((set, get) => ({
       const snapshot = await discoverConnectedModelGroups();
       set((state) => ({
         ...state,
-        groups: sortGroups(snapshot.groups),
+        groups: pruneUnusable(sortGroups(snapshot.groups)),
         statuses: snapshot.statuses,
         lastFetchedAt: snapshot.fetchedAt,
       }));
     } finally {
       set((state) => ({ ...state, refreshing: false }));
     }
+    void probeConnectedGroups();
   },
 
   refreshProvider: async (provider) => {
@@ -76,11 +116,12 @@ export const useModelCatalogStore = create<ModelCatalogStore>((set, get) => ({
       const groups = result.group.models.length > 0 ? sortGroups([...withoutProvider, result.group]) : withoutProvider;
       return {
         ...state,
-        groups,
+        groups: pruneUnusable(groups),
         statuses: { ...state.statuses, [provider]: result.status },
         lastFetchedAt: new Date().toISOString(),
       };
     });
+    void probeConnectedGroups();
     return result.status;
   },
 

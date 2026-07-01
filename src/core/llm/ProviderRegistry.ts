@@ -6,8 +6,10 @@ import {
   findBestFailover,
   isBillingError,
   isHardProviderError,
+  isModelUnusableError,
   isProviderOnCooldown,
   isRetriableError,
+  markModelUnusable,
   markProviderBillingDead,
   shouldRetrySameProvider,
   type FailoverCandidate,
@@ -618,6 +620,9 @@ export async function streamWithModelChain(
       lastError = error;
       if (opts.signal?.aborted) break;
       const parsed = parseModelRef(current);
+      // A model that is gone / not accessible to this key is retired for the
+      // session so failover, auto-assignment, and the picker stop offering it.
+      if (isModelUnusableError(error)) markModelUnusable(current);
 
       if (receivedThisLeg) {
         // Mid-stream interruption. If retriable and budget remains, RESUME the
@@ -769,6 +774,36 @@ export async function completeWithModel(modelValue: string, req: Omit<LlmRequest
   return completeOpenAiCompatible(parsed.provider, request);
 }
 
+export type ModelProbe = 'ok' | 'unusable' | 'unknown';
+
+/**
+ * Liveness-probe a single model with a minimal 1-token request. Returns:
+ *  - 'ok'       the model answered — it is usable with this key
+ *  - 'unusable' the model is gone / not accessible (definitive) — it is retired
+ *               for the session via markModelUnusable
+ *  - 'unknown'  transient failure (rate limit, overload, timeout, network) —
+ *               the model is NOT condemned; it is just busy right now
+ * Never throws. Local (Ollama) models are reported 'ok' without a call so a probe
+ * does not force a cold model load on device.
+ */
+export async function probeModelUsable(modelValue: string): Promise<ModelProbe> {
+  if (parseModelRef(modelValue).kind !== 'cloud') return 'ok';
+  try {
+    await completeWithModel(modelValue, {
+      messages: [{ role: 'user', content: 'ping' }],
+      maxTokens: 1,
+      temperature: 0,
+    });
+    return 'ok';
+  } catch (error) {
+    if (isModelUnusableError(error)) {
+      markModelUnusable(modelValue);
+      return 'unusable';
+    }
+    return 'unknown';
+  }
+}
+
 export interface FailoverInfo {
   attempted: number;
   switchedTo: string[];
@@ -884,6 +919,7 @@ export async function completeWithModelChain(
     } catch (error) {
       lastError = error;
       const parsed = parseModelRef(current);
+      if (isModelUnusableError(error)) markModelUnusable(current);
       const retries = providerRetries.get(parsed.provider) ?? 0;
       if (shouldRetrySameProvider(error) && retries < 1) {
         providerRetries.set(parsed.provider, retries + 1);

@@ -6,9 +6,14 @@ import {
   findBestFailover,
   isBillingError,
   isHardProviderError,
+  isModelUnusable,
+  isModelUnusableError,
   isProviderOnCooldown,
   isRetriableError,
+  listCloudCandidates,
+  markModelUnusable,
   markProviderBillingDead,
+  resetModelHealth,
   shouldRetrySameProvider,
 } from '../failover';
 import type { ModelGroup } from '../modelCatalog';
@@ -163,5 +168,37 @@ describe('session billing-dead providers', () => {
     const next = findBestFailover('cloud:openai:gpt-5.2', new Set(['cloud:openai:gpt-5.2']), hasKey, groups);
     expect(next?.provider).toBe('gemini');
     expect(next?.value).not.toContain('groq');
+  });
+});
+
+describe('unusable-model registry', () => {
+  beforeEach(() => {
+    resetModelHealth();
+    clearBillingDeadProviders();
+  });
+
+  it('condemns a model that is gone or not accessible to the key', () => {
+    expect(isModelUnusableError(new Error('HTTP 404: model not found'))).toBe(true);
+    expect(isModelUnusableError(new Error('The model `x` does not exist'))).toBe(true);
+    expect(isModelUnusableError(new Error('gemini-1.0-pro has been decommissioned'))).toBe(true);
+    expect(isModelUnusableError(new Error('unknown model: foo'))).toBe(true);
+  });
+
+  it('does NOT condemn a model that is merely busy or transiently failing', () => {
+    expect(isModelUnusableError(new Error('HTTP 503: model is overloaded, try again'))).toBe(false);
+    expect(isModelUnusableError(new Error('HTTP 429 rate limit'))).toBe(false);
+    expect(isModelUnusableError(new Error('request timed out'))).toBe(false);
+    expect(isModelUnusableError(new Error('failed to fetch'))).toBe(false);
+  });
+
+  it('removes a condemned model from failover candidates', () => {
+    const all = (_: LlmProviderId) => true;
+    expect(listCloudCandidates(all, groups).some((c) => c.value === 'cloud:gemini:gemini-2.5-pro')).toBe(true);
+    markModelUnusable('cloud:gemini:gemini-2.5-pro');
+    expect(isModelUnusable('cloud:gemini:gemini-2.5-pro')).toBe(true);
+    const candidates = listCloudCandidates(all, groups);
+    expect(candidates.some((c) => c.value === 'cloud:gemini:gemini-2.5-pro')).toBe(false);
+    // A sibling model on the same provider is untouched — this is per-model.
+    expect(candidates.some((c) => c.value === 'cloud:groq:openai/gpt-oss-120b')).toBe(true);
   });
 });
