@@ -254,6 +254,36 @@ describe('buildChatMarkdownExport', () => {
     expect(md).toContain('**Critique of message:** msg-0');
   });
 
+  it('renumbers inline [S#] markers and drops dangling ones so body and list line up', () => {
+    const rec = (title: string) => ({
+      source: 'pubmed' as const,
+      title,
+      authors: ['A'],
+      year: 2024,
+      identifiers: {},
+      fetchedAt: '2026-01-01T00:00:00Z',
+      provenanceHash: title,
+    });
+    const messages = [
+      {
+        id: '1',
+        role: 'assistant' as const,
+        // Body cites S2, S1, and a dangling S9 with only two references available.
+        content: 'First point [S2]. Second point [S1]. Dangling [S9].',
+        citations: [rec('Ref one'), rec('Ref two')],
+      },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    // Markers are renumbered in citation order and the dangling one is removed.
+    expect(md).toContain('First point [1]. Second point [2].');
+    expect(md).not.toContain('[S2]');
+    expect(md).not.toContain('[S9]');
+    expect(md).not.toContain('Dangling [9]');
+    // The reference list holds exactly the two cited refs, in first-appearance order.
+    expect(md).toContain('1. A (2024). Ref two');
+    expect(md).toContain('2. A (2024). Ref one');
+  });
+
   it('includes manuscript and outline proposal metadata', () => {
     const messages = [
       {

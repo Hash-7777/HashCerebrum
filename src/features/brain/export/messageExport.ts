@@ -769,12 +769,18 @@ export function buildChatMarkdownExport(
 
     out += `\n## Message ${msgIndex} — ${roleLabel}${modelTag}${failoverTag}\n\n`;
 
-    if (message.content.trim()) {
-      out += `${message.content.trim()}\n`;
+    // Renumber inline [S#] markers to sequential [1], [2], … and reduce the
+    // citation list to exactly what the body cites, in the same order — the same
+    // pass every other export path uses. Without it the transcript dumped raw
+    // [S#] source indices (up to [S95]) against a 1..N list, so any marker beyond
+    // the list dangled and the numbers never lined up.
+    const renumbered = renumberCitations(stripGeneratedReferenceSections(message.content), message.citations ?? []);
+    if (renumbered.content.trim()) {
+      out += `${renumbered.content.trim()}\n`;
     }
 
-    if (message.citations && message.citations.length > 0) {
-      out += formatChatCitations(message.citations);
+    if (renumbered.citations.length > 0) {
+      out += formatChatCitations(renumbered.citations);
       out += '\n';
     }
 
