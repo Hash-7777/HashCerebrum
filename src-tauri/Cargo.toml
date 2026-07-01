@@ -80,7 +80,9 @@ url = "2"
 
 # PDF text extraction — Librarian agent feeds extracted text back to
 # the model for citation grounding. lopdf is pure-Rust, no native deps.
-lopdf = "0.34"
+# Pinned >=0.42 to clear RUSTSEC-2026-0187 (stack overflow on deeply nested
+# PDF objects); the load_mem/get_pages/extract_text API we use is unchanged.
+lopdf = "0.42"
 
 # Typst — embedded typesetting engine for journal-grade manuscript PDFs.
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
