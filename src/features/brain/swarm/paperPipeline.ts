@@ -1099,6 +1099,32 @@ function citedSourceMarkers(text: string): string[] {
   return [...text.matchAll(/\[S(\d+)\]/g)].map((match) => `[S${match[1]}]`);
 }
 
+// Remove inline [S#] markers a drafted section cites that are NOT in the approved
+// claim ledger. The drafting model occasionally emits markers beyond the ledger it
+// was handed (e.g. [S79] when the ledger tops out far lower). Left in, they trip
+// the export gate's `citation-not-in-claim-ledger` blocker — and on free-tier the
+// QA-repair pass that would otherwise fix them can itself be rate-limited, so the
+// whole paper ends "blocked" with no output. Stripping the unapproved markers
+// deterministically keeps every legitimate ledger citation, lets the gate pass
+// without a model call, and guarantees the body and reference list agree. A marker
+// removed at the start of a sentence takes its trailing space; punctuation is
+// tidied afterwards.
+export function stripUnapprovedMarkers(
+  sections: ManuscriptSection[],
+  approvedMarkers: Set<string>,
+): ManuscriptSection[] {
+  const approvedNums = new Set(
+    [...approvedMarkers].map((m) => m.match(/\d+/)?.[0]).filter((n): n is string => Boolean(n)),
+  );
+  const clean = (text: string): string =>
+    text
+      .replace(/ ?\[S(\d+)\]/g, (full: string, n: string) => (approvedNums.has(n) ? full : ''))
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([.,;:)])/g, '$1')
+      .trim();
+  return sections.map((section) => ({ ...section, body: section.body.map(clean) }));
+}
+
 function manuscriptText(manuscript: Manuscript): string {
   return [
     manuscript.title,
@@ -1840,6 +1866,11 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   });
+  // Deterministically drop any inline marker beyond the approved claim ledger, so
+  // the export gate never hard-blocks on an over-cited [S#] the QA pass would have
+  // had to fix with a (rate-limitable) model call.
+  const approvedMarkers = new Set(opts.claimLedger.flatMap((entry) => entry.supportingSources));
+  sections = stripUnapprovedMarkers(sections, approvedMarkers);
   let abstract = await draftAbstract({
     model: opts.bossModel,
     title: opts.paperBlueprint.title,
@@ -1899,6 +1930,8 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     });
     const repairedNames = new Set(repairTargets);
     sections = sections.map((section) => (repairedNames.has(section.heading) ? repaired.find((candidate) => candidate.heading === section.heading) ?? section : section));
+    // Re-strip: a repaired section may re-introduce an over-cited marker.
+    sections = stripUnapprovedMarkers(sections, approvedMarkers);
     abstract = await draftAbstract({
       model: opts.bossModel,
       title: opts.paperBlueprint.title,

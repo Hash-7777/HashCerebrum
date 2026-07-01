@@ -11,10 +11,33 @@ import {
   isSubstantiveAbstract,
   keywordsFrom,
   neutralizeUnverifiableNct,
+  stripUnapprovedMarkers,
   parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('stripUnapprovedMarkers', () => {
+  const approved = new Set(['[S1]', '[S2]', '[S3]']);
+  it('drops markers beyond the approved claim ledger, keeps approved ones', () => {
+    const out = stripUnapprovedMarkers(
+      [{ heading: 'Intro', body: ['A finding [S2] and an over-cited one [S79] here.'] }],
+      approved,
+    );
+    expect(out[0]!.body[0]).toBe('A finding [S2] and an over-cited one here.');
+  });
+
+  it('leaves a fully-approved section untouched', () => {
+    const body = ['Point one [S1]. Point two [S3].'];
+    const out = stripUnapprovedMarkers([{ heading: 'X', body }], approved);
+    expect(out[0]!.body[0]).toBe('Point one [S1]. Point two [S3].');
+  });
+
+  it('tidies punctuation when a trailing marker is removed', () => {
+    const out = stripUnapprovedMarkers([{ heading: 'X', body: ['Claim [S95].'] }], approved);
+    expect(out[0]!.body[0]).toBe('Claim.');
+  });
+});
 
 describe('neutralizeUnverifiableNct', () => {
   it('strips a hallucinated NCT and its registered-as scaffolding, keeping the prose', () => {
