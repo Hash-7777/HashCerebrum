@@ -53,6 +53,24 @@ function elapsed(record: ActivityRecord, start: number): string {
   return `${((record.ts - start) / 1000).toFixed(1)}s`;
 }
 
+// A persisted "app session started" boundary. The trace log survives restarts, so
+// without this the relative clock counts from the very first entry ever recorded
+// and shows meaningless six-digit second counts (e.g. 606807.9s) after a few
+// sessions.
+function isSessionBoundary(r: ActivityRecord): boolean {
+  return r.agentId === 'system' && r.phase === 'start' && /session started/i.test(r.detail ?? '');
+}
+
+// For an oldest-first list, the session-start ts each entry is measured against,
+// so every "app session started" restarts the relative clock near zero.
+function sessionStarts(ordered: ActivityRecord[]): number[] {
+  let current = ordered[0]?.ts ?? Date.now();
+  return ordered.map((r) => {
+    if (isSessionBoundary(r)) current = r.ts;
+    return current;
+  });
+}
+
 function summaryFor(activity: ActivityRecord[]): string {
   const latest = activity[0];
   if (!latest) return 'No run yet';
@@ -63,17 +81,17 @@ function summaryFor(activity: ActivityRecord[]): string {
 // format used by the chat Markdown export, with a relative timestamp prefix.
 function buildTraceMarkdown(activity: ActivityRecord[]): string {
   const ordered = [...activity].reverse(); // oldest first
-  const start = ordered[0]?.ts ?? Date.now();
+  const starts = sessionStarts(ordered); // session-relative, so times reset per session
   const lines: string[] = [
     '# Execution Trace',
     '',
     `_Exported ${new Date().toLocaleString()}_`,
     '',
   ];
-  for (const r of ordered) {
-    const t = `${((r.ts - start) / 1000).toFixed(1)}s`;
+  ordered.forEach((r, i) => {
+    const t = `${((r.ts - (starts[i] ?? r.ts)) / 1000).toFixed(1)}s`;
     lines.push(`- \`[${t}]\` **${r.agentId}** · ${r.phase}${r.detail ? ` — ${r.detail}` : ''}`);
-  }
+  });
   lines.push('');
   return lines.join('\n');
 }
@@ -121,7 +139,7 @@ export function ExecutionTrace() {
   }, []);
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);
-  const startTime = visible[0]?.ts ?? Date.now();
+  const visibleStarts = useMemo(() => sessionStarts(visible), [visible]);
 
   // Opening the panel re-arms following so it jumps to the latest line.
   useEffect(() => {
@@ -206,11 +224,11 @@ export function ExecutionTrace() {
             <span className="trace-msg">idle</span>
           </div>
         )}
-        {visible.map((record) => {
+        {visible.map((record, i) => {
           const phase = PHASE_CLASS[record.phase] ?? 'wait';
           return (
             <div key={record.id} className={`execution-trace-entry trace-${phase}`}>
-              <span className="trace-time">[{elapsed(record, startTime)}]</span>
+              <span className="trace-time">[{elapsed(record, visibleStarts[i] ?? record.ts)}]</span>
               <span className="trace-agent">{record.agentId}</span>
               <Icon name={PHASE_ICON[record.phase] ?? 'pulse'} size={12} />
               <span className="trace-msg">{record.detail || record.phase}</span>
