@@ -84,6 +84,14 @@ let installed = false;
 // persistent trace with identical consecutive lines.
 let lastTraceMessage = '';
 
+// Benign upstream-library console noise that is not an app problem. These still
+// print to devtools (we call the original console method first) but are kept out
+// of the user-facing error log and execution trace, where they read as spurious
+// "warnings" the user cannot act on. Currently: three.js deprecation notices
+// emitted from inside @react-three/fiber's render loop (e.g. THREE.Clock /
+// PCFSoftShadowMap), which we do not call directly and cannot silence at source.
+const THIRD_PARTY_NOISE = /THREE\.\w+.*deprecated/i;
+
 /** Mirror a captured item into the persistent execution trace, so even silent
  *  errors appear in the Trace panel (and survive restarts). Never throws. */
 function mirrorToTrace(level: ErrorLevel, message: string): void {
@@ -140,6 +148,8 @@ export function installErrorCapture(): void {
         const message = args
           .map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : safeStringify(a)))
           .join(' ');
+        // Devtools still saw it above; keep benign upstream noise out of the log/trace.
+        if (THIRD_PARTY_NOISE.test(message)) return;
         const stackArg = args.find((a): a is Error => a instanceof Error);
         record({ source: 'console', level, message, ...(stackArg?.stack ? { stack: stackArg.stack } : {}) });
       } catch {
