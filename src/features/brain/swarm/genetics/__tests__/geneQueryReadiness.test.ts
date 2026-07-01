@@ -2,9 +2,26 @@ import { describe, expect, it } from 'vitest';
 import {
   assessGeneQueryReadiness,
   clarificationMessage,
+  extractGeneSymbols,
+  extractRsIds,
   hasDiseaseSignal,
   hasGeneSignal,
 } from '../geneQueryReadiness';
+
+describe('extractGeneSymbols / extractRsIds', () => {
+  it('pulls the gene symbol out of a full sentence for the DB query', () => {
+    expect(
+      extractGeneSymbols('Association between the MICA gene TT genotype and cardiovascular complications in type 1 diabetes?'),
+    ).toContain('MICA');
+    // Genetics meta-words in caps must not be mistaken for a gene.
+    expect(extractGeneSymbols('DNA and RNA variants')).toEqual([]);
+  });
+
+  it('pulls rsIDs', () => {
+    expect(extractRsIds('does rs1051792 and rs2596542 matter')).toEqual(['rs1051792', 'rs2596542']);
+    expect(extractRsIds('no rsid here')).toEqual([]);
+  });
+});
 
 describe('hasGeneSignal', () => {
   it('detects gene symbols and rsIDs', () => {

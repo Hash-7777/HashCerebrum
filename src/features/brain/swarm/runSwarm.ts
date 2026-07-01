@@ -28,7 +28,13 @@ import {
   unverifiedDrugNames,
 } from './boss';
 import { confidenceFromEvidence } from './genetics/associationConfidence';
-import { assessGeneQueryReadiness, clarificationMessage } from './genetics/geneQueryReadiness';
+import {
+  assessGeneQueryReadiness,
+  clarificationMessage,
+  diseaseTerms as geneDiseaseTerms,
+  extractGeneSymbols,
+  extractRsIds,
+} from './genetics/geneQueryReadiness';
 import {
   detectPaperRequest,
   fallbackPaperTasks,
@@ -490,11 +496,42 @@ async function geneticDatabaseEvidence(
       return [];
     }
   };
-  const [gwas, clinvar] = await Promise.all([
-    fetchOne('gwas_catalog_search', () => med.gwas_catalog({ query: question, maxResults: 25 })),
-    fetchOne('clinvar_search', () => med.clinvar({ query: question, maxResults: 25 })),
-  ]);
-  return [...gwas, ...clinvar];
+  // GWAS Catalog and ClinVar match on a GENE SYMBOL or rsID, never on a full
+  // sentence — passing the raw question returned 0 for real genes like MICA. Query
+  // by each extracted symbol/rsID instead, and guarantee ON-TOPIC literature with
+  // a focused "<gene> <disease terms>" search (the LLM specialist's own queries had
+  // returned unrelated records). Falls back to the raw question only when no gene
+  // is named (the readiness gate normally prevents that).
+  const genes = extractGeneSymbols(question);
+  const rsIds = extractRsIds(question);
+  const geneTerms = [...genes, ...rsIds];
+  const disease = geneDiseaseTerms(question).slice(0, 4);
+  const litQuery = [genes[0] ?? geneTerms[0] ?? question, ...disease].join(' ').trim();
+
+  const dbQueries = geneTerms.length > 0 ? geneTerms : [question];
+  const perDb = Math.max(6, Math.floor(25 / dbQueries.length));
+
+  const gwas = (
+    await Promise.all(
+      dbQueries.map((q) => fetchOne('gwas_catalog_search', () => med.gwas_catalog({ query: q, maxResults: perDb }))),
+    )
+  ).flat();
+  const clinvar = (
+    await Promise.all(
+      dbQueries.map((q) => fetchOne('clinvar_search', () => med.clinvar({ query: q, maxResults: perDb }))),
+    )
+  ).flat();
+  // Focused, on-topic literature so the confidence engine can score real published
+  // effect sizes even when GWAS/ClinVar have no row for a niche gene-disease pair.
+  const [pubmed, europepmc] =
+    litQuery && geneTerms.length > 0
+      ? await Promise.all([
+          fetchOne('pubmed_search', () => med.pubmed({ query: litQuery, maxResults: 15 })),
+          fetchOne('europepmc_fetch', () => med.europepmc({ query: litQuery, maxResults: 15 })),
+        ])
+      : [[], []];
+
+  return [...gwas, ...clinvar, ...pubmed, ...europepmc];
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {

@@ -51,6 +51,28 @@ export function hasGeneSignal(text: string): boolean {
   return text.split(/[^A-Za-z0-9-]+/).some(geneLikeToken);
 }
 
+/** Gene-symbol tokens named in the text (e.g. "MICA"), de-duplicated, order kept.
+ *  Used to query GWAS Catalog / ClinVar by SYMBOL rather than by a whole sentence,
+ *  which those APIs cannot match. */
+export function extractGeneSymbols(text: string): string[] {
+  const out: string[] = [];
+  for (const tok of text.split(/[^A-Za-z0-9-]+/)) {
+    const t = tok.trim();
+    if (geneLikeToken(t) && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
+/** rsID tokens named in the text (e.g. "rs1051792"), de-duplicated. */
+export function extractRsIds(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\brs\d{2,}\b/gi)) {
+    const id = m[0].toLowerCase();
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 /** The disease/phenotype content words in a query (lowercased) — excluding gene
  *  symbols, rsIDs and genetics meta-words. Used to keep literature scoring on
  *  the asked disease. */
