@@ -274,9 +274,11 @@ function BrainModel({ rotateEnabled, performanceMode, groupRef, ...props }: Brai
     if (!groupRef.current) return;
     groupRef.current.rotation.x = 0.12;
     // Ease the spin speed toward its target — full speed during a run, 0 when
-    // idle or while the user is dragging — so it accelerates from rest and
-    // decelerates to a stop from wherever it currently is. No snap on send/stop.
-    const target = hasActiveGlow && rotateEnabled ? AUTO_ROTATE_SPEED : 0;
+    // idle, while the user is dragging, or in performance mode — so it
+    // accelerates from rest and decelerates to a stop from wherever it currently
+    // is. No snap on send/stop. Performance mode freezes the model so the button
+    // visibly stops all motion (and drops the GPU work) even during a run.
+    const target = hasActiveGlow && rotateEnabled && !performanceMode ? AUTO_ROTATE_SPEED : 0;
     spinSpeedRef.current += (target - spinSpeedRef.current) * Math.min(1, dt * 3);
     groupRef.current.rotation.y += spinSpeedRef.current * dt;
     if (!hasActiveGlow && spinSpeedRef.current < 0.002) spinSpeedRef.current = 0;
@@ -407,9 +409,13 @@ function BrainCanvasInner(props: BrainCanvasProps) {
     const timer = setTimeout(() => setSpinning(false), 1600);
     return () => clearTimeout(timer);
   }, [glowActive]);
+  // Performance mode never uses the continuous 'always' loop: the model is frozen
+  // (no rotation) and the scene only repaints on demand — region glow still
+  // updates because the material effect calls invalidate(). This is the GPU cut
+  // the performance button promises.
   const frameloop: 'always' | 'demand' | 'never' = !visible
     ? 'never'
-    : spinning && windowActive
+    : spinning && windowActive && !performanceMode
       ? 'always'
       : 'demand';
   const cameraRef = useRef<THREE.Camera | null>(null);
