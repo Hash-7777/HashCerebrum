@@ -2,6 +2,7 @@
 @import './sections/base.css';
 @import './sections/shell.css';
 @import './sections/brain-canvas.css';
+@import './sections/brain-2d.css';
 @import './sections/brain-chat.css';
 @import './sections/brain-sources.css';
 @import './sections/settings-audit.css';

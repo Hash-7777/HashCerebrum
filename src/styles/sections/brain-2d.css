@@ -1,0 +1,43 @@
+/* 2D brain (Lite mode) — GPU-free stand-in for the WebGL BrainCanvas.
+   Region colours/opacity come from SVG presentation attributes on the
+   component; this sheet only handles layout and the running-region pulse. */
+
+.brain2d {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 4px 4px;
+}
+
+.brain2d-svg {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  overflow: visible;
+}
+
+/* A region whose agent is running breathes so activity reads at a glance.
+   CSS opacity overrides the SVG `opacity` attribute for the running state. */
+.brain2d-region.is-running {
+  animation: brain2d-pulse 1.9s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes brain2d-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brain2d-region.is-running {
+    animation: none;
+    opacity: 0.92;
+  }
+}
