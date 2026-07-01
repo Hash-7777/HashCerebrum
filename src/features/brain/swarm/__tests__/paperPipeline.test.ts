@@ -10,10 +10,33 @@ import {
   extractEvidenceFromRecords,
   isSubstantiveAbstract,
   keywordsFrom,
+  neutralizeUnverifiableNct,
   parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('neutralizeUnverifiableNct', () => {
+  it('strips a hallucinated NCT and its registered-as scaffolding, keeping the prose', () => {
+    const out = neutralizeUnverifiableNct(
+      'The completed clinical trial registered as NCT03596502 compared DOACs versus warfarin.',
+      ['NCT03596502'],
+    );
+    expect(out).not.toContain('NCT03596502');
+    expect(out).toContain('compared DOACs versus warfarin');
+    expect(out).toContain('a registered trial');
+  });
+
+  it('drops a parenthetical NCT and tidies punctuation', () => {
+    const out = neutralizeUnverifiableNct('An observational study (NCT03993119) tracked usage.', ['NCT03993119']);
+    expect(out).toBe('An observational study tracked usage.');
+  });
+
+  it('leaves a verified NCT untouched (not in the bad list)', () => {
+    const text = 'The ANAFIE registry (NCT02786888) enrolled elderly patients.';
+    expect(neutralizeUnverifiableNct(text, ['NCT03596502'])).toBe(text);
+  });
+});
 
 describe('isSubstantiveAbstract', () => {
   it('rejects a blank or thin abstract so the manuscript never ships an empty one', () => {

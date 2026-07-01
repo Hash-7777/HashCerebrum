@@ -86,6 +86,34 @@ function validateDraftIdentifiers(
   return issues;
 }
 
+// Remove trial-registry identifiers the draft cited that are NOT in the retrieved
+// evidence — a hallucinated NCT presented as a real registered trial is a serious
+// integrity failure ("the completed clinical trial registered as NCT03596502…"
+// where no such record was retrieved). We strip the fabricated identifier and the
+// "registered as / (NCT…)" scaffolding around it, leaving the surrounding prose,
+// rather than assert a registry number the pipeline never saw. Verified NCTs (in
+// evidence) are untouched.
+export function neutralizeUnverifiableNct(text: string, badNcts: string[]): string {
+  let out = text;
+  for (const nct of badNcts) {
+    const esc = nct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out
+      // "(NCT123…)" or ", NCT123…," parenthetical/apposition
+      .replace(new RegExp(`\\s*[(\\[]\\s*${esc}\\s*[)\\]]`, 'gi'), '')
+      // "registered as/under NCT123…", "identifier NCT123…", "NCT number NCT123…"
+      .replace(new RegExp(`\\b(?:registered|identified|listed)\\s+(?:as|under)\\s+${esc}\\b`, 'gi'), 'a registered trial')
+      .replace(new RegExp(`\\b(?:trial|study|registry)\\s+(?:number|identifier|id)\\s+${esc}\\b`, 'gi'), 'trial')
+      // bare token
+      .replace(new RegExp(`\\b${esc}\\b`, 'gi'), '');
+  }
+  return out
+    .replace(/\s*,\s*,/g, ',')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
+}
+
 // ── C6: claim↔source fidelity gate ──────────────────────────────────────────
 // Simple keyword overlap between a claim and its supporting source texts.
 // Flags claims whose wording drifts far from the evidence they cite.
@@ -1632,6 +1660,13 @@ async function compileSections(opts: {
         phase: 'tool_call',
         detail: `${blueprintSection.heading}: unverifiable identifiers flagged — ${idIssues.join(', ')}`,
       });
+      // Don't just flag it: strip hallucinated trial-registry numbers from the
+      // prose so a fabricated NCT is never presented to the reader as a real
+      // registered trial. (PMID/DOI issues stay flagged for review.)
+      const badNcts = idIssues.filter((id) => /^NCT\d{8,}$/i.test(id));
+      if (badNcts.length > 0) {
+        body = body.map((paragraph) => neutralizeUnverifiableNct(paragraph, badNcts));
+      }
     }
 
     // C6: claim↔source fidelity gate — flag claims whose wording drifts from evidence.
