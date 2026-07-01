@@ -27,7 +27,7 @@ import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
-import { BrainCanvas2D } from './components/BrainCanvas2D';
+import { BrainWorkflow2D } from './components/BrainWorkflow2D';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
@@ -878,13 +878,13 @@ export function BrainMode({
             <GeneticsPanel />
           </FeatureBoundary>
         ) : lite ? (
-          // Lite mode: no WebGL / 3D — a 2D SVG brain carries the same
-          // region/agent activity as the 3D scene, above the agent panel, so
-          // weak or no-GPU hardware runs full-speed with no loss of any feature.
+          // Lite mode: no WebGL / 3D — a 2D pipeline workflow shows the live
+          // research process (rail slides to the active stage) above the agent
+          // panel, so weak or no-GPU hardware runs full-speed with no loss.
           <>
-            <FeatureBoundary name="Brain (2D)">
+            <FeatureBoundary name="Pipeline (2D)">
               <div className="brain-model-panel">
-                <BrainCanvas2D statuses={agentStatuses} />
+                <BrainWorkflow2D statuses={agentStatuses} />
               </div>
             </FeatureBoundary>
             <FeatureBoundary name="Agents">
