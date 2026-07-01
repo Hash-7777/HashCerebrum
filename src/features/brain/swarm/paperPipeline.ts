@@ -26,7 +26,6 @@ import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
-import { coreConceptGroups } from './runSwarm';
 import { normalizeMedicalSpelling } from './queryNormalize';
 
 
@@ -1000,18 +999,55 @@ const NON_TOPIC_KEYWORDS = new Set([
   'publishable', 'publishable-quality', 'quality', 'titled', 'across', 'spectrum', 'current',
 ]);
 
+// Connectors, articles, and request words that separate one keyword PHRASE from
+// the next. Splitting the title at these keeps multi-word medical terms intact
+// ("direct oral anticoagulants", "atrial fibrillation") instead of shattering
+// them into single words, which is what made the keyword line read
+// "direct, oral, anticoagulants, warfarin, …".
+const KEYWORD_PHRASE_STOP = new Set([
+  'and', 'or', 'of', 'the', 'a', 'an', 'for', 'in', 'on', 'with', 'to', 'by', 'at', 'from', 'into',
+  'versus', 'vs', 'over', 'under', 'between', 'among', 'than', 'as', 'is', 'are', 'be', 'their', 'its',
+  'this', 'that', 'these', 'those', 'about', 'regarding', 'concerning',
+  // request / deliverable words
+  'write', 'draft', 'create', 'generate', 'produce', 'make', 'full', 'complete', 'comprehensive',
+  'detailed', 'thorough', 'professional', 'research', 'paper', 'manuscript', 'article', 'report',
+  'review', 'summary', 'patient', 'patients', 'publication', 'publication-ready', 'ready',
+  'assess', 'assessing', 'evaluate', 'evaluating', 'examine', 'explore', 'investigate', 'determine',
+  'using', 'use', 'uses', 'used', 'statistics', 'statistical', 'stats', 'numeric', 'numbers', 'data',
+  'analysis', 'analyse', 'analyze',
+]);
+
 export function keywordsFrom(question: string): string[] {
-  // Use coreConceptGroups (already used for relevance ranking) to extract real
-  // medical subject terms, instead of tokenising the raw prompt. This drops
-  // generic words like "effect", "versus", "systematic" automatically. When the
-  // user gave an explicit title, keyword from the TITLE (the real subject) not
-  // the surrounding instruction. Pre-normalise spelling first.
+  // Split the subject text into PHRASES at connector/request words and keep each
+  // run of consecutive content words as one keyword, so multi-word medical terms
+  // survive. When the user gave an explicit title, key from the TITLE (the real
+  // subject), not the surrounding instruction. Normalise spelling first.
   const source = extractExplicitTitle(question) ?? question;
-  const groups = coreConceptGroups(normalizeMedicalSpelling(source));
-  const keywords = groups
-    .map((g) => g[0])
-    .filter((k): k is string => !!k && k.length >= 3 && !NON_TOPIC_KEYWORDS.has(k));
-  return [...new Set(keywords)].slice(0, 8);
+  const tokens = normalizeMedicalSpelling(source)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const phrases: string[] = [];
+  let run: string[] = [];
+  const flush = () => {
+    if (run.length > 0) {
+      const phrase = run.slice(0, 4).join(' ').trim(); // cap a phrase at 4 words
+      if (phrase.length >= 3) phrases.push(phrase);
+    }
+    run = [];
+  };
+  for (const token of tokens) {
+    if (token.length < 3 || /^\d+$/.test(token) || KEYWORD_PHRASE_STOP.has(token) || NON_TOPIC_KEYWORDS.has(token)) {
+      flush();
+    } else {
+      run.push(token);
+    }
+  }
+  flush();
+
+  return [...new Set(phrases)].slice(0, 8);
 }
 
 function wordCount(value: string): number {

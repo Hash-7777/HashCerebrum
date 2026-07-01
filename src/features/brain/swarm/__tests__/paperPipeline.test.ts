@@ -77,7 +77,24 @@ describe('title & keyword cleanup', () => {
     expect(keywords).not.toContain('research');
     expect(keywords).not.toContain('paper');
     expect(keywords).not.toContain('statistics');
-    expect(keywords).toEqual(expect.arrayContaining(['nsaids', 'warfarin', 'digoxin']));
+    // Keywords are multi-word medical phrases, so match by substring rather than
+    // exact single tokens (e.g. "nsaids use" contains "nsaids").
+    for (const term of ['nsaids', 'warfarin', 'digoxin']) {
+      expect(keywords.some((k) => k.includes(term))).toBe(true);
+    }
+  });
+
+  it('keeps multi-word medical terms intact instead of splitting them into single words', () => {
+    const kw = keywordsFrom(
+      'Write a full research paper on the efficacy and bleeding risk of direct oral anticoagulants versus warfarin for stroke prevention in atrial fibrillation in patients over 75.',
+    );
+    // The reported bug produced ["direct", "oral", "anticoagulants", …]. Phrases
+    // must survive whole.
+    expect(kw).toContain('direct oral anticoagulants');
+    expect(kw).toContain('atrial fibrillation');
+    expect(kw).toContain('stroke prevention');
+    expect(kw).not.toContain('direct');
+    expect(kw).not.toContain('oral');
   });
 
   it('drops trailing instruction sentences and leading publication-ready meta', () => {
@@ -93,7 +110,7 @@ describe('title & keyword cleanup', () => {
     for (const junk of ['publication', 'ready', 'assessing', 'paper', 'research']) {
       expect(kw).not.toContain(junk);
     }
-    expect(kw).toContain('sglt2');
+    expect(kw.some((k) => k.includes('sglt2'))).toBe(true);
   });
 
   it('uses an explicit user-supplied title verbatim (no truncation)', () => {
@@ -106,7 +123,8 @@ describe('title & keyword cleanup', () => {
     for (const junk of ['publishable-quality', 'publishable', 'titled', 'quality', 'across']) {
       expect(kw).not.toContain(junk);
     }
-    expect(kw).toEqual(expect.arrayContaining(['cotransporter-2', 'failure']));
+    expect(kw.some((k) => k.includes('cotransporter-2'))).toBe(true);
+    expect(kw.some((k) => k.includes('failure'))).toBe(true);
   });
 
   it('drops comparison and temporal question words from keywords', () => {
@@ -173,9 +191,9 @@ describe('extractBoundEffects', () => {
       'cardiovascular',
     );
     const keywords = keywordsFrom('cardiovascual risk in diabetis patients');
-    expect(keywords).toContain('cardiovascular');
-    expect(keywords).toContain('diabetes');
-    expect(keywords).not.toContain('cardiovascual');
+    expect(keywords.some((k) => k.includes('cardiovascular'))).toBe(true);
+    expect(keywords.some((k) => k.includes('diabetes'))).toBe(true);
+    expect(keywords.join(' ')).not.toContain('cardiovascual');
   });
 });
 
