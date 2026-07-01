@@ -10,12 +10,31 @@ import {
   extractEvidenceFromRecords,
   isSubstantiveAbstract,
   keywordsFrom,
+  modelForSection,
   neutralizeUnverifiableNct,
   stripUnapprovedMarkers,
   parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+
+describe('modelForSection', () => {
+  const specialists = [
+    { agentId: 'pharmacist' as const, label: 'P', subQuery: '', findings: '', evidence: [], toolCalls: 0, model: 'm-pharm' },
+    { agentId: 'clinical_research' as const, label: 'C', subQuery: '', findings: '', evidence: [], toolCalls: 0, model: 'm-clin' },
+    { agentId: 'evidence_synthesis' as const, label: 'E', subQuery: '', findings: '', evidence: [], toolCalls: 0, model: 'm-eviz' },
+  ];
+  it('drafts a body section on its owning specialist model', () => {
+    expect(modelForSection('Mechanistic and Pharmacologic Evidence', specialists, 'boss')).toBe('m-pharm');
+    expect(modelForSection('Clinical Evidence and Safety Outcomes', specialists, 'boss')).toBe('m-clin');
+    expect(modelForSection('Evidence Base and Search Yield', specialists, 'boss')).toBe('m-eviz');
+  });
+  it('keeps connective sections and unknown owners on the boss model', () => {
+    expect(modelForSection('Introduction', specialists, 'boss')).toBe('boss');
+    expect(modelForSection('Discussion', specialists, 'boss')).toBe('boss');
+    expect(modelForSection('Clinical Evidence', [], 'boss')).toBe('boss');
+  });
+});
 
 describe('stripUnapprovedMarkers', () => {
   const approved = new Set(['[S1]', '[S2]', '[S3]']);

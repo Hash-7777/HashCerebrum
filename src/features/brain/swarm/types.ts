@@ -21,6 +21,9 @@ export interface SpecialistResult {
   evidence: EvidenceItem[];
   toolCalls: number;
   error?: string;
+  /** The model this specialist ran on, so section drafting can be distributed
+   *  across the specialists' providers instead of hammering one boss model. */
+  model?: string;
 }
 
 export type BossPhase = 'routing' | 'delegating' | 'synthesizing' | 'answering';

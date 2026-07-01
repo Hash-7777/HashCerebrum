@@ -1590,6 +1590,23 @@ function deterministicGapSection(section: PaperBlueprint['sections'][number], so
   };
 }
 
+// Distributed drafting: a body section is drafted on the model of the specialist
+// that gathered its evidence, so the load spreads across the swarm's providers
+// instead of hammering one boss model section after section (the main source of
+// free-tier rate-limit churn). Connective sections (Intro / Methods / Discussion /
+// Limitations / Conclusion) and any section whose owner is unknown stay on the
+// boss model, which holds the whole-paper context.
+export function modelForSection(heading: string, specialists: SpecialistResult[], bossModel: string): string {
+  const h = heading.toLowerCase();
+  const pick = (agentId: string): string | undefined =>
+    specialists.find((s) => s.agentId === agentId && s.model && !s.error)?.model;
+  let m: string | undefined;
+  if (/mechanis|pharmacolog|pharmacokinetic|drug/.test(h)) m = pick('pharmacist');
+  else if (/clinical|trial|registry|outcome|safety/.test(h)) m = pick('clinical_research');
+  else if (/evidence base|search yield|\bresults\b|synthesis/.test(h)) m = pick('evidence_synthesis');
+  return m ?? bossModel;
+}
+
 async function compileSections(opts: {
   question: string;
   bossModel: string;
@@ -1649,7 +1666,7 @@ async function compileSections(opts: {
     let body: string[];
     try {
       body = await draftLedgerSection({
-        model: opts.bossModel,
+        model: modelForSection(blueprintSection.heading, opts.specialists, opts.bossModel),
         question: opts.question,
         section: blueprintSection,
         claims,
@@ -1871,7 +1888,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
   // had to fix with a (rate-limitable) model call.
   const approvedMarkers = new Set(opts.claimLedger.flatMap((entry) => entry.supportingSources));
   sections = stripUnapprovedMarkers(sections, approvedMarkers);
-  let abstract = await draftAbstract({
+  const abstract = await draftAbstract({
     model: opts.bossModel,
     title: opts.paperBlueprint.title,
     sections,
@@ -1932,14 +1949,9 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     sections = sections.map((section) => (repairedNames.has(section.heading) ? repaired.find((candidate) => candidate.heading === section.heading) ?? section : section));
     // Re-strip: a repaired section may re-introduce an over-cited marker.
     sections = stripUnapprovedMarkers(sections, approvedMarkers);
-    abstract = await draftAbstract({
-      model: opts.bossModel,
-      title: opts.paperBlueprint.title,
-      sections,
-      claimLedger: opts.claimLedger,
-      extractions: opts.evidenceExtractions,
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    });
+    // Reuse the abstract drafted before the loop rather than re-drafting it every
+    // pass — QA repairs are citation/depth fixes that do not change the abstract's
+    // claims, so a per-pass re-draft was up to two wasted model calls per paper.
     manuscript = {
       title: opts.paperBlueprint.title,
       abstract,

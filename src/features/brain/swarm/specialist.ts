@@ -248,7 +248,7 @@ export async function runSpecialist(
     }
 
     callbacks.onSpecialistDone(agent.id, evidence.length);
-    return { agentId: agent.id, label: agent.label, subQuery, findings: final.content, evidence, toolCalls };
+    return { agentId: agent.id, label: agent.label, subQuery, findings: final.content, evidence, toolCalls, model };
   } catch (error) {
     // A specialist failure is contained — the swarm continues with the rest.
     const detail = error instanceof Error ? error.message : String(error);
@@ -262,6 +262,6 @@ export async function runSpecialist(
         ? `${detail.slice(0, 87)}…`
         : detail;
     callbacks.onSpecialistError(agent.id, displayMsg);
-    return { agentId: agent.id, label: agent.label, subQuery, findings: '', evidence, toolCalls, error: reason };
+    return { agentId: agent.id, label: agent.label, subQuery, findings: '', evidence, toolCalls, error: reason, model };
   }
 }
