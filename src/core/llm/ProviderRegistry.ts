@@ -580,14 +580,33 @@ export async function streamWithModelChain(
     }
 
     let receivedThisLeg = false;
+    // First-token watchdog: abort this leg (but not the whole turn) if a cloud
+    // model does not begin streaming in time, so failover picks a faster model.
+    let firstTokenTimedOut = false;
+    const legController = new AbortController();
+    const onExternalAbort = () => legController.abort();
+    if (opts.signal) {
+      if (opts.signal.aborted) legController.abort();
+      else opts.signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+    const guardFirstToken = parseModelRef(current).kind === 'cloud';
+    const firstTokenTimer = guardFirstToken
+      ? setTimeout(() => {
+          if (!receivedThisLeg) {
+            firstTokenTimedOut = true;
+            legController.abort();
+          }
+        }, FIRST_TOKEN_TIMEOUT_MS)
+      : undefined;
     try {
       const response = await streamWithModel(current, legReq, {
         onToken: (token) => {
+          if (!receivedThisLeg && firstTokenTimer) clearTimeout(firstTokenTimer);
           receivedThisLeg = true;
           acc += token;
           opts.onToken(token);
         },
-        signal: opts.signal,
+        signal: legController.signal,
       });
       if (response.usage) {
         chainIn += response.usage.inputTokens;
@@ -617,6 +636,11 @@ export async function streamWithModelChain(
         failover: { attempted: switchedTo.length, switchedTo },
       };
     } catch (error) {
+      // A watchdog abort surfaces as a bare AbortError; translate it into a
+      // retriable timeout so the chain fails over instead of giving up.
+      if (firstTokenTimedOut && !opts.signal?.aborted) {
+        error = new Error(`first-token timeout: ${parseModelRef(current).provider} did not start streaming — failing over`);
+      }
       lastError = error;
       if (opts.signal?.aborted) break;
       const parsed = parseModelRef(current);
@@ -678,6 +702,9 @@ export async function streamWithModelChain(
         reason: error instanceof Error ? error.message : String(error),
       });
       current = next.value;
+    } finally {
+      if (firstTokenTimer) clearTimeout(firstTokenTimer);
+      opts.signal?.removeEventListener('abort', onExternalAbort);
     }
   }
 
@@ -822,6 +849,13 @@ export interface FailoverResult extends LlmResponse {
 }
 
 const MAX_FAILOVERS = 4;
+// First-token watchdog: how long a cloud model may take to emit its FIRST token
+// before we abandon the leg and fail over. An overloaded/slow provider otherwise
+// blocks the whole turn until the 600s HTTP timeout — the reason a trivial chat
+// could hang for many seconds. Only the first token is guarded; once a model is
+// streaming, it may take as long as it needs. Local (Ollama) legs are exempt —
+// they can be slow to warm and have no cloud to fail over to.
+const FIRST_TOKEN_TIMEOUT_MS = 12_000;
 // How many times a length-capped generation may be resumed on the same model
 // before we return what we have — bounds total output on free-tier caps.
 const MAX_LENGTH_CONTINUATIONS = 4;
