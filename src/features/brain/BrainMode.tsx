@@ -38,8 +38,6 @@ const BrainCanvas = lazy(() =>
   import('./components/BrainCanvas').then((m) => ({ default: m.BrainCanvas })),
 );
 import { Composer } from './components/Composer';
-import { DrugInteractionPanel } from './components/DrugInteractionPanel';
-import { GeneticsPanel } from './components/GeneticsPanel';
 import { ClaimLedgerPanel } from './components/ClaimLedgerPanel';
 import type { ClaimLedgerEntry } from './swarm/publicationTypes';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -61,16 +59,10 @@ const WELCOME_MESSAGE: ChatMessage = {
     'Ask the boss anything. It routes plain questions to a quick chat reply, and research questions to a swarm of medical specialists that fetch guarded evidence and answer with citations.',
 };
 
-// `drugFocus` / `geneticsFocus` are set by the Drug-Interactions and Genetics
-// modes, which reuse this same chat experience but route every question to a
-// dedicated report (interaction grading / gene-variant correlation).
-export function BrainMode({
-  drugFocus = false,
-  geneticsFocus = false,
-}: { drugFocus?: boolean; geneticsFocus?: boolean } = {}) {
-  // Both reuse the solo (no 3D brain, no swarm panel) layout and a single
-  // specialist pipeline.
-  const soloFocus = drugFocus || geneticsFocus;
+// The single mega-mind mode. Drug-interaction and genetics requests are handled
+// here as INTENTS (classified per turn or forced via a slash command), so there
+// are no longer separate Pharmacist / Genetics modes.
+export function BrainMode() {
   // Lite mode: skip the 3D brain entirely (no three.js, no GLB, no GPU) and show
   // the 2D agent panel instead. Auto-enabled on weak hardware; user-overridable.
   const autoLowEnd = useLowEndDevice();
@@ -97,9 +89,7 @@ export function BrainMode({
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   // The intent resolved for the current/last turn, so the workflow view shows the
   // right track (paper vs interactions vs genetics vs lookup).
-  const [activeIntent, setActiveIntent] = useState<WorkflowIntent>(
-    drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : 'evidence_review',
-  );
+  const [activeIntent, setActiveIntent] = useState<WorkflowIntent>('evidence_review');
   const [isRunning, setIsRunning] = useState(false);
   const [claimLedgerOpen, setClaimLedgerOpen] = useState(false);
   const [pendingClaims, setPendingClaims] = useState<ClaimLedgerEntry[] | null>(null);
@@ -185,7 +175,7 @@ export function BrainMode({
   // saved turn, so this never clobbers an in-progress conversation.
   // Brain and Drug-Interactions are separate histories. Both instances stay
   // mounted, so each only loads the active chat when it belongs to ITS mode.
-  const chatMode = drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : 'brain';
+  const chatMode = 'brain';
   useEffect(() => {
     if (!activeChatId) return;
     const chat = useChatHistoryStore.getState().chats.find((c) => c.id === activeChatId);
@@ -233,8 +223,8 @@ export function BrainMode({
     // `evidence_review` all use the normal research path for now.
     const resolved = resolveIntent(cleanQuery, overrides);
     setActiveIntent(resolved.intent);
-    const turnDrugFocus = drugFocus || resolved.intent === 'drug_interactions';
-    const turnGeneticsFocus = geneticsFocus || resolved.intent === 'genetics';
+    const turnDrugFocus = resolved.intent === 'drug_interactions';
+    const turnGeneticsFocus = resolved.intent === 'genetics';
     const turnSoloFocus = turnDrugFocus || turnGeneticsFocus;
     const turnMini = useBrainModesStore.getState().mini || resolved.effort === 'mini';
 
@@ -806,7 +796,7 @@ export function BrainMode({
   };
 
   return (
-    <div className={`mode brain-mode brain-workspace${drugFocus ? ' brain-mode--drug' : ''}${geneticsFocus ? ' brain-mode--genetics' : ''}`}>
+    <div className={`mode brain-mode brain-workspace${activeIntent === 'drug_interactions' ? ' brain-mode--drug' : activeIntent === 'genetics' ? ' brain-mode--genetics' : ''}`}>
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">
@@ -860,8 +850,8 @@ export function BrainMode({
             onEdit={editMessage}
             onDraftOutline={draftFromOutline}
             onPromptSelect={(prompt) => { if (!isRunning) setQuery(prompt); }}
-            drugFocus={drugFocus}
-            geneticsFocus={geneticsFocus}
+            drugFocus={activeIntent === 'drug_interactions'}
+            geneticsFocus={activeIntent === 'genetics'}
           />
         </FeatureBoundary>
 
@@ -883,30 +873,12 @@ export function BrainMode({
             onSubmit={submit}
             onStop={stopRun}
             onOpenSettings={() => window.dispatchEvent(new CustomEvent('hc:open-settings'))}
-            {...(drugFocus
-              ? { placeholder: 'Ask about a drug interaction — e.g. “warfarin and grapefruit”. Get a cited interaction report.' }
-              : {})}
-            {...(geneticsFocus
-              ? { placeholder: 'Name a gene variant and a disease — e.g. “MICA TT genotype and cardiovascular complications”.' }
-              : {})}
           />
         </FeatureBoundary>
       </section>
 
-      <section className={`brain-side${soloFocus || lite ? ' brain-side--solo' : ''}`}>
-        {drugFocus ? (
-          // Specialised layout for Drug-Interactions: no 3D brain and no agent
-          // swarm panel — just the interaction-grade key beside the report.
-          <FeatureBoundary name="Drug interaction panel">
-            <DrugInteractionPanel />
-          </FeatureBoundary>
-        ) : geneticsFocus ? (
-          // Specialised layout for Genetics: no 3D brain — the confidence-band
-          // key beside the correlation report.
-          <FeatureBoundary name="Genetics panel">
-            <GeneticsPanel />
-          </FeatureBoundary>
-        ) : lite ? (
+      <section className={`brain-side${lite ? ' brain-side--solo' : ''}`}>
+        {lite ? (
           // Lite mode: no WebGL / 3D — a 2D pipeline workflow shows the live
           // research process (rail slides to the active stage) above the agent
           // panel, so weak or no-GPU hardware runs full-speed with no loss.

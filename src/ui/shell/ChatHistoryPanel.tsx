@@ -27,17 +27,15 @@ export function ChatHistoryPanel() {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
 
   const setMode = useModeStore((s) => s.setMode);
-  const mode = useModeStore((s) => s.mode);
-  // Brain, Drug-Interactions and Genetics each keep their own chat list; every
-  // other mode shows the Brain history.
-  const chatMode = mode === 'drug_interactions' || mode === 'genetics' ? mode : 'brain';
-
+  // Drug-interaction and genetics chats are now Brain chats (those modes were
+  // merged into the mega-mind), so the Brain history is the single list — older
+  // chats saved under the retired modes fold into it.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [filter, setFilter] = useState('');
 
   const ordered = [...chats]
-    .filter((c) => c.projectId === activeProjectId && (c.mode ?? 'brain') === chatMode)
+    .filter((c) => c.projectId === activeProjectId)
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   const filtered = filter
@@ -68,7 +66,7 @@ export function ChatHistoryPanel() {
         <button
           type="button"
           className="icon-btn compact"
-          onClick={() => newChat(chatMode)}
+          onClick={() => newChat('brain')}
           title="New chat"
           aria-label="New chat"
         >
@@ -92,7 +90,7 @@ export function ChatHistoryPanel() {
                   onClick={() => {
                     if (editingId !== chat.id) {
                       selectChat(chat.id);
-                      setMode(chat.mode ?? 'brain');
+                      setMode('brain');
                     }
                   }}
                 >

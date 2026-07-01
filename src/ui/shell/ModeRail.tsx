@@ -6,8 +6,6 @@ const MODE_ICONS: Record<ModeId, IconName> = {
   brain: 'brain',
   memory: 'database',
   peer_review: 'shield',
-  drug_interactions: 'brain',
-  genetics: 'brain',
 };
 
 export function ModeRail() {
