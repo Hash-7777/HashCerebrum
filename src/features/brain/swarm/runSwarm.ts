@@ -660,12 +660,39 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     // Keep the drug-label (OpenFDA) and terminology (RxNorm) records here — for
     // an interaction question they are authoritative trusted sources, not just
     // background, so the report can cite them for a clear regulatory-grade answer.
-    const evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    let evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
     // Fabrication guard: if a named drug appears in none of the retrieved
     // records, it is likely misspelled or not a real drug — refuse to grade it
     // rather than inventing a clinical interaction grade for a drug that does
-    // not exist.
-    const unverified = unverifiedDrugNames(researchQuestion, evidence);
+    // not exist. BUT a real drug can simply be absent from the literature the
+    // specialist happened to fetch (e.g. fluconazole was wrongly rejected), so
+    // each flagged name is verified against RxNorm — the authoritative drug
+    // terminology — before refusing. Only a name unknown to BOTH literature and
+    // RxNorm is treated as fabricated; RxNorm hits are added as evidence.
+    let unverified = unverifiedDrugNames(researchQuestion, evidence);
+    if (unverified.length > 0) {
+      const med = platform().medical;
+      const rxRecords: EvidenceItem[] = [];
+      const stillUnverified: string[] = [];
+      await Promise.all(
+        unverified.map(async (drug) => {
+          callbacks.onToolCall('drug_interactions', 'RxNorm');
+          try {
+            const { results } = await med.rxnorm(drug);
+            callbacks.onToolResult('drug_interactions', 'RxNorm', results.length);
+            if (results.length > 0) rxRecords.push(...results);
+            else stillUnverified.push(drug);
+          } catch {
+            callbacks.onToolResult('drug_interactions', 'RxNorm', 0);
+            stillUnverified.push(drug);
+          }
+        }),
+      );
+      if (rxRecords.length > 0) {
+        evidence = rankEvidenceByRelevance(researchQuestion, [...evidence, ...rxRecords]);
+      }
+      unverified = stillUnverified;
+    }
     if (unverified.length > 0) {
       callbacks.onBossPhase('answering');
       const message = unverifiedDrugMessage(unverified);
