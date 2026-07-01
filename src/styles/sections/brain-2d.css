@@ -1,204 +1,201 @@
-/* 2D research-pipeline workflow (Lite mode) — a GPU-free stepper shown instead
-   of the 3D brain. A rail fill slides to the active stage, the running stage
-   carries a sliding sheen. All motion is CSS driven off data-stage / data-state
-   so no inline dynamic styles are needed. */
+/* 2D research-pipeline workflow (Lite mode) — a GPU-free, premium stepper shown
+   instead of the 3D brain. Icon tiles per stage, a top progress meter that slides,
+   a per-row rail that fills to the active stage, and a sliding sheen on the active
+   tile. All motion is CSS driven off data-stage / data-state so no inline dynamic
+   styles are needed. */
 
 .wf {
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
-  padding: 6px 6px 10px;
+  padding: 20px 20px 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(79, 140, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(22, 30, 45, 0.66), rgba(12, 17, 26, 0.66));
+  border: 1px solid rgba(120, 140, 180, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 24px 60px -40px rgba(0, 0, 0, 0.85);
 }
 
 .wf-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  padding: 0 4px 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-
 .wf-title {
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 1.4px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: #cdd6e5;
+  color: #c6d0e0;
 }
-
 .wf-phase {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #3dd1bf;
+  color: #6fa0ff;
   transition: color 0.4s ease;
   text-align: right;
 }
+.wf[data-state='idle'] .wf-phase { color: #5b6678; }
 
-.wf[data-state='idle'] .wf-phase {
-  color: #5b6678;
-}
-
-.wf-track {
-  position: relative;
-  padding-left: 6px;
-}
-
-/* Vertical rail + sliding fill */
-.wf-rail {
-  position: absolute;
-  left: 13px;
-  top: 14px;
-  bottom: 14px;
-  width: 3px;
-  border-radius: 3px;
-  background: #1b2433;
+/* Top progress meter */
+.wf-meter {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(120, 140, 180, 0.16);
   overflow: hidden;
+  margin-bottom: 18px;
 }
-
-.wf-rail-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 0;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #3ddc84 0%, #3dd1bf 45%, #4f8cff 100%);
+.wf-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3ddc84, #3dd1bf 45%, #4f8cff);
   box-shadow: 0 0 12px rgba(61, 209, 191, 0.5);
-  transition: height 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
 }
+.wf[data-stage='0'] .wf-meter-fill { width: 17%; }
+.wf[data-stage='1'] .wf-meter-fill { width: 33%; }
+.wf[data-stage='2'] .wf-meter-fill { width: 50%; }
+.wf[data-stage='3'] .wf-meter-fill { width: 67%; }
+.wf[data-stage='4'] .wf-meter-fill { width: 84%; }
+.wf[data-stage='5'] .wf-meter-fill { width: 100%; }
+.wf[data-state='done'] .wf-meter-fill { width: 100%; }
+.wf[data-state='idle'] .wf-meter-fill { width: 0; }
 
-/* Fill slides to the active stage (centre of its row) */
-.wf[data-stage='0'] .wf-rail-fill { height: 10%; }
-.wf[data-stage='1'] .wf-rail-fill { height: 26%; }
-.wf[data-stage='2'] .wf-rail-fill { height: 42%; }
-.wf[data-stage='3'] .wf-rail-fill { height: 58%; }
-.wf[data-stage='4'] .wf-rail-fill { height: 74%; }
-.wf[data-stage='5'] .wf-rail-fill { height: 92%; }
-.wf[data-state='done'] .wf-rail-fill { height: 100%; }
-.wf[data-state='idle'] .wf-rail-fill { height: 0; }
-
-.wf-stages {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  position: relative;
-}
+.wf-stages { list-style: none; margin: 0; padding: 0; }
 
 .wf-row {
   position: relative;
   display: grid;
-  grid-template-columns: 20px 1fr;
+  grid-template-columns: 34px 1fr auto;
   align-items: center;
-  gap: 12px;
-  min-height: 46px;
-  padding: 4px 0;
+  gap: 13px;
+  padding: 7px 0;
 }
 
-/* Marker — a rounded bar, not a dot */
-.wf-marker {
-  justify-self: center;
-  width: 4px;
-  height: 20px;
-  border-radius: 4px;
-  background: #2a3750;
-  transition: background 0.4s ease, box-shadow 0.4s ease, height 0.4s ease;
+/* Connecting rail between tiles */
+.wf-rail {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 2px;
+  height: 100%;
+  background: rgba(120, 140, 180, 0.16);
+  transition: background 0.5s ease;
 }
+.wf-row:last-child .wf-rail { display: none; }
+.wf-row[data-row-state='done'] .wf-rail { background: linear-gradient(180deg, #3ddc84, #3dd1bf); }
 
-.wf-body {
+/* Icon tile — a rounded square, never a bare dot */
+.wf-tile {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
   overflow: hidden;
-  border-radius: 8px;
-  padding: 6px 10px;
-  transition: background 0.4s ease, box-shadow 0.4s ease;
+  background: rgba(30, 40, 58, 0.9);
+  border: 1px solid rgba(120, 140, 180, 0.22);
+  color: #7c8aa2;
+  transition: background 0.45s ease, border-color 0.45s ease, color 0.45s ease, box-shadow 0.45s ease, transform 0.45s ease;
 }
+.wf-tile-icon { width: 17px; height: 17px; display: block; }
+.wf-tile-icon svg { width: 100%; height: 100%; }
 
+.wf-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wf-label {
   font-size: 13.5px;
   font-weight: 500;
-  color: #8b96a8;
-  transition: color 0.4s ease;
+  color: #93a0b6;
+  transition: color 0.45s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 .wf-hint {
   font-size: 11.5px;
   color: #5b6678;
-  transition: color 0.4s ease;
+  transition: color 0.45s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Sliding sheen overlay — the "rich" motion on the running stage */
+/* Status chip */
+.wf-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #5b6678;
+  background: rgba(120, 140, 180, 0.1);
+  border: 1px solid rgba(120, 140, 180, 0.14);
+  transition: all 0.45s ease;
+  white-space: nowrap;
+}
+
+/* Sliding sheen overlay on the active tile */
 .wf-sheen {
   position: absolute;
   inset: 0;
-  border-radius: 8px;
   pointer-events: none;
   opacity: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgba(79, 140, 255, 0.16) 45%,
-    rgba(61, 209, 191, 0.22) 50%,
-    transparent 80%
-  );
-  transform: translateX(-120%);
+  transform: translateX(-130%);
+  background: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, 0.22) 50%, transparent 75%);
 }
 
-/* ── Completed ── */
-.wf-row[data-row-state='done'] .wf-marker {
-  background: #3ddc84;
-  box-shadow: 0 0 8px rgba(61, 220, 132, 0.55);
+/* ── Done ── */
+.wf-row[data-row-state='done'] .wf-tile {
+  background: rgba(61, 220, 132, 0.14);
+  border-color: rgba(61, 220, 132, 0.5);
+  color: #45e08c;
 }
-.wf-row[data-row-state='done'] .wf-label {
-  color: #b7c2d4;
-}
+.wf-row[data-row-state='done'] .wf-label { color: #b7c2d4; }
+.wf-row[data-row-state='done'] .wf-chip { color: #45e08c; border-color: rgba(61, 220, 132, 0.3); background: rgba(61, 220, 132, 0.08); }
 
 /* ── Active ── */
-.wf-row[data-row-state='active'] .wf-marker {
-  height: 26px;
-  background: #4f8cff;
-  box-shadow: 0 0 12px rgba(79, 140, 255, 0.8);
+.wf-row[data-row-state='active'] .wf-tile {
+  background: linear-gradient(180deg, #4f8cff, #3d7bf0);
+  border-color: rgba(79, 140, 255, 0.9);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(79, 140, 255, 0.14), 0 6px 18px -6px rgba(79, 140, 255, 0.8);
+  transform: scale(1.06);
 }
-.wf-row[data-row-state='active'] .wf-body {
-  background: rgba(79, 140, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(79, 140, 255, 0.28);
-}
-.wf-row[data-row-state='active'] .wf-label {
-  color: #eaf1ff;
-  font-weight: 600;
-}
-.wf-row[data-row-state='active'] .wf-hint {
-  color: #7fa9ff;
-}
-.wf-row[data-row-state='active'] .wf-sheen {
-  animation: wf-sheen-slide 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
+.wf-row[data-row-state='active'] .wf-tile .wf-sheen { animation: wf-sheen-slide 2.1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.wf-row[data-row-state='active'] .wf-label { color: #eef3ff; font-weight: 600; }
+.wf-row[data-row-state='active'] .wf-hint { color: #86acf5; }
+.wf-row[data-row-state='active'] .wf-chip { color: #cfe0ff; border-color: rgba(79, 140, 255, 0.5); background: rgba(79, 140, 255, 0.16); }
 
 /* ── Pending ── */
-.wf-row[data-row-state='pending'] {
-  opacity: 0.5;
+.wf-row[data-row-state='pending'] .wf-label,
+.wf-row[data-row-state='pending'] .wf-hint { opacity: 0.7; }
+
+.wf-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 140, 180, 0.12);
 }
+.wf-foot-pct { font-size: 16px; font-weight: 700; color: #dfe7f2; font-variant-numeric: tabular-nums; }
+.wf-foot-label { font-size: 11.5px; color: #5b6678; }
 
 @keyframes wf-sheen-slide {
-  0% {
-    transform: translateX(-120%);
-    opacity: 0;
-  }
-  35% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(120%);
-    opacity: 0;
-  }
+  0% { transform: translateX(-130%); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateX(130%); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wf-rail-fill {
-    transition: none;
-  }
-  .wf-row[data-row-state='active'] .wf-sheen {
-    animation: none;
-  }
+  .wf-meter-fill { transition: none; }
+  .wf-row[data-row-state='active'] .wf-tile .wf-sheen { animation: none; }
 }
