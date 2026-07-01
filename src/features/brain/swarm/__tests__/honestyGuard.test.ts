@@ -4,6 +4,7 @@ import {
   stripFabricatedAppraisal,
   stripCounterfactualDataset,
   stripSearchYieldCounts,
+  stripFabricatedAggregates,
   softenOverclaims,
   reconcileCrossingCI,
   reconcileDirection,
@@ -80,6 +81,25 @@ describe('stripSearchYieldCounts', () => {
     expect(stripSearchYieldCounts(real)).toBe(real);
     const real2 = 'A retrospective cohort of 20000 patients was analysed.';
     expect(stripSearchYieldCounts(real2)).toBe(real2);
+  });
+});
+
+describe('stripFabricatedAggregates', () => {
+  it('removes a fabricated pooled participant count and invented strength breakdown', () => {
+    expect(
+      stripFabricatedAggregates(
+        'The final evidence set comprised 29 strong, 52 moderate, 17 weak, and 2 contextual sources, representing a pooled sample size of 270 participants.',
+      ),
+    ).toBe('');
+    expect(stripFabricatedAggregates('This yielded a combined sample of 4210 patients.')).toBe('');
+    expect(stripFabricatedAggregates('The aggregate enrolment of 1500 subjects was analysed.')).toBe('');
+  });
+
+  it('NEVER removes a single real study sample size', () => {
+    const real = 'A Medicare cohort study analysed 617,611 patients with atrial fibrillation.';
+    expect(stripFabricatedAggregates(real)).toBe(real);
+    const real2 = 'The ROCKET AF trial enrolled 6229 elderly patients.';
+    expect(stripFabricatedAggregates(real2)).toBe(real2);
   });
 });
 

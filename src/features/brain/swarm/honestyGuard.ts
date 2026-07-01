@@ -81,6 +81,22 @@ export function stripSearchYieldCounts(text: string): string {
   return rejoin(splitSentences(text).filter((s) => !SEARCH_YIELD_RX.test(s)));
 }
 
+// A fabricated AGGREGATE across the corpus that the pipeline never computes: a
+// "pooled / combined / total sample size of N participants" (the pipeline runs no
+// meta-analytic pooling of sample sizes, so any such total is invented — in one
+// real run the abstract claimed "a pooled sample size of 270 participants" while
+// the body cited single studies of 617,611), or an invented evidence-strength
+// breakdown ("29 strong, 52 moderate, 17 weak … sources"). A single study's own
+// sample size ("a cohort of 617,611 patients") is real data and is NOT matched.
+const FABRICATED_AGGREGATE_RX =
+  /\b(?:pooled|combined|aggregate|total|overall|cumulative)\s+(?:sample(?:\s+size)?|cohort|population|enrol[lm]ent)\s+of\s+\d[\d,]*\s*(?:participants|patients|subjects|individuals|cases)\b|\b\d+\s+strong\b[^.]*?\b\d+\s+moderate\b[^.]*?\b\d+\s+(?:weak|context)/i;
+
+/** Remove sentences asserting a fabricated pooled participant count or an
+ *  invented evidence-strength breakdown. */
+export function stripFabricatedAggregates(text: string): string {
+  return rejoin(splitSentences(text).filter((s) => !FABRICATED_AGGREGATE_RX.test(s)));
+}
+
 // Over-confident phrasings → calibrated, honest equivalents. Applied verbatim
 // (case-insensitive) so a low-certainty, abstract-only synthesis never claims
 // more confidence than the evidence supports.
@@ -163,7 +179,9 @@ export function applyHonestyPass(text: string): string {
   if (!text) return text;
   return softenOverclaims(
     reconcileDirection(
-      reconcileCrossingCI(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+      reconcileCrossingCI(
+        stripFabricatedAggregates(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+      ),
     ),
   );
 }
