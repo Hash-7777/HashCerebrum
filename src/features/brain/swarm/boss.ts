@@ -293,6 +293,14 @@ const DI_NON_DRUG_WORDS = new Set([
   'medicines', 'food', 'juice', 'tablet', 'tablets', 'what', 'does', 'can', 'take', 'taking',
   'together', 'safe', 'safety', 'dose', 'doses', 'dosing', 'patient', 'patients', 'person', 'people',
   'elderly', 'adult', 'adults', 'child', 'children', 'effect', 'effects', 'risk', 'risks',
+  // Instruction / command verbs — the user asks the tool to DO something ("grade
+  // the interactions…", "check…", "assess…"). These are not drug names; without
+  // this, "grade" was parsed as a drug and the whole report was refused as
+  // "I couldn't find grade in the drug terminology databases".
+  'grade', 'grades', 'grading', 'graded', 'check', 'checking', 'assess', 'assessing', 'evaluate',
+  'evaluating', 'compare', 'comparing', 'list', 'analyze', 'analyse', 'analyzing', 'analysing', 'rate', 'report',
+  'show', 'tell', 'give', 'find', 'identify', 'review', 'explain', 'describe', 'please', 'about',
+  'possible', 'potential', 'clinically', 'clinical', 'significant', 'major', 'severe', 'their',
 ]);
 
 /** Candidate drug names parsed from a free-text interaction query. */

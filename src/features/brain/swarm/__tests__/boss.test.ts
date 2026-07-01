@@ -30,6 +30,13 @@ describe('drug-interaction fabrication guard', () => {
     expect(drugCandidates('warfarin and ibuprofen')).not.toContain('and');
   });
 
+  it('drops the leading command verb so it is not treated as a drug', () => {
+    const drugs = drugCandidates('Grade the interactions between warfarin, amiodarone, aspirin, and fluconazole');
+    expect(drugs).toEqual(expect.arrayContaining(['warfarin', 'amiodarone', 'aspirin', 'fluconazole']));
+    expect(drugs).not.toContain('grade');
+    expect(drugs).not.toContain('interactions');
+  });
+
   it('flags a drug that appears in no retrieved record', () => {
     const evidence = [rec('Systematic overview of warfarin and its drug and food interactions', 'warfarin interactions')];
     expect(unverifiedDrugNames('zynteprol and warfarin', evidence)).toEqual(['zynteprol']);
