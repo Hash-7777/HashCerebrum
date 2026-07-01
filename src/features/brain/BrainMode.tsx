@@ -47,6 +47,8 @@ import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
+import { resolveIntent } from './swarm/intent';
+import { parseSlashCommands, type SlashEffort, type SlashIntent } from './composer/slashCommands';
 import { buildPaperOutline } from './swarm/paperPipeline';
 import { summarizeDatasetText, summarizeDatasetXlsx } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
@@ -215,8 +217,20 @@ export function BrainMode({
     baseMessages: ChatMessage[],
     appendUser: boolean,
     forceDraft = false,
+    overrides: { forcedIntent?: SlashIntent; forcedEffort?: SlashEffort } = {},
   ) => {
     if (!cleanQuery || isRunning) return;
+
+    // Mega-mind routing: in Brain, classify the request (or honour a forced slash
+    // command) so a drug or gene question routes to the right specialist path
+    // without the user picking a mode. When the component is already a dedicated
+    // Pharmacist/Genetics mode, that focus wins. `paper`/`lookup`/`rag`/
+    // `evidence_review` all use the normal research path for now.
+    const resolved = resolveIntent(cleanQuery, overrides);
+    const turnDrugFocus = drugFocus || resolved.intent === 'drug_interactions';
+    const turnGeneticsFocus = geneticsFocus || resolved.intent === 'genetics';
+    const turnSoloFocus = turnDrugFocus || turnGeneticsFocus;
+    const turnMini = useBrainModesStore.getState().mini || resolved.effort === 'mini';
 
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: cleanQuery };
     const nextMessages = appendUser ? [...baseMessages, userMessage] : baseMessages;
@@ -231,8 +245,8 @@ export function BrainMode({
     // Outline-first: propose the paper's structure (deterministic, no tokens)
     // and stop — the user approves with "Draft full paper", which re-enters
     // runTurn with forceDraft so the real pipeline runs.
-    if (!forceDraft && !soloFocus && useBrainModesStore.getState().outlineFirst) {
-      const outline = buildPaperOutline(cleanQuery, useBrainModesStore.getState().mini);
+    if (!forceDraft && !turnSoloFocus && useBrainModesStore.getState().outlineFirst) {
+      const outline = buildPaperOutline(cleanQuery, turnMini);
       const body = [
         '## Proposed paper outline',
         '',
@@ -500,9 +514,9 @@ export function BrainMode({
         modelFor: agentModelFor,
         callbacks,
         signal: abortRef.current?.signal,
-        mini: useBrainModesStore.getState().mini,
-        drugFocus,
-        geneticsFocus,
+        mini: turnMini,
+        drugFocus: turnDrugFocus,
+        geneticsFocus: turnGeneticsFocus,
         onClaimLedger: (ledger) =>
           new Promise((resolve, reject) => {
             claimLedgerResolve.current = resolve;
@@ -556,10 +570,10 @@ export function BrainMode({
         // Tag findings to the mode's domain so its retrieval stays isolated,
         // and only feed shared memory on a confident result (drug interactions:
         // a clear verdict; genetics: a non-insufficient association band).
-        const memoryTag = drugFocus ? 'drug_interactions' : geneticsFocus ? 'genetics' : undefined;
-        const soloConfident = drugFocus
+        const memoryTag = turnDrugFocus ? 'drug_interactions' : turnGeneticsFocus ? 'genetics' : undefined;
+        const soloConfident = turnDrugFocus
           ? isConfidentInteractionReport(finalContent)
-          : geneticsFocus
+          : turnGeneticsFocus
             ? isConfidentGeneReport(finalContent)
             : true;
         if (
@@ -656,16 +670,25 @@ export function BrainMode({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const cleanQuery = query.trim();
-    if (!cleanQuery || isRunning) return;
+    const raw = query.trim();
+    if (!raw || isRunning) return;
+
+    // Strip any leading slash command (e.g. "/genetics …") from the message the
+    // user sees, and carry the forced intent/effort into the turn.
+    const parsed = parseSlashCommands(raw);
+    const cleanQuery = parsed.text || raw;
+    const overrides = {
+      ...(parsed.forcedIntent ? { forcedIntent: parsed.forcedIntent } : {}),
+      ...(parsed.forcedEffort ? { forcedEffort: parsed.forcedEffort } : {}),
+    };
 
     if (editingMessageId) {
       const editIndex = messages.findIndex((message) => message.id === editingMessageId && message.role === 'user');
-      await runTurn(cleanQuery, editIndex >= 0 ? messages.slice(0, editIndex) : messages, true);
+      await runTurn(cleanQuery, editIndex >= 0 ? messages.slice(0, editIndex) : messages, true, false, overrides);
       return;
     }
 
-    await runTurn(cleanQuery, messages, true);
+    await runTurn(cleanQuery, messages, true, false, overrides);
   };
 
   // Approve an outline proposal: run the real pipeline for the stored query.

@@ -1,7 +1,8 @@
-import { useEffect, useRef, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Icon } from '@ui/icons';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useBrainModesStore } from '@core/store/brainModesStore';
+import { activeSlashPrefix, matchingCommands } from '../composer/slashCommands';
 
 export function Composer({
   query,
@@ -66,6 +67,48 @@ export function Composer({
     const file = event.target.files?.[0];
     event.target.value = '';
     if (file) onDatasetFile?.(file);
+  };
+
+  // Slash-command autocomplete: when the message starts with a bare "/token", show
+  // the matching commands. Selecting one inserts it and focuses the box.
+  const slashPrefix = activeSlashPrefix(query);
+  const suggestions = useMemo(() => (slashPrefix ? matchingCommands(slashPrefix) : []), [slashPrefix]);
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+  const [sel, setSel] = useState(0);
+  const showSlash = suggestions.length > 0 && dismissedFor !== slashPrefix;
+  useEffect(() => {
+    setSel(0);
+  }, [slashPrefix]);
+
+  const chooseCommand = (command: string) => {
+    setQuery(`${command} `);
+    setDismissedFor(null);
+    textareaRef.current?.focus();
+  };
+
+  const onSlashKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (!showSlash) return false;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSel((i) => (i + 1) % suggestions.length);
+      return true;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSel((i) => (i - 1 + suggestions.length) % suggestions.length);
+      return true;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      chooseCommand(suggestions[Math.min(sel, suggestions.length - 1)]!.command);
+      return true;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setDismissedFor(slashPrefix);
+      return true;
+    }
+    return false;
   };
 
   return (
@@ -174,6 +217,27 @@ export function Composer({
           </div>
         )}
 
+        {showSlash && (
+          <div className="composer-slash" role="listbox" aria-label="Commands">
+            {suggestions.map((cmd, i) => (
+              <button
+                type="button"
+                key={cmd.command}
+                className="composer-slash-item"
+                role="option"
+                aria-selected={i === Math.min(sel, suggestions.length - 1)}
+                data-active={i === Math.min(sel, suggestions.length - 1)}
+                onMouseEnter={() => setSel(i)}
+                onClick={() => chooseCommand(cmd.command)}
+              >
+                <span className="cs-cmd">{cmd.command}</span>
+                <span className="cs-label">{cmd.label}</span>
+                <span className="cs-help">{cmd.help}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           className="composer-input"
@@ -182,6 +246,7 @@ export function Composer({
           placeholder={placeholder}
           rows={1}
           onKeyDown={(e) => {
+            if (onSlashKeyDown(e)) return;
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               if (canSubmit && !isRunning) onSubmit(e as unknown as FormEvent);
