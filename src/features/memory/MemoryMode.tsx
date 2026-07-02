@@ -242,14 +242,12 @@ export function MemoryMode() {
       <section className="memory-main" aria-label="Project memory">
         <header className="memory-toolbar">
           <div>
-            <p className="eyebrow">
-              <Icon name="database" size={10} /> Memory
-            </p>
             <h1>{scope === 'library' ? 'Library' : projectName}</h1>
+            <span className="mode-accent-tick" aria-hidden="true" />
             <p className="memory-subtitle">
-              {visible.length} {visible.length === 1 ? 'saved finding' : 'saved findings'}
+              <b>{visible.length}</b> {visible.length === 1 ? 'saved finding' : 'saved findings'}
               {scope === 'library' ? ' across all projects' : ''}
-              {search.trim() ? ` matching "${search.trim()}"` : ''}
+              {search.trim() ? ` · matching "${search.trim()}"` : ''}
             </p>
           </div>
           <div className="memory-tools">

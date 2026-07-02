@@ -20,45 +20,49 @@
 }
 
 .peer-review-header h2 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0 0 0.2rem;
+  font-family: "Newsreader", "Source Serif 4", Georgia, serif;
+  font-size: clamp(24px, 2.2vw, 30px);
+  font-weight: 500;
+  margin: 0;
   color: var(--text-1);
-  font-family: var(--f-display);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variation-settings: "opsz" 48;
 }
 
 .peer-review-subtitle {
-  font-size: 0.75rem;
-  color: var(--text-3);
-  margin: 0;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+  margin: 10px 0 0;
 }
 
 .peer-review-header > :first-child {
   flex: 1;
 }
 
+/* Accent-glass primary — matches the workspace Export PDF button (quiet
+   accent-outlined, never a flat fill). */
 .peer-review-import-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 7px 14px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  font-family: var(--f-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: none;
-  border-radius: var(--r-sm);
+  gap: 6px;
+  padding: 8px 15px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: filter 0.14s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-
+.peer-review-import-btn svg { color: var(--accent); }
 .peer-review-import-btn:hover {
-  filter: brightness(1.08);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-line), 0 0 18px var(--accent-glow);
 }
 
 /* Empty state */

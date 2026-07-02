@@ -45,6 +45,7 @@ export default function PeerReviewMode() {
       <header className="peer-review-header">
         <div>
           <h2>Peer Review</h2>
+          <span className="mode-accent-tick" aria-hidden="true" />
           <p className="peer-review-subtitle">
             AI-driven critique, scoring, and publication guidance for research papers
           </p>

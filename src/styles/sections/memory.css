@@ -47,10 +47,13 @@
 }
 .memory-toolbar h1 {
   margin: 0;
-  font-family: var(--hc-font-serif);
-  font-size: 26px;
+  font-family: "Newsreader", "Source Serif 4", Georgia, serif;
+  font-size: clamp(24px, 2.2vw, 30px);
   font-weight: 500;
-  color: var(--hc-fg-strong);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text-1);
+  font-variation-settings: "opsz" 48;
   /* Single line so the header height stays constant when the title switches
      between a project name and "Library". */
   white-space: nowrap;
@@ -62,14 +65,17 @@
    ("… across all projects") the toolbar must not grow/shrink, or the graph's
    grid row resizes and the R3F canvas glitches to a different size. */
 .memory-subtitle {
-  margin: 4px 0 0;
-  color: var(--hc-fg-muted);
-  font-size: 12px;
+  margin: 10px 0 0;
+  color: var(--text-4);
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
+.memory-subtitle b { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 0.3em; }
 .memory-search {
   display: inline-flex;
   align-items: center;
