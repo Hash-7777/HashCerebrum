@@ -352,6 +352,40 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 ---
 
+## Testing
+
+The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
+
+```mermaid
+flowchart TB
+  subgraph FE["🟦 Frontend · Vitest · 814 tests"]
+    direction LR
+    A["Swarm & pipeline<br/>intent routing · claim ledger<br/>parallel drafting · export gate"]
+    B["Citation integrity<br/>renumber [S#]→[n] · marker expand<br/>drop dangling · strip over-cited"]
+    C["Honesty guard<br/>fabricated aggregates · record counts<br/>overclaim softening · CI↔p reconcile"]
+    D["Domain logic<br/>drug/gene extraction · keyword phrases<br/>tier failover · slash commands"]
+  end
+  subgraph BE["🦀 Backend · cargo test · 62 tests"]
+    direction LR
+    E["Security guard<br/>host allowlist · SSRF denylist<br/>(RFC-1918 / CGNAT / IPv6-ULA)"]
+    F["Network core<br/>capped streaming reads<br/>per-host rate limiter"]
+    G["Storage & provenance<br/>OS keychain · SQLite cache<br/>hash-chained audit log"]
+  end
+  FE -.->|"typecheck · test · build:web"| CI{{"CI on every push"}}
+  BE -.->|"cargo test · cargo audit"| CI
+```
+
+| Surface | Command | Covers |
+|---|---|---|
+| Frontend | `npm test` | 814 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
+| Backend | `cargo test` (in `src-tauri/`) | 62 tests — the network guard & SSRF denylist, capped reads, rate limiting, keychain, and the tamper-evident audit log |
+| Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
+| Security | `cargo audit` | Dependency advisories, run in CI on every push |
+
+Every push runs typecheck, the full Vitest suite, `build:web`, `cargo test`, and `cargo audit` — a change cannot merge unless all pass.
+
+---
+
 ## Getting started
 
 You need **Node ≥ 20** and the **Rust toolchain**. Everything else is in the repo.
