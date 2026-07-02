@@ -4,19 +4,23 @@
 // The window is created hidden (tauri.conf.json) so the WebView's white default
 // can never flash on launch. We restore the saved geometry and THEN show in one
 // sequence: setting size/position while the window is still hidden and revealing
-// it in the same beat is what makes the placement stick on macOS — the window
-// manager never gets a chance to re-place the frame. Geometry is persisted to
-// localStorage on every move/resize, so it survives quit + relaunch. This mirrors
-// the approach proven in HashCortX. Idempotent, and a no-op outside the desktop
-// runtime (browser dev).
+// it in the same beat is what makes the placement stick on macOS.
+//
+// Geometry is persisted by POLLING the live outer-position / inner-size on a
+// timer (plus a flush when the page unloads) — the approach proven in HashCortX.
+// An earlier event-based version (onMoved/onResized) did not reliably persist in
+// the packaged app, so nothing was ever saved and the window re-centred every
+// launch. Polling reads the real geometry directly and cannot miss it.
+//
+// Idempotent, and a no-op outside the desktop runtime (browser dev).
 
 import type { Window } from '@tauri-apps/api/window';
 
 const SIZE_KEY = 'hc_win_size';
 const POS_KEY = 'hc_win_pos';
+const SAVE_INTERVAL_MS = 2000;
 
-let revealed = false;
-let persisting = false;
+let started = false;
 
 const isDesktop = (): boolean =>
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -44,7 +48,7 @@ async function restoreGeometry(win: Window): Promise<void> {
     try {
       await win.setSize(new PhysicalSize(Math.round(Number(size.width)), Math.round(Number(size.height))));
     } catch {
-      /* ignore — fall through to whatever the config default is */
+      /* ignore — fall through to the config default */
     }
   }
 
@@ -68,52 +72,60 @@ async function restoreGeometry(win: Window): Promise<void> {
   }
 }
 
-// Persist geometry as the user moves/resizes. Event-driven (no polling) and
-// debounced, so a drag writes localStorage once it settles rather than on every
-// intermediate frame.
+// Persist geometry by reading the live outer position + inner size every couple
+// of seconds (only writing when it actually changed), plus an immediate flush on
+// page unload so a move made in the last tick is not lost.
 function startPersistence(win: Window): void {
-  if (persisting) return;
-  persisting = true;
+  let lastX: number | undefined;
+  let lastY: number | undefined;
+  let lastW: number | undefined;
+  let lastH: number | undefined;
 
-  let timer: number | undefined;
-  let size: { width: number; height: number } | null = null;
-  let pos: { x: number; y: number } | null = null;
-
-  const flush = (): void => {
-    timer = undefined;
-    if (size) localStorage.setItem(SIZE_KEY, JSON.stringify(size));
-    if (pos) localStorage.setItem(POS_KEY, JSON.stringify(pos));
+  const save = async (): Promise<void> => {
+    try {
+      const pos = await win.outerPosition();
+      if (pos.x !== lastX || pos.y !== lastY) {
+        lastX = pos.x;
+        lastY = pos.y;
+        localStorage.setItem(POS_KEY, JSON.stringify({ x: pos.x, y: pos.y }));
+      }
+    } catch {
+      /* ignore a single failed read */
+    }
+    try {
+      const size = await win.innerSize();
+      if (size.width !== lastW || size.height !== lastH) {
+        lastW = size.width;
+        lastH = size.height;
+        localStorage.setItem(SIZE_KEY, JSON.stringify({ width: size.width, height: size.height }));
+      }
+    } catch {
+      /* ignore a single failed read */
+    }
   };
-  const schedule = (): void => {
-    if (timer === undefined) timer = window.setTimeout(flush, 400);
-  };
 
-  void win.onResized(({ payload }) => {
-    size = { width: payload.width, height: payload.height };
-    schedule();
-  });
-  void win.onMoved(({ payload }) => {
-    pos = { x: payload.x, y: payload.y };
-    schedule();
-  });
+  setInterval(() => void save(), SAVE_INTERVAL_MS);
+  window.addEventListener('pagehide', () => void save());
+  window.addEventListener('beforeunload', () => void save());
 }
 
 export function revealWindow(): void {
-  if (revealed) return;
+  if (started) return;
   if (!isDesktop()) return;
+  // Claim the single reveal up front so the timed retries + boot-splash call do
+  // not run the restore concurrently; released again only if this attempt fails.
+  started = true;
   void import('@tauri-apps/api/window')
     .then(async ({ getCurrentWindow }) => {
       const win = getCurrentWindow();
       await restoreGeometry(win);
       await win.show();
       await win.setFocus().catch(() => {});
-      // Only mark revealed once show() actually succeeded — if an early-boot call
-      // raced and threw, `revealed` stays false so a later call (boot splash or
-      // the timed fallback) can retry.
-      revealed = true;
       startPersistence(win);
     })
     .catch(() => {
-      /* show failed this time — leave `revealed` false so a later call retries */
+      // Reveal failed this time — let a later call (timed fallback / boot splash)
+      // retry rather than leaving the window hidden forever.
+      started = false;
     });
 }
