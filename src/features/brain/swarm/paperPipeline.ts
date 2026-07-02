@@ -1409,9 +1409,6 @@ function callSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function callModel(
   model: string,
@@ -1607,7 +1604,7 @@ export function modelForSection(heading: string, specialists: SpecialistResult[]
   return m ?? bossModel;
 }
 
-async function compileSections(opts: {
+interface CompileSectionsOpts {
   question: string;
   bossModel: string;
   specialists: SpecialistResult[];
@@ -1622,51 +1619,122 @@ async function compileSections(opts: {
   evidenceGap?: string;
   mini?: boolean;
   signal?: AbortSignal;
-}): Promise<ManuscriptSection[]> {
-  const sections: ManuscriptSection[] = [];
-  const roleDigest = specialistRoleDigest(opts.specialists);
-  const datasetBlock = opts.dataset ? datasetSummaryForPrompt(opts.dataset) : '(no uploaded dataset was supplied)';
+}
 
-  for (const blueprintSection of opts.paperBlueprint.sections) {
-    if (opts.signal?.aborted) throw new Error('Run stopped by user');
-    if (opts.repairTargets && !opts.repairTargets.has(blueprintSection.heading)) {
-      const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
-      if (existing) {
-        sections.push(existing);
-        continue;
-      }
+// Connective sections narrate ACROSS the evidence, so they are written in wave 2
+// once the body sections exist. Everything else is a self-contained body section
+// (evidence base, mechanism, clinical, trials, methods) that can be written in
+// parallel in wave 1.
+const CONNECTIVE_SECTION = /introduction|discussion|conclusion|limitation/i;
+const DRAFT_CONCURRENCY = 3;
+
+// Run an async task over items with a bounded concurrency, preserving no order
+// (callers write into a shared map keyed by heading).
+async function mapPool<T>(items: T[], concurrency: number, task: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      await task(items[index]!);
     }
-    if (blueprintSection.heading === 'Declarations') {
-      sections.push(declarationSection());
-      continue;
+  });
+  await Promise.all(workers);
+}
+
+// Draft ONE section from the claim ledger, with all the per-section guards:
+// evidence-gap injection, deterministic methods notes, distributed model choice,
+// identifier validation + NCT neutralisation, the claim↔source fidelity gate, and
+// bounded expansion to the minimum word count. Pure per-section work, so it is
+// safe to run several of these concurrently.
+async function draftOneSection(
+  opts: CompileSectionsOpts,
+  blueprintSection: PaperBlueprint['sections'][number],
+  priorDigest: string,
+  roleDigest: string,
+  datasetBlock: string,
+): Promise<ManuscriptSection> {
+  opts.onStage?.(opts.repairTargets?.has(blueprintSection.heading) ? `QA repair ${blueprintSection.heading}` : blueprintSection.heading);
+  const claims = claimsForBlueprintSection(blueprintSection, opts.claimLedger);
+  const assignedMarkers = [...new Set(claims.flatMap((claim) => claim.supportingSources))];
+  const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
+  // Evidence gap is injected into ONE section only so it does not leak into every
+  // section and repeat the same honesty note 9× (I3).
+  const isLimitations = blueprintSection.heading.toLowerCase().includes('limitation');
+  const isMethods = blueprintSection.heading.toLowerCase().includes('method');
+  const shouldInjectGap =
+    opts.evidenceGap &&
+    (isLimitations ||
+      (!opts.paperBlueprint.sections.some((s) => s.heading.toLowerCase().includes('limitation')) && isMethods));
+  const methodsNotes = isMethods
+    ? deterministicMethodsNotes(opts.question, opts.evidence, opts.extractions)
+    : undefined;
+  const sectionModel = modelForSection(blueprintSection.heading, opts.specialists, opts.bossModel);
+  let body: string[];
+  try {
+    body = await draftLedgerSection({
+      model: sectionModel,
+      question: opts.question,
+      section: blueprintSection,
+      claims,
+      extractions: opts.extractions,
+      specialistDigest: roleDigest,
+      datasetBlock,
+      priorDigest,
+      ...(existing ? { currentBody: existing.body } : {}),
+      ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
+      mini: opts.mini ?? false,
+      ...(methodsNotes ? { methodsNotes } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    // Surface the failure in the trace instead of silently shipping a stub
+    // section — this is what made an incomplete paper look like a success.
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'error',
+      detail: `Section "${blueprintSection.heading}" draft failed: ${detail.slice(0, 120)}`,
+    });
+    body = [
+      `${SECTION_REVIEW_FLAG} this section could not be drafted from the claim ledger because the language-model call failed (${detail.slice(0, 160)}). It needs to be written or regenerated before submission. The available claim ledger should be reviewed directly ${assignedMarkers.slice(0, 3).join(' ')}.`,
+    ];
+  }
+
+  // C3: validate identifiers in the drafted prose against retrieved evidence.
+  const idIssues = validateDraftIdentifiers(body.join(' '), opts.evidence);
+  if (idIssues.length > 0) {
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'tool_call',
+      detail: `${blueprintSection.heading}: unverifiable identifiers flagged — ${idIssues.join(', ')}`,
+    });
+    const badNcts = idIssues.filter((id) => /^NCT\d{8,}$/i.test(id));
+    if (badNcts.length > 0) body = body.map((paragraph) => neutralizeUnverifiableNct(paragraph, badNcts));
+  }
+
+  // C6: claim↔source fidelity gate — flag claims whose wording drifts from evidence.
+  for (const claim of claims) {
+    const sourceTexts = opts.extractions
+      .filter((e) => claim.supportingSources.includes(e.sourceMarker))
+      .map((e) => `${e.title} ${e.keyFinding}`);
+    if (claimSourceFidelity(claim.claim, sourceTexts).flag) {
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'tool_call',
+        detail: `${blueprintSection.heading} claim fidelity low for "${claim.claim.slice(0, 80)}…"`,
+      });
     }
-    opts.onStage?.(opts.repairTargets?.has(blueprintSection.heading) ? `QA repair ${blueprintSection.heading}` : blueprintSection.heading);
-    const claims = claimsForBlueprintSection(blueprintSection, opts.claimLedger);
-    const assignedMarkers = [...new Set(claims.flatMap((claim) => claim.supportingSources))];
-    if (claims.length === 0) {
-      sections.push(deterministicGapSection(blueprintSection, opts.extractions.map((item) => item.sourceMarker)));
-      continue;
-    }
-    const priorDigest =
-      sections.map((section) => `${section.heading}: ${(section.body[0] ?? '').slice(0, 220)}`).join('\n') ||
-      '(none yet)';
-    const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
-    // Evidence gap is injected into ONE section only so it does not leak into
-    // every section and repeat the same honesty note 9× (I3).
-    const isLimitations = blueprintSection.heading.toLowerCase().includes('limitation');
-    const isMethods = blueprintSection.heading.toLowerCase().includes('method');
-    const shouldInjectGap =
-      opts.evidenceGap &&
-      (isLimitations ||
-        (!opts.paperBlueprint.sections.some((s) => s.heading.toLowerCase().includes('limitation')) &&
-          isMethods));
-    const methodsNotes = isMethods
-      ? deterministicMethodsNotes(opts.question, opts.evidence, opts.extractions)
-      : undefined;
-    let body: string[];
+  }
+
+  // Bounded expansion to the minimum word count (skip if the draft already failed).
+  const draftFailed = body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG);
+  let passes = 1;
+  while (!draftFailed && bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
+    opts.onStage?.(`${blueprintSection.heading} expansion ${passes}`);
     try {
       body = await draftLedgerSection({
-        model: modelForSection(blueprintSection.heading, opts.specialists, opts.bossModel),
+        model: sectionModel,
         question: opts.question,
         section: blueprintSection,
         claims,
@@ -1674,93 +1742,78 @@ async function compileSections(opts: {
         specialistDigest: roleDigest,
         datasetBlock,
         priorDigest,
-        ...(existing ? { currentBody: existing.body } : {}),
+        currentBody: body,
         ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
         mini: opts.mini ?? false,
         ...(methodsNotes ? { methodsNotes } : {}),
         ...(opts.signal ? { signal: opts.signal } : {}),
       });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      // Surface the failure in the trace instead of silently shipping a stub
-      // section — this is what made an incomplete paper look like a success.
-      bus.emit('agent:activity', {
-        agentId: 'boss',
-        phase: 'error',
-        detail: `Section "${blueprintSection.heading}" draft failed: ${detail.slice(0, 120)}`,
-      });
-      body = [
-        `${SECTION_REVIEW_FLAG} this section could not be drafted from the claim ledger because the language-model call failed (${detail.slice(0, 160)}). It needs to be written or regenerated before submission. The available claim ledger should be reviewed directly ${assignedMarkers.slice(0, 3).join(' ')}.`,
-      ];
+    } catch {
+      break;
     }
-
-    // C3: validate identifiers in the drafted prose against retrieved evidence.
-    const draftText = body.join(' ');
-    const idIssues = validateDraftIdentifiers(draftText, opts.evidence);
-    if (idIssues.length > 0) {
-      bus.emit('agent:activity', {
-        agentId: 'boss',
-        phase: 'tool_call',
-        detail: `${blueprintSection.heading}: unverifiable identifiers flagged — ${idIssues.join(', ')}`,
-      });
-      // Don't just flag it: strip hallucinated trial-registry numbers from the
-      // prose so a fabricated NCT is never presented to the reader as a real
-      // registered trial. (PMID/DOI issues stay flagged for review.)
-      const badNcts = idIssues.filter((id) => /^NCT\d{8,}$/i.test(id));
-      if (badNcts.length > 0) {
-        body = body.map((paragraph) => neutralizeUnverifiableNct(paragraph, badNcts));
-      }
-    }
-
-    // C6: claim↔source fidelity gate — flag claims whose wording drifts from evidence.
-    for (const claim of claims) {
-      const sourceTexts = opts.extractions
-        .filter((e) => claim.supportingSources.includes(e.sourceMarker))
-        .map((e) => `${e.title} ${e.keyFinding}`);
-      const fidelity = claimSourceFidelity(claim.claim, sourceTexts);
-      if (fidelity.flag) {
-        bus.emit('agent:activity', {
-          agentId: 'boss',
-          phase: 'tool_call',
-          detail: `${blueprintSection.heading} claim fidelity low (${Math.round(fidelity.score * 100)}%) for "${claim.claim.slice(0, 80)}…"`,
-        });
-      }
-    }
-
-    // Skip expansion if the initial draft already failed — don't burn calls
-    // on a section that is guaranteed to stay a stub.
-    const draftFailed = body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG);
-    let passes = 1;
-    while (!draftFailed && bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
-      opts.onStage?.(`${blueprintSection.heading} expansion ${passes}`);
-      try {
-        body = await draftLedgerSection({
-          model: opts.bossModel,
-          question: opts.question,
-          section: blueprintSection,
-          claims,
-          extractions: opts.extractions,
-          specialistDigest: roleDigest,
-          datasetBlock,
-          priorDigest,
-          currentBody: body,
-          ...(shouldInjectGap ? { evidenceGap: opts.evidenceGap } : {}),
-          mini: opts.mini ?? false,
-          ...(methodsNotes ? { methodsNotes } : {}),
-          ...(opts.signal ? { signal: opts.signal } : {}),
-        });
-      } catch {
-        break;
-      }
-      passes += 1;
-    }
-    sections.push({ heading: blueprintSection.heading, body });
-    // Inter-call delay to avoid rate-limit hits on providers with per-minute quotas.
-    if (!opts.mini) {
-      await delay(500);
-    }
+    passes += 1;
   }
-  return sections;
+  return { heading: blueprintSection.heading, body };
+}
+
+// Two-wave distributed drafting. Wave 1 writes the self-contained body sections in
+// PARALLEL (each on its owning specialist's model); wave 2 then writes the
+// connective narrative (Introduction / Discussion / Conclusion / Limitations) on
+// the boss model from a digest of the finished body sections, so coherence holds
+// without the whole paper being written one slow section at a time.
+async function compileSections(opts: CompileSectionsOpts): Promise<ManuscriptSection[]> {
+  const roleDigest = specialistRoleDigest(opts.specialists);
+  const datasetBlock = opts.dataset ? datasetSummaryForPrompt(opts.dataset) : '(no uploaded dataset was supplied)';
+  const done = new Map<string, ManuscriptSection>();
+  const toDraft: PaperBlueprint['sections'][number][] = [];
+
+  // First pass (no model calls): resolve reused / Declarations / no-claim gap
+  // sections, and collect the ones that need drafting.
+  for (const blueprintSection of opts.paperBlueprint.sections) {
+    if (opts.signal?.aborted) throw new Error('Run stopped by user');
+    if (opts.repairTargets && !opts.repairTargets.has(blueprintSection.heading)) {
+      const existing = opts.existingSections?.find((section) => section.heading === blueprintSection.heading);
+      if (existing) {
+        done.set(blueprintSection.heading, existing);
+        continue;
+      }
+    }
+    if (blueprintSection.heading === 'Declarations') {
+      done.set(blueprintSection.heading, declarationSection());
+      continue;
+    }
+    if (claimsForBlueprintSection(blueprintSection, opts.claimLedger).length === 0) {
+      done.set(blueprintSection.heading, deterministicGapSection(blueprintSection, opts.extractions.map((item) => item.sourceMarker)));
+      continue;
+    }
+    toDraft.push(blueprintSection);
+  }
+
+  // Wave 1 — body sections, in parallel (no cross-section dependency).
+  const bodySections = toDraft.filter((s) => !CONNECTIVE_SECTION.test(s.heading));
+  await mapPool(bodySections, DRAFT_CONCURRENCY, async (blueprintSection) => {
+    const section = await draftOneSection(opts, blueprintSection, '(body sections are written in parallel)', roleDigest, datasetBlock);
+    done.set(blueprintSection.heading, section);
+  });
+
+  // Wave 2 — connective narrative, from a digest of every section written so far
+  // (body + reused + gap), in blueprint order, so it ties them together.
+  const bodyDigest =
+    opts.paperBlueprint.sections
+      .map((s) => done.get(s.heading))
+      .filter((sec): sec is ManuscriptSection => !!sec)
+      .map((sec) => `${sec.heading}: ${(sec.body[0] ?? '').slice(0, 220)}`)
+      .join('\n') || '(none yet)';
+  const connectiveSections = toDraft.filter((s) => CONNECTIVE_SECTION.test(s.heading));
+  await mapPool(connectiveSections, DRAFT_CONCURRENCY, async (blueprintSection) => {
+    const section = await draftOneSection(opts, blueprintSection, bodyDigest, roleDigest, datasetBlock);
+    done.set(blueprintSection.heading, section);
+  });
+
+  // Reassemble in blueprint order.
+  return opts.paperBlueprint.sections
+    .map((s) => done.get(s.heading))
+    .filter((sec): sec is ManuscriptSection => !!sec);
 }
 
 async function draftAbstract(opts: {
