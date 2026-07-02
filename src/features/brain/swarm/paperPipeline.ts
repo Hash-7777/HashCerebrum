@@ -2090,9 +2090,14 @@ export async function preparePaperLedger(opts: {
       // manuscript title is the heading itself, not the word "Title".
       .replace(/^title\s*:\s*/i, '')
       .trim();
+    // Reject a title that was cut off mid-stream (a rate-limit / provider drop
+    // truncated one run to "Direct Oral Ant"): a real journal title is at least a
+    // few words, so anything shorter falls back to the deterministic blueprint
+    // title rather than shipping a broken heading.
     if (
-      candidate.length >= 10 &&
+      candidate.length >= 20 &&
       candidate.length <= 200 &&
+      candidate.split(/\s+/).filter(Boolean).length >= 4 &&
       !/^title$/i.test(candidate) &&
       !/\b(write|draft|generate|manuscript topic|section to write)\b/i.test(candidate)
     ) {

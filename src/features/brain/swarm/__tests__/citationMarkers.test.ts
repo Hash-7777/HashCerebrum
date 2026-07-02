@@ -27,6 +27,14 @@ describe('expandCitationMarkers', () => {
     expect(expandCitationMarkers('【S2】', 40)).toBe('[S2]');
   });
 
+  it('tolerates a dagger/asterisk footnote glyph the model appends', () => {
+    // The real leak: Gemini / GPT-OSS emit 【S5†】, which failed the closing-bracket
+    // match and leaked raw. Now normalised to [S5].
+    expect(expandCitationMarkers('rise in INR【S5†】 noted', 40)).toBe('rise in INR[S5] noted');
+    expect(expandCitationMarkers('effect [S6*] and [S8†]', 40)).toBe('effect [S6] and [S8]');
+    expect(expandCitationMarkers('group 【S3†, S5†】', 40)).toBe('group [S3][S5]');
+  });
+
   it('handles bare (non-S) numbers in a group', () => {
     expect(expandCitationMarkers('[4, 12]', 40)).toBe('[S4][S12]');
   });

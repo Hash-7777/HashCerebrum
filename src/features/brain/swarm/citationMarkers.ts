@@ -9,16 +9,24 @@
 // [S25, S27] -> [S25][S27], so the existing single-marker pass handles them
 // uniformly and nothing internal can survive to the page.
 
+// A single citation number, optionally S-prefixed, and optionally trailed by a
+// dagger/asterisk footnote glyph that some models (Gemini, GPT-OSS) append —
+// e.g. "S5†", "12*". Without tolerating that glyph the whole marker (【S5†】)
+// failed to match the closing bracket and leaked raw into the report.
+const NUM = 'S?\\d+[†‡✝*]?';
+const RANGE = `${NUM}(?:\\s*[-‑–—]\\s*${NUM})?`;
+const LIST = `${RANGE}(?:\\s*[,;]\\s*${RANGE})*`;
+
 // Fullwidth / CJK brackets some models emit instead of ASCII brackets.
-const ALT_BRACKET = /[【〔［]\s*(S?\d+(?:\s*[-‑–—]\s*S?\d+)?(?:\s*[,;]\s*S?\d+(?:\s*[-‑–—]\s*S?\d+)?)*)\s*[】〕］]/g;
+const ALT_BRACKET = new RegExp(`[【〔［]\\s*(${LIST})\\s*[】〕］]`, 'g');
 
 // A whole bracketed citation group: one or more S-prefixed (or bare) numbers,
 // each optionally a range, separated by commas or semicolons.
-//   [S8]  [S25, S27]  [S1-S4]  [1, 2; 5]  [S1–S3, S7]
-const GROUP = /\[\s*(S?\d+(?:\s*[-‑–—]\s*S?\d+)?(?:\s*[,;]\s*S?\d+(?:\s*[-‑–—]\s*S?\d+)?)*)\s*\]/g;
+//   [S8]  [S25, S27]  [S1-S4]  [1, 2; 5]  [S1–S3, S7]  【S5†】
+const GROUP = new RegExp(`\\[\\s*(${LIST})\\s*\\]`, 'g');
 
 function expandPart(part: string, maxSpan: number): string | null {
-  const range = part.match(/^S?(\d+)\s*[-‑–—]\s*S?(\d+)$/);
+  const range = part.match(/^S?(\d+)[†‡✝*]?\s*[-‑–—]\s*S?(\d+)[†‡✝*]?$/);
   if (range) {
     let lo = Number(range[1]);
     let hi = Number(range[2]);
@@ -29,7 +37,7 @@ function expandPart(part: string, maxSpan: number): string | null {
     for (let n = lo; n <= hi; n += 1) out += `[S${n}]`;
     return out;
   }
-  const single = part.match(/^S?(\d+)$/);
+  const single = part.match(/^S?(\d+)[†‡✝*]?$/);
   if (single) return `[S${single[1]}]`;
   return null;
 }
