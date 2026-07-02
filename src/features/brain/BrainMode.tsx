@@ -899,7 +899,7 @@ export function BrainMode() {
           // panel, so weak or no-GPU hardware runs full-speed with no loss.
           <>
             <FeatureBoundary name="Pipeline (2D)">
-              <div className="brain-model-panel">
+              <div className="brain-model-panel brain-model-panel--flat">
                 <BrainWorkflow2D statuses={agentStatuses} intent={activeIntent} />
               </div>
             </FeatureBoundary>

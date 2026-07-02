@@ -14,6 +14,26 @@
   box-shadow: var(--shadow-lg, 0 24px 60px -40px rgba(0, 0, 0, 0.85));
 }
 
+/* In Lite mode the 2D pipeline IS the side panel, so it must read as one fixed
+   frame — not a floating card inside the 3D-brain gradient (which made it look
+   lifted/curled). The panel provides the single frame; the workflow fills it
+   flat and stays put while only its steps change per task. */
+.brain-model-panel--flat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+}
+.brain-model-panel--flat .wf {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .wf-head {
   display: flex;
   align-items: baseline;

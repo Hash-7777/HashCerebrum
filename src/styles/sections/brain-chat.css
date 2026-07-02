@@ -198,19 +198,6 @@
 }
 /* Scrollbars are styled globally in base.css (theme-aware). */
 
-/* sticky scroll fade at top */
-.chat-scroll::before {
-  content: "";
-  position: sticky;
-  top: 0;
-  height: 20px;
-  margin-bottom: -20px;
-  background: linear-gradient(180deg, var(--ink-2), transparent);
-  pointer-events: none;
-  z-index: 1;
-  display: block;
-}
-
 .transcript-load-more {
   align-self: flex-start;
   padding: 6px 12px;

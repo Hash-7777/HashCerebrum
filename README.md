@@ -135,6 +135,10 @@ The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Scienc
 
 The boss classifies each request and delegates to the specialists it needs. The **Pharmacist** is the combined drug expert (pharmacology *and* interactions) for general research; the dedicated **Drug Interactions** agent produces the graded A–X report when the request is an interaction check. The roster and the region map are compile-time constants — the type system rejects a seventh agent.
 
+### 3D / 2D view
+
+A toolbar toggle switches the workspace between the **3D** anatomical brain and a GPU-free **2D pipeline** view — the same view **Lite mode** uses automatically on weak or GPU-less hardware. The 2D view is a fixed stepper panel that shows the live research process (route → retrieve → … → report); only its steps and their contents change to match the task at hand (a quick lookup, a full paper, a drug-interaction or genetics check). No research feature is lost in 2D — it is purely how the workspace is drawn.
+
 ---
 
 ## One mega-mind, three modes
