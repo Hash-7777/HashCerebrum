@@ -27,6 +27,7 @@ import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
+import { applyHonestyPass } from './honestyGuard';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -1753,6 +1754,14 @@ async function draftOneSection(
     }
     passes += 1;
   }
+  // Run the deterministic honesty pass on the drafted prose HERE, at the source,
+  // so the manuscript stored and shown in the chat matches the exported PDF —
+  // otherwise fabricated aggregates / invented record counts (e.g. "strong = 33",
+  // "209 records") were only stripped at export and leaked into the live preview.
+  // A section that is nothing but the review flag is left untouched.
+  if (!(body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG))) {
+    body = body.map((paragraph) => applyHonestyPass(paragraph));
+  }
   return { heading: blueprintSection.heading, body };
 }
 
@@ -1834,11 +1843,14 @@ async function draftAbstract(opts: {
   // Deterministic fallback abstract — always non-empty, so the manuscript never
   // ships with a blank ABSTRACT (which happened when the model replied without
   // the labelled fields and the parse came back empty).
+  // Count-free wording: the exact record / strength counts live in the evidence
+  // figures, not the prose — stating them here reads as a fabricated study
+  // statistic and is stripped by the honesty pass anyway.
   const fallback: Manuscript['abstract'] = {
     background: 'This evidence-review draft was generated from guarded biomedical source retrieval and structured extraction.',
     objective: `To summarize source-backed evidence for ${opts.title.replace(/^Evidence Review of\s+/i, '')}.`,
-    methods: `The pipeline extracted ${opts.extractions.length} retrieved record(s), built ${opts.claimLedger.length} claim-led entry or entries, and blocked unsupported statistics.`,
-    results: `The claim ledger included ${strong} strong, ${moderate} moderate, ${weak} weak, and ${context} context claim(s); ${numeric} numeric statistic or sample-size field(s) were extracted from source text.`,
+    methods: 'The pipeline retrieved records from guarded biomedical sources, extracted structured evidence, built a source-backed claim ledger, and blocked unsupported statistics.',
+    results: 'The claim ledger organised the retrieved evidence by strength and captured the source-reported effect estimates; the accompanying evidence figures give the counts.',
     conclusions: 'The draft should be reviewed against full source records before submission or clinical use.',
   };
   try {
@@ -1859,15 +1871,18 @@ ${digest}`,
     const parsed = parseAbstract(reply);
     // A model can reply without the labelled fields, leaving the parse empty —
     // never ship that. Backfill any thin field from the deterministic fallback.
-    return isSubstantiveAbstract(parsed)
-      ? {
-          background: parsed.background.trim() || fallback.background,
-          objective: parsed.objective.trim() || fallback.objective,
-          methods: parsed.methods.trim() || fallback.methods,
-          results: parsed.results.trim() || fallback.results,
-          conclusions: parsed.conclusions.trim() || fallback.conclusions,
-        }
-      : fallback;
+    if (!isSubstantiveAbstract(parsed)) return fallback;
+    // Honesty-pass each field at the source so the preview matches the export —
+    // the abstract prompt is fed the evidence-strength counts, so the model tends
+    // to write "strong = 33, moderate = 29 …" into Results, which reads as a
+    // fabricated study statistic and is stripped here rather than only at export.
+    return {
+      background: applyHonestyPass(parsed.background.trim()) || fallback.background,
+      objective: applyHonestyPass(parsed.objective.trim()) || fallback.objective,
+      methods: applyHonestyPass(parsed.methods.trim()) || fallback.methods,
+      results: applyHonestyPass(parsed.results.trim()) || fallback.results,
+      conclusions: applyHonestyPass(parsed.conclusions.trim()) || fallback.conclusions,
+    };
   } catch {
     return fallback;
   }

@@ -347,6 +347,19 @@ export function unverifiedDrugMessage(unverified: string[]): string {
 export const INTERACTION_DISCLAIMER =
   'Not medical advice. This is automated triage that can be wrong or incomplete — verify every result with a licensed pharmacist or physician before any prescribing, dispensing, or medication decision.';
 
+// Collapse a run of 5+ consecutive citation markers ([n] or [Sn], separated only
+// by spaces/commas) down to the first three, so a model that defensively cites
+// every retrieved record does not print "[2][3]…[40]" after every sentence — as
+// happened when a genetics query returned mostly off-target records.
+export function collapseMarkerRuns(text: string): string {
+  // A marker plus 4+ more (total >= 5); separators are consumed only BETWEEN
+  // markers so trailing whitespace before following text is preserved.
+  return text.replace(/\[S?\d+\](?:[\s,]*\[S?\d+\]){4,}/g, (run) => {
+    const markers = run.match(/\[S?\d+\]/g) ?? [];
+    return markers.slice(0, 3).join('');
+  });
+}
+
 export function ensureInteractionDisclaimer(content: string): string {
   const trimmed = content.trimEnd();
   const lower = trimmed.toLowerCase();
@@ -446,7 +459,7 @@ Produce the graded interaction card(s) now, citing [S#] markers exactly as shown
     return { content: ensureInteractionDisclaimer(note), modelUsed: res.modelUsed };
   }
   return {
-    content: ensureInteractionDisclaimer(body),
+    content: ensureInteractionDisclaimer(collapseMarkerRuns(body)),
     modelUsed: res.modelUsed,
   };
 }
@@ -567,7 +580,7 @@ Write the correlation report now, beginning with the header line exactly as give
   if (!CONFIDENT_GENE_RX.test(content) && !/association confidence:/i.test(content)) {
     content = `${header}\n\n${content}`;
   }
-  return { content: ensureGeneDisclaimer(content), modelUsed: res.modelUsed };
+  return { content: ensureGeneDisclaimer(collapseMarkerRuns(content)), modelUsed: res.modelUsed };
 }
 
 // Synthesize the specialists' findings into the final answer — streamed.
@@ -646,7 +659,7 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
     { onToken, signal },
     emitFailover,
   );
-  return { content: stripLeakedSpecialistLabels(res.content), modelUsed: res.modelUsed };
+  return { content: collapseMarkerRuns(stripLeakedSpecialistLabels(res.content)), modelUsed: res.modelUsed };
 }
 
 // Remove internal specialist section labels the model sometimes echoes back as

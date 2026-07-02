@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collapseMarkerRuns,
   drugCandidates,
   ensureGeneDisclaimer,
   ensureInteractionDisclaimer,
@@ -28,6 +29,13 @@ describe('drug-interaction fabrication guard', () => {
   it('parses candidate drug names and drops connectors', () => {
     expect(drugCandidates('zynteprol and warfarin')).toEqual(expect.arrayContaining(['zynteprol', 'warfarin']));
     expect(drugCandidates('warfarin and ibuprofen')).not.toContain('and');
+  });
+
+  it('collapses a long run of citation markers to the first three', () => {
+    expect(collapseMarkerRuns('None reported [2][3][4][5][6][7][8].')).toBe('None reported [2][3][4].');
+    expect(collapseMarkerRuns('gap [1], [2], [3], [4], [5], [6] here')).toBe('gap [1][2][3] here');
+    // A short run (fewer than five) is left alone.
+    expect(collapseMarkerRuns('supported [1][2][3]')).toBe('supported [1][2][3]');
   });
 
   it('drops the leading command verb so it is not treated as a drug', () => {
