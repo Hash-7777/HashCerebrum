@@ -290,7 +290,7 @@ export function buildExportHtml(message: ExportableMessage): string {
   const title = message.title || 'HashCerebrum Export';
   const style = currentCitationStyle();
   const artifact = message.manuscript
-    ? (message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []))
+    ? (buildPublicationArtifact(message.manuscript, message.citations ?? []))
     : null;
 
   let body: string;
@@ -550,7 +550,12 @@ export function buildExportHtml(message: ExportableMessage): string {
 export function buildMarkdownExport(message: ExportableMessage): string {
   const style = currentCitationStyle();
   if (message.manuscript) {
-    const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+    // Always rebuild the publication artifact from the manuscript rather than
+    // reusing message.manuscript.publication cached at generation time — the
+    // cached artifact was produced by the OLD publication logic, so after any
+    // fix to citation normalisation / the honesty pass the preview and export
+    // kept showing the pre-fix document. Rebuilding applies the current logic.
+    const artifact = buildPublicationArtifact(message.manuscript, message.citations ?? []);
     return publicationMarkdown(message.manuscript, artifact, style);
   }
   const renumbered = renumberCitations(stripGeneratedReferenceSections(message.content), message.citations ?? []);
@@ -622,7 +627,7 @@ export async function exportMessageDocx(message: ExportableMessage): Promise<voi
     exportMessageDoc(message);
     return;
   }
-  const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+  const artifact = buildPublicationArtifact(message.manuscript, message.citations ?? []);
   const exportManuscript = normalizeManuscriptForPublication(message.manuscript, artifact, {
     includeSupplementalSection: false,
   });
@@ -659,7 +664,7 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
   const content = stripGeneratedReferenceSections(message.content);
 
   if (message.manuscript) {
-    const artifact = message.manuscript.publication ?? buildPublicationArtifact(message.manuscript, message.citations ?? []);
+    const artifact = buildPublicationArtifact(message.manuscript, message.citations ?? []);
     // A drafted manuscript always exports as a PDF. Publication-QA blockers
     // (e.g. thin evidence, an uncited section) are quality signals surfaced in
     // the pipeline, not a reason to deny the user the PDF they asked for — the
