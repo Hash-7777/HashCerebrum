@@ -106,6 +106,13 @@
 .icon-btn.compact { width: 22px; height: 22px; border-radius: 5px; }
 .icon-btn.danger:hover { color: var(--danger); }
 .icon-btn.ring { border: 1px solid var(--line); }
+/* Active toggle (e.g. the 2D pipeline view is on) — accent-tinted so the current
+   mode reads at a glance in the toolbar. */
+.icon-btn[data-on='true'] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
 
 .btn {
   display: inline-flex;

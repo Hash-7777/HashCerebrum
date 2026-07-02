@@ -1,6 +1,8 @@
 import { APP_NAME, APP_VERSION } from '@config/constants';
 import { Icon } from '@ui/icons';
 import { platform } from '@platform/index';
+import { useBrainModesStore } from '@core/store/brainModesStore';
+import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
 import logoMark from '@/assets/logo-mark.png';
 
 const maskStyle = {
@@ -25,6 +27,15 @@ function restartApp() {
 }
 
 export function TitleBar() {
+  // 3D ⇄ 2D view toggle, surfaced in the toolbar for one-click access. The Lite
+  // preference drives the Brain workspace: 'on' = 2D pipeline, 'off' = 3D brain,
+  // 'auto' = 2D only on weak hardware. Clicking forces the opposite explicit mode.
+  const lite = useBrainModesStore((s) => s.lite);
+  const setLite = useBrainModesStore((s) => s.setLite);
+  const autoLowEnd = useLowEndDevice();
+  const is2D = lite === 'on' || (lite === 'auto' && autoLowEnd);
+  const toggleView = () => setLite(is2D ? 'off' : 'on');
+
   return (
     <header className="titlebar" data-tauri-drag-region>
       <div className="brand">
@@ -34,6 +45,17 @@ export function TitleBar() {
       </div>
       <div className="spacer" />
       <div className="titlebar-right">
+        <button
+          className="icon-btn"
+          type="button"
+          data-on={is2D}
+          title={is2D ? '2D pipeline view — switch to 3D brain' : '3D brain view — switch to 2D pipeline'}
+          aria-label={is2D ? 'Switch to 3D brain view' : 'Switch to 2D pipeline view'}
+          aria-pressed={is2D}
+          onClick={toggleView}
+        >
+          <Icon name={is2D ? 'graph' : 'brain'} size={15} />
+        </button>
         <button className="icon-btn" type="button" title="Search (⌘F)" aria-label="Search" onClick={focusSearch}>
           <Icon name="search" size={15} />
         </button>
