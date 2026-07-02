@@ -42,10 +42,9 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs        = "5"
 shellexpand = "3"
 
-# OS keychain — keyring crate for Linux/Windows; macOS uses
-# security-framework directly (see target block) to avoid
-# binary-bound ACLs that lose keys after each rebuild.
-keyring = "3"
+# OS keychain — see the per-platform [target.*.dependencies] blocks below:
+# macOS uses security-framework directly (binary-bound ACL avoidance); Linux and
+# Windows use the keyring crate with the OS credential backends enabled.
 
 # HTTP — all external network goes through Rust, never the renderer
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
@@ -95,6 +94,15 @@ typst-assets = { version = "0.14", features = ["fonts"] }
 # macOS: direct keychain access (avoid binary-bound ACL)
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2"
+
+# Linux & Windows: keyring crate with the OS credential backends enabled.
+# keyring 3.x builds NO credential store by default, so without these features
+# storing an API key would fail on Linux/Windows. windows-native uses the Windows
+# Credential Manager; sync-secret-service + crypto-rust use the freedesktop Secret
+# Service over D-Bus in pure Rust (no libsecret / system -dev packages needed to
+# build). Only the backend matching the target OS is compiled.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
 
 [profile.release]
 strip         = true
