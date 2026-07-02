@@ -38,6 +38,7 @@ const BrainCanvas = lazy(() =>
   import('./components/BrainCanvas').then((m) => ({ default: m.BrainCanvas })),
 );
 import { Composer } from './components/Composer';
+import { Icon } from '@ui/icons';
 import { ClaimLedgerPanel } from './components/ClaimLedgerPanel';
 import type { ClaimLedgerEntry } from './swarm/publicationTypes';
 import { Transcript, type ChatMessage } from './components/Transcript';
@@ -98,6 +99,7 @@ export function BrainMode() {
   const [draftProgress, setDraftProgress] = useState<string | null>(null);
   const draftingAssistantId = useRef<string | null>(null);
   const canSubmit = query.trim().length > 0;
+  const turnCount = messages.filter((m) => m.role !== 'system').length;
   // Placeholder label for a pending bubble — the boss model. The final
   // bubble is relabelled with the model that actually answered.
   const modelLabel = useMemo(() => labelForModel(agentModelFor('boss')), [modelGroups]);
@@ -800,43 +802,56 @@ export function BrainMode() {
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">
-            <h1 className="brain-title"><em>The</em> Brain</h1>
-            <div className="chat-meta">
-              <span className="chat-meta-line">
-                <span>{messages.filter((m) => m.role !== 'system').length} TURNS</span>
-                {isRunning && <><span className="dot-sep">·</span><span>RUNNING</span></>}
-                {draftProgress && <><span className="dot-sep">·</span><span className="draft-progress">{draftProgress}</span></>}
-              </span>
-              <span className="chat-export-actions">
-                {messages.filter((m) => m.role !== 'system').length > 0 ? (
-                  // Working state: compact export actions only. The onboarding tip
-                  // is dropped here so the long prose + buttons no longer share one
-                  // nowrap line that overflowed and clipped the header.
+            <div className="chat-head-left">
+              <h1 className="brain-title"><em>The</em> Brain</h1>
+              <div className={`brain-rule${isRunning ? ' is-running' : ''}`} aria-hidden="true"><span /></div>
+              <div className="chat-meta">
+                <span className="meta-item"><b>{String(turnCount).padStart(2, '0')}</b> turns</span>
+                {evidence.length > 0 && (
                   <>
-                    <button type="button" onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export MD</button>
-                    <button type="button" onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: messages.filter((m) => m.role !== 'system').length })}>Export PDF</button>
-                    <button
-                      type="button"
-                      className="chat-clear-btn"
-                      onClick={() => {
-                        clearActive();
-                        setMessages([WELCOME_MESSAGE]);
-                        setDataset(null);
-                        setEvidence([]);
-                      }}
-                      title="Clear workspace"
-                    >
-                      Clear
-                    </button>
+                    <span className="meta-div" aria-hidden="true" />
+                    <span className="meta-item meta-accent"><b>{String(evidence.length).padStart(2, '0')}</b> evidence</span>
                   </>
-                ) : null}
-              </span>
-              {evidence.length > 0 && (
-                <span className="chat-meta-evidence">
-                  <b>{evidence.length}</b> EVIDENCE
-                </span>
-              )}
+                )}
+                {(draftProgress || isRunning) && (
+                  <>
+                    <span className="meta-div" aria-hidden="true" />
+                    <span className="meta-run">{draftProgress || 'running'}</span>
+                  </>
+                )}
+              </div>
             </div>
+            {turnCount > 0 && (
+              <div className="chat-export-actions">
+                <button
+                  type="button"
+                  className="export-btn"
+                  onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
+                >
+                  <Icon name="document" size={13} /> Export MD
+                </button>
+                <button
+                  type="button"
+                  className="export-btn export-primary"
+                  onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
+                >
+                  <Icon name="filePdf" size={13} /> Export PDF
+                </button>
+                <button
+                  type="button"
+                  className="export-btn export-clear"
+                  onClick={() => {
+                    clearActive();
+                    setMessages([WELCOME_MESSAGE]);
+                    setDataset(null);
+                    setEvidence([]);
+                  }}
+                  title="Clear workspace"
+                >
+                  <Icon name="close" size={12} /> Clear
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

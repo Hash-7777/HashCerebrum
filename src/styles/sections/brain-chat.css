@@ -24,9 +24,9 @@
 /* ── Chat header ──────────────────────────────────────────── */
 
 .chat-header {
-  padding: 5px 22px 4px;
+  padding: 16px 24px 14px;
   background: var(--ink-1);
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -36,18 +36,20 @@
 
 .chat-header-row {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
   min-width: 0;
 }
+
+.chat-head-left { min-width: 0; }
 
 .brain-title {
   margin: 0;
   font-family: "Newsreader", "Source Serif 4", Georgia, serif;
-  font-size: clamp(20px, 2vw, 28px);
-  font-weight: 400;
-  letter-spacing: -0.018em;
+  font-size: clamp(24px, 2.2vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
   line-height: 1;
   color: var(--text-1);
   font-variation-settings: "opsz" 48;
@@ -55,72 +57,113 @@
 .brain-title em {
   font-style: italic;
   font-weight: 300;
-  color: var(--text-2);
-  margin-right: 0.18em;
+  color: var(--text-3);
+  margin-right: 0.16em;
   font-variation-settings: "opsz" 72;
+}
+
+/* Accent underline mark — a static hairline that gains a slow accent sweep while
+   a run is in progress (no blinking dot). */
+.brain-rule {
+  position: relative;
+  margin-top: 12px;
+  height: 1px;
+  width: 100%;
+  max-width: 360px;
+  background: var(--line);
+  overflow: hidden;
+}
+.brain-rule > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 48px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+.brain-rule.is-running > span {
+  opacity: 1;
+  animation: brain-rule-sweep 2.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+@keyframes brain-rule-sweep {
+  0% { transform: translateX(-56px); }
+  100% { transform: translateX(360px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brain-rule.is-running > span { animation: none; opacity: 0; }
+  .brain-rule.is-running { background: var(--accent-line); }
 }
 
 .chat-meta {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  font-family: var(--f-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  white-space: nowrap;
-  /* Allow the meta block to shrink within the header row so it can never push
-     the title out or overflow/clip the column. */
-  min-width: 0;
-}
-.chat-meta-line {
-  display: flex;
   align-items: center;
-  gap: 8px;
-}
-.chat-meta .dot-sep { color: var(--text-5); }
-.chat-meta-evidence {
+  gap: 11px;
+  margin-top: 11px;
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
   color: var(--text-4);
-  letter-spacing: 0.12em;
+  min-width: 0;
+  flex-wrap: wrap;
 }
-.chat-meta-evidence b {
-  color: var(--accent);
-  font-weight: 700;
+.chat-meta .meta-item b {
+  color: var(--text-2);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  margin-right: 0.35em;
+}
+.chat-meta .meta-accent b { color: var(--accent); }
+.chat-meta .meta-div {
+  width: 1px;
+  height: 10px;
+  background: var(--line-strong);
+}
+.chat-meta .meta-run {
+  color: var(--accent);
+  text-transform: lowercase;
 }
 
 .chat-export-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  /* Wrap to a second line on a tight header rather than overflowing/clipping. */
+  gap: 4px;
+  flex-shrink: 0;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
 }
-.chat-export-actions button {
-  font-family: var(--f-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
   background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 7px 14px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
-.chat-export-actions button:hover {
-  color: var(--accent);
+.export-btn svg { opacity: 0.85; }
+.export-btn:hover {
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.04);
+}
+/* Primary — a quiet accent-outlined "glass" button, never a flat fill. */
+.export-btn.export-primary {
+  color: var(--text-1);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.export-btn.export-primary svg { opacity: 1; color: var(--accent); }
+.export-btn.export-primary:hover {
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-line), 0 0 18px var(--accent-glow);
 }
-.chat-export-actions .chat-clear-btn:hover {
-  color: var(--danger, #e07070);
-  border-color: var(--danger, #e07070);
-}
+.export-btn.export-clear { color: var(--text-4); }
+.export-btn.export-clear:hover { color: var(--danger, #e07070); background: rgba(224, 112, 112, 0.08); }
 
 
 /* ── Chat scroll area ─────────────────────────────────────── */
