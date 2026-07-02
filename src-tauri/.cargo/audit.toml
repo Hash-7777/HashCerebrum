@@ -1,0 +1,16 @@
+# cargo-audit configuration.
+#
+# The ignored advisories below are transitive quick-xml DoS advisories
+# (RUSTSEC-2026-0194 quadratic attribute check, RUSTSEC-2026-0195 unbounded
+# namespace allocation), fixed only in quick-xml >= 0.41.0. HashCerebrum does not
+# depend on quick-xml directly — it is pulled in three times through the typst
+# typesetting stack (typst -> hayagriva/citationberg, and plist/syntect/two-face
+# for bundled syntax definitions), which as of this writing still pin quick-xml
+# 0.37/0.38/0.39 and have no released version on 0.41. The vulnerabilities are
+# denial-of-service triggered by parsing MALICIOUS XML; in this app quick-xml only
+# ever parses internally-generated typesetting/bibliography content and static
+# bundled syntax files — never attacker-controlled XML — so the practical exposure
+# is negligible. Re-audit and remove these ignores once the typst/plist/syntect
+# stack ships on quick-xml >= 0.41.
+[advisories]
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
