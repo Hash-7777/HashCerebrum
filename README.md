@@ -14,7 +14,7 @@
 [![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust backend](https://img.shields.io/badge/Rust-backend-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Platform: macOS](https://img.shields.io/badge/macOS-desktop-333333?style=flat-square&logo=apple&logoColor=white)](#getting-started)
+[![Platform: macOS · Linux · Windows](https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-333333?style=flat-square)](#getting-started)
 
 </div>
 
@@ -346,7 +346,7 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (612 tests) + `cargo test` (50 tests) |
+| Testing | Vitest (814 tests) + `cargo test` (62 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -380,6 +380,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 sudo apt update
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
+> API keys are stored in the OS keychain. On Linux that is the freedesktop
+> **Secret Service** — a desktop session (GNOME Keyring or KWallet) provides it,
+> so it works out of the box on a normal desktop. On a headless/minimal setup,
+> install and unlock a keyring (e.g. `gnome-keyring`) or the app cannot save keys.
 
 **Windows**
 ```powershell
@@ -429,7 +433,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 612 unit tests
+npm test               # Vitest — 814 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -496,7 +500,7 @@ src-tauri/
 | Rust Tauri backend (`src-tauri/src/`) | 41 | ~6,411 |
 | **Total core source** | **323** | **~51,494** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (612 Vitest tests plus 50 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (814 Vitest tests plus 62 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 
