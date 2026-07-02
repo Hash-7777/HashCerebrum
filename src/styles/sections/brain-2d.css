@@ -17,15 +17,20 @@
 /* In Lite mode the 2D pipeline IS the side panel, so it must read as one fixed
    frame — not a floating card inside the 3D-brain gradient (which made it look
    lifted/curled). The panel provides the single frame; the workflow fills it
-   flat and stays put while only its steps change per task. */
-.brain-model-panel--flat {
+   flat and stays put while only its steps change per task.
+
+   The compound `.brain-model-panel.brain-model-panel--flat` selector outranks the
+   base `.brain-model-panel` (loaded from a later stylesheet), so the neutral ink
+   surface actually wins over the purple/gold 3D-brain gradient — that leak was
+   why the 2D background did not match the rest of the app. */
+.brain-model-panel.brain-model-panel--flat {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 22px;
   background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
 }
-.brain-model-panel--flat .wf {
+.brain-model-panel.brain-model-panel--flat .wf {
   margin: 0;
   padding: 0;
   background: transparent;
@@ -83,7 +88,7 @@
   grid-template-columns: 32px 1fr auto;
   align-items: center;
   gap: 14px;
-  padding: 6px 0;
+  padding: 9px 0;
 }
 
 /* Connecting rail — sits BEHIND the tiles (z-index 0); the solid tile below hides

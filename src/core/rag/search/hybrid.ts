@@ -70,10 +70,24 @@ export function hybridSearch(input: HybridInput): RagSearchHit[] {
   }
   ranked.sort((a, b) => b.score - a.score);
 
-  // Optional MMR diversity over a candidate window, else just take the top.
+  // Optional MMR diversity, else just take the top.
+  //
+  // MMR is O(picks² · dim), so applying it to a large limit (the Memory UI asks
+  // for up to 200 results) means billions of cosine ops on the main thread — it
+  // froze the app on every keystroke. Diversify only a bounded HEAD of the
+  // ranking and append the remainder by relevance. For the small limits used by
+  // research retrieval (≤ the cap) this is identical to diversifying the whole
+  // result, so retrieval behaviour is unchanged; only the large browse limit is
+  // spared the quadratic blow-up.
   if (input.diversify) {
-    const window = ranked.slice(0, Math.max(limit * 3, limit));
-    return mmrRerank(window, vectorFor, input.mmrLambda ?? 0.7, limit);
+    const DIVERSIFY_CAP = 24;
+    const picks = Math.min(limit, DIVERSIFY_CAP);
+    const window = ranked.slice(0, Math.max(picks * 3, picks));
+    const head = mmrRerank(window, vectorFor, input.mmrLambda ?? 0.7, picks);
+    if (limit <= DIVERSIFY_CAP) return head;
+    const headIds = new Set(head.map((h) => h.chunk.id));
+    const tail = ranked.filter((h) => !headIds.has(h.chunk.id));
+    return [...head, ...tail].slice(0, limit);
   }
   return ranked.slice(0, limit);
 }

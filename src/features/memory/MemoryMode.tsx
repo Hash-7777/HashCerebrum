@@ -37,6 +37,14 @@ export function MemoryMode() {
   const [showDocs, setShowDocs] = useState(false);
 
   const [search, setSearch] = useState('');
+  // Results are driven off a debounced copy of the query, so typing does not
+  // rebuild the lexical index + 3D vector map (and re-run hybrid retrieval) on
+  // every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 180);
+    return () => window.clearTimeout(timer);
+  }, [search]);
   // Graph is the default view — the topic map is the primary way to read memory.
   const [view, setView] = useState<MemoryView>('graph');
   // Scope: this project only, or the whole cross-project library (the deduped
@@ -205,7 +213,7 @@ export function MemoryMode() {
   // project being viewed. Empty search lists everything newest-first.
   const [searchResults, setSearchResults] = useState<RagChunk[]>([]);
   useEffect(() => {
-    const query = search.trim();
+    const query = debouncedSearch.trim();
     if (!query || !activeProjectId) {
       setSearchResults([]);
       return;
@@ -228,14 +236,14 @@ export function MemoryMode() {
     return () => {
       cancelled = true;
     };
-  }, [scopedChunks, search, activeProjectId, scope]);
+  }, [scopedChunks, debouncedSearch, activeProjectId, scope]);
 
   const visible = useMemo(() => {
-    if (!search.trim()) {
+    if (!debouncedSearch.trim()) {
       return [...scopedChunks].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     return searchResults;
-  }, [scopedChunks, search, searchResults]);
+  }, [scopedChunks, debouncedSearch, searchResults]);
 
   return (
     <div className="mode memory-mode">

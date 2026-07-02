@@ -8,6 +8,39 @@
     var(--ink-0);
 }
 .brain-stage { flex: 1; min-width: 0; position: relative; }
+
+/* Loading placeholder shown while the 3D brain chunk + model load (e.g. after
+   switching 2D → 3D). It fills the stage with a calm ink surface and a small
+   spinner so the panel never shows the bare purple/gold gradient as an empty
+   box during the ~2s load. */
+.brain-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+  border-radius: var(--r-xl);
+}
+.brain-loading-orb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+.brain-loading-label {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-4);
+  letter-spacing: 0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brain-loading-orb { animation: none; }
+}
 .brain-stage::after {
   content: "";
   position: absolute;

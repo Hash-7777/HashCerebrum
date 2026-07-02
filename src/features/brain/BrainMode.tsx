@@ -914,8 +914,9 @@ export function BrainMode() {
                 <div className="brain-stage">
                   <Suspense
                     fallback={
-                      <div className="brain-empty" role="status">
-                        <p className="brain-empty-title">Loading 3D brain…</p>
+                      <div className="brain-loading" role="status" aria-live="polite">
+                        <span className="brain-loading-orb" aria-hidden="true" />
+                        <p className="brain-loading-label">Preparing the 3D brain…</p>
                       </div>
                     }
                   >
