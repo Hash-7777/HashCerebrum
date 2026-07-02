@@ -75,19 +75,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(
-            // Restore size/position/maximised, but NOT visibility: the window is
-            // created hidden (tauri.conf.json) and the frontend reveals it only
-            // after the dark UI has painted. Without excluding VISIBLE here, this
-            // plugin re-shows the window on launch, flashing the blank WebView
-            // white before the page renders.
-            tauri_plugin_window_state::Builder::default()
-                .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::all()
-                        .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
-                )
-                .build(),
-        )
         .setup(|app| {
             security::guard::init(app.handle())?;
             audit::init(app.handle())?;
@@ -95,47 +82,12 @@ pub fn run() {
             telemetry::init(app.handle())?;
             let supervisor = swarm::init(app.handle())?;
             app.manage(supervisor);
-            // First launch only (no saved window state yet): center the main
-            // window. On later launches the window-state plugin restores the saved
-            // geometry, so we must NOT re-center — that is what made the window
-            // forget its position. `center: true` in tauri.conf.json was removed
-            // for the same reason (it re-centered on every launch).
-            if let Some(win) = app.get_webview_window("main") {
-                let restore_flags = tauri_plugin_window_state::StateFlags::all()
-                    .difference(tauri_plugin_window_state::StateFlags::VISIBLE);
-                let has_saved_state = app
-                    .path()
-                    .app_config_dir()
-                    .map(|dir| {
-                        dir.join(".window-state.json").exists()
-                            || dir.join("window-state.json").exists()
-                    })
-                    .unwrap_or(false);
-                if has_saved_state {
-                    // Restore the saved size + position EXPLICITLY. The plugin's
-                    // auto-restore does not reliably fire for a window declared in
-                    // tauri.conf.json that is created hidden, which is why the
-                    // window forgot its geometry; calling restore_state here
-                    // guarantees it. Idempotent if auto-restore also ran.
-                    let _ = tauri_plugin_window_state::WindowExt::restore_state(&win, restore_flags);
-                } else {
-                    // First launch (no saved state yet): center the window.
-                    let _ = win.center();
-                }
-                // Save geometry to disk immediately when the window closes,
-                // before the app exits (macOS Cmd+Q may destroy the window
-                // before RunEvent::Exit fires, leaving stale cache).
-                let app_handle = app.handle().clone();
-                win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { .. } = event {
-                        let _ = tauri_plugin_window_state::AppHandleExt::save_window_state(
-                            &app_handle,
-                            tauri_plugin_window_state::StateFlags::all()
-                                .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
-                        );
-                    }
-                });
-            }
+            // Window geometry (size + position) is remembered by the frontend: it
+            // restores the saved geometry and THEN shows the window in one beat
+            // (see src/platform/revealWindow.ts). Doing the restore in JS right
+            // before `show()` is what makes it stick on macOS — geometry is set
+            // while the window is still hidden and revealed in the same sequence,
+            // so the window manager never gets a chance to re-place it.
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -182,16 +134,11 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
     {
-        Ok(app) => app.run(|app_handle, event| {
+        Ok(app) => app.run(|_app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                // Guarantee the window geometry is persisted on exit, independent
-                // of window close-event timing — so size and position are
-                // remembered on the next launch.
-                let _ = tauri_plugin_window_state::AppHandleExt::save_window_state(
-                    app_handle,
-                    tauri_plugin_window_state::StateFlags::all()
-                        .difference(tauri_plugin_window_state::StateFlags::VISIBLE),
-                );
+                // Window geometry is persisted from the frontend on every
+                // move/resize (see src/platform/revealWindow.ts), so nothing to
+                // save here — just close the database connections cleanly.
                 if let Err(e) = cache::close_connection() {
                     tracing::warn!("Cache close error on exit: {}", e);
                 }
