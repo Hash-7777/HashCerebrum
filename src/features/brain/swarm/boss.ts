@@ -432,8 +432,21 @@ Produce the graded interaction card(s) now, citing [S#] markers exactly as shown
     { onToken, signal },
     emitFailover,
   );
+  const body = stripLeakedSpecialistLabels(res.content).trim();
+  // An empty body means the model returned no content on a "successful" reply —
+  // typically a provider safety filter blocking the pharmacology request (common
+  // with Gemini) or a silent rate-limit, neither of which the failover chain can
+  // catch. Explain it instead of shipping a bare disclaimer that reads as "no
+  // output".
+  if (!body) {
+    const note =
+      `The interaction report could not be generated: **${res.modelUsed}** returned an empty response. ` +
+      `This usually means the provider's safety filter blocked the drug-interaction request (Gemini models often do) or a silent rate limit. ` +
+      `Try again, or switch the boss model to **Auto** or a non-Gemini provider in Agent settings.`;
+    return { content: ensureInteractionDisclaimer(note), modelUsed: res.modelUsed };
+  }
   return {
-    content: ensureInteractionDisclaimer(stripLeakedSpecialistLabels(res.content)),
+    content: ensureInteractionDisclaimer(body),
     modelUsed: res.modelUsed,
   };
 }
@@ -542,7 +555,15 @@ Write the correlation report now, beginning with the header line exactly as give
   );
   // Guarantee the deterministic header and disclaimer are present even if the
   // model dropped them.
-  let content = stripLeakedSpecialistLabels(res.content);
+  let content = stripLeakedSpecialistLabels(res.content).trim();
+  // An empty body (safety filter / silent rate-limit returning a blank 200) would
+  // otherwise ship just the header + disclaimer and read as "no output".
+  if (!content) {
+    content =
+      `The correlation report could not be generated: **${res.modelUsed}** returned an empty response — ` +
+      `usually a provider safety filter or a silent rate limit. Try again, or switch the boss model to **Auto** ` +
+      `or a non-Gemini provider in Agent settings.`;
+  }
   if (!CONFIDENT_GENE_RX.test(content) && !/association confidence:/i.test(content)) {
     content = `${header}\n\n${content}`;
   }
