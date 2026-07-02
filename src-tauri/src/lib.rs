@@ -101,6 +101,8 @@ pub fn run() {
             // forget its position. `center: true` in tauri.conf.json was removed
             // for the same reason (it re-centered on every launch).
             if let Some(win) = app.get_webview_window("main") {
+                let restore_flags = tauri_plugin_window_state::StateFlags::all()
+                    .difference(tauri_plugin_window_state::StateFlags::VISIBLE);
                 let has_saved_state = app
                     .path()
                     .app_config_dir()
@@ -109,7 +111,15 @@ pub fn run() {
                             || dir.join("window-state.json").exists()
                     })
                     .unwrap_or(false);
-                if !has_saved_state {
+                if has_saved_state {
+                    // Restore the saved size + position EXPLICITLY. The plugin's
+                    // auto-restore does not reliably fire for a window declared in
+                    // tauri.conf.json that is created hidden, which is why the
+                    // window forgot its geometry; calling restore_state here
+                    // guarantees it. Idempotent if auto-restore also ran.
+                    let _ = tauri_plugin_window_state::WindowExt::restore_state(&win, restore_flags);
+                } else {
+                    // First launch (no saved state yet): center the window.
                     let _ = win.center();
                 }
                 // Save geometry to disk immediately when the window closes,

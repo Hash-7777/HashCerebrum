@@ -46,7 +46,7 @@ export function TitleBar() {
       <div className="spacer" />
       <div className="titlebar-right">
         <button
-          className="icon-btn"
+          className="icon-btn view-toggle"
           type="button"
           data-on={is2D}
           title={is2D ? '2D pipeline view — switch to 3D brain' : '3D brain view — switch to 2D pipeline'}
@@ -54,7 +54,7 @@ export function TitleBar() {
           aria-pressed={is2D}
           onClick={toggleView}
         >
-          <Icon name={is2D ? 'graph' : 'brain'} size={15} />
+          {is2D ? '2D' : '3D'}
         </button>
         <button className="icon-btn" type="button" title="Search (⌘F)" aria-label="Search" onClick={focusSearch}>
           <Icon name="search" size={15} />
