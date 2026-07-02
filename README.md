@@ -356,24 +356,7 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-```mermaid
-flowchart TB
-  subgraph FE["🟦 Frontend · Vitest · 814 tests"]
-    direction LR
-    A["Swarm & pipeline<br/>intent routing · claim ledger<br/>parallel drafting · export gate"]
-    B["Citation integrity<br/>renumber [S#]→[n] · marker expand<br/>drop dangling · strip over-cited"]
-    C["Honesty guard<br/>fabricated aggregates · record counts<br/>overclaim softening · CI↔p reconcile"]
-    D["Domain logic<br/>drug/gene extraction · keyword phrases<br/>tier failover · slash commands"]
-  end
-  subgraph BE["🦀 Backend · cargo test · 62 tests"]
-    direction LR
-    E["Security guard<br/>host allowlist · SSRF denylist<br/>(RFC-1918 / CGNAT / IPv6-ULA)"]
-    F["Network core<br/>capped streaming reads<br/>per-host rate limiter"]
-    G["Storage & provenance<br/>OS keychain · SQLite cache<br/>hash-chained audit log"]
-  end
-  FE -.->|"typecheck · test · build:web"| CI{{"CI on every push"}}
-  BE -.->|"cargo test · cargo audit"| CI
-```
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 814 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 62 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
