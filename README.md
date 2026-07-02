@@ -41,8 +41,8 @@ In medicine, two things matter more than anything else: **where your data goes**
 1. Authoritative biomedical databases are queried in parallel — **PubMed/NLM, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar**, plus **GWAS Catalog and ClinVar** for genetics (no scraped blogs, no synthetic corpora)
 2. Retrieved records are extracted into a structured evidence table with study design, population, outcomes, and effect values
 3. A claim ledger maps each finding to a source marker and grades its evidence strength
-4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive
-5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list
+4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive. Body sections are drafted **in parallel**, each on the model of the specialist that gathered its evidence, and the boss then writes the connective narrative (introduction, discussion, conclusion) from a digest of them — fewer calls, load spread across providers
+5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list; any marker beyond the approved ledger is stripped before the gate so an over-cited draft can never end up blocked
 
 The result is an answer where **every sentence has a chain of custody back to a real publication** — and a clear record of exactly which databases were contacted to produce it.
 
@@ -131,23 +131,36 @@ The research workspace is a real-time 3D anatomical brain model (CC0-1.0, Scienc
 | Clinical Research | Parietal lobe | ClinicalTrials.gov — cohorts, trial outcomes, statistics, effect sizes |
 | Pharmacist | Basal ganglia | RxNorm · openFDA — drugs, dosing, adverse effects, **and drug interactions** |
 | Genetics | Cerebellum | GWAS Catalog · ClinVar — gene-variant ↔ disease associations |
-| Drug Interactions | Amygdala | *Reserved for the dedicated Drug Interactions mode* |
+| Drug Interactions | Amygdala | RxNorm · openFDA — grades drug pairs A–X for the drug-interaction intent |
 
-In **Brain** mode the boss delegates to the first five specialists. The **Pharmacist** is the combined drug expert (pharmacology *and* interactions), so general research routes every medication question to one capable agent; the standalone **Drug Interactions** agent powers the dedicated Drug Interactions mode. The roster and the region map are compile-time constants — the type system rejects a seventh agent.
+The boss classifies each request and delegates to the specialists it needs. The **Pharmacist** is the combined drug expert (pharmacology *and* interactions) for general research; the dedicated **Drug Interactions** agent produces the graded A–X report when the request is an interaction check. The roster and the region map are compile-time constants — the type system rejects a seventh agent.
 
 ---
 
-## Modes
+## One mega-mind, three modes
+
+**Brain** is a single mega-mind: it classifies each request and routes it to the right pipeline — a normal chat, a quick cited lookup, a memory recall, an evidence review, a full manuscript, a **graded drug-interaction check**, or a **gene–disease association report** — all without you picking a tab. The classifier is deterministic-first (a normal chat never spins up the swarm); an ambiguous request gets one lightweight tiebreak call.
 
 | Mode | Key | Description |
 |---|---|---|
-| **Brain** | `⌘1` | Research workspace — boss-swarm chat alongside a live 3D brain. Composer toggles: **Memory** (saved findings), **Library** (imported PDFs, default OFF), **Smart RAG** (agentic reasoning, default ON), **Brain Mini** (lighter pipeline for free/small models) |
+| **Brain** | `⌘1` | The mega-mind workspace — boss-swarm chat alongside a live 3D brain (or a 2D pipeline view in Lite mode). Drug-interaction and genetics requests are handled here as intents. Composer toggles: **Memory** (saved findings), **Library** (imported PDFs, default OFF), **Smart RAG** (agentic reasoning, default ON), **Brain Mini** (lighter pipeline for free/small models) |
 | **Memory** | `⌘2` | Semantic knowledge store — cited findings searched by meaning, plotted on a real **labelled 3-axis (PC1/PC2/PC3) vector map** with k-means clusters; a **Project / Library** scope toggle browses the whole cross-project corpus; one-click **Prune** |
 | **Peer Review** | `⌘3` | Upload any paper or send a Brain manuscript to a 4-agent critique swarm with a live document editor — resilient on free-tier rate limits and always returns at least a partial review. Export the review as **PDF or Markdown** |
-| **Drug Interactions** | `⌘4` | A focused clinical-pharmacology checker — grades each drug pair **A–X** (none → contraindicated) with mechanism, effect, and management, weighting authoritative drug-label sources |
-| **Genetics** | `⌘5` | A gene-expert checker — enter a gene variant and a disease and get an **association-confidence score** plus a cited correlation report from curated genetic databases (GWAS Catalog, ClinVar) and literature. Clarifies the query first if a gene or disease is missing |
 
-The mode registry is a typed tuple capped at six entries (`src/config/modes.ts`) — adding a seventh is a compile error.
+### Slash commands
+
+Force a focus from the composer (a `/` opens an autocomplete list); otherwise the classifier decides:
+
+| Command | Forces |
+|---|---|
+| `/paper` | A full, source-grounded manuscript |
+| `/genetics` | A gene / variant × disease association report |
+| `/interactions` (`/pharmacist`, `/drugs`) | A graded A–X drug-interaction check |
+| `/search` | A short, cited answer — no manuscript |
+| `/rag` | An answer from your saved research memory |
+| `/mini` · `/deep` | Effort modifiers — fewer calls, or more specialists + a verification pass |
+
+The mode registry is a typed tuple (`src/config/modes.ts`); the intent classifier and slash-command parser live in `src/features/brain/swarm/intent.ts` and `src/features/brain/composer/slashCommands.ts`.
 
 ---
 
@@ -166,11 +179,11 @@ On a low-quota or local model the review runs **serially with backoff** that hon
 
 ---
 
-## Drug Interactions — a graded clinical checker
+## Drug interactions — a graded clinical checker
 
-The **Drug Interactions** mode is a focused interaction checker rather than the general research team. A single specialist gathers evidence and the report **grades every drug pair on the A–X scale** — A (none) · B (minor) · C (moderate) · D (major) · X (contraindicated) — as one card per pair with **Mechanism · Effect · Action · Evidence**, a critical-alerts summary, and a verify-with-a-clinician line. It biases toward the more serious grade when evidence is thin, treats **drug-label (openFDA) and RxNorm** records as authoritative, and cites `[S#]` throughout — it will not invent an interaction.
+Ask about drug interactions in Brain (or force it with `/interactions`) and the request routes to a focused interaction checker rather than the general research team. A single specialist gathers evidence and the report **grades every drug pair on the A–X scale** — A (none) · B (minor) · C (moderate) · D (major) · X (contraindicated) — as one card per pair with **Mechanism · Effect · Action · Evidence**, a critical-alerts summary, and a verify-with-a-clinician line. It biases toward the more serious grade when evidence is thin, treats **drug-label (openFDA) and RxNorm** records as authoritative, verifies each named drug against **RxNorm** before grading it, and cites `[S#]` throughout — it will not invent an interaction.
 
-Its confirmed findings are saved to the shared memory (tagged `drug_interactions`) so ordinary Brain research benefits from them — but the checker itself only draws on its **own trusted interaction findings**, never the other modes' general research.
+Its confirmed findings are saved to the shared memory (tagged `drug_interactions`) so ordinary Brain research benefits from them — but the checker itself only draws on its **own trusted interaction findings**, never other requests' general research.
 
 This grading model and the failover chain are adapted from patterns in my prior desktop app, **HashCortX** (see *Lineage* below).
 
@@ -178,7 +191,7 @@ This grading model and the failover chain are adapted from patterns in my prior 
 
 ## Genetics — gene-variant ↔ disease correlation, scored
 
-The **Genetics** mode is a gene-expert checker. You name a gene variant (a gene symbol like `MICA`, or an rsID like `rs1051792`) and a disease, and it returns an **Association Confidence score (0–100%)** plus a cited correlation report. It is **gene-agnostic** — any gene, any variant, any disease.
+Name a gene variant and a disease in Brain (or force it with `/genetics`) and the request routes to a gene-expert checker. You give a gene symbol like `MICA` or an rsID like `rs1051792` plus a disease, and it returns an **Association Confidence score (0–100%)** plus a cited correlation report. It is **gene-agnostic** — any gene, any variant, any disease. The curated databases are queried by **gene symbol / rsID** (never a raw sentence), with a focused on-topic literature search alongside.
 
 What makes the number trustworthy:
 
