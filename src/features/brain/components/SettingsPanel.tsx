@@ -49,6 +49,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [localOnly, setLocalOnly] = useState(getPrivacyLocalOnly());
   const rerankEnabled = useMemorySettingsStore((s) => s.rerankEnabled);
   const toggleRerank = useMemorySettingsStore((s) => s.toggleRerank);
+  const fullTextEnabled = useMemorySettingsStore((s) => s.fullTextEnabled);
+  const toggleFullText = useMemorySettingsStore((s) => s.toggleFullText);
   const [saving, setSaving] = useState<LlmProviderId | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
@@ -258,6 +260,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 After finding papers, re-reads each top result against your exact question and
                 puts the most relevant ones first. Runs fully offline and only when the reranker
                 model is installed; if it isn&apos;t, search works exactly as before.
+              </p>
+              <label className="toggle-row">
+                <input type="checkbox" checked={fullTextEnabled} onChange={() => toggleFullText()} />
+                <span>Read whole papers — use full text when a paper is free to read</span>
+              </label>
+              <p className="field-hint">
+                For the top open-access papers, fetches the full article and uses the passage that
+                best answers your question instead of just the abstract. Bounded so runs stay fast;
+                any paper without free full text simply keeps its abstract.
               </p>
             </section>
           </>

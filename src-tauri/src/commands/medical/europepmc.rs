@@ -135,6 +135,10 @@ pub async fn europepmc_fetch(
                 .unwrap_or_default();
             let pmid = item["pmid"].as_str().map(str::to_string);
             let doi = item["doi"].as_str().map(str::to_string);
+            // pmcid + open-access flag let the frontend fetch the full text of the
+            // articles that actually have it (europepmc_fulltext with source "PMC").
+            let pmcid = item["pmcid"].as_str().map(str::to_string);
+            let is_open_access = item["isOpenAccess"].as_str();
             let url = item["pmid"]
                 .as_str()
                 .map(|id| format!("https://europepmc.org/article/MED/{id}"));
@@ -151,7 +155,7 @@ pub async fn europepmc_fetch(
                     title,
                     year,
                     authors,
-                    serde_json::json!({ "pmid": pmid, "doi": doi, "source": item["source"].as_str(), "journal": item["journalTitle"].as_str() }),
+                    serde_json::json!({ "pmid": pmid, "doi": doi, "pmcid": pmcid, "isOpenAccess": is_open_access, "source": item["source"].as_str(), "journal": item["journalTitle"].as_str() }),
                     url,
                     snippet,
                 );

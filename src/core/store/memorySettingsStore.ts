@@ -17,6 +17,10 @@ const SMART_RAG_KEY = 'hc.memory.smartRagEnabled.v1';
 // ON, but it only does anything when the reranker model is vendored — otherwise it
 // is a silent no-op, so this toggle is harmless either way.
 const RERANK_KEY = 'hc.memory.rerankEnabled.v1';
+// Whether the top open-access records are enriched with their most relevant
+// full-text passage (instead of only the abstract). Defaults ON; bounded and
+// fail-safe — any record without open-access full text just keeps its abstract.
+const FULLTEXT_KEY = 'hc.memory.fullTextEnabled.v1';
 
 function load(key: string, defaultValue = true): boolean {
   try {
@@ -49,6 +53,9 @@ interface MemorySettingsStore {
   rerankEnabled: boolean;
   setRerankEnabled: (value: boolean) => void;
   toggleRerank: () => void;
+  fullTextEnabled: boolean;
+  setFullTextEnabled: (value: boolean) => void;
+  toggleFullText: () => void;
 }
 
 export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => ({
@@ -76,4 +83,10 @@ export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => 
     set({ rerankEnabled: value });
   },
   toggleRerank: () => get().setRerankEnabled(!get().rerankEnabled),
+  fullTextEnabled: load(FULLTEXT_KEY),
+  setFullTextEnabled: (value) => {
+    save(FULLTEXT_KEY, value);
+    set({ fullTextEnabled: value });
+  },
+  toggleFullText: () => get().setFullTextEnabled(!get().fullTextEnabled),
 }));

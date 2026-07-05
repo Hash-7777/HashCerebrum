@@ -8,6 +8,7 @@ import { agentById } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { setMemoryScope, clearMemoryScope } from '@core/tools/memoryScope';
 import { retrieve, smartRetrieve, useRagStore, parentWindowText } from '@core/rag';
+import { enrichEvidenceWithFullText } from '@core/rag/fulltext/enrich';
 import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { studyTopGaps } from '@core/rag/agentic/studyEngine';
@@ -823,7 +824,14 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // (context-resolved) question so off-topic records sink or drop out before
   // they can be cited.
   const { evidence: fromLibrary, gapNote: libraryGapNote } = await libraryEvidence(researchQuestion, bossModel);
-  const merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialists), ...fromLibrary]);
+  let merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialists), ...fromLibrary]);
+  // Read whole papers: enrich the top open-access records with their most relevant
+  // full-text passage (instead of only the abstract). Bounded + fail-safe — any
+  // record without open-access full text keeps its abstract, so this never blocks
+  // or degrades a run.
+  if (useMemorySettingsStore.getState().fullTextEnabled) {
+    merged = await enrichEvidenceWithFullText(researchQuestion, merged);
+  }
   if (libraryGapNote) {
     bus.emit('agent:activity', {
       agentId: 'boss',
