@@ -93,6 +93,21 @@ conflict with clean, commercial, AGPL-compatible distribution.
 Vendoring + the upstream `LICENSE`/`NOTICE`/model-card files live next to the
 weights in `public/models/embed/` (see that folder's `README.md`).
 
+## Reranker model (RAG retrieval precision)
+
+Retrieval uses a small, fixed, **pre-trained cross-encoder reranker** (inference
+only — not an LLM) bundled under `public/models/rerank/` and run fully offline via
+`@huggingface/transformers` (`allowRemoteModels=false`). It rescores the top
+retrieved passages against the question. It is optional: if the folder is empty the
+app keeps its existing search order.
+
+| Asset | License | Notes |
+|---|---|---|
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` (**committed & bundled**) | Apache-2.0 | MS MARCO cross-encoder; ONNX build via `Xenova/ms-marco-MiniLM-L-6-v2`, int8-quantised, vendored at `public/models/rerank/ms-marco-MiniLM-L-6-v2/` with `LICENSE.md`. Base model microsoft/MiniLM-L6 (MIT). |
+
+Vendoring + the upstream `LICENSE`/model-card files live next to the weights in
+`public/models/rerank/` (see that folder's `README.md`).
+
 ## Full dependency-license audit (2026-05-31)
 
 Both trees were scanned end-to-end:
