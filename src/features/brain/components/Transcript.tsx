@@ -20,6 +20,7 @@ import { useToastStore } from '@core/store/toastStore';
 import { usePeerReviewStore } from '@core/store/peerReviewStore';
 import { useModeStore } from '@core/store/modeStore';
 import { manuscriptToReadableText } from '../swarm/manuscript';
+import { findSupportingSpans } from '../swarm/citationSpans';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import { MarkdownText } from '@ui/MarkdownText';
@@ -462,19 +463,32 @@ export const Transcript = memo(function Transcript({
                   )}
                   {message.citations && message.citations.length > 0 && !isDocument && (
                     <div className="inline-citations">
-                      {message.citations.slice(0, 6).map((item, i) => (
-                        <a
-                          key={evidenceKey(item, i)}
-                          href={isSafeUrl(item.url) ? item.url : undefined}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={isRetracted(item) ? 'citation-retracted' : ''}
-                          title={isRetracted(item) ? 'This paper has been retracted' : undefined}
-                        >
-                          <Icon name="quote" size={10} /> [{i + 1}] {item.source}
-                          {isRetracted(item) && <span className="retraction-badge">RETRACTED</span>}
-                        </a>
-                      ))}
+                      {(() => {
+                        // The exact supporting sentence from each cited source, so a
+                        // reader can verify a citation against the precise text.
+                        const spans = findSupportingSpans(message.content, message.citations ?? []);
+                        return message.citations.slice(0, 6).map((item, i) => {
+                          const span = spans[i];
+                          const tip = isRetracted(item)
+                            ? 'This paper has been retracted'
+                            : span
+                              ? `Supports: “${span}”`
+                              : undefined;
+                          return (
+                            <a
+                              key={evidenceKey(item, i)}
+                              href={isSafeUrl(item.url) ? item.url : undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={isRetracted(item) ? 'citation-retracted' : ''}
+                              title={tip}
+                            >
+                              <Icon name="quote" size={10} /> [{i + 1}] {item.source}
+                              {isRetracted(item) && <span className="retraction-badge">RETRACTED</span>}
+                            </a>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                   {!isSystem && !message.isStreaming && (
