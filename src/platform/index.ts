@@ -103,6 +103,10 @@ export interface Platform {
     openfda(endpoint: string, q: MedicalSourceQuery): Promise<MedicalSourceResult>;
     rxnorm(drug: string): Promise<MedicalSourceResult>;
     crossref_lookup(doi: string): Promise<CrossrefMeta>;
+    /** Open-access full text (plain text) for an Europe PMC article, by source
+     *  code ("PMC"/"MED") + id. Rejects when no open-access full text exists —
+     *  callers fall back to the abstract. */
+    europepmcFulltext(source: string, id: string): Promise<string>;
   };
 
   // PDF extraction (bytes-based only — path-based command removed)

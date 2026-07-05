@@ -128,6 +128,7 @@ export const tauriPlatform: Platform = {
       };
     },
     crossref_lookup: (doi) => invoke('crossref_lookup', { doi }),
+    europepmcFulltext: (source, id) => invoke<string>('europepmc_fulltext', { source, id }),
   },
 
   pdf: {

@@ -112,6 +112,9 @@ export const browserPlatform: Platform = {
       authors: ['Browser mock'],
       url: `https://doi.org/${doi}`,
     }),
+    europepmcFulltext: async () => {
+      throw new Error('Full-text fetching requires the desktop app');
+    },
   },
   pdf: {
     extractTextBytes: async () => {

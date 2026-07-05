@@ -234,6 +234,14 @@ async fn backoff_delay(attempt: u32) {
 }
 
 pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<serde_json::Value> {
+    let body = fetch_text(url, cache_ttl_seconds).await?;
+    Ok(serde_json::from_str(&body)?)
+}
+
+/// Fetch the raw text body of a GET request, with the same cache + transient-retry
+/// behaviour as `fetch_json`. Used for non-JSON responses such as Europe PMC
+/// full-text JATS/XML.
+pub async fn fetch_text(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<String> {
     let cache_key = sha256_hex(url.as_str().as_bytes());
 
     // Check cache first. A cache read error must NOT abort the fetch — a
@@ -245,7 +253,7 @@ pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<s
             let mut log_url = url.clone();
             log_url.set_query(None);
             tracing::debug!(url = %log_url, "cache hit");
-            return Ok(serde_json::from_slice(&cached)?);
+            return Ok(String::from_utf8_lossy(&cached).into_owned());
         }
         Ok(None) => {}
         Err(e) => tracing::warn!(error = %e, "cache read failed; bypassing cache for this fetch"),
@@ -300,7 +308,7 @@ pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<s
         }
     }
 
-    Ok(serde_json::from_str(&response.body)?)
+    Ok(response.body)
 }
 
 pub fn max_results(value: u32, fallback: u32, ceiling: u32) -> usize {
