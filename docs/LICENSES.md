@@ -108,6 +108,21 @@ app keeps its existing search order.
 Vendoring + the upstream `LICENSE`/model-card files live next to the weights in
 `public/models/rerank/` (see that folder's `README.md`).
 
+## NLI / fact-check model (answer verification)
+
+Answers are fact-checked with a small, fixed, **pre-trained NLI cross-encoder**
+(inference only — not an LLM) bundled under `public/models/nli/` and run fully
+offline via `@huggingface/transformers` (`allowRemoteModels=false`). It checks
+whether each cited sentence is entailed by its source. Optional: if the folder is
+empty the fact-check is silently skipped.
+
+| Asset | License | Notes |
+|---|---|---|
+| `mobilebert-uncased-mnli` (**committed & bundled**) | Apache-2.0 | MobileBERT fine-tuned on MNLI; ONNX build via `Xenova/mobilebert-uncased-mnli`, int8-quantised, vendored at `public/models/nli/mobilebert-uncased-mnli/` with `LICENSE.md`. Base model google/mobilebert-uncased (Apache-2.0). |
+
+Vendoring + the upstream `LICENSE`/model-card files live next to the weights in
+`public/models/nli/` (see that folder's `README.md`).
+
 ## Full dependency-license audit (2026-05-31)
 
 Both trees were scanned end-to-end:
