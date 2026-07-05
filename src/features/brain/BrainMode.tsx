@@ -31,6 +31,8 @@ import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
+import { verifyAnswer } from './swarm/claimVerify';
+import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
 // Lazy so the heavy three.js / WebGL bundle and the 3D brain model load ONLY
 // when the canvas is actually rendered — never in Lite mode or on weak hardware.
@@ -111,6 +113,36 @@ export function BrainMode() {
       abortRef.current?.abort();
     };
   }, []);
+
+  // Fact-check finalized research answers once each: the offline NLI model checks
+  // whether every cited sentence is entailed by its source, and any that are not
+  // are attached to the message for a subtle "may not be fully supported" note.
+  // Path-agnostic (covers every finalize path), gated by the verify setting, and
+  // fail-open — it only annotates, never rewrites, and a no-op when the model is
+  // absent. The ref guard stops it re-running as the message list re-renders.
+  const verifiedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!useMemorySettingsStore.getState().verifyEnabled) return;
+    const target = messages.find(
+      (m) =>
+        m.role === 'assistant' &&
+        !m.isStreaming &&
+        (m.citations?.length ?? 0) > 0 &&
+        !verifiedRef.current.has(m.id),
+    );
+    if (!target) return;
+    verifiedRef.current.add(target.id);
+    let cancelled = false;
+    void verifyAnswer(target.content, target.citations ?? []).then((res) => {
+      if (cancelled || res.unsupported.length === 0) return;
+      setMessages((current) =>
+        current.map((m) => (m.id === target.id ? { ...m, unsupportedClaims: res.unsupported } : m)),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
 
   const stopRun = () => {
     abortRef.current?.abort();

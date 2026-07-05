@@ -41,6 +41,9 @@ export interface ChatMessage {
   outlineProposal?: { query: string };
   // Execution trace for this turn: boss phases, specialist calls, tool results.
   trace?: TurnTraceEntry[];
+  // Cited sentences the offline NLI fact-check did not find clearly supported by
+  // their source. Present only after a research answer has been verified.
+  unsupportedClaims?: string[];
 }
 
 // Which workspace produced a chat. Brain and Drug-Interactions keep separate

@@ -463,6 +463,23 @@
   background: rgba(220, 38, 38, 0.06);
 }
 .inline-citations a.citation-retracted:hover { background: rgba(220, 38, 38, 0.12); }
+
+/* Offline fact-check note: subtle amber line under a research answer when the NLI
+   pass found cited sentences its source did not clearly support. Hover for them. */
+.claim-check-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--warn, #d0a24a);
+  background: rgba(208, 162, 74, 0.09);
+  border: 1px solid rgba(208, 162, 74, 0.28);
+  cursor: help;
+}
+
 .retraction-badge {
   display: inline-block;
   margin-left: 4px;

@@ -21,6 +21,10 @@ const RERANK_KEY = 'hc.memory.rerankEnabled.v1';
 // full-text passage (instead of only the abstract). Defaults ON; bounded and
 // fail-safe — any record without open-access full text just keeps its abstract.
 const FULLTEXT_KEY = 'hc.memory.fullTextEnabled.v1';
+// Whether answers are fact-checked (each cited sentence entailment-checked against
+// its source). Defaults ON; a no-op unless the NLI model is vendored, and it only
+// annotates (never rewrites), so this toggle is harmless either way.
+const VERIFY_KEY = 'hc.memory.verifyEnabled.v1';
 
 function load(key: string, defaultValue = true): boolean {
   try {
@@ -56,6 +60,9 @@ interface MemorySettingsStore {
   fullTextEnabled: boolean;
   setFullTextEnabled: (value: boolean) => void;
   toggleFullText: () => void;
+  verifyEnabled: boolean;
+  setVerifyEnabled: (value: boolean) => void;
+  toggleVerify: () => void;
 }
 
 export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => ({
@@ -89,4 +96,10 @@ export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => 
     set({ fullTextEnabled: value });
   },
   toggleFullText: () => get().setFullTextEnabled(!get().fullTextEnabled),
+  verifyEnabled: load(VERIFY_KEY),
+  setVerifyEnabled: (value) => {
+    save(VERIFY_KEY, value);
+    set({ verifyEnabled: value });
+  },
+  toggleVerify: () => get().setVerifyEnabled(!get().verifyEnabled),
 }));

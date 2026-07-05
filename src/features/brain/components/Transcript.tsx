@@ -491,6 +491,19 @@ export const Transcript = memo(function Transcript({
                       })()}
                     </div>
                   )}
+                  {message.unsupportedClaims && message.unsupportedClaims.length > 0 && !isDocument && (
+                    <div
+                      className="claim-check-note"
+                      title={`Not clearly supported by the cited source:\n\n${message.unsupportedClaims
+                        .map((s) => `• ${s}`)
+                        .join('\n\n')}`}
+                    >
+                      <Icon name="shield" size={11} />{' '}
+                      {message.unsupportedClaims.length}{' '}
+                      {message.unsupportedClaims.length === 1 ? 'sentence' : 'sentences'} may not be fully
+                      supported by the cited source
+                    </div>
+                  )}
                   {!isSystem && !message.isStreaming && (
                     <div className="actions-rail">
                       <button type="button" onClick={() => void copyMessage(message)} className="action">

@@ -51,6 +51,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const toggleRerank = useMemorySettingsStore((s) => s.toggleRerank);
   const fullTextEnabled = useMemorySettingsStore((s) => s.fullTextEnabled);
   const toggleFullText = useMemorySettingsStore((s) => s.toggleFullText);
+  const verifyEnabled = useMemorySettingsStore((s) => s.verifyEnabled);
+  const toggleVerify = useMemorySettingsStore((s) => s.toggleVerify);
   const [saving, setSaving] = useState<LlmProviderId | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
@@ -269,6 +271,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 For the top open-access papers, fetches the full article and uses the passage that
                 best answers your question instead of just the abstract. Bounded so runs stay fast;
                 any paper without free full text simply keeps its abstract.
+              </p>
+              <label className="toggle-row">
+                <input type="checkbox" checked={verifyEnabled} onChange={() => toggleVerify()} />
+                <span>Fact-check answers — flag sentences a source doesn&apos;t clearly support</span>
+              </label>
+              <p className="field-hint">
+                After an answer is written, checks each cited sentence against the paper it points to
+                and marks any that aren&apos;t clearly backed. Runs fully offline; it only adds a note
+                and never changes the answer. Needs the fact-check model installed.
               </p>
             </section>
           </>
