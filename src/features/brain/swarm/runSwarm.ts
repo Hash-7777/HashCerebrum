@@ -9,6 +9,7 @@ import { bus } from '@core/bus/EventBus';
 import { setMemoryScope, clearMemoryScope } from '@core/tools/memoryScope';
 import { retrieve, smartRetrieve, useRagStore, parentWindowText } from '@core/rag';
 import { enrichEvidenceWithFullText } from '@core/rag/fulltext/enrich';
+import { extractPico, picoSummary, isPicoUseful } from './pico';
 import { createEpisode } from '@core/rag/agentic/episodicMemory';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { studyTopGaps } from '@core/rag/agentic/studyEngine';
@@ -629,6 +630,14 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const researchQuestion = normalizeMedicalSpelling(
     await contextualizeQuestion(bossModel, question, conversation),
   );
+
+  // Surface the PICO frame (Population/Intervention/Comparator/Outcome) of the
+  // question in the trace when it reads as a structured clinical question — the
+  // systematic-review lens the answer is built through. Purely informational.
+  const pico = extractPico(researchQuestion);
+  if (isPicoUseful(pico)) {
+    bus.emit('agent:activity', { agentId: 'boss', phase: 'tool_call', detail: `PICO — ${picoSummary(pico)}` });
+  }
 
   // If the boss model's provider was cooled down during contextualization,
   // re-resolve it so planResearch doesn't start with a dead provider.
