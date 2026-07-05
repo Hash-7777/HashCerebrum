@@ -26,6 +26,7 @@ import { applyLearnedPriors } from './learnedPriors';
 import { recallPriorBeliefs } from './priorRecall';
 import { buildBuckets, buildConsensusSummary } from './consensusTimeline';
 import { reasoningRerank, conflictedChunkIds } from './reasoningRerank';
+import { crossEncoderRerank } from '../search/crossEncoderRerank';
 import { ragDebug } from './debug';
 import { assessCoverage, type CoverageAssessment } from './coverageAssessor';
 import { extractClaims, type ExtractedClaim } from './claimExtractor';
@@ -188,10 +189,15 @@ export async function smartRetrieve(
   const conflicts = detectConflicts(claims);
 
   // 5b. Reasoning rerank — a final, model-free rerank that refines the order of
-  // the retrieved set by claim density, conflict salience, and source diversity
-  // (the kind of signal a cross-encoder adds, without the cost). Reorders the
-  // same hits, so claims/conflicts/coverage computed above stay valid.
+  // the retrieved set by claim density, conflict salience, and source diversity.
+  // Reorders the same hits, so claims/conflicts/coverage computed above stay valid.
   hits = reasoningRerank(hits, { claims, conflictedChunkIds: conflictedChunkIds(claims, conflicts) });
+
+  // 5c. Cross-encoder rerank — when the bundled reranker model is available, do a
+  // true (question, passage) rescoring of the head of the list on top of the
+  // heuristic order above. It is fail-safe: if the model is not vendored or errors,
+  // the order is returned unchanged, so this never degrades retrieval.
+  hits = await crossEncoderRerank(query, hits);
   chunks = hits.map((h) => h.chunk);
 
   // 6. Citation traversal
