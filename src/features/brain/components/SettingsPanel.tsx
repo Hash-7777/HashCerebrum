@@ -8,6 +8,7 @@ import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
+import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import type { LlmProviderId } from '@core/llm/types';
 import { platform, type CacheStats } from '@platform/index';
 import { resetAllData } from '@core/store/resetData';
@@ -46,6 +47,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [keyErrors, setKeyErrors] = useState<Partial<Record<LlmProviderId, string>>>({});
   const [host, setHost] = useState(getOllamaHost());
   const [localOnly, setLocalOnly] = useState(getPrivacyLocalOnly());
+  const rerankEnabled = useMemorySettingsStore((s) => s.rerankEnabled);
+  const toggleRerank = useMemorySettingsStore((s) => s.toggleRerank);
   const [saving, setSaving] = useState<LlmProviderId | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cacheBusy, setCacheBusy] = useState(false);
@@ -239,6 +242,22 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               <p className="field-hint">
                 Applies to the reference list in every export (PDF, Word, LaTeX, Markdown, HTML).
                 In-text citation numbers never change.
+              </p>
+            </section>
+
+            <section className="settings-theme" aria-label="Retrieval quality">
+              <header>
+                <strong>Retrieval quality</strong>
+                <span>{rerankEnabled ? 'Smarter' : 'Standard'}</span>
+              </header>
+              <label className="toggle-row">
+                <input type="checkbox" checked={rerankEnabled} onChange={() => toggleRerank()} />
+                <span>Smarter re-ranking — take a closer second look at the top results</span>
+              </label>
+              <p className="field-hint">
+                After finding papers, re-reads each top result against your exact question and
+                puts the most relevant ones first. Runs fully offline and only when the reranker
+                model is installed; if it isn&apos;t, search works exactly as before.
               </p>
             </section>
           </>

@@ -431,7 +431,7 @@ async function libraryEvidence(question: string, model?: string): Promise<{ evid
   let gapNote: string | null = null;
   try {
     if (memory.smartRagEnabled) {
-      const result = await smartRetrieve(question, { activeProjectId: projectId, limit: 8, ...(model ? { model } : {}) });
+      const result = await smartRetrieve(question, { activeProjectId: projectId, limit: 8, rerank: memory.rerankEnabled, ...(model ? { model } : {}) });
       hits = result.hits;
       gapNote = result.gapNote;
     } else {

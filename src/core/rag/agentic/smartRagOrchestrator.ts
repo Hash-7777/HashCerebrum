@@ -55,6 +55,10 @@ export interface SmartRetrieveOptions {
   tag?: string;
   /** User's selected model for query planning. If omitted, deterministic fallback is used. */
   model?: string;
+  /** Apply the cross-encoder reranker to the head of the results (default true).
+   *  It is a no-op unless the reranker model is vendored, so false only skips a
+   *  step that would otherwise self-skip. */
+  rerank?: boolean;
 }
 
 const SUBQUERY_LIMIT = 6;
@@ -101,7 +105,7 @@ export async function smartRetrieve(
   query: string,
   opts: SmartRetrieveOptions,
 ): Promise<SmartRetrieveResult> {
-  const { activeProjectId, limit = SUBQUERY_LIMIT, tag, model } = opts;
+  const { activeProjectId, limit = SUBQUERY_LIMIT, tag, model, rerank = true } = opts;
 
   // Inline retrieve to avoid circular dependency with ../index.ts
   async function doRetrieve(q: string, l: number, t?: string): Promise<RagSearchHit[]> {
@@ -197,7 +201,7 @@ export async function smartRetrieve(
   // true (question, passage) rescoring of the head of the list on top of the
   // heuristic order above. It is fail-safe: if the model is not vendored or errors,
   // the order is returned unchanged, so this never degrades retrieval.
-  hits = await crossEncoderRerank(query, hits);
+  if (rerank) hits = await crossEncoderRerank(query, hits);
   chunks = hits.map((h) => h.chunk);
 
   // 6. Citation traversal

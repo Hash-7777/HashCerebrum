@@ -13,6 +13,10 @@ const LIBRARY_KEY = 'hc.memory.useLibrary.v1';
 // Whether Smart RAG (agentic query planning, coverage assessment, claim
 // extraction, conflict detection, citation traversal) is active. Defaults ON.
 const SMART_RAG_KEY = 'hc.memory.smartRagEnabled.v1';
+// Whether the cross-encoder reranker refines the top retrieved passages. Defaults
+// ON, but it only does anything when the reranker model is vendored — otherwise it
+// is a silent no-op, so this toggle is harmless either way.
+const RERANK_KEY = 'hc.memory.rerankEnabled.v1';
 
 function load(key: string, defaultValue = true): boolean {
   try {
@@ -42,6 +46,9 @@ interface MemorySettingsStore {
   smartRagEnabled: boolean;
   setSmartRagEnabled: (value: boolean) => void;
   toggleSmartRag: () => void;
+  rerankEnabled: boolean;
+  setRerankEnabled: (value: boolean) => void;
+  toggleRerank: () => void;
 }
 
 export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => ({
@@ -63,4 +70,10 @@ export const useMemorySettingsStore = create<MemorySettingsStore>((set, get) => 
     set({ smartRagEnabled: value });
   },
   toggleSmartRag: () => get().setSmartRagEnabled(!get().smartRagEnabled),
+  rerankEnabled: load(RERANK_KEY),
+  setRerankEnabled: (value) => {
+    save(RERANK_KEY, value);
+    set({ rerankEnabled: value });
+  },
+  toggleRerank: () => get().setRerankEnabled(!get().rerankEnabled),
 }));
