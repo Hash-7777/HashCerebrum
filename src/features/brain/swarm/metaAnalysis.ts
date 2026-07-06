@@ -9,7 +9,7 @@
  * DerSimonian & Laird random-effects estimator).
  */
 
-import type { EvidenceExtraction } from './publicationTypes';
+import type { BoundEffect, EvidenceExtraction } from './publicationTypes';
 
 type NumericEffect = {
   label: string;
@@ -181,6 +181,28 @@ function extractRatioWithCi(
 }
 
 /**
+ * Read a ratio + 95% CI straight from a pre-bound effect (the pipeline's
+ * extractBoundEffects already pairs each estimate with ITS OWN CI, so this avoids
+ * re-parsing free text and is why the meta-analysis now fires — the raw
+ * effectValues store the point estimate and the CI as separate items, so the CI
+ * was never found beside the ratio).
+ */
+function ratioFromBoundEffect(
+  bound: BoundEffect,
+): { family: RatioFamily; point: number; ciLow: number; ciHigh: number } | undefined {
+  const family = ratioFamily(bound.measure);
+  if (!family || !bound.ci) return undefined;
+  const point = safeNumber(bound.value);
+  const parts = bound.ci.split(/\s*(?:to|[-–—])\s*/i);
+  const ciLow = safeNumber(parts[0]);
+  const ciHigh = safeNumber(parts[1]);
+  if (point === undefined || ciLow === undefined || ciHigh === undefined) return undefined;
+  if (point <= 0 || point > 100 || ciLow <= 0 || ciHigh <= ciLow) return undefined;
+  if (point < ciLow * 0.5 || point > ciHigh * 2) return undefined;
+  return { family, point, ciLow, ciHigh };
+}
+
+/**
  * Pool ratio effect measures (HR / OR / RR) reported with 95% CIs across studies.
  * Effects are combined on the log scale (inverse-variance, DerSimonian-Laird) and
  * exponentiated back for display, so the pooled estimate and forest plot read on
@@ -191,14 +213,23 @@ function extractRatioWithCi(
 export function buildRatioMeta(extractions: EvidenceExtraction[]): MetaAnalysisResult | undefined {
   const byFamily = new Map<RatioFamily, NumericEffect[]>();
   for (const ex of extractions) {
-    const candidates = [
-      ex.keyFinding,
-      ...ex.effectValues.map((e) => `${e.label} ${e.value} ${e.sourceText}`),
-    ];
+    // Prefer the pre-bound effects (ratio already paired with its own CI); fall
+    // back to parsing free text. One effect per source so a single study that
+    // reports several subgroup ratios is not double-counted as many studies.
     let parsed: ReturnType<typeof extractRatioWithCi>;
-    for (const text of candidates) {
-      parsed = extractRatioWithCi(text);
+    for (const bound of ex.boundEffects ?? []) {
+      parsed = ratioFromBoundEffect(bound);
       if (parsed) break;
+    }
+    if (!parsed) {
+      const candidates = [
+        ex.keyFinding,
+        ...ex.effectValues.map((e) => `${e.label} ${e.value} ${e.sourceText}`),
+      ];
+      for (const text of candidates) {
+        parsed = extractRatioWithCi(text);
+        if (parsed) break;
+      }
     }
     if (!parsed) continue;
     const se = (Math.log(parsed.ciHigh) - Math.log(parsed.ciLow)) / (2 * Z_975);

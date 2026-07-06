@@ -145,6 +145,23 @@ describe('buildRatioMeta', () => {
     expect(r!.kind).toBe('rr');
     expect(r!.studies).toBe(2);
   });
+
+  it('pools from pre-bound effects when the CI is not inline in the abstract text (WS-3)', () => {
+    // keyFinding/effectValues carry NO ratio+CI pair — only the pre-bound effects
+    // do. This is the real-run case where the meta previously never fired.
+    const withBound = (marker: string, value: string, ci: string): EvidenceExtraction => ({
+      ...makeRatio(marker, 'An abstract with no inline hazard ratio and CI together.'),
+      boundEffects: [
+        { measure: 'HR', value, ci, pValue: null, direction: 'reduction', sourceText: `HR ${value}` },
+      ],
+    });
+    const r = buildRatioMeta([withBound('[S1]', '0.80', '0.74-0.86'), withBound('[S2]', '0.76', '0.72-0.81')]);
+    expect(r).toBeDefined();
+    expect(r!.kind).toBe('hr');
+    expect(r!.studies).toBe(2);
+    expect(r!.pooledPoint).toBeGreaterThan(0.7);
+    expect(r!.pooledPoint).toBeLessThan(0.85);
+  });
 });
 
 describe('buildEvidenceMeta', () => {
