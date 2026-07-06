@@ -39,6 +39,7 @@ import {
 import { exportMessageLatex } from '../export/latexExport';
 import { referenceUrl } from '../export/citationStyles';
 import { exportReferencesBibtex, exportReferencesRis } from '../export/bibliography';
+import { exportEvidenceTableCsv } from '../export/evidenceTable';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 import { InteractionMatrix } from './InteractionMatrix';
 import { InteractionReportBody } from './InteractionReportBody';
@@ -560,6 +561,14 @@ export const Transcript = memo(function Transcript({
                             className="action"
                           >
                             <Icon name="quote" size={13} /> RIS
+                          </button>
+                          <button
+                            type="button"
+                            title="Export the structured evidence table (design, population, effect estimates) as CSV"
+                            onClick={() => exportEvidenceTableCsv(exportableFor(message, actualIndex).title, message.citations)}
+                            className="action"
+                          >
+                            <Icon name="document" size={13} /> CSV
                           </button>
                         </>
                       )}
