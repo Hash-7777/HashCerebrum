@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { formatReference } from '../citationStyles';
+import { formatReference, referenceUrl } from '../citationStyles';
 
 function rec(partial: Partial<EvidenceItem> & { title: string }): EvidenceItem {
   return {
@@ -120,5 +120,42 @@ describe('formatReference — advance online publication', () => {
   it('leaves current-year and earlier records unannotated', () => {
     expect(formatReference(current, 'vancouver')).not.toContain('Advance online');
     expect(formatReference(study, 'vancouver')).not.toContain('Advance online');
+  });
+});
+
+describe('referenceUrl — best link to the real paper', () => {
+  it('prefers the DOI, resolved through doi.org', () => {
+    expect(referenceUrl(rec({ title: 't', identifiers: { doi: '10.1/abc', pmid: '99887' } }))).toBe(
+      'https://doi.org/10.1/abc',
+    );
+  });
+
+  it('strips an existing doi.org prefix so the DOI is not doubled', () => {
+    expect(referenceUrl(rec({ title: 't', identifiers: { doi: 'https://doi.org/10.2/xyz' } }))).toBe(
+      'https://doi.org/10.2/xyz',
+    );
+  });
+
+  it('falls back to a PubMed link when only a PMID is present', () => {
+    expect(referenceUrl(rec({ title: 't', identifiers: { pmid: '34449189' } }))).toBe(
+      'https://pubmed.ncbi.nlm.nih.gov/34449189/',
+    );
+  });
+
+  it('falls back to PMC, then ClinicalTrials.gov, then the record URL', () => {
+    expect(referenceUrl(rec({ title: 't', identifiers: { pmcid: 'PMC7654321' } }))).toBe(
+      'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7654321/',
+    );
+    expect(referenceUrl(rec({ title: 't', identifiers: { nctId: 'NCT03119116' } }))).toBe(
+      'https://clinicaltrials.gov/study/NCT03119116',
+    );
+    expect(referenceUrl(rec({ title: 't', url: 'https://example.org/paper' }))).toBe(
+      'https://example.org/paper',
+    );
+  });
+
+  it('returns null when nothing resolvable is present, and never a non-web URL', () => {
+    expect(referenceUrl(rec({ title: 't' }))).toBeNull();
+    expect(referenceUrl(rec({ title: 't', url: 'javascript:alert(1)' }))).toBeNull();
   });
 });

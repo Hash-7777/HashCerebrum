@@ -167,7 +167,9 @@ describe('publication artifact contract', () => {
     expect(markdown).toContain('## Figure SVG Assets');
     expect(markdown).toContain('<svg');
     expect(markdown).toContain('## References');
-    expect(markdown).toContain('[1] A Researcher, B Clinician');
+    // References are clickable: the marker precedes a Markdown link to the paper.
+    expect(markdown).toContain('[1] [A Researcher, B Clinician');
+    expect(markdown).toContain('](https://doi.org/10.1000/bleed)');
     expect(markdown).not.toContain('[S2]');
   });
 

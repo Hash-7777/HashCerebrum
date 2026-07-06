@@ -35,4 +35,12 @@ describe('markdownToLatex', () => {
   it('escapes special characters in body text', () => {
     expect(markdownToLatex('Risk rose 5% with co-therapy.')).toContain('5\\% with');
   });
+
+  it('converts a Markdown reference link to \\href without mangling the URL', () => {
+    const out = markdownToLatex('1. Author A. A study title. 2024. [10.1/abc](https://doi.org/10.1%2Fabc)');
+    expect(out).toContain('\\href{https://doi.org/10.1\\%2Fabc}{10.1/abc}');
+    // The special char in the URL is escaped for hyperref, not with the body
+    // \% path, and the label is still present.
+    expect(out).not.toContain('LINK');
+  });
 });

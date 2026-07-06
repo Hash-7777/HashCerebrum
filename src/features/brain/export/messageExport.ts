@@ -8,7 +8,7 @@ import {
   publicationMarkdown,
   referenceLinesForPublication,
 } from '../swarm/publication';
-import { formatReference, type CitationStyle } from './citationStyles';
+import { formatReference, referenceUrl, type CitationStyle } from './citationStyles';
 import { expandCitationMarkers } from '../swarm/citationMarkers';
 import { currentCitationStyle } from '@core/store/exportSettingsStore';
 
@@ -185,7 +185,12 @@ function citationBlock(citations: EvidenceItem[] = [], style: CitationStyle = 'v
   if (citations.length === 0) return '';
   const rows = citations
     .slice(0, 40)
-    .map((item, i) => `<li><span class="ref-num">${i + 1}.</span> ${escapeHtml(formatReference(item, style))}</li>`)
+    .map((item, i) => {
+      const text = escapeHtml(formatReference(item, style));
+      const url = referenceUrl(item);
+      const body = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${text}</a>` : text;
+      return `<li><span class="ref-num">${i + 1}.</span> ${body}</li>`;
+    })
     .join('\n');
   return `<section class="references"><h2>References</h2><ol>${rows}</ol></section>`;
 }
@@ -565,7 +570,12 @@ export function buildMarkdownExport(message: ExportableMessage): string {
         '## References',
         ...renumbered.citations
           .slice(0, 40)
-          .map((item, index) => `${index + 1}. ${formatReference(item, style)}`),
+          .map((item, index) => {
+            const text = formatReference(item, style);
+            const url = referenceUrl(item);
+            const body = url ? `[${text.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}](${url})` : text;
+            return `${index + 1}. ${body}`;
+          }),
       ].join('\n')
     : '';
   return `# ${message.title}\n\n${renumbered.content}${citations}\n`;

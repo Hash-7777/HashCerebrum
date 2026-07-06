@@ -81,12 +81,15 @@ describe('message export helpers', () => {
 
     expect(slugifyFilename(message.title)).toBe('nsaids-and-warfarin-manuscript');
     // References now render in a proper scholarly style (Vancouver by default):
-    // authors. title. year. source. — rather than the old "SOURCE: title".
-    expect(buildMarkdownExport(message)).toContain('1. HashCerebrum test. Bleeding outcomes in anticoagulant users.');
+    // authors. title. year. source. — and, when a link is resolvable, the whole
+    // line is a clickable Markdown link to the real paper.
+    const md = buildMarkdownExport(message);
+    expect(md).toContain('1. [HashCerebrum test. Bleeding outcomes in anticoagulant users.');
+    expect(md).toContain('](https://doi.org/10.0000/test)');
     const html = buildExportHtml(message);
     expect(html).toContain('<h2>References</h2>');
-    // New citation format uses lowercase doi: with author name and italic title
-    expect(html).toContain('10.0000/test');
+    // The reference links out to the resolved DOI URL.
+    expect(html).toContain('href="https://doi.org/10.0000/test"');
     expect(html).toContain('Bleeding outcomes');
   });
 

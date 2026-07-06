@@ -24,6 +24,32 @@ function inlineToLatex(escaped: string): string {
     .replace(/`([^`]+)`/g, '\\texttt{$1}');
 }
 
+// Escape only the characters that are special inside \href{...}'s URL argument,
+// so a percent-encoded DOI (e.g. https://doi.org/10.1%2Fx) survives intact.
+function latexHrefUrl(url: string): string {
+  return url.replace(/([\\#%{}])/g, '\\$1');
+}
+
+// Render one Markdown text run to LaTeX, converting [label](url) links to
+// \href before escaping so the URL is never mangled by LaTeX escaping. The
+// surrounding text and the link label are escaped and inline-formatted normally.
+function renderInlineWithLinks(text: string): string {
+  const links: { label: string; url: string }[] = [];
+  const withPlaceholders = text.replace(
+    /\[((?:\\.|[^\][])*)\]\((https?:\/\/[^\s)]+)\)/g,
+    (_match, label: string, url: string) => {
+      const i = links.length;
+      links.push({ label: label.replace(/\\([[\]])/g, '$1'), url });
+      return `@@LINK${i}@@`;
+    },
+  );
+  const escaped = inlineToLatex(escapeLatex(withPlaceholders));
+  return escaped.replace(/@@LINK(\d+)@@/g, (_match, n: string) => {
+    const link = links[Number(n)]!;
+    return `\\href{${latexHrefUrl(link.url)}}{${inlineToLatex(escapeLatex(link.label))}}`;
+  });
+}
+
 function headingCommand(level: number): string {
   if (level <= 1) return 'section*';
   if (level === 2) return 'section*';
@@ -63,7 +89,7 @@ export function markdownToLatex(markdown: string): string {
         out.push(`\\begin{${kind}}`);
       }
       const item = (bullet ? bullet[1]! : ordered![1]!).trim();
-      out.push(`  \\item ${inlineToLatex(escapeLatex(item))}`);
+      out.push(`  \\item ${renderInlineWithLinks(item)}`);
       continue;
     }
     if (!line.trim()) {
@@ -72,7 +98,7 @@ export function markdownToLatex(markdown: string): string {
       continue;
     }
     closeList();
-    out.push(inlineToLatex(escapeLatex(line)));
+    out.push(renderInlineWithLinks(line));
   }
   closeList();
   // Collapse 3+ blank lines to a single paragraph break.

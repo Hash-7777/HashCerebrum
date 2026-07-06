@@ -86,6 +86,10 @@ pub struct ReferenceLine {
     marker: String,
     #[serde(default)]
     text: String,
+    /// Best link to the real paper (DOI → PubMed → …). When present and web-safe,
+    /// the reference line is rendered as a clickable Typst `#link`.
+    #[serde(default)]
+    url: Option<String>,
 }
 
 /// Escape a string so it is safe inside a Typst string literal. Content
@@ -680,15 +684,32 @@ fn build_typ(
         }
     }
 
-    // References — hanging indent, marker in bold.
+    // References — hanging indent, marker in bold. When a web-safe link is
+    // supplied, the whole reference line is a clickable Typst #link to the real
+    // paper; otherwise it renders as plain text exactly as before.
     if !references.is_empty() {
         doc.push_str("= References\n");
         for reference in references {
-            doc.push_str(&format!(
-                "#par(hanging-indent: 1.2em)[*{}* #\"{}\"]\n\n",
-                esc_heading(&reference.marker),
-                esc(&soften_long_tokens(&collapse_ws(&reference.text)))
-            ));
+            let marker = esc_heading(&reference.marker);
+            let body = esc(&soften_long_tokens(&collapse_ws(&reference.text)));
+            let web_link = reference
+                .url
+                .as_deref()
+                .map(str::trim)
+                .filter(|u| u.starts_with("https://") || u.starts_with("http://"));
+            if let Some(url) = web_link {
+                doc.push_str(&format!(
+                    "#par(hanging-indent: 1.2em)[*{}* #link(\"{}\")[#\"{}\"]]\n\n",
+                    marker,
+                    esc(url),
+                    body
+                ));
+            } else {
+                doc.push_str(&format!(
+                    "#par(hanging-indent: 1.2em)[*{}* #\"{}\"]\n\n",
+                    marker, body
+                ));
+            }
         }
     }
 
@@ -738,10 +759,40 @@ mod tests {
         let references = vec![ReferenceLine {
             marker: "[1]".into(),
             text: "Author A, Author B. A study title. 2024. PubMed. PMID:12345.".into(),
+            url: Some("https://pubmed.ncbi.nlm.nih.gov/12345/".into()),
         }];
         let source = build_typ(&manuscript, &references, "HashCerebrum · smoke test", &[]);
+        assert!(
+            source.contains("#link(\"https://pubmed.ncbi.nlm.nih.gov/12345/\")"),
+            "a reference with a web URL must render as a clickable Typst link"
+        );
         let pdf = compile(source, Vec::new()).expect("typst should compile the manuscript");
         assert!(pdf.starts_with(b"%PDF"), "output must be a PDF");
+    }
+
+    #[test]
+    fn build_typ_reference_without_url_stays_plain() {
+        let manuscript = Manuscript {
+            title: "No-link test".into(),
+            abstract_: Abstract::default(),
+            keywords: Vec::new(),
+            sections: vec![Section {
+                heading: "Results".into(),
+                body: vec!["A short result paragraph.".into()],
+            }],
+            publication: None,
+        };
+        let source = build_typ(
+            &manuscript,
+            &[ReferenceLine {
+                marker: "[1]".into(),
+                text: "Author A. A record with no resolvable link. RxNorm.".into(),
+                url: None,
+            }],
+            "HashCerebrum",
+            &[],
+        );
+        assert!(!source.contains("#link("), "a reference with no URL must not render a link");
     }
 
     #[test]
@@ -770,6 +821,7 @@ mod tests {
             &[ReferenceLine {
                 marker: "[1]".into(),
                 text: "A. Author. Long reference. Available from: https://example.org/research/supplement/verylongunbrokentokenabcdefghijklmnopqrstuvwxyz0123456789.pdf".into(),
+                url: None,
             }],
             "HashCerebrum",
             &[],

@@ -6,13 +6,14 @@ import {
   Document,
   Paragraph,
   TextRun,
+  ExternalHyperlink,
   HeadingLevel,
   AlignmentType,
   Packer,
   type IParagraphOptions,
 } from 'docx';
 import type { Manuscript } from '../swarm/manuscript';
-import { formatReference, type CitationStyle } from './citationStyles';
+import { formatReference, referenceUrl, type CitationStyle } from './citationStyles';
 import type { EvidenceItem } from '@platform/index';
 
 function headingStyle(level: number): IParagraphOptions {
@@ -130,9 +131,21 @@ export async function buildDocxBlob(
     );
     for (const ref of references) {
       const line = formatReference(ref, style);
+      const url = referenceUrl(ref);
       children.push(
         new Paragraph({
-          text: line,
+          // When a link is resolvable, the whole reference line is a clickable
+          // hyperlink to the real paper (DOI → PubMed → …); otherwise plain text.
+          ...(url
+            ? {
+                children: [
+                  new ExternalHyperlink({
+                    children: [new TextRun({ text: line, style: 'Hyperlink' })],
+                    link: url,
+                  }),
+                ],
+              }
+            : { text: line }),
           spacing: { after: 80 },
           indent: { hanging: 360 },
         }),

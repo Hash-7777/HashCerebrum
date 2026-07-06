@@ -31,7 +31,7 @@ import type {
 import { expandCitationMarkers } from './citationMarkers';
 import { applyHonestyPass } from './honestyGuard';
 import { forestPlotFigure } from './stats/forestPlot';
-import { formatReference, type CitationStyle } from '../export/citationStyles';
+import { formatReference, referenceUrl, type CitationStyle } from '../export/citationStyles';
 import type { MetaAnalysisResult } from './metaAnalysis';
 import { buildEvidenceMeta, formatMetaResult } from './metaAnalysis';
 
@@ -41,6 +41,21 @@ import { buildEvidenceMeta, formatMetaResult } from './metaAnalysis';
 function referenceText(reference: CanonicalReference, style?: CitationStyle): string {
   if (!style || style === 'vancouver') return reference.text;
   return formatReference(reference.evidence, style);
+}
+
+// Escape the two characters that would break a Markdown link label, so a
+// reference title containing brackets cannot corrupt the [label](url) wrapper.
+function escapeMdLinkLabel(text: string): string {
+  return text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+}
+
+// A reference-list line as Markdown: the whole line links to the real paper
+// (DOI → PubMed → …) when a URL is resolvable, otherwise plain text.
+function referenceMarkdownLine(reference: CanonicalReference, style?: CitationStyle): string {
+  const text = referenceText(reference, style);
+  const url = referenceUrl(reference.evidence);
+  const body = url ? `[${escapeMdLinkLabel(text)}](${url})` : text;
+  return `${reference.displayMarker} ${body}`;
 }
 
 const SOURCE_LABELS: Record<EvidenceItem['source'], string> = {
@@ -1271,11 +1286,15 @@ export function normalizeManuscriptForPublication(
 export function referenceLinesForPublication(
   artifact: PublicationArtifact,
   style?: CitationStyle,
-): { marker: string; text: string }[] {
-  return artifact.references.map((reference) => ({
-    marker: reference.displayMarker,
-    text: referenceText(reference, style),
-  }));
+): { marker: string; text: string; url?: string }[] {
+  return artifact.references.map((reference) => {
+    const url = referenceUrl(reference.evidence);
+    return {
+      marker: reference.displayMarker,
+      text: referenceText(reference, style),
+      ...(url ? { url } : {}),
+    };
+  });
 }
 
 export function assertPublicationReady(artifact: PublicationArtifact): void {
@@ -1308,7 +1327,7 @@ export function publicationMarkdown(
     });
   }
   if (artifact.references.length > 0) {
-    lines.push('', '## References', ...artifact.references.map((reference) => `${reference.displayMarker} ${referenceText(reference, style)}`));
+    lines.push('', '## References', ...artifact.references.map((reference) => referenceMarkdownLine(reference, style)));
   }
   return `${lines.join('\n')}\n`;
 }
@@ -1325,7 +1344,14 @@ export function publicationHtml(
     )
     .join('\n');
   const references = artifact.references
-    .map((reference) => `<li>${escXml(reference.displayMarker)} ${escXml(referenceText(reference, style))}</li>`)
+    .map((reference) => {
+      const text = referenceText(reference, style);
+      const url = referenceUrl(reference.evidence);
+      const body = url
+        ? `<a href="${escXml(url)}" target="_blank" rel="noreferrer">${escXml(text)}</a>`
+        : escXml(text);
+      return `<li>${escXml(reference.displayMarker)} ${body}</li>`;
+    })
     .join('\n');
   return `${bodyHtml}
 <section class="figures"><h2>Figures</h2>${figures}</section>

@@ -195,6 +195,32 @@ function harvard(record: EvidenceItem): string {
 }
 
 /**
+ * Best canonical URL to the underlying paper/record so a reader can click a
+ * reference and open the real source — or null when no resolvable link exists.
+ * Priority reflects "takes you to the actual paper": a DOI resolves to the
+ * publisher's article page; PubMed / PMC / ClinicalTrials.gov are reliable
+ * public fallbacks; finally the record's own captured URL. Pure and safe: only
+ * http(s) links are ever returned. Shared by the on-screen citation chips and
+ * every export path so the link is identical across app, PDF, Word, LaTeX,
+ * Markdown, and HTML.
+ */
+export function referenceUrl(record: EvidenceItem): string | null {
+  const ids = record.identifiers ?? {};
+  const doi = (ids.doi ?? '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
+  if (doi) return `https://doi.org/${encodeURI(doi)}`;
+  const pmid = (ids.pmid ?? '').trim();
+  if (/^\d+$/.test(pmid)) return `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`;
+  const pmcid = (ids.pmcid ?? '').trim().toUpperCase();
+  if (/^PMC\d+$/.test(pmcid)) return `https://www.ncbi.nlm.nih.gov/pmc/articles/${pmcid}/`;
+  const nct = (ids.nctId ?? ids.nct ?? '').trim().toUpperCase();
+  if (/^NCT\d+$/.test(nct)) return `https://clinicaltrials.gov/study/${nct}`;
+  if (record.url && /^https?:\/\//i.test(record.url)) return record.url;
+  const idUrl = (ids.url ?? '').trim();
+  if (/^https?:\/\//i.test(idUrl)) return idUrl;
+  return null;
+}
+
+/**
  * Render one reference-list line for a record in the chosen style. The leading
  * number/marker is added by the caller — this returns only the formatted text.
  */

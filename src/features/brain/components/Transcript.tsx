@@ -37,6 +37,7 @@ import {
   type ExportableMessage,
 } from '../export/messageExport';
 import { exportMessageLatex } from '../export/latexExport';
+import { referenceUrl } from '../export/citationStyles';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 import { InteractionMatrix } from './InteractionMatrix';
 import { InteractionReportBody } from './InteractionReportBody';
@@ -474,10 +475,14 @@ export const Transcript = memo(function Transcript({
                             : span
                               ? `Supports: “${span}”`
                               : undefined;
+                          // Resolve the best link to the real paper (DOI → PubMed →
+                          // PMC → trial → captured URL), not just the record's own url,
+                          // so a PubMed record with only a DOI/PMID is still clickable.
+                          const link = referenceUrl(item);
                           return (
                             <a
                               key={evidenceKey(item, i)}
-                              href={isSafeUrl(item.url) ? item.url : undefined}
+                              href={isSafeUrl(link) ? link : undefined}
                               target="_blank"
                               rel="noreferrer"
                               className={isRetracted(item) ? 'citation-retracted' : ''}

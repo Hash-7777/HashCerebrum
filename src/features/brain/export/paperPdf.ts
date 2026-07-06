@@ -4,7 +4,7 @@
 // on demand so it never weighs down the main bundle.
 
 import type { EvidenceItem } from '@platform/index';
-import { formatReference } from './citationStyles';
+import { formatReference, referenceUrl } from './citationStyles';
 import type { Manuscript } from '../swarm/manuscript';
 
 export interface PaperPdfInput {
@@ -584,6 +584,9 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
       if (!record) return;
       const refText = winAnsiSafe(formatReferenceIndexed(record, listIndex));
       const lines = splitPdfTextToSize(doc, refText, contentW - 22);
+      // Best link to the real paper (DOI → PubMed → …); each drawn line gets a
+      // clickable link annotation over it when a URL is resolvable.
+      const url = referenceUrl(record);
       // Accent-coloured bracket marker on first line
       lines.forEach((line, li) => {
         ensureSpace(13);
@@ -602,6 +605,7 @@ export async function buildPaperPdfBlob(input: PaperPdfInput): Promise<Blob> {
         } else {
           doc.text(line, marginX + 22, y);
         }
+        if (url) doc.link(marginX, y - 9, contentW - 22, 12, { url });
         y += 13;
       });
       y += 4;

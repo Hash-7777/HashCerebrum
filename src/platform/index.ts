@@ -124,7 +124,7 @@ export interface Platform {
   manuscript: {
     renderPdf(
       manuscript: unknown,
-      references: { marker: string; text: string }[],
+      references: { marker: string; text: string; url?: string }[],
       meta: string,
     ): Promise<Blob>;
   };
