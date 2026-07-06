@@ -759,6 +759,56 @@ export function findUnverifiedStatistics(
   return out;
 }
 
+/**
+ * WS-1b: remove a statistic that is attributed to a source which does NOT report
+ * that number, keeping the surrounding claim in words. Fail-safe by construction:
+ * it works sentence by sentence (never removes a number from a different
+ * sentence), and it acts ONLY when the cited sources report at least one other
+ * extracted statistic — a non-empty locked set proves extraction succeeded for
+ * that source, so a missing number is a genuine misattribution rather than an
+ * extraction gap. A paragraph with nothing to remove is returned byte-for-byte
+ * unchanged. Returns the cleaned text and the removed statistics (for the trace).
+ */
+export function neutralizeUnverifiedStatistics(
+  text: string,
+  qet: Map<string, Set<string>>,
+): { text: string; removed: string[] } {
+  const removed: string[] = [];
+  const sentences = splitSentences(text).map((sentence) => {
+    const markers = [...new Set(sentence.match(SENTENCE_MARKER_RX) ?? [])];
+    if (markers.length === 0) return sentence;
+    const allowed = new Set<string>();
+    for (const mk of markers) for (const v of qet.get(mk) ?? []) allowed.add(v);
+    if (allowed.size === 0) return sentence; // extraction gap — never touch
+    let out = sentence;
+    for (const stat of extractEffectValues(sentence)) {
+      const nums = [...stat.value.matchAll(/[0-9]+(?:\.[0-9]+)?/g)].map((m) => normalizeStatNumber(m[0]));
+      if (nums.length === 0 || nums.every((n) => allowed.has(n))) continue;
+      const esc = stat.sourceText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const next = out.replace(new RegExp(esc), '');
+      if (next !== out) {
+        removed.push(stat.sourceText);
+        out = next;
+      }
+    }
+    return out;
+  });
+  if (removed.length === 0) return { text, removed }; // nothing changed — original preserved exactly
+  const cleaned = sentences
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' ')
+    // Tidy the empty parentheses / dangling separators a removed statistic leaves.
+    .replace(/\(\s*[,;]?\s*\)/g, '')
+    .replace(/\(\s*,\s*/g, '(')
+    .replace(/\s*,\s*\)/g, ')')
+    .replace(/\s*,\s*,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
+  return { text: cleaned, removed };
+}
+
 /** Render bound effects for the drafting prompt — each estimate with its own CI,
  *  p-value, and inferred direction, so the model cites them as units. */
 function formatBoundEffects(effects: BoundEffect[] | undefined): string {
@@ -1879,20 +1929,30 @@ async function draftOneSection(
     body = body.map((paragraph) => applyHonestyPass(paragraph));
   }
 
-  // WS-1: surface any statistic attributed to a source that does not report it
-  // (a misattributed or invented estimate — e.g. citing one study with two
-  // different hazard ratios). Non-destructive: it flags in the execution trace so
-  // the drift is visible without risking surgery on correct prose.
-  const unverifiedStats = findUnverifiedStatistics(body.join('\n\n'), buildQuantEvidenceTable(opts.extractions));
-  if (unverifiedStats.length > 0) {
-    bus.emit('agent:activity', {
-      agentId: 'boss',
-      phase: 'tool_call',
-      detail: `${blueprintSection.heading}: ${unverifiedStats.length} statistic(s) not backed by the cited source — ${unverifiedStats
-        .slice(0, 3)
-        .map((stat) => `"${stat.sourceText}" ${stat.markers.join('')}`)
-        .join('; ')}`,
+  // WS-1b: remove any statistic attributed to a source that does not report it
+  // (a misattributed or invented estimate — e.g. one study cited with two
+  // different hazard ratios), keeping the surrounding claim in words. Fail-safe:
+  // sentence-scoped, and only acts when the cited source reports some other
+  // extracted statistic (so a genuine misattribution is removed, not an
+  // extraction gap). A section whose draft failed is left as its review flag.
+  if (!(body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG))) {
+    const qet = buildQuantEvidenceTable(opts.extractions);
+    const removed: string[] = [];
+    body = body.map((paragraph) => {
+      const result = neutralizeUnverifiedStatistics(paragraph, qet);
+      removed.push(...result.removed);
+      return result.text;
     });
+    if (removed.length > 0) {
+      bus.emit('agent:activity', {
+        agentId: 'boss',
+        phase: 'tool_call',
+        detail: `${blueprintSection.heading}: removed ${removed.length} statistic(s) not backed by the cited source — ${removed
+          .slice(0, 3)
+          .map((s) => `"${s}"`)
+          .join('; ')}`,
+      });
+    }
   }
 
   return { heading: blueprintSection.heading, body };

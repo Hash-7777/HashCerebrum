@@ -4,6 +4,7 @@ import {
   buildQuantEvidenceTable,
   extractSampleSize,
   findUnverifiedStatistics,
+  neutralizeUnverifiedStatistics,
   withIncompleteDraftBanner,
   INCOMPLETE_DRAFT_BANNER,
 } from '../paperPipeline';
@@ -76,6 +77,39 @@ describe('findUnverifiedStatistics', () => {
     const out = findUnverifiedStatistics('The analysis yielded an odds ratio of 2.08 [S12].', qet);
     expect(out.length).toBeGreaterThan(0);
     expect(out.some((u) => u.sourceText.includes('2.08'))).toBe(true);
+  });
+});
+
+describe('neutralizeUnverifiedStatistics', () => {
+  const qet = new Map<string, Set<string>>([['[S12]', new Set(['0.94', '0.9', '0.99', '0.02'])]]);
+
+  it('removes a misattributed statistic but keeps the claim and the marker', () => {
+    const { text, removed } = neutralizeUnverifiedStatistics(
+      'The trial reported a neutral effect (hazard ratio 1.05, 95% CI 1.0-1.1) [S12].',
+      qet,
+    );
+    expect(removed.length).toBeGreaterThan(0);
+    expect(text).not.toContain('1.05');
+    expect(text).not.toContain('1.0-1.1');
+    expect(text).toContain('neutral effect');
+    expect(text).toContain('[S12]');
+  });
+
+  it('leaves a correctly attributed statistic byte-for-byte unchanged', () => {
+    const input = 'The trial reported a modest benefit (hazard ratio 0.94, 95% CI 0.90-0.99) [S12].';
+    const { text, removed } = neutralizeUnverifiedStatistics(input, qet);
+    expect(removed).toEqual([]);
+    expect(text).toBe(input);
+  });
+
+  it('does NOT touch a number when the cited source has no extracted stats (extraction gap)', () => {
+    const input = 'A cohort reported a hazard ratio of 1.23 [S99].';
+    expect(neutralizeUnverifiedStatistics(input, qet).text).toBe(input); // [S99] not in the QET
+  });
+
+  it('ignores a sentence with no citation', () => {
+    const input = 'Overall the hazard ratio was around 1.05.';
+    expect(neutralizeUnverifiedStatistics(input, qet).text).toBe(input);
   });
 });
 
