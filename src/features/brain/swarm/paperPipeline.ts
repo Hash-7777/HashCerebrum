@@ -455,16 +455,22 @@ function detectOutcomes(text: string): string[] {
   return [...new Set(outcomes)];
 }
 
-function extractSampleSize(text: string): string | null {
+export function extractSampleSize(text: string): string | null {
   const patterns = [
-    /\b(?:n|N)\s*=\s*([0-9][0-9,]*)\b/,
-    /\b([0-9][0-9,]*)\s+(?:patients|participants|subjects|adults|children|cases)\b/i,
-    /\benrolled\s+([0-9][0-9,]*)\b/i,
-    /\bsample\s+of\s+([0-9][0-9,]*)\b/i,
+    /\b(?:n|N)\s*=\s*([0-9][0-9,]*)\b/g,
+    /\b([0-9][0-9,]*)\s+(?:patients|participants|subjects|adults|children|cases)\b/gi,
+    /\benrolled\s+([0-9][0-9,]*)\b/gi,
+    /\bsample\s+of\s+([0-9][0-9,]*)\b/gi,
   ];
   for (const rx of patterns) {
-    const match = text.match(rx);
-    if (match?.[1]) return `n=${match[1].replace(/,/g, '')}`;
+    for (const match of text.matchAll(rx)) {
+      const n = Number((match[1] ?? '').replace(/,/g, ''));
+      // Reject an implausibly small "sample size" (< 10): almost always a misparse
+      // of a phase or trial-version number ("TRAILBLAZER-ALZ 4" → "n=4"), not a
+      // real study population. Scan every match so a valid later count is not
+      // shadowed by an early misparse.
+      if (Number.isFinite(n) && n >= 10) return `n=${n}`;
+    }
   }
   return null;
 }

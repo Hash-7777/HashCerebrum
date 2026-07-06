@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { abstractStatsDigest, buildQuantEvidenceTable, findUnverifiedStatistics } from '../paperPipeline';
+import {
+  abstractStatsDigest,
+  buildQuantEvidenceTable,
+  extractSampleSize,
+  findUnverifiedStatistics,
+} from '../paperPipeline';
 import type { EvidenceExtraction } from '../publicationTypes';
 
 function ext(marker: string, partial: Partial<EvidenceExtraction> = {}): EvidenceExtraction {
@@ -86,5 +91,16 @@ describe('abstractStatsDigest', () => {
 
   it('is explicit when nothing quantitative was extracted', () => {
     expect(abstractStatsDigest([ext('[S1]', {})])).toBe('(no effect estimates were extracted)');
+  });
+});
+
+describe('extractSampleSize', () => {
+  it('does not read a trial-version number as a sample size (the "n=4" bug)', () => {
+    expect(extractSampleSize('TRAILBLAZER-ALZ 4: a phase 3 trial comparing donanemab with aducanumab.')).toBeNull();
+  });
+
+  it('extracts a real study population and skips an early sub-10 misparse', () => {
+    expect(extractSampleSize('A phase 2 study that enrolled 856 participants with early AD.')).toBe('n=856');
+    expect(extractSampleSize('n = 1,576 participants were pooled across trials.')).toBe('n=1576');
   });
 });
