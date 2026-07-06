@@ -28,7 +28,7 @@ import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass, splitSentences } from './honestyGuard';
-import { dedupeParagraphs } from './dedupe';
+import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -2097,6 +2097,11 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
   // had to fix with a (rate-limitable) model call.
   const approvedMarkers = new Set(opts.claimLedger.flatMap((entry) => entry.supportingSources));
   sections = stripUnapprovedMarkers(sections, approvedMarkers);
+  // Remove near-verbatim paragraphs repeated ACROSS sections (a real run shipped
+  // the same "Alzheimer's disease is the leading cause of dementia…" paragraph in
+  // the Introduction, Mechanistic, and Discussion). Runs before the abstract so it
+  // keys off the de-duplicated body.
+  sections = dedupeAcrossSections(sections);
   const abstract = await draftAbstract({
     model: opts.bossModel,
     title: opts.paperBlueprint.title,

@@ -72,3 +72,46 @@ export function dedupeParagraphs(paragraphs: string[], threshold = 0.85): string
   }
   return kept;
 }
+
+/**
+ * Remove a paragraph in a LATER section that near-duplicates one already kept in
+ * an earlier section — e.g. the same "Alzheimer's disease is the leading cause of
+ * dementia…" paragraph appearing verbatim in the Introduction, Mechanistic, and
+ * Discussion sections. Conservative by design: it uses a higher threshold (0.9)
+ * than the within-section pass and only compares whole paragraphs, so a
+ * legitimately reworded restatement (an Introduction or Conclusion summarising in
+ * fresh words) is well below the bar and never removed. A section is never
+ * emptied — if every paragraph would be dropped, the first is kept so the section
+ * still has content. Order and first occurrence are preserved.
+ */
+export function dedupeAcrossSections<T extends { body: string[] }>(sections: T[], threshold = 0.9): T[] {
+  const seenNorm: string[] = [];
+  const seenSets: Set<string>[] = [];
+  return sections.map((section) => {
+    const body: string[] = [];
+    for (const paragraph of section.body) {
+      const norm = normalize(paragraph);
+      const set = tokenSet(norm);
+      const isDuplicate =
+        !!norm &&
+        seenNorm.some((earlier, i) => {
+          if (earlier === norm) return true;
+          return (
+            set.size >= MIN_TOKENS_FOR_FUZZY &&
+            seenSets[i]!.size >= MIN_TOKENS_FOR_FUZZY &&
+            jaccard(set, seenSets[i]!) >= threshold
+          );
+        });
+      if (!isDuplicate) {
+        body.push(paragraph);
+        if (norm) {
+          seenNorm.push(norm);
+          seenSets.push(set);
+        }
+      }
+    }
+    // Never ship an emptied section; keep its first paragraph if all were dropped.
+    const finalBody = body.length > 0 ? body : section.body.slice(0, 1);
+    return { ...section, body: finalBody };
+  });
+}
