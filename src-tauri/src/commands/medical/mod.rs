@@ -238,6 +238,27 @@ pub async fn fetch_json(url: Url, cache_ttl_seconds: Option<i64>) -> AppResult<s
     Ok(serde_json::from_str(&body)?)
 }
 
+/// True when an error is an upstream HTTP 404. Some biomedical APIs (notably
+/// OpenFDA) return 404 for a *zero-result* query rather than an empty list, which
+/// is a normal outcome, not a failure.
+pub(crate) fn is_upstream_not_found(err: &AppError) -> bool {
+    matches!(err, AppError::Network(msg) if msg.contains("HTTP 404"))
+}
+
+/// Like [`fetch_json`], but maps an upstream 404 ("no matches found") to
+/// `Ok(None)` so a zero-result search degrades to an empty result set instead of
+/// surfacing as a network error in the agent panel.
+pub async fn fetch_json_optional(
+    url: Url,
+    cache_ttl_seconds: Option<i64>,
+) -> AppResult<Option<serde_json::Value>> {
+    match fetch_json(url, cache_ttl_seconds).await {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if is_upstream_not_found(&err) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 /// Fetch the raw text body of a GET request, with the same cache + transient-retry
 /// behaviour as `fetch_json`. Used for non-JSON responses such as Europe PMC
 /// full-text JATS/XML.
@@ -435,6 +456,19 @@ pub(super) fn disease_terms(query: &str, gene: Option<&str>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_upstream_not_found_only_matches_a_404_network_error() {
+        assert!(is_upstream_not_found(&AppError::Network(
+            "upstream returned HTTP 404 for https://api.fda.gov/drug/event.json".into()
+        )));
+        assert!(!is_upstream_not_found(&AppError::Network(
+            "upstream returned HTTP 500 for https://api.fda.gov/drug/event.json".into()
+        )));
+        assert!(!is_upstream_not_found(&AppError::InvalidInput(
+            "bad".into()
+        )));
+    }
 
     #[test]
     fn strip_html_removes_tags_and_labels_sections() {

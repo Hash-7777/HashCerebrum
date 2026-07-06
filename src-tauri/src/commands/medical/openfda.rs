@@ -1,7 +1,8 @@
 //! OpenFDA. Docs: https://open.fda.gov/apis/
 
 use crate::commands::medical::{
-    compact_query_terms, evidence, fetch_json, max_results as clamp_max_results, EvidenceItem,
+    compact_query_terms, evidence, fetch_json_optional, max_results as clamp_max_results,
+    EvidenceItem,
 };
 use crate::error::{AppError, AppResult};
 use url::Url;
@@ -74,7 +75,14 @@ pub async fn openfda_query(
     url.query_pairs_mut()
         .append_pair("search", &search)
         .append_pair("limit", &limit.to_string());
-    let json = fetch_json(url, Some(172800)).await?;
+    // OpenFDA returns HTTP 404 ("No matches found!") for a zero-result search, not
+    // an empty list. Treat that as no matching records — a normal outcome — rather
+    // than a network error, so a specific drug-safety query that simply has no
+    // adverse-event reports degrades gracefully instead of failing the source.
+    let json = match fetch_json_optional(url, Some(172800)).await? {
+        Some(json) => json,
+        None => return Ok(Vec::new()),
+    };
     let results = json["results"].as_array().cloned().unwrap_or_default();
     Ok(results.into_iter().enumerate().map(|(i, item)| {
         let title = item["patient"]["drug"].as_array()
