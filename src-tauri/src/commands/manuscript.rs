@@ -792,7 +792,10 @@ mod tests {
             "HashCerebrum",
             &[],
         );
-        assert!(!source.contains("#link("), "a reference with no URL must not render a link");
+        assert!(
+            !source.contains("#link("),
+            "a reference with no URL must not render a link"
+        );
     }
 
     #[test]
