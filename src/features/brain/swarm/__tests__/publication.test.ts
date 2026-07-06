@@ -6,10 +6,32 @@ import {
   assertPublicationReady,
   buildPublicationArtifact,
   normalizeManuscriptForPublication,
+  prismaFlowSvg,
   publicationMarkdown,
   referenceLinesForPublication,
   sanitizeSvgForHtml,
 } from '../publication';
+
+describe('prismaFlowSvg', () => {
+  it('renders the four PRISMA stages with counts and exclusion side-boxes', () => {
+    const svg = prismaFlowSvg(41, 38, 26, { 'Europe PMC': 20, PubMed: 15, OpenAlex: 6 });
+    expect(svg).toContain('Records identified from databases (n = 41)');
+    expect(svg).toContain('Records after duplicates removed (n = 38)');
+    expect(svg).toContain('Records cited in the synthesis (n = 26)');
+    // Exclusions are the differences: 41-38 duplicates, 38-26 not cited.
+    expect(svg).toContain('Duplicate records removed: 3');
+    expect(svg).toContain('Records not cited: 12');
+    // Honest about being an automated, non-dual-reviewer screen.
+    expect(svg).toContain('not a dual-reviewer PRISMA screen');
+    expect(svg.startsWith('<svg')).toBe(true);
+  });
+
+  it('never shows negative exclusion counts', () => {
+    const svg = prismaFlowSvg(10, 10, 10, { PubMed: 10 });
+    expect(svg).toContain('Duplicate records removed: 0');
+    expect(svg).toContain('Records not cited: 0');
+  });
+});
 import { buildClaimLedger, extractEvidenceFromRecords } from '../paperPipeline';
 
 const evidence: EvidenceItem[] = [

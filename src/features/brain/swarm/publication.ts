@@ -289,10 +289,53 @@ function sourceYieldSvg(counts: Record<string, number>): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
 }
 
-function sourceFlowSvg(total: number, unique: number, cited: number): string {
-  const box = (x: number, y: number, label: string, value: string) =>
-    `<rect x="${x}" y="${y}" width="250" height="58" rx="10" fill="#111c2b" stroke="#2a3951"/><text x="${x + 125}" y="${y + 24}" text-anchor="middle" fill="#f1f6fc" font-size="13" font-weight="700">${escXml(label)}</text><text x="${x + 125}" y="${y + 44}" text-anchor="middle" fill="#3dd1bf" font-size="14">${escXml(value)}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="720" height="310" rx="14" fill="#08111d"/>${box(235, 28, 'Records identified', String(total))}<path d="M360 86 L360 118" stroke="#7f8ea8" stroke-width="2"/>${box(235, 118, 'Unique source records', String(unique))}<path d="M360 176 L360 208" stroke="#7f8ea8" stroke-width="2"/>${box(235, 208, 'Records cited in draft', String(cited))}</svg>`;
+// A PRISMA 2020-style study-selection flow built from the counts the pipeline
+// already knows: records identified (per source), duplicates removed, records
+// screened, and records included/cited — with exclusion side-boxes. Honestly
+// labelled as an automated screen (no dual independent reviewers), so it reads as
+// a real selection diagram rather than a decorative flow.
+export function prismaFlowSvg(
+  total: number,
+  unique: number,
+  cited: number,
+  counts: Record<string, number>,
+): string {
+  const dupRemoved = Math.max(0, total - unique);
+  const notCited = Math.max(0, unique - cited);
+  const sourcesRaw = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => `${source} ${count}`)
+    .join(', ');
+  const sources = sourcesRaw.length > 68 ? `${sourcesRaw.slice(0, 65)}…` : sourcesRaw;
+  const box = (y: number, label: string, sub?: string, accent = false) =>
+    `<rect x="150" y="${y}" width="340" height="${sub ? 58 : 46}" rx="10" fill="#111c2b" stroke="${accent ? '#3dd1bf' : '#2a3951'}"/>` +
+    `<text x="320" y="${y + (sub ? 22 : 27)}" text-anchor="middle" fill="#f1f6fc" font-size="12.5" font-weight="700">${escXml(label)}</text>` +
+    (sub ? `<text x="320" y="${y + 42}" text-anchor="middle" fill="#9fb0c7" font-size="10.5">${escXml(sub)}</text>` : '');
+  const side = (y: number, text: string) =>
+    `<rect x="516" y="${y}" width="190" height="40" rx="8" fill="#0d1622" stroke="#3a3145" stroke-dasharray="4 3"/><text x="611" y="${y + 24}" text-anchor="middle" fill="#c6a15a" font-size="10.5">${escXml(text)}</text>`;
+  const down = (y1: number, y2: number) =>
+    `<path d="M320 ${y1} L320 ${y2}" stroke="#7f8ea8" stroke-width="2" marker-end="url(#pahead)"/>`;
+  const branch = (y: number) =>
+    `<path d="M490 ${y} L516 ${y}" stroke="#7f8ea8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#pahead)"/>`;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 356" role="img" font-family="DejaVu Sans Mono, Libertinus Serif">` +
+    `<defs><marker id="pahead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7f8ea8"/></marker></defs>` +
+    `<rect width="720" height="356" rx="14" fill="#08111d"/>` +
+    `<text x="16" y="24" fill="#f1f6fc" font-size="15" font-weight="700">Study selection (PRISMA-style automated flow)</text>` +
+    box(44, `Records identified from databases (n = ${total})`, sources) +
+    down(102, 122) +
+    box(122, `Records after duplicates removed (n = ${unique})`) +
+    branch(145) +
+    side(125, `Duplicate records removed: ${dupRemoved}`) +
+    down(168, 188) +
+    box(188, `Records screened & relevance-ranked (n = ${unique})`) +
+    branch(211) +
+    side(191, `Records not cited: ${notCited}`) +
+    down(234, 254) +
+    box(254, `Records cited in the synthesis (n = ${cited})`, undefined, true) +
+    `<text x="16" y="326" fill="#6b7a91" font-size="10">Automated identification, de-duplication, and relevance screening — not a dual-reviewer PRISMA screen.</text>` +
+    `</svg>`
+  );
 }
 
 function yearsSvg(years: number[]): string {
@@ -440,11 +483,17 @@ function buildFigures(
     {
       id: 'fig-prisma-flow',
       kind: 'prisma_flow',
-      title: 'Automated evidence flow',
-      caption: `Automated source flow from retrieved records to unique records and cited references. This diagram reflects automated deduplication and citation selection, not a formal human-screened systematic-review flow.`,
-      alt: 'Three-box flow diagram from identified records to unique records to cited records.',
-      svg: sourceFlowSvg(total, unique, referenceCount),
-      data: { totalRecords: total, uniqueRecords: unique, citedReferences: referenceCount },
+      title: 'Study selection (PRISMA-style)',
+      caption: `Study-selection flow from records identified across biomedical databases, through automated de-duplication and relevance screening, to the records cited in the synthesis. Identified: ${total}; after de-duplication: ${unique}; cited: ${referenceCount}. This is an automated screen, not a dual independent-reviewer PRISMA process.`,
+      alt: 'PRISMA-style flow diagram: records identified, duplicates removed, records screened, and records cited, with exclusion counts.',
+      svg: prismaFlowSvg(total, unique, referenceCount, counts),
+      data: {
+        totalRecords: total,
+        uniqueRecords: unique,
+        citedReferences: referenceCount,
+        duplicatesRemoved: Math.max(0, total - unique),
+        notCited: Math.max(0, unique - referenceCount),
+      },
     },
   ];
 
