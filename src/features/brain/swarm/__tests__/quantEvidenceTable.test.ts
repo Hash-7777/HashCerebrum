@@ -4,8 +4,11 @@ import {
   buildQuantEvidenceTable,
   extractSampleSize,
   findUnverifiedStatistics,
+  withIncompleteDraftBanner,
+  INCOMPLETE_DRAFT_BANNER,
 } from '../paperPipeline';
 import type { EvidenceExtraction } from '../publicationTypes';
+import type { Manuscript } from '../manuscript';
 
 function ext(marker: string, partial: Partial<EvidenceExtraction> = {}): EvidenceExtraction {
   return {
@@ -91,6 +94,48 @@ describe('abstractStatsDigest', () => {
 
   it('is explicit when nothing quantitative was extracted', () => {
     expect(abstractStatsDigest([ext('[S1]', {})])).toBe('(no effect estimates were extracted)');
+  });
+});
+
+describe('withIncompleteDraftBanner', () => {
+  const base: Manuscript = {
+    title: 'A draft',
+    abstract: { background: '', objective: '', methods: '', results: '', conclusions: '' },
+    keywords: [],
+    sections: [{ heading: 'Introduction', body: ['First real paragraph.'] }],
+  };
+
+  it('prepends a banner when the draft is not export-ready', () => {
+    const notReady: Manuscript = {
+      ...base,
+      publication: { validation: { exportReady: false } } as unknown as NonNullable<Manuscript['publication']>,
+    };
+    const out = withIncompleteDraftBanner(notReady);
+    expect(out.sections[0]!.body[0]!.startsWith(INCOMPLETE_DRAFT_BANNER)).toBe(true);
+    expect(out.sections[0]!.body).toContain('First real paragraph.');
+  });
+
+  it('prepends a banner (with a section count) when a section could not be drafted', () => {
+    const flagged: Manuscript = {
+      ...base,
+      sections: [{ heading: 'Introduction', body: ['⚠ SECTION NEEDS REVIEW — could not draft.'] }],
+    };
+    const out = withIncompleteDraftBanner(flagged);
+    expect(out.sections[0]!.body[0]).toContain('1 section could not be fully drafted');
+  });
+
+  it('leaves a complete, export-ready manuscript untouched and is idempotent', () => {
+    const ready: Manuscript = {
+      ...base,
+      publication: { validation: { exportReady: true } } as unknown as NonNullable<Manuscript['publication']>,
+    };
+    expect(withIncompleteDraftBanner(ready)).toEqual(ready);
+    const notReady: Manuscript = {
+      ...base,
+      publication: { validation: { exportReady: false } } as unknown as NonNullable<Manuscript['publication']>,
+    };
+    const once = withIncompleteDraftBanner(notReady);
+    expect(withIncompleteDraftBanner(once)).toEqual(once); // no double banner
   });
 });
 

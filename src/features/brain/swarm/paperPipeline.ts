@@ -172,6 +172,11 @@ const MIN_PRIMARY_EVIDENCE = 5;
 // or repair, so an incomplete section is never silently shipped as if finished.
 const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
 
+// Prepended to a manuscript finalized with unresolved blockers (e.g. sections
+// left incomplete when a free-tier provider rate-limited mid-draft), so the
+// warning ships inside the document rather than only in the execution trace.
+export const INCOMPLETE_DRAFT_BANNER = '⚠ INCOMPLETE DRAFT';
+
 const SECTION_SYSTEM = `You are The Cerebrum, a biomedical manuscript compiler. Write EXACTLY ONE SECTION per call.
 
 DEPTH — density, not length:
@@ -2194,7 +2199,34 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
   }
 
   opts.onStage?.(manuscript.publication?.validation.exportReady ? 'Export ready' : 'blocked');
-  return manuscript;
+
+  // WS-11: never ship an incomplete draft silently — attach a visible banner.
+  return withIncompleteDraftBanner(manuscript);
+}
+
+/** When a manuscript was finalized incomplete — residual validation blockers
+ *  (graceful degradation under rate-limiting) or a section that could not be
+ *  drafted — prepend a clearly-marked banner to the first section so the warning
+ *  travels inside the document into every export, not just the execution trace.
+ *  A complete manuscript is returned unchanged. Idempotent. */
+export function withIncompleteDraftBanner(manuscript: Manuscript): Manuscript {
+  const notExportReady = manuscript.publication?.validation.exportReady === false;
+  const flaggedSections = manuscript.sections.filter((section) =>
+    section.body.some((paragraph) => paragraph.startsWith(SECTION_REVIEW_FLAG)),
+  ).length;
+  const first = manuscript.sections[0];
+  if (!(notExportReady || flaggedSections > 0) || !first || first.body[0]?.startsWith(INCOMPLETE_DRAFT_BANNER)) {
+    return manuscript;
+  }
+  const detail =
+    flaggedSections > 0
+      ? ` ${flaggedSections} section${flaggedSections === 1 ? '' : 's'} could not be fully drafted.`
+      : '';
+  const banner = `${INCOMPLETE_DRAFT_BANNER} — this manuscript was finalized with unresolved quality checks, commonly caused by provider rate-limiting during drafting.${detail} Review the flagged content and re-run on a less rate-limited provider (or set the boss model to Auto) for a complete draft before any use.`;
+  return {
+    ...manuscript,
+    sections: [{ ...first, body: [banner, ...first.body] }, ...manuscript.sections.slice(1)],
+  };
 }
 
 export interface PaperLedgerPrep {
