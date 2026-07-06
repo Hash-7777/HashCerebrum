@@ -28,6 +28,7 @@ import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass } from './honestyGuard';
+import { dedupeParagraphs } from './dedupe';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -173,10 +174,10 @@ const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
 
 const SECTION_SYSTEM = `You are The Cerebrum, a biomedical manuscript compiler. Write EXACTLY ONE SECTION per call.
 
-DEPTH:
-- Write to the UPPER end of the target word range.
-- Elaborate every point: state the finding, explain mechanism/significance, place in clinical context, note limitations, connect to broader question.
-- If evidence is thin, write a transparent evidence-gap analysis rather than a short section.
+DEPTH — density, not length:
+- Cover every claim assigned to this section once, in depth: state the finding, explain mechanism/significance, place it in clinical context, note limitations, connect it to the broader question.
+- NEVER repeat a sentence, claim, or paragraph, and never restate the same point in different words to reach a length. When the assigned evidence is fully covered, STOP — a shorter, non-repetitive section is REQUIRED over a padded one. Repetition is the worst possible failure here.
+- If evidence is thin, write a transparent evidence-gap analysis rather than padding.
 
 INTEGRITY — this is a REVIEW of retrieved literature, NOT original research:
 - NEVER claim original data collection ("we conducted", "enrolled patients", "EHR analysis", "propensity-score matching", etc.).
@@ -1730,9 +1731,14 @@ async function draftOneSection(
 
   // Bounded expansion to the minimum word count (skip if the draft already failed).
   const draftFailed = body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG);
+  // Collapse near-duplicate paragraphs a weak model emits while padding, so the
+  // word count reflects real content and repetition never ships (D1 — a real run
+  // shipped the same Introduction paragraphs five times).
+  if (!draftFailed) body = dedupeParagraphs(body);
   let passes = 1;
   while (!draftFailed && bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
     opts.onStage?.(`${blueprintSection.heading} expansion ${passes}`);
+    const beforeWords = bodyWordCount(body);
     try {
       body = await draftLedgerSection({
         model: sectionModel,
@@ -1752,6 +1758,10 @@ async function draftOneSection(
     } catch {
       break;
     }
+    body = dedupeParagraphs(body);
+    // If a pass added no genuinely new content (only repeats the dedupe removed),
+    // stop rather than looping on padding.
+    if (bodyWordCount(body) <= beforeWords) break;
     passes += 1;
   }
   // Run the deterministic honesty pass on the drafted prose HERE, at the source,
