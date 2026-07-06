@@ -1110,11 +1110,20 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
 // DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
 const NON_TOPIC_KEYWORDS = new Set([
   'differ', 'differs', 'differed', 'difference', 'differences', 'differential',
-  'compare', 'compared', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
+  'compare', 'compared', 'comparing', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
   'decade', 'decades', 'recent', 'recently', 'trend', 'trends', 'last', 'over', 'past', 'consensus',
   // Request/format words that leaked from "publishable-quality research paper
   // titled …" into the keyword list.
   'publishable', 'publishable-quality', 'quality', 'titled', 'across', 'spectrum', 'current',
+  // Action / instruction verbs that describe the REQUEST, not the subject
+  // ("comparing … for SLOWING … , REPORT … , WEIGH the risk … , DISCUSS …").
+  'slowing', 'weigh', 'weighing', 'weighed', 'reporting', 'discuss', 'discussing', 'discussed',
+  'including', 'include', 'includes', 'measuring', 'measured', 'examining', 'exploring',
+  // Statistical-reporting descriptors ("report the EFFECT SIZES, CONFIDENCE
+  // INTERVALS, and P-VALUES") — they name what to report, not the medical topic,
+  // and produced junk keywords like "effect sizes" and "p-values weigh".
+  'effect', 'effects', 'size', 'sizes', 'confidence', 'interval', 'intervals', 'p-value', 'p-values',
+  'pvalue', 'pvalues', 'significance', 'estimate', 'estimates', 'value', 'values',
 ]);
 
 // Connectors, articles, and request words that separate one keyword PHRASE from
@@ -1143,6 +1152,9 @@ export function keywordsFrom(question: string): string[] {
   const source = extractExplicitTitle(question) ?? question;
   const tokens = normalizeMedicalSpelling(source)
     .toLowerCase()
+    // Drop the possessive so "Alzheimer's disease" stays one phrase instead of
+    // shattering into "alzheimer" + a stray "s" + "disease".
+    .replace(/['’]s\b/g, '')
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
     .filter(Boolean);

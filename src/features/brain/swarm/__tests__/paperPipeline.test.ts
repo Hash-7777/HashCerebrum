@@ -205,6 +205,23 @@ describe('title & keyword cleanup', () => {
   it('leaves an already-clean topic intact', () => {
     expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
   });
+
+  it('drops gerund/meta and statistical-descriptor words (the lecanemab run)', () => {
+    const kw = keywordsFrom(
+      "Write a full, publishable research paper, with statistics, comparing lecanemab versus donanemab for slowing cognitive decline in early symptomatic Alzheimer's disease. Report the effect sizes (CDR-SB change), confidence intervals, and p-values, weigh the risk of ARIA, including by APOE ε4 status.",
+    );
+    // Real subject terms survive…
+    expect(kw.some((k) => k.includes('lecanemab'))).toBe(true);
+    expect(kw.some((k) => k.includes('donanemab'))).toBe(true);
+    expect(kw.some((k) => k.includes('cognitive decline'))).toBe(true);
+    // "Alzheimer's disease" is not shattered by the possessive.
+    expect(kw.some((k) => k.includes('alzheimer disease'))).toBe(true);
+    // …while the junk from the real run is gone.
+    for (const junk of ['comparing', 'slowing', 'weigh', 'p-values', 'effect', 'sizes', 'confidence', 'intervals', 'disease']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw.some((k) => k === 'effect sizes' || k.startsWith('effect '))).toBe(false);
+  });
 });
 
 describe('extractBoundEffects', () => {
