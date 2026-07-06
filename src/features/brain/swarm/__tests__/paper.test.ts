@@ -4,6 +4,7 @@ import {
   buildSourceGroundedPaperFallback,
   detectPaperRequest,
   fallbackPaperTasks,
+  isCodingRequest,
   isHarmfulRequest,
   isMetaOrAppQuestion,
   isPriorWorkReviewRequest,
@@ -94,6 +95,28 @@ describe('safety gates', () => {
     expect(isSmallTalk('history of stroke')).toBe(false);
     expect(isSmallTalk('how does aspirin work')).toBe(false);
     expect(isSmallTalk('okay so which statin is safest in CKD')).toBe(false);
+  });
+
+  it('routes a software/coding request to chat, not the research swarm', () => {
+    for (const m of [
+      'code a simple rag system for medical ai',
+      'write a Python script to parse PubMed XML',
+      'build me a React component for the dashboard',
+      'implement a function that dedupes citations',
+    ]) {
+      expect(isCodingRequest(m)).toBe(true);
+    }
+  });
+
+  it('never mistakes a biomedical use of "code" for a coding request', () => {
+    for (const m of [
+      'what is the ICD-10 code for type 2 diabetes',
+      'explain the genetic code and codon usage in BRCA1',
+      'what does code status mean in the ICU',
+      'compare warfarin and apixaban for stroke prevention',
+    ]) {
+      expect(isCodingRequest(m)).toBe(false);
+    }
   });
 });
 

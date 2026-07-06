@@ -48,6 +48,7 @@ import {
   isPriorWorkReviewRequest,
   isSelfHarmQuery,
   isSmallTalk,
+  isCodingRequest,
   manuscriptStandardForQuestion,
   SELF_HARM_MESSAGE,
 } from './paper';
@@ -603,6 +604,15 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // not launch a research swarm that retrieves unrelated evidence and writes a
   // bogus manuscript. Route to chat with a refusal.
   if (isOffTopicQuestion(question)) {
+    callbacks.onBossPhase('answering');
+    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
+  }
+
+  // A software/coding request ("code a RAG system", "write a Python script") is
+  // not a biomedical question — answer it in chat instead of launching a
+  // literature search that returns nothing on point.
+  if (isCodingRequest(question)) {
     callbacks.onBossPhase('answering');
     const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };

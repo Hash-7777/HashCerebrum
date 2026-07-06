@@ -83,6 +83,20 @@ export function isSmallTalk(question: string): boolean {
   return SMALL_TALK_RX.test(question);
 }
 
+// A request to write software (not a biomedical question) — e.g. "code a simple
+// RAG system", "write a Python script". Routed to chat so the boss explains or
+// declines rather than launching a literature search that returns nothing on
+// point. Guarded so biomedical uses of "code" never match.
+const CODING_NEGATIVE_RX =
+  /\b(icd|icd-?10|cpt|hcpcs|snomed|genetic|dna|rna|amino\s+acid|codon|code\s+status|code\s+blue|colour\s+code|color\s+code|zip\s+code|dress\s+code)\b/i;
+const CODING_REQUEST_RX =
+  /\b(write|create|make|generate|build|implement|refactor|debug)\s+(me\s+)?(a|an|some|the)?\s*(code|program|script|function|class|app|application|web\s?app|website|api|algorithm|component|module|snippet|regex|sql|react|python|javascript|typescript|rust|golang|node(?:\.?js)?|frontend|backend|cli|chatbot|bot)\b|^\s*(code|program|implement|debug|refactor|compile)\s+(me\s+)?(a|an|the|some)\b/i;
+
+export function isCodingRequest(question: string): boolean {
+  if (CODING_NEGATIVE_RX.test(question)) return false;
+  return CODING_REQUEST_RX.test(question);
+}
+
 // Typo-tolerant fallback: a creation verb plus a document noun anywhere in the
 // question (not necessarily adjacent) is a paper request. PAPER_RX requires the
 // noun to immediately follow the verb + qualifiers, so a stray or misspelled
