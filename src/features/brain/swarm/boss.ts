@@ -126,6 +126,28 @@ export async function contextualizeQuestion(
   return question;
 }
 
+// The Genetics specialist is only relevant when the question actually concerns
+// genes / variants / pharmacogenomics. An eager planner otherwise adds a genetics
+// sub-task that returns noise — a real run spun up "investigate potential genetic
+// factors" on a pure SGLT2-vs-GLP-1 pharmacotherapy comparison. This signal keeps
+// it when the question is genuinely genetic (e.g. "…by APOE ε4 status").
+const GENETIC_SIGNAL_RX =
+  /\b(gene|genes|genetic|genetics|genomic|genome|variant|variants|snp|snps|rs\d+|allele|alleles|genotype|genotypes|polymorphism|polymorphisms|mutation|mutations|gwas|clinvar|heritability|hereditary|pharmacogenomic|pharmacogenetics?|apoe|brca\d?|hla|germline|somatic|epigenetic)\b/i;
+
+/** Drop a Genetics specialist task when the question has no genetic angle, so the
+ *  genetics agent is not delegated to on a non-genetic question. Never returns an
+ *  empty research plan — falls back to evidence synthesis if genetics was the only
+ *  task. Exported for testing. */
+export function pruneIrrelevantGenetics(plan: BossPlan, question: string): BossPlan {
+  if (plan.mode !== 'research' || GENETIC_SIGNAL_RX.test(question)) return plan;
+  const tasks = plan.tasks.filter((task) => task.agentId !== 'genetics');
+  if (tasks.length === plan.tasks.length) return plan;
+  return {
+    mode: 'research',
+    tasks: tasks.length > 0 ? tasks : [{ agentId: 'evidence_synthesis', subQuery: question }],
+  };
+}
+
 // Decide chat vs. research and, for research, which specialists handle what.
 export async function planResearch(
   model: string,
@@ -155,7 +177,7 @@ or
   try {
     const resp = await completeWithModelChain(model, { messages, temperature: 0.1, maxTokens: 600 });
     const parsed = parsePlan(resp.content);
-    if (parsed) return parsed;
+    if (parsed) return pruneIrrelevantGenetics(parsed, question);
   } catch {
     /* fall through to a safe default */
   }

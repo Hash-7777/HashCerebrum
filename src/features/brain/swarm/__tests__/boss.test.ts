@@ -9,9 +9,11 @@ import {
   isConfidentInteractionReport,
   isIdentityQuestion,
   looksLikeRefusalOrNonQuery,
+  pruneIrrelevantGenetics,
   stripLeakedSpecialistLabels,
   unverifiedDrugNames,
 } from '../boss';
+import type { BossPlan } from '../boss';
 import type { AssociationConfidence } from '../genetics/associationConfidence';
 import type { EvidenceItem } from '@platform/index';
 
@@ -192,5 +194,46 @@ describe('stripLeakedSpecialistLabels', () => {
   it('leaves ordinary text untouched', () => {
     const text = 'Empagliflozin reduced HF hospitalization [S3] (HR 0.75).';
     expect(stripLeakedSpecialistLabels(text)).toBe(text);
+  });
+});
+
+describe('pruneIrrelevantGenetics', () => {
+  const withGenetics: BossPlan = {
+    mode: 'research',
+    tasks: [
+      { agentId: 'evidence_synthesis', subQuery: 'q' },
+      { agentId: 'genetics', subQuery: 'investigate genetic factors' },
+    ],
+  };
+
+  it('drops a genetics task when the question has no genetic angle (the SGLT2 run)', () => {
+    const out = pruneIrrelevantGenetics(
+      withGenetics,
+      'compare SGLT2 inhibitors versus GLP-1 receptor agonists for MACE in type 2 diabetes and CKD',
+    );
+    expect(out.tasks.some((t) => t.agentId === 'genetics')).toBe(false);
+    expect(out.tasks.some((t) => t.agentId === 'evidence_synthesis')).toBe(true);
+  });
+
+  it('keeps genetics when the question is genuinely genetic (APOE, the lecanemab run)', () => {
+    const out = pruneIrrelevantGenetics(
+      withGenetics,
+      'compare lecanemab versus donanemab, including outcomes by APOE ε4 status',
+    );
+    expect(out.tasks.some((t) => t.agentId === 'genetics')).toBe(true);
+  });
+
+  it('never leaves an empty research plan if genetics was the only task', () => {
+    const out = pruneIrrelevantGenetics(
+      { mode: 'research', tasks: [{ agentId: 'genetics', subQuery: 'g' }] },
+      'a purely pharmacologic question about statins',
+    );
+    expect(out.tasks).toHaveLength(1);
+    expect(out.tasks[0]!.agentId).toBe('evidence_synthesis');
+  });
+
+  it('leaves a chat plan untouched', () => {
+    const chat: BossPlan = { mode: 'chat', tasks: [] };
+    expect(pruneIrrelevantGenetics(chat, 'hello')).toEqual(chat);
   });
 });
