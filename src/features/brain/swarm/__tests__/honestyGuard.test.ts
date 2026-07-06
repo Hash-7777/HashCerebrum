@@ -189,4 +189,24 @@ describe('splitSentences', () => {
   it('keeps terminal punctuation and handles a no-punctuation tail', () => {
     expect(splitSentences('One. Two! Three')).toEqual(['One.', ' Two!', 'Three']);
   });
+
+  it('does NOT split on a decimal point (the "0. 86" bug)', () => {
+    // "0.86" must stay in one sentence, not become "The HR was 0." + "86 overall."
+    expect(splitSentences('The HR was 0.86 overall.')).toEqual(['The HR was 0.86 overall.']);
+    expect(splitSentences('CI 0.84-0.95, p=0.0003.')).toEqual(['CI 0.84-0.95, p=0.0003.']);
+    // A real sentence boundary after a number still splits.
+    expect(splitSentences('It was 0.86. Next point.')).toEqual(['It was 0.86.', ' Next point.']);
+  });
+});
+
+describe('applyHonestyPass — decimal integrity (regression)', () => {
+  it('leaves decimals untouched instead of re-spacing them to "0. 86"', () => {
+    const input =
+      'Across studies the pooled hazard ratio for MACE was approximately 0.86, 95% CI 0.84-0.95, p=0.0003.';
+    const out = applyHonestyPass(input);
+    expect(out).toContain('0.86');
+    expect(out).toContain('0.84-0.95');
+    expect(out).toContain('p=0.0003');
+    expect(out).not.toMatch(/\d\.\s\d/); // no "0. 86" anywhere
+  });
 });
