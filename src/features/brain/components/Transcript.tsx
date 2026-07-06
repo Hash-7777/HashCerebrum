@@ -497,6 +497,16 @@ export const Transcript = memo(function Transcript({
                       })()}
                     </div>
                   )}
+                  {message.verification && message.verification.checked > 0 && !isDocument && (
+                    <div
+                      className="claim-check-verified"
+                      title={`${message.verification.supported} of ${message.verification.checked} cited sentence(s) were entailed by their cited source — checked on-device by the offline NLI fact-check model. This is an automated check, not a substitute for reading the sources.`}
+                    >
+                      <Icon name="shield" size={11} />{' '}
+                      {Math.round((message.verification.supported / message.verification.checked) * 100)}% of cited
+                      claims verified against source
+                    </div>
+                  )}
                   {message.unsupportedClaims && message.unsupportedClaims.length > 0 && !isDocument && (
                     <div
                       className="claim-check-note"

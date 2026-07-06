@@ -134,9 +134,21 @@ export function BrainMode() {
     verifiedRef.current.add(target.id);
     let cancelled = false;
     void verifyAnswer(target.content, target.citations ?? []).then((res) => {
-      if (cancelled || res.unsupported.length === 0) return;
+      // Record the result whenever the model actually checked something — even
+      // when nothing is unsupported — so the positive "% of claims verified"
+      // trust badge can render, not only the warning. A no-op run (no model, or
+      // no cited sentences) leaves the message untouched.
+      if (cancelled || res.checked === 0) return;
       setMessages((current) =>
-        current.map((m) => (m.id === target.id ? { ...m, unsupportedClaims: res.unsupported } : m)),
+        current.map((m) =>
+          m.id === target.id
+            ? {
+                ...m,
+                verification: { checked: res.checked, supported: res.checked - res.unsupported.length },
+                ...(res.unsupported.length > 0 ? { unsupportedClaims: res.unsupported } : {}),
+              }
+            : m,
+        ),
       );
     });
     return () => {

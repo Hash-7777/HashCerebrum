@@ -480,6 +480,24 @@
   cursor: help;
 }
 
+/* Positive counterpart of .claim-check-note: the share of cited sentences the
+   on-device NLI fact-check entailed from their source. Mint, to read as a
+   trust signal rather than a warning. */
+.claim-check-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  margin-right: 8px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--accent, #38b2a3);
+  background: rgba(56, 178, 163, 0.09);
+  border: 1px solid rgba(56, 178, 163, 0.28);
+  cursor: help;
+}
+
 .retraction-badge {
   display: inline-block;
   margin-left: 4px;

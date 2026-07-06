@@ -44,6 +44,10 @@ export interface ChatMessage {
   // Cited sentences the offline NLI fact-check did not find clearly supported by
   // their source. Present only after a research answer has been verified.
   unsupportedClaims?: string[];
+  // Result of the offline NLI fact-check over this answer's cited sentences:
+  // how many were checked and how many the model entailed from their source.
+  // Drives the "N% of cited claims verified against source" trust badge.
+  verification?: { checked: number; supported: number };
 }
 
 // Which workspace produced a chat. Brain and Drug-Interactions keep separate
