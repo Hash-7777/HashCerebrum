@@ -27,7 +27,7 @@ import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
-import { applyHonestyPass } from './honestyGuard';
+import { applyHonestyPass, splitSentences } from './honestyGuard';
 import { dedupeParagraphs } from './dedupe';
 
 
@@ -676,6 +676,76 @@ export function extractEvidenceFromRecords(records: EvidenceItem[]): EvidenceExt
       trusted: isTrustedRecord(record),
     };
   });
+}
+
+// ── WS-1: Quantitative Evidence Table (QET) ─────────────────────────────────
+// The locked set of statistics that legitimately belong to each source, keyed by
+// its [S#] marker. A number may be attributed to a source ONLY if that source
+// actually reports it — so the same study can never be cited with two different
+// hazard ratios (D3), and a context-free number scraped from one abstract can
+// never be pinned to a source that does not contain it (D4).
+
+/** Normalise a numeric token so "0.860", ".86", and "0.86" compare equal. */
+function normalizeStatNumber(value: string): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : value.trim();
+}
+
+function addStatTokens(set: Set<string>, text: string | null | undefined): void {
+  if (!text) return;
+  for (const m of text.matchAll(/[0-9]+(?:\.[0-9]+)?/g)) set.add(normalizeStatNumber(m[0]));
+}
+
+/** Build the QET: for each source marker, the set of numeric tokens (ratio point
+ *  estimates, CI bounds, and p-values) that source actually reports. */
+export function buildQuantEvidenceTable(extractions: EvidenceExtraction[]): Map<string, Set<string>> {
+  const qet = new Map<string, Set<string>>();
+  for (const extraction of extractions) {
+    const values = qet.get(extraction.sourceMarker) ?? new Set<string>();
+    for (const bound of extraction.boundEffects ?? []) {
+      addStatTokens(values, bound.value);
+      addStatTokens(values, bound.ci);
+      addStatTokens(values, bound.pValue);
+    }
+    for (const effect of extraction.effectValues) addStatTokens(values, effect.value);
+    qet.set(extraction.sourceMarker, values);
+  }
+  return qet;
+}
+
+export interface UnverifiedStat {
+  /** The statistic as written, e.g. "hazard ratio 1.05". */
+  sourceText: string;
+  /** The markers the sentence cited, e.g. ["[S12]"]. */
+  markers: string[];
+}
+
+const SENTENCE_MARKER_RX = /\[S\d+\]/g;
+
+/**
+ * Statistics in the drafted prose that are attributed (by an inline [S#] marker
+ * in the same sentence) to a source whose QET does NOT contain the number — the
+ * signature of a misattributed or invented estimate. A statistic is verified only
+ * when every numeric token in it appears in the union of the cited sources' sets.
+ * Sentences with no citation are not checked (nothing to verify against).
+ */
+export function findUnverifiedStatistics(
+  text: string,
+  qet: Map<string, Set<string>>,
+): UnverifiedStat[] {
+  const out: UnverifiedStat[] = [];
+  for (const sentence of splitSentences(text)) {
+    const markers = [...new Set(sentence.match(SENTENCE_MARKER_RX) ?? [])];
+    if (markers.length === 0) continue;
+    const allowed = new Set<string>();
+    for (const mk of markers) for (const v of qet.get(mk) ?? []) allowed.add(v);
+    for (const stat of extractEffectValues(sentence)) {
+      const nums = [...stat.value.matchAll(/[0-9]+(?:\.[0-9]+)?/g)].map((m) => normalizeStatNumber(m[0]));
+      if (nums.length === 0) continue;
+      if (!nums.every((n) => allowed.has(n))) out.push({ sourceText: stat.sourceText, markers });
+    }
+  }
+  return out;
 }
 
 /** Render bound effects for the drafting prompt — each estimate with its own CI,
@@ -1543,7 +1613,8 @@ Dataset: ${opts.datasetBlock}
 
 Prior sections: ${opts.priorDigest}
 ${current}
-Write ${opts.section.heading} now. Start with the first sentence — no heading, no number. Write to the UPPER end of the target. Every sentence must trace to a claim or extraction. If no effect sizes exist, state that limitation clearly, then compensate with rich contextual discussion.`;
+Write ${opts.section.heading} now. Start with the first sentence — no heading, no number. Cover each claim once, in depth; do NOT repeat, restate, or pad to reach a length. Every sentence must trace to a claim or extraction.
+STATISTICS LOCK: attach a hazard/odds/risk ratio, confidence interval, or p-value ONLY to the exact [S#] whose EXTRACTIONS above list that number. Never give a source a statistic it does not report, never cite the same source's estimate two different ways, and never invent a number to sound precise. If no effect sizes exist, state that limitation clearly, then compensate with rich contextual discussion.`;
   const reply = await callModel(
     opts.model,
     SECTION_SYSTEM,
@@ -1772,6 +1843,23 @@ async function draftOneSection(
   if (!(body.length > 0 && body[0]!.startsWith(SECTION_REVIEW_FLAG))) {
     body = body.map((paragraph) => applyHonestyPass(paragraph));
   }
+
+  // WS-1: surface any statistic attributed to a source that does not report it
+  // (a misattributed or invented estimate — e.g. citing one study with two
+  // different hazard ratios). Non-destructive: it flags in the execution trace so
+  // the drift is visible without risking surgery on correct prose.
+  const unverifiedStats = findUnverifiedStatistics(body.join('\n\n'), buildQuantEvidenceTable(opts.extractions));
+  if (unverifiedStats.length > 0) {
+    bus.emit('agent:activity', {
+      agentId: 'boss',
+      phase: 'tool_call',
+      detail: `${blueprintSection.heading}: ${unverifiedStats.length} statistic(s) not backed by the cited source — ${unverifiedStats
+        .slice(0, 3)
+        .map((stat) => `"${stat.sourceText}" ${stat.markers.join('')}`)
+        .join('; ')}`,
+    });
+  }
+
   return { heading: blueprintSection.heading, body };
 }
 
