@@ -761,6 +761,18 @@ function formatBoundEffects(effects: BoundEffect[] | undefined): string {
     .join('; ');
 }
 
+/** A compact per-source list of the app-extracted effect estimates, fed to the
+ *  abstract so its Results field cannot contradict the body (a real run's
+ *  abstract claimed an agent "lacks efficacy data" while the body cited that same
+ *  source's hazard ratios, because the flat body digest had truncated the section
+ *  that reported them). Bounded so it never overflows the abstract prompt. */
+export function abstractStatsDigest(extractions: EvidenceExtraction[]): string {
+  const lines = extractions
+    .filter((item) => (item.boundEffects?.length ?? 0) > 0)
+    .map((item) => `${item.sourceMarker} ${formatBoundEffects(item.boundEffects)}`);
+  return lines.length > 0 ? lines.join('\n').slice(0, 1500) : '(no effect estimates were extracted)';
+}
+
 function numbers(value: string): string[] {
   return [...value.matchAll(/[0-9]+(?:\.[0-9]+)?/g)].map((match) => match[0]!.replace(/^0+(?=\d)/, ''));
 }
@@ -1937,7 +1949,17 @@ async function draftAbstract(opts: {
   const weak = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'weak').length;
   const context = opts.claimLedger.filter((claim) => claim.evidenceStrength === 'context').length;
   const numeric = opts.extractions.reduce((sum, item) => sum + item.effectValues.length + (item.sampleSize ? 1 : 0), 0);
-  const digest = opts.sections.map((section) => `${section.heading}\n${section.body.join(' ')}`).join('\n\n').slice(0, 7000);
+  // Balance the digest across sections. A flat 7000-char head slice dropped the
+  // later Clinical/Results section entirely, so the abstract claimed an agent had
+  // "no efficacy data" while the body reported its hazard ratios — give every
+  // section an equal share so each is represented.
+  const perSection = Math.max(500, Math.floor(7000 / Math.max(1, opts.sections.length)));
+  const digest = opts.sections
+    .map((section) => `${section.heading}\n${section.body.join(' ').slice(0, perSection)}`)
+    .join('\n\n');
+  // Feed the abstract the app-extracted effect estimates directly so the Results
+  // field can never contradict the body's numbers.
+  const statsDigest = abstractStatsDigest(opts.extractions);
   // Deterministic fallback abstract — always non-empty, so the manuscript never
   // ships with a blank ABSTRACT (which happened when the model replied without
   // the labelled fields and the parse came back empty).
@@ -1954,11 +1976,14 @@ async function draftAbstract(opts: {
   try {
     const reply = await callModel(
       opts.model,
-      'You write structured scientific abstracts for source-grounded biomedical AUTOMATED EVIDENCE REVIEWS. Reply with exactly five labelled fields: Background:, Objective:, Methods:, Results:, Conclusions:. Do not add references or unsupported statistics. CRITICAL: this is a review of retrieved published literature, not an original study. The Methods field must describe ONLY the automated literature search and synthesis — never claim a cohort was studied, patients were enrolled, electronic health records or propensity-score matching were used, or that you measured any outcome. The Results field reports what the retrieved sources found, never results you produced.',
+      'You write structured scientific abstracts for source-grounded biomedical AUTOMATED EVIDENCE REVIEWS. Reply with exactly five labelled fields: Background:, Objective:, Methods:, Results:, Conclusions:. Do not add references or unsupported statistics. CRITICAL: this is a review of retrieved published literature, not an original study. The Methods field must describe ONLY the automated literature search and synthesis — never claim a cohort was studied, patients were enrolled, electronic health records or propensity-score matching were used, or that you measured any outcome. The Results field reports what the retrieved sources found, never results you produced. If effect estimates are supplied below, the Results field MUST reflect them and MUST NOT state that any intervention lacks efficacy or safety data when an estimate for it is listed — that contradicts the body.',
       `Write a structured abstract for "${opts.title}" using only this manuscript body and these app-owned statistics. This is an automated evidence review; do not invent a study design or primary data.
 
 Evidence-strength counts: strong ${strong}, moderate ${moderate}, weak ${weak}, context ${context}.
 Extracted numeric statistic/sample-size fields: ${numeric}.
+
+App-extracted effect estimates by source (the Results field must be consistent with these):
+${statsDigest}
 
 Manuscript body:
 ${digest}`,

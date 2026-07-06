@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildQuantEvidenceTable, findUnverifiedStatistics } from '../paperPipeline';
+import { abstractStatsDigest, buildQuantEvidenceTable, findUnverifiedStatistics } from '../paperPipeline';
 import type { EvidenceExtraction } from '../publicationTypes';
 
 function ext(marker: string, partial: Partial<EvidenceExtraction> = {}): EvidenceExtraction {
@@ -68,5 +68,23 @@ describe('findUnverifiedStatistics', () => {
     const out = findUnverifiedStatistics('The analysis yielded an odds ratio of 2.08 [S12].', qet);
     expect(out.length).toBeGreaterThan(0);
     expect(out.some((u) => u.sourceText.includes('2.08'))).toBe(true);
+  });
+});
+
+describe('abstractStatsDigest', () => {
+  it('lists a source and its effect estimates so the abstract cannot claim it "lacks data"', () => {
+    const digest = abstractStatsDigest([
+      ext('[S22]', {
+        boundEffects: [{ measure: 'HR', value: '0.50', ci: '0.33-0.78', pValue: '0.002', direction: 'reduction', sourceText: 'HR 0.50' }],
+      }),
+      ext('[S13]', {}), // no effects — omitted
+    ]);
+    expect(digest).toContain('[S22]');
+    expect(digest).toContain('HR 0.50');
+    expect(digest).not.toContain('[S13]');
+  });
+
+  it('is explicit when nothing quantitative was extracted', () => {
+    expect(abstractStatsDigest([ext('[S1]', {})])).toBe('(no effect estimates were extracted)');
   });
 });
