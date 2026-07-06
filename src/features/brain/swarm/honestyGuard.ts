@@ -74,14 +74,37 @@ export function stripCounterfactualDataset(text: string): string {
   return rejoin(splitSentences(text).filter((s) => !COUNTERFACTUAL_DATASET_RX.test(s)));
 }
 
+// A bracketed token that is NOT a citation marker — [S3], [3], [S1, S2],
+// [S1-S9] — is pipeline scaffolding or a model placeholder ("[guideline context
+// inferred]", "[citation needed]", "[insert reference]") that must never ship in
+// the prose. We remove only MULTI-WORD non-marker brackets, so a single-token
+// bracket that is real notation (an isotope label like [18F] or [11C]) is kept.
+const CITATION_MARKER_INNER = /^\s*S?\d+(?:\s*[,;&–—-]\s*S?\d+)*\s*$/i;
+
+/** Remove scaffolding/placeholder brackets while keeping real [S#] citations. */
+export function stripNonSourceBrackets(text: string): string {
+  return text
+    .replace(/\[([^\]]*)\]/g, (full, inner: string) => {
+      if (CITATION_MARKER_INNER.test(inner)) return full; // a real citation marker
+      if (/\s/.test(inner.trim())) return ''; // multi-word → placeholder, drop it
+      return full; // single token (e.g. [18F]) — leave alone
+    })
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
+}
+
 // Search-yield counts the model invents — and contradicts itself on ("320
-// records" in the abstract vs "159 entries" in the body; "strong=76, moderate=25,
-// weak=57" summing to 158, not 320). The real counts live in the deterministic
-// source-yield figure/table, so any in-prose total is removed. This targets only
-// counts of RECORDS / ENTRIES / CITATIONS / a corpus and evidence-strength
-// clusters — never study sample sizes ("8891 participants"), which are real data.
+// records" in the abstract vs "159 entries" in the body; "202 unique
+// publications" vs "69 structured evidence items" vs the deterministic 60;
+// "strong=76, moderate=25, weak=57" summing to 158, not 320). The real counts
+// live in the deterministic source-yield figure/table, so any in-prose total is
+// removed. This targets only counts of RECORDS / ENTRIES / CITATIONS /
+// PUBLICATIONS / a corpus and evidence-strength clusters — never study sample
+// sizes ("8891 participants"), which are real data, and never a narrated study
+// count like "three studies reported…".
 const SEARCH_YIELD_RX =
-  /\b\d[\d,]*\s+(?:unique\s+)?(?:records|entries|citations|abstracts)\b|\b(?:corpus|pool)\s+of\s+\d[\d,]*\b|\b(?:strong|moderate|weak|context)\s*[=:]\s*\d+\b/i;
+  /\b\d[\d,]*\s+(?:unique\s+)?(?:records|entries|citations|abstracts|publications|structured\s+evidence\s+items|evidence\s+items)\b|\b(?:corpus|pool)\s+of\s+\d[\d,]*\b|\b(?:strong|moderate|weak|context)\s*[=:]\s*\d+\b/i;
 
 /** Remove prose assertions of an invented search-yield record count. */
 export function stripSearchYieldCounts(text: string): string {
@@ -187,7 +210,11 @@ export function applyHonestyPass(text: string): string {
   return softenOverclaims(
     reconcileDirection(
       reconcileCrossingCI(
-        stripFabricatedAggregates(stripSearchYieldCounts(stripCounterfactualDataset(stripFabricatedAppraisal(text)))),
+        stripFabricatedAggregates(
+          stripSearchYieldCounts(
+            stripCounterfactualDataset(stripFabricatedAppraisal(stripNonSourceBrackets(text))),
+          ),
+        ),
       ),
     ),
   );

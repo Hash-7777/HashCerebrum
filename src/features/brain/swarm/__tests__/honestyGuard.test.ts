@@ -5,6 +5,7 @@ import {
   stripCounterfactualDataset,
   stripSearchYieldCounts,
   stripFabricatedAggregates,
+  stripNonSourceBrackets,
   softenOverclaims,
   reconcileCrossingCI,
   reconcileDirection,
@@ -81,6 +82,29 @@ describe('stripSearchYieldCounts', () => {
     expect(stripSearchYieldCounts(real)).toBe(real);
     const real2 = 'A retrospective cohort of 20000 patients was analysed.';
     expect(stripSearchYieldCounts(real2)).toBe(real2);
+  });
+
+  it('removes the contradictory prose totals from the real run (202 / 69)', () => {
+    expect(stripSearchYieldCounts('The automated search retrieved 202 unique publications.')).toBe('');
+    expect(stripSearchYieldCounts('The analysis relied on the 69 structured evidence items extracted.')).toBe('');
+    // A narrated study count is real content and is kept.
+    const narrated = 'Three studies reported a consistent cardiovascular benefit.';
+    expect(stripSearchYieldCounts(narrated)).toBe(narrated);
+  });
+});
+
+describe('stripNonSourceBrackets', () => {
+  it('removes a leaked placeholder while keeping real [S#] citations', () => {
+    expect(
+      stripNonSourceBrackets('SGLT2 inhibitors are preferred [guideline context inferred].'),
+    ).toBe('SGLT2 inhibitors are preferred.');
+    const kept = 'Both classes reduced MACE [S4], with overlap [S2, S7] and a range [S1-S9].';
+    expect(stripNonSourceBrackets(kept)).toBe(kept);
+  });
+
+  it('leaves single-token bracket notation (e.g. an isotope label) alone', () => {
+    const iso = 'Uptake of [18F]FDG was increased.';
+    expect(stripNonSourceBrackets(iso)).toBe(iso);
   });
 });
 
