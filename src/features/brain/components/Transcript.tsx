@@ -38,6 +38,7 @@ import {
 } from '../export/messageExport';
 import { exportMessageLatex } from '../export/latexExport';
 import { referenceUrl } from '../export/citationStyles';
+import { exportReferencesBibtex, exportReferencesRis } from '../export/bibliography';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 import { InteractionMatrix } from './InteractionMatrix';
 import { InteractionReportBody } from './InteractionReportBody';
@@ -532,6 +533,26 @@ export const Transcript = memo(function Transcript({
                       <button type="button" onClick={() => exportMessageLatex(exportableFor(message, actualIndex))} className="action">
                         <Icon name="document" size={13} /> LaTeX
                       </button>
+                      {(message.citations?.length ?? 0) > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            title="Export the reference list as BibTeX for Mendeley, Zotero, or EndNote"
+                            onClick={() => exportReferencesBibtex(exportableFor(message, actualIndex).title, message.citations)}
+                            className="action"
+                          >
+                            <Icon name="quote" size={13} /> BibTeX
+                          </button>
+                          <button
+                            type="button"
+                            title="Export the reference list as RIS for Mendeley, Zotero, or EndNote"
+                            onClick={() => exportReferencesRis(exportableFor(message, actualIndex).title, message.citations)}
+                            className="action"
+                          >
+                            <Icon name="quote" size={13} /> RIS
+                          </button>
+                        </>
+                      )}
                       {isAi && !message.critiqueOf && onRegenerate && (
                         <>
                           <div className="action-divider" />
