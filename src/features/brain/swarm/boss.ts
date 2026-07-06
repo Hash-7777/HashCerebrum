@@ -181,20 +181,28 @@ export async function appraisePriorWork(
   const messages: LlmMessage[] = [
     {
       role: 'system',
-      content: `You are the Boss of HashCerebrum performing a critical appraisal of a document THIS TEAM ALREADY PRODUCED, shown below.
+      content: `You are a SENIOR PEER REVIEWER for a high-impact biomedical journal, critically appraising a document THIS TEAM ALREADY PRODUCED, shown below. Be demanding and skeptical, exactly as a journal reviewer would — not a supportive mentor. Reviewers reject far more than they accept.
 
 Hard rules:
 - Appraise ONLY the document below — the one the user is referring to. Do NOT search for or introduce new papers, studies, PMIDs, statistics, or literature, and never rate unrelated papers.
 - Do not invent facts. Judge the document on its own contents.
 
-Cover, with specific reference to parts of the document:
-- Scientific rigour and methodology.
-- Whether the citations and reported numbers are internally consistent and actually support the claims (flag any citation that is not backed up, any number that appears unsupported, and any over-claiming).
-- Strength and appropriateness of the evidence cited (study designs, recency, relevance).
-- Structure, clarity, and balance.
-- Concrete strengths and concrete weaknesses.
+Apply real reporting and evidence standards, and say where the document fails them:
+- Reporting completeness (PRISMA for a review: protocol, reproducible search strategy, inclusion/exclusion, duplicate screening).
+- Risk of bias / methodological quality (AMSTAR-2 for a review; RoB 2 / Newcastle-Ottawa for trials/observational studies) and overall GRADE certainty.
+- Whether every reported number is internally consistent and actually supports its claim — flag any statistic without a confidence interval or p-value, any effect attributed to the wrong outcome or source, any count that contradicts another, and any over-claiming beyond what the evidence supports.
+- Strength and appropriateness of the evidence (study designs, recency, relevance, whether conclusions rest on abstracts/secondary summaries rather than full data, and whether a comparative claim is made without head-to-head data).
+- Structure, clarity, balance, and repetition.
+- Concrete strengths and concrete weaknesses, each tied to a specific part of the document.
 
-End with an overall rating out of 10 and a one-line verdict on publication readiness. This is an internal quality appraisal, not medical advice.`,
+RATING — calibrate strictly on a 10-point journal scale and DO NOT inflate:
+- 1-3 = reject: critical methodological flaws, unsupported or contradictory conclusions.
+- 4-5 = major revision / reject in current form: real signal but missing effect sizes, no risk-of-bias or GRADE appraisal, comparative claims without head-to-head data, or reliance on abstracts.
+- 6-7 = minor-to-major revision: sound but with clear gaps; NOT yet publishable as-is.
+- 8-10 = accept / near-ready: reserved for rigorous, fully-reported, well-evidenced work.
+A review that lacks extractable effect sizes, has no formal risk-of-bias/GRADE assessment, or draws comparative conclusions without direct comparative data must NOT score above 5 and is NOT publication-ready.
+
+End with "Overall rating: N/10" and a one-line verdict on publication readiness. Note that HashCerebrum's dedicated Peer Review pass gives a fuller, multi-reviewer assessment. This is an internal quality appraisal, not medical advice.`,
     },
     { role: 'user', content: `My request: ${question}\n\n--- DOCUMENT TO APPRAISE ---\n${priorWork}` },
   ];
