@@ -14,6 +14,7 @@ import {
   keywordsFrom,
   modelForSection,
   neutralizeUnverifiableNct,
+  parseRetryAfterMs,
   stripUnapprovedMarkers,
   parseEvidenceExtractionJson,
   titleTopic,
@@ -682,5 +683,31 @@ describe('buildSectionUserPrompt (free-tier prompt budget)', () => {
     expect(prompt).not.toMatch(/further retrieved record/);
     expect(prompt).toContain('[S1]');
     expect(prompt).toContain('[S2]');
+  });
+});
+
+describe('parseRetryAfterMs', () => {
+  it('reads the real provider cooldown phrasings', () => {
+    // Groq
+    expect(parseRetryAfterMs(new Error('Rate limit reached. Please try again in 8.522s'))).toBe(8522);
+    expect(parseRetryAfterMs(new Error('try again in 2m30s'))).toBe(150_000);
+    // Gemini
+    expect(parseRetryAfterMs(new Error('You exceeded your quota. "retryDelay": "12s"'))).toBe(12_000);
+    expect(parseRetryAfterMs(new Error('Please retry after 30 seconds'))).toBe(30_000);
+    // OpenAI-style header echoed into the message
+    expect(parseRetryAfterMs(new Error('Retry-After: 20'))).toBe(20_000);
+    // Milliseconds
+    expect(parseRetryAfterMs(new Error('retry in 500ms'))).toBe(500);
+  });
+
+  it('returns undefined when no delay is advertised, so the caller uses backoff', () => {
+    expect(parseRetryAfterMs(new Error('provider cooling down from a recent rate limit'))).toBeUndefined();
+    expect(parseRetryAfterMs(new Error('429 Too Many Requests'))).toBeUndefined();
+  });
+
+  it('never mistakes an unrelated number (e.g. an odds ratio) for a delay', () => {
+    expect(
+      parseRetryAfterMs(new Error('Rate limit reached while reporting odds ratio 0.79s effect')),
+    ).toBeUndefined();
   });
 });

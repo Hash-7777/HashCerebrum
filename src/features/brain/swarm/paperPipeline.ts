@@ -1633,6 +1633,40 @@ function isCallBillingDead(err: unknown): boolean {
 
 const MIN_CALL_CHARS = 4_000;
 const MAX_CALL_RATE_RETRIES = 3;
+// Longest we will honor a provider's advertised cooldown. Free tiers sometimes
+// advertise very long waits (the trace showed a 195s cooldown); stalling the run
+// for minutes per call is worse than failing the section fast and letting the
+// user re-run on Auto / a less-limited provider, so we cap the wait.
+const MAX_RATE_WAIT_MS = 20_000;
+
+// Read a provider's advertised cooldown, in milliseconds, from a rate-limit
+// error message. Providers phrase it many ways — Groq "Please try again in
+// 8.522s" or "in 2m30s", Gemini "retryDelay: 12s" / "retry after 30 seconds",
+// OpenAI-style "Retry-After: 20". Parsing is anchored to a cooldown phrase so a
+// stray number elsewhere in the message is never mistaken for a delay. Returns
+// undefined when no explicit delay is stated, so the caller falls back to
+// exponential backoff. Honoring a SHORT advertised wait (e.g. 8s) lets the very
+// next retry succeed where a blind 2s wait would 429 again.
+export function parseRetryAfterMs(err: unknown): number | undefined {
+  const lower = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  const anchor = /(?:try again in|again in|retry[- ]?delay["']?\s*[:=]?|retry[- ]?after:?|retry in|available in|wait(?:\s+for)?)\s*["']?/;
+  const m = anchor.exec(lower);
+  if (!m) return undefined;
+  const tail = lower.slice(m.index + m[0].length);
+  // Compound "2m30s" / "1m 30s".
+  const compound = tail.match(/^(\d+)\s*m(?:in(?:ute)?s?)?\s*(\d+(?:\.\d+)?)\s*s/);
+  if (compound) return Math.round((Number(compound[1]) * 60 + Number(compound[2])) * 1000);
+  const ms = tail.match(/^(\d+(?:\.\d+)?)\s*ms\b/);
+  if (ms) return Math.round(Number(ms[1]));
+  const sec = tail.match(/^(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?\b/);
+  if (sec) return Math.round(Number(sec[1]) * 1000);
+  const min = tail.match(/^(\d+(?:\.\d+)?)\s*m(?:in(?:ute)?s?)?\b/);
+  if (min) return Math.round(Number(min[1]) * 60_000);
+  // Bare number immediately after the anchor (e.g. "Retry-After: 20" → seconds).
+  const bare = tail.match(/^(\d+(?:\.\d+)?)\b/);
+  if (bare) return Math.round(Number(bare[1]) * 1000);
+  return undefined;
+}
 
 function callSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1702,7 +1736,13 @@ async function callModel(
       // (the section gets flagged) so a low-quota run never stalls in backoff.
       if (isCallRateLimited(err) && !noPause && rateRetries < MAX_CALL_RATE_RETRIES) {
         rateRetries += 1;
-        const waitMs = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1)) + Math.floor(Math.random() * 400);
+        // Honor the provider's advertised cooldown when it states one (a short
+        // wait like 8s lets the next retry actually succeed); otherwise fall back
+        // to exponential backoff. Cap either so a very long advertised cooldown
+        // never stalls the whole run.
+        const advertised = parseRetryAfterMs(err);
+        const backoff = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1));
+        const waitMs = Math.min(MAX_RATE_WAIT_MS, advertised ?? backoff) + Math.floor(Math.random() * 400);
         bus.emit('agent:activity', {
           agentId: 'boss',
           phase: 'tool_call',
