@@ -15,6 +15,7 @@ import {
   modelForSection,
   neutralizeUnverifiableNct,
   parseRetryAfterMs,
+  shouldExpandSection,
   stripUnapprovedMarkers,
   parseEvidenceExtractionJson,
   titleTopic,
@@ -709,5 +710,20 @@ describe('parseRetryAfterMs', () => {
     expect(
       parseRetryAfterMs(new Error('Rate limit reached while reporting odds ratio 0.79s effect')),
     ).toBeUndefined();
+  });
+});
+
+describe('shouldExpandSection', () => {
+  it('expands only a materially short section (< 85% of the minimum)', () => {
+    expect(shouldExpandSection(600, 750, false)).toBe(true); // 80% — worth a call
+    expect(shouldExpandSection(640, 750, false)).toBe(false); // 85% — good enough
+    expect(shouldExpandSection(750, 750, false)).toBe(false); // at minimum
+    expect(shouldExpandSection(900, 750, false)).toBe(false); // over minimum
+  });
+
+  it('never expands once the run has been rate-limited, however short', () => {
+    // Ship the clean shorter draft rather than burn quota to pad it.
+    expect(shouldExpandSection(100, 750, true)).toBe(false);
+    expect(shouldExpandSection(600, 750, true)).toBe(false);
   });
 });

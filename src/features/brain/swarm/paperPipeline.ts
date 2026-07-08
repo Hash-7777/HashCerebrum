@@ -1959,7 +1959,22 @@ interface CompileSectionsOpts {
   existingSections?: ManuscriptSection[];
   evidenceGap?: string;
   mini?: boolean;
+  // Shared, run-scoped budget signal. Set to rateLimited once any section call
+  // exhausts its rate-limit retries, so the rest of the run stops spending
+  // optional expansion calls and ships clean shorter drafts instead of stalling.
+  budget?: { rateLimited: boolean };
   signal?: AbortSignal;
+}
+
+// Only spend an extra model call to grow a section when it is MATERIALLY short.
+// A section already at ~85% of its minimum reads fine, and topping it up from 640
+// to 700 words is not worth a call on a limited quota. And once the run has been
+// rate-limited to exhaustion, skip expansions entirely — ship the clean shorter
+// draft rather than burn quota (and risk stalling) to pad it. This is the padding
+// that also produced repeated paragraphs on weak models.
+export function shouldExpandSection(words: number, minWords: number, rateLimited: boolean): boolean {
+  if (rateLimited) return false;
+  return words < minWords * 0.85;
 }
 
 // Connective sections narrate ACROSS the evidence, so they are written in wave 2
@@ -2040,6 +2055,9 @@ async function draftOneSection(
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
+    // A section call that exhausts its rate-limit retries is the signal that the
+    // providers are hammered — go lean for the rest of the run.
+    if (isCallRateLimited(error) && opts.budget) opts.budget.rateLimited = true;
     // Surface the failure in the trace instead of silently shipping a stub
     // section — this is what made an incomplete paper look like a success.
     bus.emit('agent:activity', {
@@ -2085,7 +2103,11 @@ async function draftOneSection(
   // shipped the same Introduction paragraphs five times).
   if (!draftFailed) body = dedupeParagraphs(body);
   let passes = 1;
-  while (!draftFailed && bodyWordCount(body) < blueprintSection.minWords && passes < MAX_SECTION_PASSES) {
+  while (
+    !draftFailed &&
+    shouldExpandSection(bodyWordCount(body), blueprintSection.minWords, opts.budget?.rateLimited ?? false) &&
+    passes < MAX_SECTION_PASSES
+  ) {
     opts.onStage?.(`${blueprintSection.heading} expansion ${passes}`);
     const beforeWords = bodyWordCount(body);
     try {
@@ -2104,7 +2126,10 @@ async function draftOneSection(
         ...(methodsNotes ? { methodsNotes } : {}),
         ...(opts.signal ? { signal: opts.signal } : {}),
       });
-    } catch {
+    } catch (error) {
+      // Expansion is optional — if it rate-limits, stop growing this section and
+      // go lean for the rest of the run rather than retrying into the quota.
+      if (isCallRateLimited(error) && opts.budget) opts.budget.rateLimited = true;
       break;
     }
     body = dedupeParagraphs(body);
@@ -2336,6 +2361,10 @@ function safePublicationArtifact(
 export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promise<Manuscript> {
   if (opts.signal?.aborted) throw new Error('Run stopped by user');
   opts.onStage?.('Drafting');
+  // Run-scoped budget shared across every section and the QA-repair phase: once a
+  // call exhausts its rate-limit retries, the rest of the run stops spending
+  // optional expansion calls (5c) and ships clean shorter drafts.
+  const budget = { rateLimited: false };
   let sections = await compileSections({
     question: opts.question,
     bossModel: opts.bossModel,
@@ -2347,6 +2376,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     ...(opts.dataset ? { dataset: opts.dataset } : {}),
     ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
     mini: opts.mini ?? false,
+    budget,
     ...(opts.onStage ? { onStage: opts.onStage } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   });
@@ -2412,6 +2442,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
       ...(opts.dataset ? { dataset: opts.dataset } : {}),
       ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
       mini: opts.mini ?? false,
+      budget,
       ...(opts.onStage ? { onStage: opts.onStage } : {}),
       repairTargets: sectionMap,
       existingSections: sections,
