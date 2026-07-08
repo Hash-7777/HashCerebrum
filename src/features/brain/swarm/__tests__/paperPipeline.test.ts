@@ -4,6 +4,7 @@ import type { Manuscript } from '../manuscript';
 import { buildPublicationArtifact } from '../publication';
 import {
   buildClaimLedger,
+  buildMethodsSection,
   buildPaperBlueprint,
   buildPaperOutline,
   extractBoundEffects,
@@ -214,6 +215,53 @@ describe('title & keyword cleanup', () => {
     }
     expect(kw.some((k) => k.includes('sglt2'))).toBe(true);
     expect(kw.some((k) => k.includes('heart failure'))).toBe(true);
+  });
+
+  describe('buildMethodsSection (deterministic Methods)', () => {
+    const wordCount = (body: string[]) =>
+      body.join(' ').split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
+
+    it('meets the Methods minimum length without any model call', () => {
+      // The blueprint requires Methods >= 500 words; a code-generated section must
+      // clear that on its own so it never trips the section-too-short gate.
+      expect(wordCount(buildMethodsSection())).toBeGreaterThanOrEqual(500);
+    });
+
+    it('names the real pipeline honestly and stays on-topic', () => {
+      const text = buildMethodsSection().join(' ');
+      // The six real databases are named…
+      for (const db of ['PubMed', 'Europe PMC', 'OpenAlex', 'ClinicalTrials.gov', 'openFDA', 'RxNorm']) {
+        expect(text).toContain(db);
+      }
+      // …and the honest disclaimers are present.
+      expect(text).toMatch(/rather than a hand-curated systematic review/i);
+      expect(text).toMatch(/no GRADE certainty|no formal risk-of-bias/i);
+      expect(text).toContain('DerSimonian');
+      // Never drifts into a conclusion, and never states a fabricated record count.
+      expect(text.toLowerCase()).not.toContain('in conclusion');
+      expect(text).not.toMatch(/\b\d{2,}\s+(?:records|studies)\s+were\s+(?:retrieved|identified)/i);
+      // Databases the pipeline does NOT use must not be claimed as searched.
+      expect(text).toMatch(/Embase, Scopus/); // only ever named as NOT searched
+      expect(text).not.toMatch(/searched\s+Embase|queried\s+Scopus/i);
+    });
+
+    it('does not leak a domain-name split into "ClinicalTrials. gov"', () => {
+      const text = buildMethodsSection().join(' ');
+      expect(text).toContain('ClinicalTrials.gov');
+      expect(text).not.toContain('ClinicalTrials. gov');
+    });
+
+    it('appends an evidence-gap note when one is supplied', () => {
+      const gap = 'The retrieved records contain NO direct evidence for: pediatric dosing.';
+      const body = buildMethodsSection(gap);
+      expect(body[body.length - 1]).toBe(gap);
+      // …and omits it entirely when none is supplied.
+      expect(buildMethodsSection()).not.toContain(gap);
+    });
+
+    it('is fully deterministic — identical output every call', () => {
+      expect(buildMethodsSection()).toEqual(buildMethodsSection());
+    });
   });
 
   it('leaves an already-clean topic intact', () => {

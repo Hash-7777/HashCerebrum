@@ -75,6 +75,9 @@ const SECTION_CITATION_EXEMPT = new Set([
   'Declarations',
   'Dataset and Statistical Analysis',
   'Figures, Tables, and Statistical Safeguards',
+  // Methods is generated deterministically from the fixed pipeline description
+  // (buildMethodsSection) and cites no findings, so it carries no [S#] markers.
+  'Methods',
 ]);
 
 const SOURCE_CITATION_RX = /\[(?:S)?(\d+)\]/g;

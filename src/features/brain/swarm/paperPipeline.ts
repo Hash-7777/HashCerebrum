@@ -64,6 +64,71 @@ function deterministicMethodsNotes(
   );
 }
 
+// Fully deterministic Methods section for an automated evidence review (no
+// uploaded dataset). The Methods narrates the FIXED, real pipeline — it is not a
+// finding to be cited — so generating it in code rather than asking a model to
+// write it removes drift (a real run produced a Methods section that trailed off
+// into "In conclusion…" and reused a study sample size as a record count),
+// guarantees an honest and identical description on every run regardless of
+// rate limits, and saves one model call on free-tier quotas. Record counts are
+// deliberately kept out of this prose — they live in the study-selection figure
+// — so a sample size can never be mistaken for a record count here. No inline
+// [S#] citations: the section describes the pipeline, not the evidence, so
+// 'Methods' is exempt from the section-missing-citation gate.
+export function buildMethodsSection(evidenceGap?: string): string[] {
+  const paragraphs = [
+    'This manuscript is an automated, source-grounded evidence review rather than a hand-curated ' +
+      'systematic review conducted under formal PRISMA methodology. The research question was decomposed ' +
+      'into concept-scoped sub-queries — covering the population, the exposure or intervention, the ' +
+      'comparator, and the outcomes of interest — and dispatched to a team of specialist agents that ' +
+      'queried authoritative biomedical databases in parallel. Every outbound request passed through a ' +
+      'guarded, allowlisted network layer and was recorded in a tamper-evident audit log, so the ' +
+      'provenance of each retrieved record is reproducible. No manual literature screening, no dual ' +
+      'independent reviewers, and no consensus adjudication were involved; the entire retrieval, ' +
+      'extraction, and synthesis workflow was executed programmatically and is described here exactly as ' +
+      'it operates.',
+    'Evidence was drawn from six biomedical sources: PubMed/MEDLINE (National Library of Medicine), ' +
+      'Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, and RxNorm. No other database was queried — in ' +
+      'particular, Embase, Scopus, Cochrane CENTRAL, Ovid, and Web of Science were not searched, and ' +
+      'their absence is a coverage limitation. The pipeline did not construct a fixed Boolean search ' +
+      'string, restrict results by a specific search date, or apply any machine-learning classifier, ' +
+      'gradient-boosted screening model, labelled training set, or similarity threshold; each specialist ' +
+      'issued concept key terms to the sources it owns. All sources are reached through free, keyless ' +
+      'public interfaces, so the search can be reproduced without institutional subscriptions.',
+    'Records were eligible when they were English-language biomedical items carrying a title and an ' +
+      'abstract or structured metadata. Included study designs spanned randomised controlled trials, ' +
+      'systematic reviews and meta-analyses, cohort and registry studies, cross-sectional and ' +
+      'case-control studies, and regulatory or drug-terminology records retained as context. Duplicate ' +
+      'records were removed by record identifier (DOI or PMID) and by an identity hash over title, first ' +
+      'author, and publication year, so the same study retrieved from more than one source was counted ' +
+      'once. Retained records were ranked by how many distinct question concepts each one addressed, so ' +
+      'multi-concept records led and single-concept noise sank. The number of records identified, ' +
+      'de-duplicated, and cited is reported in the study-selection figure rather than restated in this ' +
+      'prose, and a study sample size is never reused as a record count.',
+    'Each retained record was parsed into a structured evidence item capturing its study design, ' +
+      'population, exposure or intervention, comparator, reported outcomes, and any effect estimates — ' +
+      'hazard ratios, odds ratios, risk ratios, mean differences, confidence intervals, and p-values — ' +
+      'transcribed exactly as reported in the source text. A claim ledger then mapped every extracted ' +
+      'finding to its source marker and graded its evidence strength on a fixed scale: strong for ' +
+      'randomised trials, systematic reviews, and meta-analyses; moderate for cohort and registry ' +
+      'studies; weak for cross-sectional and single indexed records; and context for regulatory or ' +
+      'terminology sources. The manuscript was compiled only from approved ledger entries, and any ' +
+      'statistic attributed to a source that does not report it was removed while the surrounding claim ' +
+      'was kept in words.',
+    'Synthesis was narrative and organised by evidence strength. Where at least two records reported a ' +
+      'comparable effect measure with a confidence interval, an inverse-variance random-effects ' +
+      'meta-analysis (DerSimonian–Laird) was computed in-app on the logarithmic scale and ' +
+      'back-transformed for display, together with the I² heterogeneity statistic and a prediction ' +
+      'interval; this pooling is performed deterministically in code, independent of any language model. ' +
+      'No formal risk-of-bias instrument (such as the Cochrane risk-of-bias tool) and no GRADE certainty ' +
+      'assessment were applied. Because retrieval operated on titles, abstracts, and structured metadata ' +
+      'rather than full texts, the extracted effect estimates may differ from the final published ' +
+      'analyses, and this is acknowledged as a limitation of the approach.',
+  ];
+  if (evidenceGap && evidenceGap.trim()) paragraphs.push(evidenceGap.trim());
+  return paragraphs;
+}
+
 // ── C3: validate identifiers in draft prose ─────────────────────────────────
 // Scan drafted text for PMID / DOI / NCT tokens and flag any that do not
 // appear in the retrieved evidence set — prevents hallucinated citations.
@@ -1831,6 +1896,16 @@ async function draftOneSection(
     opts.evidenceGap &&
     (isLimitations ||
       (!opts.paperBlueprint.sections.some((s) => s.heading.toLowerCase().includes('limitation')) && isMethods));
+  // Evidence-review Methods is generated deterministically in code (see
+  // buildMethodsSection) — no model call, no drift, identical every run. An
+  // original-research paper with an uploaded dataset still drafts Methods with
+  // the model, because that section must describe the dataset and its analysis.
+  if (isMethods && !opts.dataset) {
+    return {
+      heading: blueprintSection.heading,
+      body: buildMethodsSection(shouldInjectGap ? opts.evidenceGap : undefined),
+    };
+  }
   const methodsNotes = isMethods
     ? deterministicMethodsNotes(opts.question, opts.evidence, opts.extractions)
     : undefined;
