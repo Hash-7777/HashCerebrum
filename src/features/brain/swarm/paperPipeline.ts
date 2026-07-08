@@ -1716,6 +1716,104 @@ async function callModel(
   }
 }
 
+// Budgets (in characters) for the variable-size blocks of a section prompt. The
+// full drafting prompt was ~15k chars, which overflowed small (≈8k-token) models
+// — forcing the wasteful "retrying smaller" shrink loop — and, more importantly,
+// blew a free-tier tokens-per-minute quota so the run stalled and shipped
+// "blocked". Capping the blocks keeps the whole request small enough to fit on
+// the FIRST attempt and to stay under a per-minute budget. The claim ledger
+// (already capped at 12 claims) is kept in full because it is the instruction;
+// the extraction detail, digests, and repair body are the parts that grow.
+const SECTION_EXTRACTION_BUDGET = 5000;
+const SECTION_PRIOR_DIGEST_BUDGET = 1200;
+const SECTION_SPECIALIST_DIGEST_BUDGET = 900;
+const SECTION_CURRENT_BODY_BUDGET = 1600;
+
+function trimTo(text: string, budget: number): string {
+  return text.length <= budget ? text : `${text.slice(0, budget).trimEnd()}…`;
+}
+
+// Keep the most relevant extractions up to a character budget, ALWAYS keeping at
+// least the first, and note how many more remain in the evidence table so the
+// model knows the corpus is larger than the excerpt it was handed.
+function cappedExtractionBlock(relevant: EvidenceExtraction[]): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (const extraction of relevant) {
+    const line = formatExtraction(extraction);
+    if (lines.length > 0 && used + line.length > SECTION_EXTRACTION_BUDGET) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  const dropped = relevant.length - lines.length;
+  if (dropped > 0) {
+    lines.push(
+      `(+${dropped} further retrieved record(s) for this section are summarised in the evidence table and the source-yield counts above; cite only the [S#] listed here.)`,
+    );
+  }
+  return lines.join('\n');
+}
+
+// Assemble the section drafting prompt with every variable block capped to its
+// budget, so the request fits a small context window and a free-tier per-minute
+// token quota on the first attempt. Pure and deterministic — unit-tested for
+// size without a model call.
+export function buildSectionUserPrompt(opts: {
+  question: string;
+  section: PaperBlueprint['sections'][number];
+  claims: ClaimLedgerEntry[];
+  extractions: EvidenceExtraction[];
+  specialistDigest: string;
+  datasetBlock: string;
+  priorDigest: string;
+  currentBody?: string[];
+  evidenceGap?: string;
+  methodsNotes?: string;
+}): string {
+  const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
+  const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
+  const claimsBlock = opts.claims.map(formatClaim).join('\n');
+  const extractionBlock = cappedExtractionBlock(relevantExtractions);
+  const current = opts.currentBody?.length
+    ? `\nCurrent draft to repair:\n${trimTo(opts.currentBody.join('\n\n'), SECTION_CURRENT_BODY_BUDGET)}\n`
+    : '';
+  const gapNote = opts.evidenceGap ? `\nEVIDENCE GAP — MANDATORY HONESTY:\n${opts.evidenceGap}\n` : '';
+  const methodsNote =
+    opts.methodsNotes && opts.section.heading.toLowerCase() === 'methods'
+      ? `\nDETERMINISTIC PIPELINE FACTS — expand these; do not invent alternatives:\n${opts.methodsNotes}\n`
+      : '';
+  const hasSynthetic = opts.extractions.some((e) => e.sourceMarker.startsWith('[P'));
+  const syntheticIsolation = hasSynthetic
+    ? `
+AUTHOR-SUPPLIED TRIALS ([P#]):
+These trials were supplied by the user, not retrieved from a database. Describe them using ONLY their provided statistics and title. Do NOT import population details, eligibility criteria, or subgroup descriptions from retrieved [S#] sources into an [P#] trial description.`
+    : '';
+  return `Topic: ${opts.question}
+${gapNote}
+Section: ${opts.section.heading}
+Intent: ${opts.section.intent}
+Target: ${opts.section.targetWords} | Min: ${opts.section.minWords}
+Markers: ${[...sourceMarkers].join(', ') || '(none)'}
+${methodsNote}
+CLAIM LEDGER:
+${claimsBlock || 'No direct claims. Write a transparent evidence-gap section.'}
+
+EXTRACTIONS:
+${extractionBlock || 'No direct extractions.'}
+${syntheticIsolation}
+
+Source yield: ${sourceYieldBlock(opts.extractions)}
+
+Agents: ${trimTo(opts.specialistDigest, SECTION_SPECIALIST_DIGEST_BUDGET)}
+
+Dataset: ${opts.datasetBlock}
+
+Prior sections: ${trimTo(opts.priorDigest, SECTION_PRIOR_DIGEST_BUDGET)}
+${current}
+Write ${opts.section.heading} now. Start with the first sentence — no heading, no number. Cover each claim once, in depth; do NOT repeat, restate, or pad to reach a length. Every sentence must trace to a claim or extraction.
+STATISTICS LOCK: attach a hazard/odds/risk ratio, confidence interval, or p-value ONLY to the exact [S#] whose EXTRACTIONS above list that number. Never give a source a statistic it does not report, never cite the same source's estimate two different ways, and never invent a number to sound precise. If no effect sizes exist, state that limitation clearly, then compensate with rich contextual discussion.`;
+}
+
 async function draftLedgerSection(opts: {
   model: string;
   question: string;
@@ -1733,45 +1831,18 @@ async function draftLedgerSection(opts: {
 }): Promise<string[]> {
   if (opts.signal?.aborted) throw new Error('Run stopped by user');
   const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
-  const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
-  const claimsBlock = opts.claims.map(formatClaim).join('\n');
-  const extractionBlock = relevantExtractions.map(formatExtraction).join('\n');
-  const current = opts.currentBody?.length ? `\nCurrent draft to repair:\n${opts.currentBody.join('\n\n')}\n` : '';
-  const gapNote = opts.evidenceGap ? `\nEVIDENCE GAP — MANDATORY HONESTY:\n${opts.evidenceGap}\n` : '';
-  const methodsNote =
-    opts.methodsNotes && opts.section.heading.toLowerCase() === 'methods'
-      ? `\nDETERMINISTIC PIPELINE FACTS — expand these; do not invent alternatives:\n${opts.methodsNotes}\n`
-      : '';
-  const hasSynthetic = opts.extractions.some((e) => e.sourceMarker.startsWith('[P'));
-  const syntheticIsolation = hasSynthetic
-    ? `
-AUTHOR-SUPPLIED TRIALS ([P#]):
-These trials were supplied by the user, not retrieved from a database. Describe them using ONLY their provided statistics and title. Do NOT import population details, eligibility criteria, or subgroup descriptions from retrieved [S#] sources into an [P#] trial description.`
-    : '';
-  const userPrompt = `Topic: ${opts.question}
-${gapNote}
-Section: ${opts.section.heading}
-Intent: ${opts.section.intent}
-Target: ${opts.section.targetWords} | Min: ${opts.section.minWords}
-Markers: ${[...sourceMarkers].join(', ') || '(none)'}
-${methodsNote}
-CLAIM LEDGER:
-${claimsBlock || 'No direct claims. Write a transparent evidence-gap section.'}
-
-EXTRACTIONS:
-${extractionBlock || 'No direct extractions.'}
-${syntheticIsolation}
-
-Source yield: ${sourceYieldBlock(opts.extractions)}
-
-Agents: ${opts.specialistDigest}
-
-Dataset: ${opts.datasetBlock}
-
-Prior sections: ${opts.priorDigest}
-${current}
-Write ${opts.section.heading} now. Start with the first sentence — no heading, no number. Cover each claim once, in depth; do NOT repeat, restate, or pad to reach a length. Every sentence must trace to a claim or extraction.
-STATISTICS LOCK: attach a hazard/odds/risk ratio, confidence interval, or p-value ONLY to the exact [S#] whose EXTRACTIONS above list that number. Never give a source a statistic it does not report, never cite the same source's estimate two different ways, and never invent a number to sound precise. If no effect sizes exist, state that limitation clearly, then compensate with rich contextual discussion.`;
+  const userPrompt = buildSectionUserPrompt({
+    question: opts.question,
+    section: opts.section,
+    claims: opts.claims,
+    extractions: opts.extractions,
+    specialistDigest: opts.specialistDigest,
+    datasetBlock: opts.datasetBlock,
+    priorDigest: opts.priorDigest,
+    ...(opts.currentBody ? { currentBody: opts.currentBody } : {}),
+    ...(opts.evidenceGap ? { evidenceGap: opts.evidenceGap } : {}),
+    ...(opts.methodsNotes ? { methodsNotes: opts.methodsNotes } : {}),
+  });
   const reply = await callModel(
     opts.model,
     SECTION_SYSTEM,

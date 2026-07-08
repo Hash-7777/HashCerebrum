@@ -7,6 +7,7 @@ import {
   buildMethodsSection,
   buildPaperBlueprint,
   buildPaperOutline,
+  buildSectionUserPrompt,
   extractBoundEffects,
   extractEvidenceFromRecords,
   isSubstantiveAbstract,
@@ -601,5 +602,85 @@ describe('paper pipeline claim ledger and QA', () => {
     expect(artifact.tables.map((table) => table.id)).toContain('table-claim-ledger');
     expect(artifact.statistics.computedAnalyses).toContain('claim_ledger');
     expect(artifact.statistics.extractedNumericStatisticCount).toBeGreaterThan(0);
+  });
+});
+
+describe('buildSectionUserPrompt (free-tier prompt budget)', () => {
+  const section = {
+    heading: 'Clinical Evidence and Safety Outcomes',
+    intent: 'Present the clinical evidence.',
+    requiredClaimIds: [],
+    requiredSourceMarkers: [],
+    targetWords: '900–1200 words',
+    minWords: 750,
+  };
+
+  const extraction = (i: number) => ({
+    id: `s${i}`,
+    sourceMarker: `[S${i}]`,
+    evidenceIndex: i,
+    source: 'pubmed' as const,
+    title: `A reasonably long study title number ${i} about the intervention and its measured cardiovascular outcomes`,
+    year: '2024',
+    identifiers: { pmid: `${1000000 + i}`, doi: `10.1000/study.${i}` },
+    studyDesign: 'randomized clinical trial',
+    population: 'adults with type 2 diabetes and established cardiovascular disease',
+    exposureOrIntervention: 'an SGLT2 inhibitor at the standard licensed dose',
+    comparator: 'placebo added to guideline-directed therapy',
+    outcomes: ['heart failure hospitalization', 'cardiovascular death'],
+    sampleSize: 'n=4000',
+    effectValues: [{ label: 'hazard ratio', value: '0.79', sourceText: 'HR 0.79 (95% CI 0.69-0.89)' }],
+    limitations: ['open-label extension', 'industry funded'],
+    keyFinding: `Study ${i} reported a reduction in heart failure hospitalization with the intervention versus placebo`,
+    trusted: true,
+  });
+
+  // 40 relevant extractions — the uncapped block would be well over the budget.
+  const extractions = Array.from({ length: 40 }, (_, i) => extraction(i + 1));
+  const claims = extractions.slice(0, 12).map((e, i) => ({
+    id: `c${i}`,
+    claim: `Claim ${i}: the intervention reduced heart failure hospitalization`,
+    supportingSources: [e.sourceMarker],
+    sectionTarget: section.heading,
+    evidenceStrength: 'strong' as const,
+    contradictionNotes: [],
+    numericSupport: [],
+  }));
+
+  it('keeps the section prompt within a small-model budget even with many records', () => {
+    const prompt = buildSectionUserPrompt({
+      question: 'Do SGLT2 inhibitors reduce heart failure hospitalization in type 2 diabetes?',
+      section,
+      claims,
+      extractions,
+      specialistDigest: 'x'.repeat(4000),
+      datasetBlock: '(no uploaded dataset was supplied)',
+      priorDigest: 'y'.repeat(4000),
+    });
+    // Fits comfortably in an ~8k-token context with room for a 5.8k-token reply.
+    expect(prompt.length).toBeLessThan(12_000);
+    // The claim ledger (the instruction) is preserved in full.
+    expect(prompt).toContain('Claim 0:');
+    expect(prompt).toContain('Claim 11:');
+    // At least the top extraction survives, and the rest are acknowledged.
+    expect(prompt).toContain('[S1]');
+    expect(prompt).toMatch(/\+\d+ further retrieved record/);
+    // The trimmed digests do not blow the budget.
+    expect(prompt).not.toContain('y'.repeat(2000));
+  });
+
+  it('does not truncate when the corpus is small (no spurious "further records" note)', () => {
+    const prompt = buildSectionUserPrompt({
+      question: 'Q',
+      section,
+      claims: claims.slice(0, 2),
+      extractions: extractions.slice(0, 2),
+      specialistDigest: 'agents',
+      datasetBlock: '(none)',
+      priorDigest: 'prior',
+    });
+    expect(prompt).not.toMatch(/further retrieved record/);
+    expect(prompt).toContain('[S1]');
+    expect(prompt).toContain('[S2]');
   });
 });
