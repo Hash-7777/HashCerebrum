@@ -224,46 +224,102 @@ describe('title & keyword cleanup', () => {
     const wordCount = (body: string[]) =>
       body.join(' ').split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
 
-    it('meets the Methods minimum length without any model call', () => {
-      // The blueprint requires Methods >= 500 words; a code-generated section must
-      // clear that on its own so it never trips the section-too-short gate.
-      expect(wordCount(buildMethodsSection())).toBeGreaterThanOrEqual(500);
+    const evi = (source: string) => ({
+      source: source as 'pubmed',
+      title: `Record from ${source}`,
+      year: 2024,
+      authors: ['A Researcher'],
+      identifiers: {},
+      snippet: 's',
+      fetchedAt: new Date(0).toISOString(),
+      provenanceHash: `h-${source}-${Math.random()}`,
+    });
+    const ext = (marker: string, source: string, design: string, outcomes: string[], keyFinding: string) => ({
+      id: marker,
+      sourceMarker: marker,
+      evidenceIndex: 0,
+      source: source as 'pubmed',
+      title: `Study ${marker}`,
+      year: '2024',
+      identifiers: {},
+      studyDesign: design,
+      population: 'adults with type 2 diabetes',
+      exposureOrIntervention: 'SGLT2 inhibitor',
+      comparator: 'placebo',
+      outcomes,
+      sampleSize: 'n=1000',
+      effectValues: [{ label: 'finding', value: '', sourceText: '' }],
+      limitations: [],
+      keyFinding,
+      trusted: true,
     });
 
-    it('names the real pipeline honestly and stays on-topic', () => {
-      const text = buildMethodsSection().join(' ');
-      // The six real databases are named…
-      for (const db of ['PubMed', 'Europe PMC', 'OpenAlex', 'ClinicalTrials.gov', 'openFDA', 'RxNorm']) {
-        expect(text).toContain(db);
-      }
-      // …and the honest disclaimers are present.
+    // A review WITH two comparable hazard ratios (a pooled meta-analysis is real).
+    const sglt2Q = 'Write a paper on whether SGLT2 inhibitors reduce heart failure hospitalization in type 2 diabetes';
+    const sglt2Evidence = [evi('pubmed'), evi('pubmed'), evi('europepmc')];
+    const sglt2Extractions = [
+      ext('[S1]', 'pubmed', 'randomized controlled trial', ['heart failure hospitalization'], 'hazard ratio 0.80 (95% CI 0.74-0.86)'),
+      ext('[S2]', 'europepmc', 'systematic review and meta-analysis', ['cardiovascular death'], 'hazard ratio 0.76 (95% CI 0.72-0.81)'),
+      ext('[S3]', 'pubmed', 'cohort study', ['heart failure hospitalization'], 'an observational reduction was seen'),
+    ];
+    // A DIFFERENT review, minimal evidence, no poolable effects (narrative only).
+    const warfarinQ = 'Write a paper on warfarin and NSAID bleeding risk in older adults';
+    const warfarinEvidence = [evi('pubmed')];
+    const warfarinExtractions = [ext('[S1]', 'pubmed', 'cross-sectional study', ['gastrointestinal bleeding'], 'no confidence interval reported')];
+
+    it('clears the 500-word minimum even on minimal evidence, without a model call', () => {
+      expect(wordCount(buildMethodsSection(warfarinQ, warfarinEvidence, warfarinExtractions))).toBeGreaterThanOrEqual(500);
+    });
+
+    it('reflects THIS study — its topic, the databases that contributed, the design mix, the outcomes', () => {
+      const text = buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions).join(' ');
+      expect(text.toLowerCase()).toContain('sglt2'); // the actual topic
+      expect(text).toContain('PubMed/MEDLINE (2)'); // real source + count
+      expect(text).toContain('Europe PMC (1)');
+      expect(text).toContain('3 record(s)'); // real retrieved count
+      expect(text).toMatch(/randomised controlled trial/); // real design mix
+      expect(text).toContain('heart failure hospitalization'); // real outcome tracked
+    });
+
+    it('is NOT a fixed template — two different reviews produce different Methods', () => {
+      const a = buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions).join(' ');
+      const b = buildMethodsSection(warfarinQ, warfarinEvidence, warfarinExtractions).join(' ');
+      expect(a).not.toEqual(b);
+      expect(a.toLowerCase()).toContain('sglt2');
+      expect(b.toLowerCase()).toContain('warfarin');
+      expect(b).not.toContain('PubMed/MEDLINE (2)'); // warfarin had 1 pubmed record
+    });
+
+    it('states a real pooled meta-analysis only when the evidence supports it', () => {
+      const pooled = buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions).join(' ');
+      expect(pooled).toContain('DerSimonian');
+      expect(pooled).toMatch(/pooled estimate and forest plot appear/);
+
+      const narrative = buildMethodsSection(warfarinQ, warfarinEvidence, warfarinExtractions).join(' ');
+      expect(narrative).toMatch(/did not report enough comparable effect measures/);
+      expect(narrative).not.toContain('DerSimonian');
+    });
+
+    it('stays honest — no drift, no domain split, competitors only named as NOT searched', () => {
+      const text = buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions).join(' ');
       expect(text).toMatch(/rather than a hand-curated systematic review/i);
       expect(text).toMatch(/no GRADE certainty|no formal risk-of-bias/i);
-      expect(text).toContain('DerSimonian');
-      // Never drifts into a conclusion, and never states a fabricated record count.
       expect(text.toLowerCase()).not.toContain('in conclusion');
-      expect(text).not.toMatch(/\b\d{2,}\s+(?:records|studies)\s+were\s+(?:retrieved|identified)/i);
-      // Databases the pipeline does NOT use must not be claimed as searched.
-      expect(text).toMatch(/Embase, Scopus/); // only ever named as NOT searched
+      expect(text).toContain('ClinicalTrials.gov');
+      expect(text).not.toContain('ClinicalTrials. gov');
+      expect(text).toMatch(/Embase, Scopus/);
       expect(text).not.toMatch(/searched\s+Embase|queried\s+Scopus/i);
     });
 
-    it('does not leak a domain-name split into "ClinicalTrials. gov"', () => {
-      const text = buildMethodsSection().join(' ');
-      expect(text).toContain('ClinicalTrials.gov');
-      expect(text).not.toContain('ClinicalTrials. gov');
-    });
-
-    it('appends an evidence-gap note when one is supplied', () => {
+    it('appends an evidence-gap note only when supplied, and is deterministic', () => {
       const gap = 'The retrieved records contain NO direct evidence for: pediatric dosing.';
-      const body = buildMethodsSection(gap);
-      expect(body[body.length - 1]).toBe(gap);
-      // …and omits it entirely when none is supplied.
-      expect(buildMethodsSection()).not.toContain(gap);
-    });
-
-    it('is fully deterministic — identical output every call', () => {
-      expect(buildMethodsSection()).toEqual(buildMethodsSection());
+      const withGap = buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions, gap);
+      expect(withGap[withGap.length - 1]).toBe(gap);
+      expect(buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions)).not.toContain(gap);
+      // Same inputs → identical output.
+      expect(buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions)).toEqual(
+        buildMethodsSection(sglt2Q, sglt2Evidence, sglt2Extractions),
+      );
     });
   });
 

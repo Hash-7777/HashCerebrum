@@ -29,6 +29,7 @@ import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass, splitSentences } from './honestyGuard';
 import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
+import { buildEvidenceMeta } from './metaAnalysis';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
@@ -64,63 +65,142 @@ function deterministicMethodsNotes(
   );
 }
 
-// Fully deterministic Methods section for an automated evidence review (no
-// uploaded dataset). The Methods narrates the FIXED, real pipeline — it is not a
-// finding to be cited — so generating it in code rather than asking a model to
-// write it removes drift (a real run produced a Methods section that trailed off
-// into "In conclusion…" and reused a study sample size as a record count),
-// guarantees an honest and identical description on every run regardless of
-// rate limits, and saves one model call on free-tier quotas. Record counts are
-// deliberately kept out of this prose — they live in the study-selection figure
-// — so a sample size can never be mistaken for a record count here. No inline
-// [S#] citations: the section describes the pipeline, not the evidence, so
-// 'Methods' is exempt from the section-missing-citation gate.
-export function buildMethodsSection(evidenceGap?: string): string[] {
+const SOURCE_DISPLAY_NAME: Record<string, string> = {
+  pubmed: 'PubMed/MEDLINE',
+  europepmc: 'Europe PMC',
+  openalex: 'OpenAlex',
+  clinicaltrials: 'ClinicalTrials.gov',
+  clinicaltrials_gov: 'ClinicalTrials.gov',
+  openfda: 'openFDA',
+  rxnorm: 'RxNorm',
+  semantic_scholar: 'Semantic Scholar',
+  gwas_catalog: 'GWAS Catalog',
+  clinvar: 'ClinVar',
+};
+function displaySourceName(source: string): string {
+  return SOURCE_DISPLAY_NAME[source] ?? source.replace(/_/g, ' ');
+}
+
+// Bucket a free-text study design into one reporting category, so the Methods can
+// state the actual design mix of THIS review's evidence.
+function classifyStudyDesign(design: string): string {
+  const t = design.toLowerCase();
+  if (/meta-analys|systematic review/.test(t)) return 'systematic reviews or meta-analyses';
+  if (/random|\brct\b/.test(t)) return 'randomised controlled trials';
+  if (/cohort|registry|prospective|retrospective|longitudinal/.test(t)) return 'cohort or registry studies';
+  if (/case[-\s]control/.test(t)) return 'case-control studies';
+  if (/cross[-\s]sectional|survey/.test(t)) return 'cross-sectional studies';
+  if (/case (report|series)/.test(t)) return 'case reports or series';
+  if (/guideline|regulatory|label|terminology/.test(t)) return 'regulatory or guideline records';
+  return 'other indexed records';
+}
+
+function joinList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0]!;
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+// Deterministic Methods section for an automated evidence review (no uploaded
+// dataset). It is generated in code — not by a model — so it never drifts into a
+// conclusion, never reuses a sample size as a record count, is identical for the
+// same run regardless of rate limits, and saves one model call on free-tier
+// quotas. It is NOT a fixed template: the constant part honestly describes the
+// pipeline (which really is the same each run), but the study-specific facts —
+// the actual topic, the databases that CONTRIBUTED records and their counts, the
+// real design mix, the outcomes tracked, and whether a pooled meta-analysis was
+// computable for THIS evidence — are woven in from the retrieved records, so two
+// different reviews produce genuinely different Methods. No inline [S#] citations
+// (it describes the pipeline, not findings), hence 'Methods' is citation-exempt.
+export function buildMethodsSection(
+  question: string,
+  evidence: EvidenceItem[],
+  extractions: EvidenceExtraction[],
+  evidenceGap?: string,
+): string[] {
+  const topic = titleTopic(question) || 'the review question';
+
+  // Databases that actually returned records, with counts, most-productive first.
+  const sourceCounts = new Map<string, number>();
+  for (const item of evidence) sourceCounts.set(item.source, (sourceCounts.get(item.source) ?? 0) + 1);
+  const sourceList = [...sourceCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => `${displaySourceName(source)} (${count})`);
+  const sourcesSentence = sourceList.length
+    ? `Evidence for this review comprised ${evidence.length} record(s) retrieved from ${joinList(sourceList)}.`
+    : `Evidence for this review was retrieved from the pipeline's biomedical sources.`;
+
+  // Actual study-design mix of the retrieved evidence.
+  const designCounts = new Map<string, number>();
+  for (const ex of extractions) {
+    const bucket = classifyStudyDesign(ex.studyDesign);
+    designCounts.set(bucket, (designCounts.get(bucket) ?? 0) + 1);
+  }
+  const designList = [...designCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([design, count]) => `${count} ${design}`);
+  const designSentence = designList.length
+    ? `Across the ${extractions.length} structured evidence item(s) extracted, the design mix comprised ${joinList(designList)}.`
+    : 'The retrieved records were parsed into structured evidence items where sufficient metadata was present.';
+
+  // Outcomes actually tracked across the evidence.
+  const outcomeSet = new Set<string>();
+  for (const ex of extractions) for (const outcome of ex.outcomes) if (outcome.trim()) outcomeSet.add(outcome.trim());
+  const outcomes = [...outcomeSet].slice(0, 6);
+  const outcomesSentence = outcomes.length
+    ? `The outcomes tracked across the retrieved evidence included ${joinList(outcomes)}.`
+    : '';
+
+  // Whether a quantitative pooled meta-analysis was computable for THIS evidence.
+  const metaComputable = buildEvidenceMeta(extractions)?.interpretable === true;
+  const synthesisSentence = metaComputable
+    ? 'Because at least two records reported a comparable effect measure with a confidence interval, an ' +
+      'inverse-variance random-effects meta-analysis (DerSimonian–Laird) was computed in-app on the ' +
+      'logarithmic scale and back-transformed for display, together with the I² heterogeneity statistic ' +
+      'and a prediction interval; the pooled estimate and forest plot appear in the results, and the ' +
+      'pooling is performed deterministically in code, independent of any language model.'
+    : 'The retrieved records did not report enough comparable effect measures with confidence intervals ' +
+      'to support a quantitative pooled meta-analysis, so the synthesis is narrative; where individual ' +
+      'effect estimates were reported they are described with their source rather than pooled.';
+
   const paragraphs = [
-    'This manuscript is an automated, source-grounded evidence review rather than a hand-curated ' +
-      'systematic review conducted under formal PRISMA methodology. The research question was decomposed ' +
-      'into concept-scoped sub-queries — covering the population, the exposure or intervention, the ' +
-      'comparator, and the outcomes of interest — and dispatched to a team of specialist agents that ' +
-      'queried authoritative biomedical databases in parallel. Every outbound request passed through a ' +
-      'guarded, allowlisted network layer and was recorded in a tamper-evident audit log, so the ' +
-      'provenance of each retrieved record is reproducible. No manual literature screening, no dual ' +
-      'independent reviewers, and no consensus adjudication were involved; the entire retrieval, ' +
-      'extraction, and synthesis workflow was executed programmatically and is described here exactly as ' +
-      'it operates.',
-    'Evidence was drawn from six biomedical sources: PubMed/MEDLINE (National Library of Medicine), ' +
-      'Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, and RxNorm. No other database was queried — in ' +
-      'particular, Embase, Scopus, Cochrane CENTRAL, Ovid, and Web of Science were not searched, and ' +
-      'their absence is a coverage limitation. The pipeline did not construct a fixed Boolean search ' +
-      'string, restrict results by a specific search date, or apply any machine-learning classifier, ' +
-      'gradient-boosted screening model, labelled training set, or similarity threshold; each specialist ' +
-      'issued concept key terms to the sources it owns. All sources are reached through free, keyless ' +
-      'public interfaces, so the search can be reproduced without institutional subscriptions.',
+    `This automated evidence review examined ${topic}. It is a source-grounded synthesis rather than a ` +
+      'hand-curated systematic review conducted under formal PRISMA methodology: the question was ' +
+      'decomposed into concept-scoped sub-queries — covering the population, the exposure or ' +
+      'intervention, the comparator, and the outcomes of interest — and dispatched to a team of ' +
+      'specialist agents that queried authoritative biomedical databases in parallel. Every outbound ' +
+      'request passed through a guarded, allowlisted network layer and was recorded in a tamper-evident ' +
+      'audit log, so the provenance of each retrieved record is reproducible. No manual literature ' +
+      'screening, no dual independent reviewers, and no consensus adjudication were involved; the entire ' +
+      'retrieval, extraction, and synthesis workflow was executed programmatically and is described here ' +
+      'exactly as it operated.',
+    `${sourcesSentence} The pipeline draws only from a fixed allowlist — PubMed/MEDLINE, Europe PMC, ` +
+      'OpenAlex, ClinicalTrials.gov, openFDA, and RxNorm — and no other database was queried; in ' +
+      'particular, Embase, Scopus, Cochrane CENTRAL, Ovid, and Web of Science were not searched, which ' +
+      'is a coverage limitation. The pipeline did not construct a fixed Boolean search string, restrict ' +
+      'results by a specific search date, or apply any machine-learning classifier, gradient-boosted ' +
+      'screening model, labelled training set, or similarity threshold; each specialist issued concept ' +
+      'key terms to the sources it owns, through free and keyless public interfaces, so the search can ' +
+      'be reproduced without institutional subscriptions.',
     'Records were eligible when they were English-language biomedical items carrying a title and an ' +
-      'abstract or structured metadata. Included study designs spanned randomised controlled trials, ' +
-      'systematic reviews and meta-analyses, cohort and registry studies, cross-sectional and ' +
-      'case-control studies, and regulatory or drug-terminology records retained as context. Duplicate ' +
-      'records were removed by record identifier (DOI or PMID) and by an identity hash over title, first ' +
-      'author, and publication year, so the same study retrieved from more than one source was counted ' +
-      'once. Retained records were ranked by how many distinct question concepts each one addressed, so ' +
-      'multi-concept records led and single-concept noise sank. The number of records identified, ' +
-      'de-duplicated, and cited is reported in the study-selection figure rather than restated in this ' +
-      'prose, and a study sample size is never reused as a record count.',
-    'Each retained record was parsed into a structured evidence item capturing its study design, ' +
-      'population, exposure or intervention, comparator, reported outcomes, and any effect estimates — ' +
-      'hazard ratios, odds ratios, risk ratios, mean differences, confidence intervals, and p-values — ' +
-      'transcribed exactly as reported in the source text. A claim ledger then mapped every extracted ' +
-      'finding to its source marker and graded its evidence strength on a fixed scale: strong for ' +
-      'randomised trials, systematic reviews, and meta-analyses; moderate for cohort and registry ' +
-      'studies; weak for cross-sectional and single indexed records; and context for regulatory or ' +
-      'terminology sources. The manuscript was compiled only from approved ledger entries, and any ' +
-      'statistic attributed to a source that does not report it was removed while the surrounding claim ' +
-      'was kept in words.',
-    'Synthesis was narrative and organised by evidence strength. Where at least two records reported a ' +
-      'comparable effect measure with a confidence interval, an inverse-variance random-effects ' +
-      'meta-analysis (DerSimonian–Laird) was computed in-app on the logarithmic scale and ' +
-      'back-transformed for display, together with the I² heterogeneity statistic and a prediction ' +
-      'interval; this pooling is performed deterministically in code, independent of any language model. ' +
-      'No formal risk-of-bias instrument (such as the Cochrane risk-of-bias tool) and no GRADE certainty ' +
+      `abstract or structured metadata. ${designSentence} Duplicate records were removed by record ` +
+      'identifier (DOI or PMID) and by an identity hash over title, first author, and publication year, ' +
+      'so the same study retrieved from more than one source was counted once, and retained records were ' +
+      'ranked by how many distinct question concepts each one addressed, so multi-concept records led ' +
+      'and single-concept noise sank. The full identification, de-duplication, and citation flow is ' +
+      'shown in the study-selection figure, and a study sample size is never reused as a record count.',
+    'Each structured evidence item captured its study design, population, exposure or intervention, ' +
+      'comparator, reported outcomes, and any effect estimates — hazard ratios, odds ratios, risk ' +
+      'ratios, mean differences, confidence intervals, and p-values — transcribed exactly as reported in ' +
+      `the source text. ${outcomesSentence} A claim ledger then mapped every extracted finding to its ` +
+      'source marker and graded its evidence strength on a fixed scale: strong for randomised trials, ' +
+      'systematic reviews, and meta-analyses; moderate for cohort and registry studies; weak for ' +
+      'cross-sectional and single indexed records; and context for regulatory or terminology sources. ' +
+      'The manuscript was compiled only from approved ledger entries, and any statistic attributed to a ' +
+      'source that does not report it was removed while the surrounding claim was kept in words.',
+    `Synthesis was narrative and organised by evidence strength. ${synthesisSentence} No formal ` +
+      'risk-of-bias instrument (such as the Cochrane risk-of-bias tool) and no GRADE certainty ' +
       'assessment were applied. Because retrieval operated on titles, abstracts, and structured metadata ' +
       'rather than full texts, the extracted effect estimates may differ from the final published ' +
       'analyses, and this is acknowledged as a limitation of the approach.',
@@ -2029,7 +2109,12 @@ async function draftOneSection(
   if (isMethods && !opts.dataset) {
     return {
       heading: blueprintSection.heading,
-      body: buildMethodsSection(shouldInjectGap ? opts.evidenceGap : undefined),
+      body: buildMethodsSection(
+        opts.question,
+        opts.evidence,
+        opts.extractions,
+        shouldInjectGap ? opts.evidenceGap : undefined,
+      ),
     };
   }
   const methodsNotes = isMethods
