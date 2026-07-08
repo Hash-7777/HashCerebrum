@@ -313,13 +313,19 @@ export function prismaFlowSvg(
     (sub ? `<text x="320" y="${y + 42}" text-anchor="middle" fill="#9fb0c7" font-size="10.5">${escXml(sub)}</text>` : '');
   const side = (y: number, text: string) =>
     `<rect x="516" y="${y}" width="190" height="40" rx="8" fill="#0d1622" stroke="#3a3145" stroke-dasharray="4 3"/><text x="611" y="${y + 24}" text-anchor="middle" fill="#c6a15a" font-size="10.5">${escXml(text)}</text>`;
+  // Arrowheads are drawn as static filled triangles rather than an SVG <marker>.
+  // The Typst PDF renderer sanitises every figure SVG through a tag allowlist
+  // that does NOT include <marker>, so a marker-based arrow made the sanitizer
+  // silently drop the ENTIRE PRISMA figure — the diagram never reached the PDF.
+  // A <path> triangle uses only allowlisted tags, so the figure now survives.
   const down = (y1: number, y2: number) =>
-    `<path d="M320 ${y1} L320 ${y2}" stroke="#7f8ea8" stroke-width="2" marker-end="url(#pahead)"/>`;
+    `<line x1="320" y1="${y1}" x2="320" y2="${y2}" stroke="#7f8ea8" stroke-width="2"/>` +
+    `<path d="M320 ${y2} L315 ${y2 - 7} L325 ${y2 - 7} Z" fill="#7f8ea8"/>`;
   const branch = (y: number) =>
-    `<path d="M490 ${y} L516 ${y}" stroke="#7f8ea8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#pahead)"/>`;
+    `<line x1="490" y1="${y}" x2="516" y2="${y}" stroke="#7f8ea8" stroke-width="1.5" stroke-dasharray="4 3"/>` +
+    `<path d="M516 ${y} L509 ${y - 5} L509 ${y + 5} Z" fill="#7f8ea8"/>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 356" role="img" font-family="DejaVu Sans Mono, Libertinus Serif">` +
-    `<defs><marker id="pahead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#7f8ea8"/></marker></defs>` +
     `<rect width="720" height="356" rx="14" fill="#08111d"/>` +
     `<text x="16" y="24" fill="#f1f6fc" font-size="15" font-weight="700">Study selection (PRISMA-style automated flow)</text>` +
     box(44, `Records identified from databases (n = ${total})`, sources) +

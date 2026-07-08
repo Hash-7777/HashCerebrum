@@ -855,6 +855,25 @@ mod tests {
     }
 
     #[test]
+    fn safe_svg_drops_marker_but_keeps_path_arrowheads() {
+        // The PRISMA study-selection figure drew its flow arrows with an SVG
+        // <marker>, which is NOT on the allowlist — so the sanitizer silently
+        // dropped the whole figure and it never reached the PDF. Arrowheads must
+        // be static <path> triangles instead. This test locks both directions:
+        // a marker-based flow is rejected, the path-based flow is accepted.
+        let marker_flow = r##"<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="a"><path d="M0 0 L6 3 L0 6 z"/></marker></defs><path d="M320 10 L320 30" marker-end="url(#a)"/></svg>"##;
+        assert!(
+            safe_svg_bytes(marker_flow).is_none(),
+            "an <marker>-based flow arrow must be rejected (documents why PRISMA avoids it)"
+        );
+        let path_flow = r##"<svg xmlns="http://www.w3.org/2000/svg"><line x1="320" y1="10" x2="320" y2="30" stroke="#7f8ea8"/><path d="M320 30 L315 23 L325 23 Z" fill="#7f8ea8"/></svg>"##;
+        assert!(
+            safe_svg_bytes(path_flow).is_some(),
+            "a <path>-triangle arrowhead must survive so the PRISMA figure reaches the PDF"
+        );
+    }
+
+    #[test]
     fn esc_heading_strips_typst_markup_including_brackets_and_tilde() {
         // # * _ ` $ < > @ \ were already stripped; [ ] ~ are Typst markup too
         // and must not survive into an inline heading.

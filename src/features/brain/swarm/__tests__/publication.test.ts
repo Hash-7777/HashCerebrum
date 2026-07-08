@@ -31,6 +31,26 @@ describe('prismaFlowSvg', () => {
     expect(svg).toContain('Duplicate records removed: 0');
     expect(svg).toContain('Records not cited: 0');
   });
+
+  it('uses only tags the Typst PDF sanitizer allows, so the figure is not dropped', () => {
+    // The Rust renderer (src-tauri/src/commands/manuscript.rs) sanitises each
+    // figure SVG against a tag allowlist that does NOT include <marker>. A
+    // marker-based arrow made the sanitizer silently drop the whole PRISMA
+    // figure from the PDF. Arrowheads must be drawn as <path> triangles.
+    const svg = prismaFlowSvg(41, 38, 26, { PubMed: 41 });
+    expect(svg).not.toContain('<marker');
+    expect(svg).not.toContain('marker-end');
+    // Arrowheads are present, drawn as filled path triangles.
+    expect(svg).toMatch(/<path d="M320 \d+ L\d+/); // downward flow arrows
+    // Every tag used is on the renderer's allowlist.
+    const allowed = new Set([
+      'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline',
+      'polygon', 'text', 'tspan', 'defs', 'use', 'clippath', 'mask',
+      'lineargradient', 'radialgradient', 'stop', 'title', 'desc', 'style',
+    ]);
+    const tags = [...svg.matchAll(/<\/?([a-zA-Z][a-zA-Z0-9]*)/g)].map((m) => m[1]!.toLowerCase());
+    for (const tag of tags) expect(allowed.has(tag)).toBe(true);
+  });
 });
 import { buildClaimLedger, extractEvidenceFromRecords } from '../paperPipeline';
 
