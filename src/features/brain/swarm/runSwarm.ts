@@ -139,6 +139,12 @@ const RELEVANCE_FILLER = new Set([
   'according', 'cure', 'cures', 'cured', 'curing', 'prove', 'proves', 'proving', 'proven', 'proof',
   'show', 'shows', 'showing', 'demonstrate', 'demonstrates', 'demonstrating', 'randomised',
   'randomized', 'controlled', 'trial', 'trials', 'study', 'studies',
+  // structural / study-type / label words — these describe the deliverable or the
+  // review type, never the medical subject, so they must never surface as an
+  // uncovered concept ("no records cover: title / systematic / impact" leaked
+  // from a 'Title:' label and the review-type words; "type" is the leftover of
+  // "type 2 diabetes" splitting on the digit).
+  'title', 'systematic', 'meta-analysis', 'metaanalysis', 'meta', 'impact', 'adults', 'adult', 'type',
 ]);
 
 // A few common medical concept synonyms so a record that uses "kidney" still

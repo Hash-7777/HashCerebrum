@@ -202,6 +202,20 @@ describe('title & keyword cleanup', () => {
     expect(kw).toContain('aspirin');
   });
 
+  it('drops structural label and study-type words (the "title, type, adults, systematic" leak)', () => {
+    // Real SGLT2 run leaked keywords: "title, impact, sglt2 inhibitors, heart
+    // failure hospitalization, adults, type, diabetes, systematic". The label
+    // word and review-type descriptors must never be keywords.
+    const kw = keywordsFrom(
+      'Title: The Impact of SGLT2 Inhibitors on Heart Failure Hospitalization in Adults with Type 2 Diabetes: A Systematic Review and Meta-Analysis',
+    );
+    for (const junk of ['title', 'impact', 'adults', 'type', 'systematic', 'meta-analysis', 'meta']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw.some((k) => k.includes('sglt2'))).toBe(true);
+    expect(kw.some((k) => k.includes('heart failure'))).toBe(true);
+  });
+
   it('leaves an already-clean topic intact', () => {
     expect(titleTopic('Anticoagulation in atrial fibrillation').toLowerCase()).toContain('anticoagulation');
   });

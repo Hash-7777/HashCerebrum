@@ -1179,6 +1179,13 @@ const NON_TOPIC_KEYWORDS = new Set([
   // and produced junk keywords like "effect sizes" and "p-values weigh".
   'effect', 'effects', 'size', 'sizes', 'confidence', 'interval', 'intervals', 'p-value', 'p-values',
   'pvalue', 'pvalues', 'significance', 'estimate', 'estimates', 'value', 'values',
+  // Structural / study-type / label words that describe the DELIVERABLE or the
+  // review TYPE, not the medical subject. "title" leaked from an explicit
+  // "Title:" label into the keyword line; "systematic"/"meta-analysis" name the
+  // review type; "impact" is a vague connective ("impact of X on Y"); "adults"
+  // is a generic population qualifier; "type" is a tokenization artifact left
+  // behind when "type 2 diabetes" splits on the digit.
+  'title', 'systematic', 'meta-analysis', 'metaanalysis', 'meta', 'impact', 'adults', 'adult', 'type',
 ]);
 
 // Connectors, articles, and request words that separate one keyword PHRASE from

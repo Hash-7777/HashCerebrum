@@ -240,6 +240,19 @@ describe('assessEvidenceSufficiency', () => {
     }
   });
 
+  it('never reports a structural label or study-type word as an uncovered concept', () => {
+    // Real SGLT2 run reported the evidence gap "no records cover: title" because
+    // the generated "Title:" label leaked into concept extraction. Label and
+    // review-type words must never surface as an uncovered concept.
+    const rawPrompt =
+      'Title: The Impact of SGLT2 Inhibitors on Heart Failure Hospitalization in Adults with Type 2 Diabetes: A Systematic Review and Meta-Analysis';
+    const evidence = [titled('SGLT2 inhibitors and heart failure hospitalization', 'sglt2 heart failure diabetes')];
+    const { uncovered } = assessEvidenceSufficiency(rawPrompt, evidence);
+    for (const junk of ['title', 'impact', 'adults', 'systematic', 'meta-analysis', 'meta']) {
+      expect(uncovered).not.toContain(junk);
+    }
+  });
+
   it('returns no note when every concept is covered', () => {
     const evidence = [
       titled('NSAIDs, warfarin and digoxin in young patients', 'nsaids warfarin digoxin young population'),
