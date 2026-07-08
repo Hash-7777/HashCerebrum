@@ -14,16 +14,19 @@
 // appraisal was applied"). Pure and deterministic — the honesty layer behaves
 // identically offline, on Ollama, and on cloud models, and is unit-testable.
 
-/** Split prose into sentences, keeping terminal punctuation. A period between
- *  two digits is a decimal point, NOT a sentence end, so "0.86" is never split
- *  into "0." + "86" (which the rejoin step then re-spaced into "0. 86" — a bug
- *  that mangled every decimal in an exported paper). The decimal point is
- *  protected during segmentation and restored immediately after. */
+/** Split prose into sentences, keeping terminal punctuation. A period that is
+ *  NOT followed by whitespace is an INTRA-TOKEN period, not a sentence end — a
+ *  real sentence boundary in prose is always followed by a space or the end of
+ *  the text. This protects decimals ("0.86" never becomes "0." + "86", which the
+ *  rejoin step re-spaced into "0. 86"), domain names ("ClinicalTrials.gov" never
+ *  becomes "ClinicalTrials. gov"), and abbreviations ("e.g.", "i.e.", "U.S.").
+ *  The protected periods are substituted for a sentinel during segmentation and
+ *  restored immediately after. */
 export function splitSentences(text: string): string[] {
-  const DECIMAL = String.fromCharCode(0xe000); // private-use sentinel, restored below
-  const guarded = text.replace(/(\d)\.(?=\d)/g, `$1${DECIMAL}`);
+  const DOT = String.fromCharCode(0xe000); // private-use sentinel, restored below
+  const guarded = text.replace(/(\S)\.(?=\S)/g, `$1${DOT}`);
   const parts = guarded.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) ?? (guarded.trim() ? [guarded.trim()] : []);
-  return parts.map((s) => s.split(DECIMAL).join('.'));
+  return parts.map((s) => s.split(DOT).join('.'));
 }
 
 // Dash class covering ASCII hyphen plus the dash variants the exporter emits —

@@ -221,6 +221,39 @@ describe('splitSentences', () => {
     // A real sentence boundary after a number still splits.
     expect(splitSentences('It was 0.86. Next point.')).toEqual(['It was 0.86.', ' Next point.']);
   });
+
+  it('does NOT split a domain name (the "ClinicalTrials. gov" bug)', () => {
+    // The period inside a domain is intra-token, not a sentence end.
+    expect(splitSentences('We searched PubMed and ClinicalTrials.gov for trials.')).toEqual([
+      'We searched PubMed and ClinicalTrials.gov for trials.',
+    ]);
+    // A real boundary after the domain still splits.
+    expect(splitSentences('We used ClinicalTrials.gov. Then we screened.')).toEqual([
+      'We used ClinicalTrials.gov.',
+      ' Then we screened.',
+    ]);
+  });
+
+  it('protects the intra-word period in an abbreviation like "e.g."', () => {
+    // "e.g" is never split into "e" + "g"; the trailing "g." before a space is a
+    // soft boundary that rejoins with a single space, so the abbreviation reads
+    // back correctly after an honesty round-trip.
+    const parts = splitSentences('Newer agents, e.g. empagliflozin, help.');
+    expect(parts.join('')).not.toMatch(/e\.\s*$|^\s*g\./); // "e." + "g" never appears
+    expect(applyHonestyPass('Newer agents, e.g. empagliflozin, help.')).toBe(
+      'Newer agents, e.g. empagliflozin, help.',
+    );
+  });
+});
+
+describe('applyHonestyPass — domain integrity (regression)', () => {
+  it('never re-spaces a database domain to "ClinicalTrials. gov"', () => {
+    const input =
+      'The automated search queried PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, OpenFDA, and RxNorm.';
+    const out = applyHonestyPass(input);
+    expect(out).toContain('ClinicalTrials.gov');
+    expect(out).not.toContain('ClinicalTrials. gov');
+  });
 });
 
 describe('applyHonestyPass — decimal integrity (regression)', () => {
