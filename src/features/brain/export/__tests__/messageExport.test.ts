@@ -12,6 +12,9 @@ import {
   stripGeneratedReferenceSections,
   stripResidualSourceMarkers,
 } from '../messageExport';
+import { buildPublicationArtifact } from '../../swarm/publication';
+import type { Manuscript } from '../../swarm/manuscript';
+import type { EvidenceExtraction } from '../../swarm/publicationTypes';
 
 describe('deriveDocumentTitle', () => {
   it('skips a bare "**Title:**" label and uses the real title line', () => {
@@ -377,5 +380,92 @@ describe('buildChatMarkdownExport', () => {
     ];
     const md = buildChatMarkdownExport(messages, meta);
     expect(md).not.toContain('### Execution Trace');
+  });
+});
+
+// Regression: the meta-analysis forest plot (and every figure that needs the
+// pipeline's evidence extractions / claim ledger) was silently dropped from
+// PDF / Word / Markdown export, because the export rebuilt the artifact with
+// buildPublicationArtifact(manuscript, citations) — no extractions. The pipeline
+// preserves those inputs on manuscript.publication; export must re-feed them.
+describe('export preserves the computed pipeline figures', () => {
+  function makeRatioExtraction(marker: string, keyFinding: string): EvidenceExtraction {
+    return {
+      id: marker,
+      sourceMarker: marker,
+      evidenceIndex: 0,
+      source: 'pubmed',
+      title: 'Test',
+      year: '2024',
+      identifiers: {},
+      studyDesign: 'randomized clinical trial',
+      population: 'adults with type 2 diabetes',
+      exposureOrIntervention: 'SGLT2 inhibitor',
+      comparator: 'placebo',
+      outcomes: ['heart failure hospitalization'],
+      sampleSize: 'n=1000',
+      effectValues: [{ label: 'finding', value: '', sourceText: '' }],
+      limitations: [],
+      keyFinding,
+      trusted: true,
+    };
+  }
+
+  const extractions: EvidenceExtraction[] = [
+    makeRatioExtraction('[S1]', 'hazard ratio 0.80 (95% CI 0.74-0.86)'),
+    makeRatioExtraction('[S2]', 'hazard ratio 0.76 (95% CI 0.72 to 0.81)'),
+    makeRatioExtraction('[S3]', 'hazard ratio 0.90 (95% CI 0.79-1.02)'),
+  ];
+
+  const evidence: EvidenceItem[] = [
+    {
+      source: 'pubmed',
+      title: 'SGLT2 inhibitors and heart failure hospitalization',
+      year: 2025,
+      authors: ['HashCerebrum test'],
+      identifiers: { pmid: '12345678' },
+      snippet: 'Synthetic citation.',
+      fetchedAt: new Date(0).toISOString(),
+      provenanceHash: 'meta-export-test',
+    },
+  ];
+
+  const baseManuscript: Manuscript = {
+    title: 'SGLT2 Inhibitors and Heart Failure Hospitalization in Type 2 Diabetes',
+    abstract: { background: 'b', objective: 'o', methods: 'm', results: 'r', conclusions: 'c' },
+    keywords: ['sglt2 inhibitors'],
+    sections: [
+      { heading: 'Introduction', body: ['SGLT2 inhibitors reduce hospitalization [S1].'] },
+      { heading: 'Discussion', body: ['The pooled estimate is protective [S1].'] },
+    ],
+  };
+
+  it('carries the pooled forest plot into the Markdown export when extractions are preserved', () => {
+    const publication = buildPublicationArtifact(baseManuscript, evidence, {
+      evidenceExtractions: extractions,
+    });
+    // Sanity: the pipeline-built artifact really does contain the meta figure.
+    expect(publication.figures.some((f) => f.kind === 'meta_analysis')).toBe(true);
+
+    const md = buildMarkdownExport({
+      title: baseManuscript.title,
+      role: 'assistant',
+      content: '',
+      citations: evidence,
+      manuscript: { ...baseManuscript, publication },
+    });
+    expect(md).toContain('Pooled quantitative synthesis');
+  });
+
+  it('omits the forest plot when the manuscript carries no extractions (data-driven, not always-on)', () => {
+    const publication = buildPublicationArtifact(baseManuscript, evidence, {});
+    const md = buildMarkdownExport({
+      title: baseManuscript.title,
+      role: 'assistant',
+      content: '',
+      citations: evidence,
+      manuscript: { ...baseManuscript, publication },
+    });
+    expect(md).not.toContain('Pooled quantitative synthesis');
   });
 });
