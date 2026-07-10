@@ -117,7 +117,9 @@ describe('associationPointsFromEvidence', () => {
     const points = associationPointsFromEvidence([
       rec({ source: 'gwas_catalog', identifiers: { oddsRatio: '1.42', ci: '[1.10-1.84]', pValue: '3e-6' } }),
     ]);
-    expect(points).toEqual([{ source: 'gwas_catalog', significant: true, direction: 'risk', quantitative: true }]);
+    expect(points).toEqual([
+      { source: 'gwas_catalog', significant: true, direction: 'risk', quantitative: true, effect: 1.42 },
+    ]);
   });
 
   it('marks a GWAS record non-significant when CI crosses 1 and p is high', () => {
@@ -161,7 +163,9 @@ describe('associationPointsFromEvidence', () => {
       ],
       'MICA TT genotype and cardiovascular complications in type 1 diabetes',
     );
-    expect(points).toEqual([{ source: 'literature', significant: true, direction: 'risk', quantitative: true }]);
+    expect(points).toEqual([
+      { source: 'literature', significant: true, direction: 'risk', quantitative: true, effect: 24.53, synthesis: false },
+    ]);
   });
 
   it('does not count a literature OR from an off-disease record', () => {
@@ -207,6 +211,40 @@ describe('associationPointsFromEvidence', () => {
     );
     expect(result.band).toBe('insufficient');
     expect(result.score).toBe(0);
+  });
+
+  it('does not read "strong" from modest, overlapping literature with no genetic record', () => {
+    // The MTHFR/VTE run: eight meta-analyses of the same primary studies, modest ORs,
+    // and no GWAS/ClinVar link scored "75% — strong". The score must now stay below
+    // strong (<60), because the effects are small, the syntheses collapse to one body
+    // of evidence, and no structured genetic record supports the association.
+    const modestMetaAnalyses = Array.from({ length: 8 }, (_, i) =>
+      rec({
+        source: 'pubmed',
+        title: `Meta-analysis ${i + 1} of MTHFR C677T and venous thromboembolism`,
+        snippet: 'Meta-analysis: the T allele was associated with venous thromboembolism (odds ratio 1.35, 95% CI 1.10-1.65, p=0.004).',
+      }),
+    );
+    const result = confidenceFromEvidence(modestMetaAnalyses, 'MTHFR C677T and venous thromboembolism');
+    expect(result.score).toBeLessThan(60);
+    expect(result.band).not.toBe('strong');
+    expect(result.band).not.toBe('very strong');
+  });
+
+  it('does not count an off-disease ClinVar classification as support', () => {
+    // MTHFR's ClinVar entries are for homocystinuria, not VTE.
+    const points = associationPointsFromEvidence(
+      [
+        rec({
+          source: 'clinvar',
+          title: 'MTHFR variant',
+          snippet: 'ClinVar clinical significance: Pathogenic for homocystinuria.',
+          identifiers: { clinicalSignificance: 'Pathogenic' },
+        }),
+      ],
+      'venous thromboembolism',
+    );
+    expect(points).toEqual([]);
   });
 
   it('confidenceFromEvidence ties it together (MICA-style risk association)', () => {

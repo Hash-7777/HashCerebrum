@@ -28,6 +28,14 @@ export interface AssociationDataPoint {
    *  hazard ratio with a p-value or CI), not just a clinical classification. The
    *  top "very strong" band requires this so a band can never outrun the data. */
   quantitative?: boolean;
+  /** The reported ratio (OR/RR/HR) on its natural scale, where 1 is the null. A
+   *  significant OR of 1.3 is far weaker evidence of a link than an OR of 24, and
+   *  the score must reflect that. Absent for classification-only records. */
+  effect?: number;
+  /** The record is an evidence synthesis (meta-analysis / systematic review). Such
+   *  records pool the SAME underlying primary studies, so counting eight of them as
+   *  eight independent observations inflates the score — they are collapsed to one. */
+  synthesis?: boolean;
 }
 
 export interface AssociationConfidence {
@@ -71,6 +79,30 @@ function volumeFactor(n: number): number {
   return n <= 0 ? 0 : 1 - Math.exp(-0.55 * n);
 }
 
+// Effect-magnitude factor. A significant OR of 1.3 and a significant OR of 24 both
+// pass a p-value test, but they are not equally strong evidence of a link. Scaled on
+// |ln(effect)| against a three-fold effect, floored at 0.3 so a small-but-real effect
+// still scores something. Records with no reported ratio (a decisive ClinVar
+// classification) are not damped.
+// A record that pools other studies rather than reporting a primary observation.
+const SYNTHESIS_RX = /\b(meta-?analysis|systematic review|umbrella review|pooled analysis|meta-?analytic)\b/i;
+
+const REFERENCE_EFFECT = Math.log(3);
+function magnitudeFactor(effect: number | undefined): number {
+  if (effect === undefined || !Number.isFinite(effect) || effect <= 0) return 1;
+  const magnitude = Math.abs(Math.log(effect)) / REFERENCE_EFFECT;
+  return Math.min(1, Math.max(0.3, magnitude));
+}
+
+/** Independent observations among the supporting points. Evidence syntheses reuse the
+ *  same primary studies, so they contribute one observation between them however many
+ *  were retrieved — eight meta-analyses of the same literature are not eight studies. */
+function independentSupportCount(supports: AssociationDataPoint[]): number {
+  const primary = supports.filter((p) => !p.synthesis).length;
+  const anySynthesis = supports.some((p) => p.synthesis);
+  return primary + (anySynthesis ? 1 : 0);
+}
+
 /**
  * Compute the association-confidence score from normalized data points. Pure and
  * deterministic. Returns an "insufficient" result (score 0) when no significant
@@ -108,12 +140,16 @@ export function associationConfidence(points: AssociationDataPoint[]): Associati
   const directionConcordance = Math.max(risk, protective) / (risk + protective);
   // Curated pathogenic/protective ClinVar corroboration adds a small boost.
   const clinvarBoost = supports.some((p) => p.source === 'clinvar') ? 8 : 0;
+  // How large the reported effects actually are, averaged across the supports.
+  const effectFactor =
+    supports.reduce((sum, p) => sum + magnitudeFactor(p.effect), 0) / supports.length;
 
   const raw =
     100 *
       supportRatio *
-      volumeFactor(supports.length) *
+      volumeFactor(independentSupportCount(supports)) *
       tierFactor *
+      effectFactor *
       (0.85 + 0.15 * directionConcordance) +
     clinvarBoost;
   let score = Math.round(Math.min(100, Math.max(0, raw)));
@@ -127,6 +163,17 @@ export function associationConfidence(points: AssociationDataPoint[]): Associati
   if (score >= 80 && quantitativeCount === 0) {
     score = 79;
     capNote = ' Capped below "very strong" because no quantitative effect size (OR/RR/HR with a CI or p-value) was retrieved — the score rests on clinical classifications and effect direction.';
+  }
+
+  // "Strong" is a claim that a curated genetic database records this variant against
+  // this disease. Published literature alone — however much of it — cannot carry the
+  // top bands: an MTHFR/VTE query once read "75% — strong" from meta-analyses while
+  // the report itself noted no GWAS Catalog or ClinVar record linked the two.
+  const structuredSupport = supports.some((p) => p.source === 'gwas_catalog' || p.source === 'clinvar');
+  if (score >= 60 && !structuredSupport) {
+    score = 59;
+    capNote +=
+      ' Capped below "strong" because no GWAS Catalog or ClinVar record links this variant to the asked disease — the score rests on published literature alone.';
   }
 
   const pooledDirection: AssociationConfidence['pooledDirection'] =
@@ -200,6 +247,8 @@ function literaturePoint(record: EvidenceItem, disease: string[]): AssociationDa
     // A literature point always carries a reported ratio, and a SUPPORTING one is
     // significant by a p-value or CI — i.e. a real quantitative effect size.
     quantitative: significant,
+    effect: value,
+    synthesis: SYNTHESIS_RX.test(text),
   };
 }
 
@@ -235,8 +284,21 @@ export function associationPointsFromEvidence(
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   };
+  // A structured record only supports THIS association when it is recorded against the
+  // disease that was asked about. ClinVar names the condition in the record text and
+  // was never checked, so MTHFR's homocystinuria classifications counted as support for
+  // venous thromboembolism. GWAS is trait-filtered upstream; re-check it here too.
+  const onAskedDisease = (record: EvidenceItem): boolean => {
+    if (disease.length === 0) return true;
+    const hay = `${record.title} ${record.snippet ?? ''}`.toLowerCase();
+    return disease.some((term) => hay.includes(term));
+  };
+
   for (const record of evidence) {
     const id = (record.identifiers ?? {}) as Record<string, unknown>;
+    if (record.source === 'gwas_catalog' || record.source === 'clinvar') {
+      if (!onAskedDisease(record)) continue;
+    }
     if (record.source === 'gwas_catalog') {
       const or = num(id.oddsRatio);
       const p = num(id.pValue);
@@ -249,6 +311,7 @@ export function associationPointsFromEvidence(
         significant,
         direction: or > 1 ? 'risk' : or < 1 ? 'protective' : 'neutral',
         quantitative: true, // GWAS Catalog rows carry an odds ratio + CI/p-value
+        effect: or,
       });
     } else if (record.source === 'clinvar') {
       const sig = typeof id.clinicalSignificance === 'string' ? id.clinicalSignificance : '';
