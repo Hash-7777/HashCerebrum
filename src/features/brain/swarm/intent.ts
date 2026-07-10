@@ -25,8 +25,13 @@ export interface ResolvedIntent {
   ambiguous: boolean;
 }
 
+// A request for a publishable artifact — not merely a cited answer. "Publication-ready",
+// "publishable" and "journal article" ask for the manuscript pipeline (PRISMA diagram,
+// forest plot, structured sections) just as plainly as the word "paper" does; without
+// them a "publication-ready evidence review" fell through to a plain cited answer and
+// the requested figures were never generated. A bare "evidence review" stays a review.
 const PAPER_CUE =
-  /\b(full|complete|comprehensive|publishable)?\s*(research|scientific)?\s*(paper|manuscript)\b|\bsystematic review\b|\bliterature review\b|\bwrite\b[^.?!]*\b(paper|manuscript|review)\b|\bdraft\b[^.?!]*\b(paper|manuscript)\b/i;
+  /\b(full|complete|comprehensive|publishable)?\s*(research|scientific)?\s*(paper|manuscript)\b|\bsystematic review\b|\bliterature review\b|\bpublication[-\s]?ready\b|\bsubmission[-\s]?ready\b|\bpublishable\b|\bjournal article\b|\bwrite\b[^.?!]*\b(paper|manuscript|review)\b|\bdraft\b[^.?!]*\b(paper|manuscript)\b/i;
 const INTERACTION_CUE =
   /\binteract(?:ion|ions|s|ing)?\b|\bcombin(?:e|ed|ing|ation)\b|\btogether\b|\bcontraindicat|\bco-?administ|\bconcomitant\b|\bdrug[-\s]drug\b/i;
 // A generic question ABOUT interactions ("what are common drug interactions…") is
