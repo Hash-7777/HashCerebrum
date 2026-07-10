@@ -15,7 +15,9 @@ import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
 import type { AssociationConfidence } from './genetics/associationConfidence';
 import { paperSystemInstruction, type PaperRequest } from './paper';
+import { normalizeMedicalSpelling } from './queryNormalize';
 import type { SpecialistResult, SpecialistTask } from './types';
+import DRUG_NAMES from './drug-names.json';
 
 const MAX_TASKS = 4;
 
@@ -342,14 +344,41 @@ const DI_NON_DRUG_WORDS = new Set([
 ]);
 
 /** Candidate drug names parsed from a free-text interaction query. */
+// Known drug names (RxNorm ingredients, precise ingredients and brand names).
+// Regenerate with scripts/build-drug-names.mjs.
+let drugLexicon: Set<string> | null = null;
+function knownDrugs(): Set<string> {
+  drugLexicon ??= new Set(DRUG_NAMES as readonly string[]);
+  return drugLexicon;
+}
+
+// International nonproprietary name stems. A word that is not in the lexicon but ends
+// in one of these is a suspected drug — a misspelling or an invented name — and must
+// still be surfaced for verification. This is what catches a fabricated "esomeprazolam"
+// while leaving "thrombosis" and "metabolizers" alone.
+const DRUG_STEM_RX =
+  /(prazole|azolam|azepam|statin|sartan|pril|olol|mab|nib|cillin|mycin|cycline|oxacin|caine|dipine|grel|gliptin|glitazone|triptan|parin|coxib|setron|barbital|tidine|conazole|thiazide|semide|sone|olone|vir)$/;
+
+function drugShaped(word: string): boolean {
+  return word.length >= 6 && DRUG_STEM_RX.test(word);
+}
+
+/** The words in a query that name — or purport to name — a drug.
+ *
+ *  A word counts only when RxNorm knows it, or when it is spelled like a drug but is
+ *  unknown. Accepting every word of 4+ characters that was missing from a hand-kept
+ *  blocklist made a real run report "cyp2c19, confirmed, metabolizers, thrombosis,
+ *  verdict…" as drugs it could not verify, burying the one name that was genuinely
+ *  fabricated. Spelling is normalised first so "clopidogril" resolves to clopidogrel. */
 export function drugCandidates(query: string): string[] {
-  const cleaned = query.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ');
+  const cleaned = normalizeMedicalSpelling(query).toLowerCase().replace(/[^a-z0-9\s-]/g, ' ');
   return [
     ...new Set(
       cleaned
         .split(/\s+/)
         .map((token) => token.replace(/^-+|-+$/g, '').trim())
-        .filter((word) => word.length >= 4 && !DI_NON_DRUG_WORDS.has(word)),
+        .filter((word) => word.length >= 4 && !DI_NON_DRUG_WORDS.has(word))
+        .filter((word) => knownDrugs().has(word) || drugShaped(word)),
     ),
   ];
 }

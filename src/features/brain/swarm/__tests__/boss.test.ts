@@ -29,8 +29,31 @@ describe('drug-interaction fabrication guard', () => {
   });
 
   it('parses candidate drug names and drops connectors', () => {
-    expect(drugCandidates('zynteprol and warfarin')).toEqual(expect.arrayContaining(['zynteprol', 'warfarin']));
+    // "zynteprazole" is not in RxNorm but is spelled like a drug, so it is still a
+    // candidate and will be surfaced as unverifiable.
+    expect(drugCandidates('zynteprazole and warfarin')).toEqual(
+      expect.arrayContaining(['zynteprazole', 'warfarin']),
+    );
     expect(drugCandidates('warfarin and ibuprofen')).not.toContain('and');
+  });
+
+  it('does not treat ordinary medical prose as drug names', () => {
+    // The clopidogrel run reported "cyp2c19, confirmed, metabolizers, thrombosis,
+    // verdict…" as drugs it could not verify, hiding the one fabricated name.
+    const drugs = drugCandidates(
+      'Grade the interaction between clopidogril and omeprazole in CYP2C19 poor metabolizers, ' +
+        'given the confirmed three-fold rise in stent thrombosis. Include esomeprazolam in the comparison.',
+    );
+    expect(drugs).toEqual(expect.arrayContaining(['clopidogrel', 'omeprazole', 'esomeprazolam']));
+    for (const noise of ['cyp2c19', 'confirmed', 'metabolizers', 'thrombosis', 'verdict', 'stent', 'comparison']) {
+      expect(drugs).not.toContain(noise);
+    }
+  });
+
+  it('normalises a misspelled drug to its real name', () => {
+    expect(drugCandidates('clopidogril and omeprazole')).toEqual(
+      expect.arrayContaining(['clopidogrel', 'omeprazole']),
+    );
   });
 
   it('collapses a long run of citation markers to the first three', () => {
@@ -49,7 +72,17 @@ describe('drug-interaction fabrication guard', () => {
 
   it('flags a drug that appears in no retrieved record', () => {
     const evidence = [rec('Systematic overview of warfarin and its drug and food interactions', 'warfarin interactions')];
-    expect(unverifiedDrugNames('zynteprol and warfarin', evidence)).toEqual(['zynteprol']);
+    expect(unverifiedDrugNames('zynteprazole and warfarin', evidence)).toEqual(['zynteprazole']);
+  });
+
+  it('flags only the fabricated drug, not the surrounding prose', () => {
+    const evidence = [rec('Clopidogrel and omeprazole: CYP2C19 interaction', 'clopidogrel omeprazole stent thrombosis')];
+    expect(
+      unverifiedDrugNames(
+        'Grade the interaction between clopidogril and omeprazole in CYP2C19 poor metabolizers. Include esomeprazolam.',
+        evidence,
+      ),
+    ).toEqual(['esomeprazolam']);
   });
 
   it('does not flag drugs present in the evidence', () => {
