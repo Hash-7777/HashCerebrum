@@ -30,7 +30,7 @@ import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components
 import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow2D';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
-import { isConfidentGeneReport, isConfidentInteractionReport } from './swarm/boss';
+import { isConfidentGeneReport, isConfidentInteractionReport, looksLikeRefusalOrNonQuery } from './swarm/boss';
 import { verifyAnswer } from './swarm/claimVerify';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
@@ -691,7 +691,11 @@ export function BrainMode() {
     } catch (error) {
       if (!isMounted.current) return;
       const detail = error instanceof Error ? error.message : String(error);
-      const fallback = streamedContent || `HashCerebrum could not complete the request: ${detail}`;
+      // Partial output is worth keeping — a streamed refusal is not. Showing it as
+      // the message body would leave the user with an apology where an answer
+      // should be, so on a refusal the error itself is the only honest content.
+      const keepStreamed = streamedContent && !looksLikeRefusalOrNonQuery(streamedContent);
+      const fallback = keepStreamed ? streamedContent : `HashCerebrum could not complete the request: ${detail}`;
       if (activeRunId) runs.failRun(activeRunId, detail);
       updateAgentStatus('boss', { state: 'error', detail });
       setMessages((current) =>

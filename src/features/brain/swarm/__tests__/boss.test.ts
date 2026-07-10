@@ -70,6 +70,18 @@ describe('looksLikeRefusalOrNonQuery', () => {
     }
   });
 
+  it('flags a refusal written with typographic apostrophes', () => {
+    // What the provider actually returned on the HFpEF run. The straight-quote
+    // regex missed it, so the refusal was rendered as a scored, cited report.
+    for (const t of [
+      'I’m sorry, but I can’t fulfill that request.',
+      'I’m sorry, but I can’t help with that.',
+      'I can’t assist with that.',
+    ]) {
+      expect(looksLikeRefusalOrNonQuery(t)).toBe(true);
+    }
+  });
+
   it('does not flag a genuine rewritten research question', () => {
     for (const t of [
       'What is the efficacy of SGLT2 inhibitors in HFpEF?',

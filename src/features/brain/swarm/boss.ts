@@ -84,10 +84,16 @@ const BACK_REF_FOLLOWUP_RX =
 // doing so searched the refusal text itself and returned apology-themed papers.
 // Detect it so contextualization falls back to the user's original message.
 const REFUSAL_OR_NON_QUERY_RX =
-  /\b(i(?:'?m| am)\s+sorry|i\s+can(?:'?t|not)\s+(?:help|assist|comply|do\s+that|provide|fulfil|answer)|i\s+(?:am|'?m)\s+unable|i\s+won'?t\s+(?:help|assist)|as\s+an?\s+(?:ai|language\s+model)|cannot\s+(?:help|assist)\s+with\s+that)\b/i;
+  /\b(i(?:'?m| am)\s+sorry|i\s+can(?:'?t|not)\s+(?:help|assist|comply|do\s+that|provide|fulfill?|answer)|i\s+(?:am|'?m)\s+unable|i\s+won'?t\s+(?:help|assist)|as\s+an?\s+(?:ai|language\s+model)|cannot\s+(?:help|assist)\s+with\s+that)\b/i;
+
+// Models overwhelmingly emit typographic apostrophes ("I’m", "can’t"), so match
+// against a straight-quote normalisation of the text rather than the raw string.
+function normalizeQuotes(text: string): string {
+  return text.replace(/[‘’ʼ′]/g, "'");
+}
 
 export function looksLikeRefusalOrNonQuery(text: string): boolean {
-  return REFUSAL_OR_NON_QUERY_RX.test(text);
+  return REFUSAL_OR_NON_QUERY_RX.test(normalizeQuotes(text));
 }
 
 export async function contextualizeQuestion(
@@ -607,6 +613,17 @@ Write the correlation report now, beginning with the header line exactly as give
       `usually a provider safety filter or a silent rate limit. Try again, or switch the boss model to **Auto** ` +
       `or a non-Gemini provider in Agent settings.`;
   }
+  // A refusal is not a report. Prepending the deterministic confidence header to
+  // one would dress "I'm sorry, I can't help with that" up as a scored, cited
+  // finding — the most misleading thing this app could render. Fail the run instead
+  // so the caller shows an error with no score, no disclaimer and no citations.
+  if (looksLikeRefusalOrNonQuery(content)) {
+    throw new Error(
+      `${res.modelUsed} declined to write the correlation report. This usually means the question ` +
+        `was routed to the gene expert but is not a gene-disease question, or the provider's safety ` +
+        `filter fired. Rephrase the question, or switch the boss model in Agent settings.`,
+    );
+  }
   if (!CONFIDENT_GENE_RX.test(content) && !/association confidence:/i.test(content)) {
     content = `${header}\n\n${content}`;
   }
@@ -689,7 +706,16 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
     { onToken, signal },
     emitFailover,
   );
-  return { content: collapseMarkerRuns(stripLeakedSpecialistLabels(res.content)), modelUsed: res.modelUsed };
+  const synthesized = collapseMarkerRuns(stripLeakedSpecialistLabels(res.content));
+  // Never present a refusal as a synthesis: the caller would attach the retrieved
+  // records to it as citations, making an apology look like a sourced finding.
+  if (looksLikeRefusalOrNonQuery(synthesized)) {
+    throw new Error(
+      `${res.modelUsed} declined to synthesize an answer from the retrieved records. ` +
+        `Rephrase the question, or switch the boss model in Agent settings.`,
+    );
+  }
+  return { content: synthesized, modelUsed: res.modelUsed };
 }
 
 // Remove internal specialist section labels the model sometimes echoes back as
