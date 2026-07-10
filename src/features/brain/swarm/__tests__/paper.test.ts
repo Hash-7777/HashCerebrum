@@ -211,6 +211,28 @@ describe('paper request helpers', () => {
     expect(isPriorWorkReviewRequest('make a paper about sepsis')).toBe(false);
   });
 
+  it('does not mistake an ordinary relative pronoun for a back-reference', () => {
+    // The colchicine run: "review" plus the "that"/"it" in "the source that actually
+    // reports it" hijacked a fresh paper request into peer-reviewing the previous
+    // chat message, which it scored 1/10.
+    const colchicine = `Give me a publication-ready evidence review quantifying the reduction in MACE
+that colchicine delivers in secondary cardiovascular prevention. Include a PRISMA diagram and a
+forest plot. Every numeric claim must carry a citation to the source that actually reports it.`;
+    expect(isPriorWorkReviewRequest(colchicine)).toBe(false);
+
+    expect(
+      isPriorWorkReviewRequest('review the evidence on colchicine and report the data that supports it'),
+    ).toBe(false);
+    expect(isPriorWorkReviewRequest('assess whether statins reduce mortality and cite it')).toBe(false);
+  });
+
+  it('still recognises a genuine appraisal of prior work', () => {
+    expect(isPriorWorkReviewRequest('rate it')).toBe(true);
+    expect(isPriorWorkReviewRequest('peer-review the manuscript you just wrote')).toBe(true);
+    expect(isPriorWorkReviewRequest('fact-check your previous answer')).toBe(true);
+    expect(isPriorWorkReviewRequest('critique that draft')).toBe(true);
+  });
+
   it('keeps synthesis-failure fallbacks structured like a paper', () => {
     const request = detectPaperRequest('make a full research paper about NSAIDs and warfarin');
     expect(request).not.toBeNull();

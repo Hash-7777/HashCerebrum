@@ -51,11 +51,29 @@ const ANALYTICAL_RX =
 // "review the evidence on statins" is NOT captured here.
 const REVIEW_VERB_RX =
   /\b(rate|review|critique|appraise|assess|grade|evaluat\w*|judge|score|fact[-\s]?check|peer[-\s]?review)\b/i;
-const BACK_REFERENCE_RX =
-  /\b(it|this|that|these|those|above|previous|prior|the\s+(paper|draft|manuscript|article|document|review|answer|response|text|write[-\s]?up)|your\s+(last|previous|answer|response|paper|draft))\b/i;
+
+// An appraisal verb taking a bare pronoun as its DIRECT OBJECT: "rate it",
+// "review that", "grade this". The pronoun must follow the verb — a bare "it" or
+// "that" anywhere in the sentence is not a back-reference. Matching those loosely
+// sent "…a citation to the source that actually reports it" into a prior-work
+// review, which peer-reviewed the previous chat message instead of researching.
+const APPRAISE_PRONOUN_RX =
+  /\b(?:rate|review|critique|appraise|assess|grade|evaluat\w*|judge|score|fact[-\s]?check|peer[-\s]?review)\s+(?:it|this|that|these|those)\b/i;
+
+// A named reference to a document the team already produced ("that draft", "your
+// previous answer"). The determiner must sit directly on the work noun.
+const PRIOR_WORK_OBJECT_RX =
+  /\b(?:the|this|that|these|those|your|my|its)\s+(?:last\s+|previous\s+|prior\s+|final\s+|above\s+)?(?:paper|draft|manuscript|article|document|review|answer|response|text|write[-\s]?up|report)\b|\byour\s+(?:last|previous)\b/i;
+
+// An explicit request to PRODUCE a new document. This can never be an appraisal of
+// prior work, however many review verbs and pronouns it happens to contain.
+const NEW_WORK_RX =
+  /\bpublication[-\s]?ready\b|\bsubmission[-\s]?ready\b|\bpublishable\b|\b(?:write|draft|produce|generate|create|compose)\b[^.?!]*\b(?:paper|manuscript|article|review)\b/i;
 
 export function isPriorWorkReviewRequest(question: string): boolean {
-  return REVIEW_VERB_RX.test(question) && BACK_REFERENCE_RX.test(question);
+  if (NEW_WORK_RX.test(question)) return false;
+  if (APPRAISE_PRONOUN_RX.test(question)) return true;
+  return REVIEW_VERB_RX.test(question) && PRIOR_WORK_OBJECT_RX.test(question);
 }
 
 // Meta / app-introspection / prompt-injection questions ("tell me your system
