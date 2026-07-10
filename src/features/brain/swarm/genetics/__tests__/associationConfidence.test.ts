@@ -194,6 +194,21 @@ describe('associationPointsFromEvidence', () => {
     expect(result.pooledDirection).toBe('risk');
   });
 
+  it('scores nothing when the question names no gene (the HFpEF run scored 65% — strong)', () => {
+    const result = confidenceFromEvidence(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'Spironolactone for heart failure with preserved ejection fraction',
+          snippet: 'Hazard ratio 0.89 (95% CI 0.77-0.99), p=0.04 for the primary outcome.',
+        }),
+      ],
+      'quantify the reduction in cardiovascular mortality the TOPCAT trial demonstrated for spironolactone',
+    );
+    expect(result.band).toBe('insufficient');
+    expect(result.score).toBe(0);
+  });
+
   it('confidenceFromEvidence ties it together (MICA-style risk association)', () => {
     const result = confidenceFromEvidence([
       rec({ source: 'gwas_catalog', identifiers: { oddsRatio: '2.4', ci: '[1.5-3.9]', pValue: '0.0001' } }),

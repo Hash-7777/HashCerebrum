@@ -9,7 +9,7 @@
 
 import type { EvidenceItem } from '@platform/index';
 import { extractEffectValues } from '../paperPipeline';
-import { diseaseTerms } from './geneQueryReadiness';
+import { diseaseTerms, hasGeneSignal } from './geneQueryReadiness';
 
 export type AssociationSource = 'gwas_catalog' | 'clinvar' | 'literature';
 export type AssociationDirection = 'risk' | 'protective' | 'neutral';
@@ -265,10 +265,31 @@ export function associationPointsFromEvidence(
 }
 
 /** Convenience: score straight from retrieved evidence. The question gates which
- *  literature records may contribute (must mention the asked disease). */
+ *  literature records may contribute (must mention the asked disease).
+ *
+ *  An association confidence quantifies a GENE-disease link, so it is only meaningful
+ *  when the question actually names a gene or variant. A cardiology question once
+ *  reached this scorer (its trial acronym was misread as a gene), and its 25
+ *  spironolactone papers were scored "65% — strong". With no gene in the question
+ *  there is nothing for the score to be about, so report it as insufficient. */
 export function confidenceFromEvidence(
   evidence: EvidenceItem[],
   question?: string,
 ): AssociationConfidence {
-  return associationConfidence(associationPointsFromEvidence(evidence, question));
+  const points = associationPointsFromEvidence(evidence, question);
+  if (question !== undefined && !hasGeneSignal(question)) {
+    return {
+      score: 0,
+      band: 'insufficient',
+      supportCount: 0,
+      refuteCount: 0,
+      quantitativeCount: 0,
+      totalCount: points.length,
+      pooledDirection: 'none',
+      rationale:
+        'The question names no gene or variant, so the strength of a gene-disease association ' +
+        'cannot be quantified from the retrieved records.',
+    };
+  }
+  return associationConfidence(points);
 }
