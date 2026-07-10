@@ -6,6 +6,13 @@
 // rather than guessing. Pure and deterministic so it works on any model,
 // including small local ones — the clarifying questions are fixed templates.
 
+// Approved human gene symbols (HGNC). Regenerate with scripts/build-gene-symbols.mjs.
+// A token only reads as a gene when it appears HERE — an ALL-CAPS shape alone is not
+// enough. Trial acronyms (TOPCAT, SPRINT, EMPEROR) and reporting guidelines (PRISMA,
+// CONSORT, STROBE) are ALL-CAPS and are not genes; treating them as genes routed a
+// spironolactone-in-HFpEF question to the gene expert.
+import GENE_SYMBOLS from './gene-symbols.json';
+
 export interface GeneQueryReadiness {
   ready: boolean;
   hasGene: boolean;
@@ -16,12 +23,35 @@ export interface GeneQueryReadiness {
 
 const RS_RX = /\brs\d{2,}\b/i;
 
+let lexicon: Set<string> | null = null;
+function geneLexicon(): Set<string> {
+  lexicon ??= new Set(GENE_SYMBOLS as readonly string[]);
+  return lexicon;
+}
+
 // Upper-case tokens that look like a gene symbol but are common non-gene
 // abbreviations — excluded so they don't read as a gene.
 const NON_GENE_CAPS = new Set([
   'AND', 'THE', 'FOR', 'NOT', 'BUT', 'WITH', 'DNA', 'RNA', 'PCR', 'FDA', 'EMA', 'WHO', 'BMI',
   'WBC', 'HB', 'MRI', 'CT', 'ICU', 'OR', 'NK', 'ID', 'T1D', 'T2D', 'CVD', 'CV', 'HBA1C',
 ]);
+
+// Approved gene symbols that are ALSO routine clinical, dosing or statistical
+// abbreviations. "ACE inhibitor", "CAD", "elevated CRP", "BID dosing" are not
+// genetics, so a bare occurrence of these is not a gene signal — the question must
+// carry explicit genetic context as well. Unambiguous symbols (MICA, KRAS, BRCA1,
+// APOE) never need this, so a bare "MICA and type 1 diabetes" still routes to the
+// gene expert.
+const AMBIGUOUS_SYMBOLS = new Set([
+  'ACE', 'ACHE', 'ADA', 'ALB', 'BID', 'CAD', 'CAMP', 'CAST', 'CAT', 'CELL', 'CLOCK', 'CRP',
+  'EGFR', 'FAT', 'GAS', 'IDE', 'IMPACT', 'LAD', 'LARGE', 'MET', 'MICE', 'NUMB', 'PACE', 'PAP',
+  'PER', 'PLAT', 'PRUNE', 'RAGE', 'REST', 'SAT', 'SEA', 'SET', 'SKI', 'SLUG', 'SPIN', 'STAR',
+  'TAT', 'TAX', 'VIP',
+]);
+
+// Explicit genetic framing that rescues an ambiguous symbol.
+const GENETIC_CONTEXT_RX =
+  /\b(gene|genes|genetic|genetics|genomic|genome|variant|variants|allele|alleles|genotype|genotypes|polymorphism|polymorphisms|mutation|mutations|snp|snps|rs\d{2,}|locus|loci|haplotype|haplotypes|gwas|clinvar|germline|somatic|epigenetic|methylation|promoter|knockout|wild-?type|expression|amplification|fusion|rearrangement|pharmacogenomic|pharmacogenetics?)\b/i;
 
 // Words that describe the kind of finding or are generic — never the disease.
 const NON_DISEASE_WORDS = new Set([
@@ -34,6 +64,8 @@ const NON_DISEASE_WORDS = new Set([
   'analyze', 'analyse', 'show', 'tell', 'find', 'give', 'report', 'correlate', 'associated',
 ]);
 
+/** Shaped like a gene symbol: ALL-CAPS, 2-12 chars. Shape ONLY — says nothing about
+ *  whether the token is a real gene. Used to keep acronyms out of the disease terms. */
 function geneLikeToken(token: string): boolean {
   const t = token.trim();
   const len = t.length;
@@ -45,10 +77,20 @@ function geneLikeToken(token: string): boolean {
   return /[A-Z]/.test(t);
 }
 
+/** Is this token an actual approved gene symbol, given the surrounding question?
+ *  Shape + HGNC membership; an ambiguous symbol additionally needs genetic context. */
+function isGeneSymbolToken(token: string, text: string): boolean {
+  const t = token.trim();
+  if (!geneLikeToken(t)) return false;
+  if (!geneLexicon().has(t)) return false;
+  if (AMBIGUOUS_SYMBOLS.has(t) && !GENETIC_CONTEXT_RX.test(text)) return false;
+  return true;
+}
+
 /** Does the text name a gene symbol or an rsID? */
 export function hasGeneSignal(text: string): boolean {
   if (RS_RX.test(text)) return true;
-  return text.split(/[^A-Za-z0-9-]+/).some(geneLikeToken);
+  return text.split(/[^A-Za-z0-9-]+/).some((tok) => isGeneSymbolToken(tok, text));
 }
 
 /** Gene-symbol tokens named in the text (e.g. "MICA"), de-duplicated, order kept.
@@ -58,7 +100,7 @@ export function extractGeneSymbols(text: string): string[] {
   const out: string[] = [];
   for (const tok of text.split(/[^A-Za-z0-9-]+/)) {
     const t = tok.trim();
-    if (geneLikeToken(t) && !out.includes(t)) out.push(t);
+    if (isGeneSymbolToken(t, text) && !out.includes(t)) out.push(t);
   }
   return out;
 }

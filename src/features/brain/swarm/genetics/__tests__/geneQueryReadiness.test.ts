@@ -21,6 +21,44 @@ describe('extractGeneSymbols / extractRsIds', () => {
     expect(extractRsIds('does rs1051792 and rs2596542 matter')).toEqual(['rs1051792', 'rs2596542']);
     expect(extractRsIds('no rsid here')).toEqual([]);
   });
+
+  it('never queries the genetic databases for a trial acronym', () => {
+    expect(extractGeneSymbols('the TOPCAT trial and a PRISMA diagram')).toEqual([]);
+  });
+});
+
+describe('hasGeneSignal — only real gene symbols count', () => {
+  // The spironolactone-in-HFpEF run: TOPCAT and PRISMA were read as gene symbols,
+  // which sent a cardiology question to the gene expert.
+  const hfpef = `In adults with heart failure with preserved ejection fraction (HFpEF),
+quantify the roughly 30% reduction in cardiovascular mortality that the TOPCAT trial
+demonstrated for spironolactone. Give me a publication-ready evidence review with a
+pooled hazard ratio and 95% CI, a PRISMA diagram, and a forest plot.`;
+
+  it('does not fire on trial acronyms or reporting guidelines', () => {
+    expect(hasGeneSignal(hfpef)).toBe(false);
+    for (const acronym of ['SPRINT', 'EMPEROR', 'PARADIGM', 'CONSORT', 'STROBE', 'AMSTAR']) {
+      expect(hasGeneSignal(`the ${acronym} trial in heart failure`)).toBe(false);
+    }
+  });
+
+  it('still fires on a bare unambiguous gene symbol', () => {
+    expect(hasGeneSignal('MICA and cardiovascular complications in type 1 diabetes')).toBe(true);
+    expect(hasGeneSignal('BRCA1 in breast cancer')).toBe(true);
+    expect(hasGeneSignal('outcomes by APOE status')).toBe(true);
+  });
+
+  it('requires genetic context for a symbol that is also a clinical abbreviation', () => {
+    // "ACE" the gene vs. "ACE inhibitor" the drug class; "CAD" the gene vs. coronary
+    // artery disease; "CRP" the gene vs. the inflammatory marker.
+    expect(hasGeneSignal('do ACE inhibitors reduce mortality in CAD with elevated CRP')).toBe(false);
+    expect(hasGeneSignal('the ACE insertion/deletion polymorphism and hypertension')).toBe(true);
+    expect(hasGeneSignal('EGFR mutation status in lung cancer')).toBe(true);
+  });
+
+  it('recognises a gene family named as a bare prefix', () => {
+    expect(hasGeneSignal('HLA haplotypes in coeliac disease')).toBe(true);
+  });
 });
 
 describe('hasGeneSignal', () => {
