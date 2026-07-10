@@ -322,7 +322,7 @@ const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
 // warning ships inside the document rather than only in the execution trace.
 export const INCOMPLETE_DRAFT_BANNER = '⚠ INCOMPLETE DRAFT';
 
-const SECTION_SYSTEM = `You are The Cerebrum, a biomedical manuscript compiler. Write EXACTLY ONE SECTION per call.
+const SECTION_SYSTEM = `You are the HashCerebrum agent, a biomedical manuscript compiler. Write EXACTLY ONE SECTION per call.
 
 DEPTH — density, not length:
 - Cover every claim assigned to this section once, in depth: state the finding, explain mechanism/significance, place it in clinical context, note limitations, connect it to the broader question.

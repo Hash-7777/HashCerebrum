@@ -322,7 +322,7 @@ export interface ReviewAgentDef {
 export const REVIEW_SWARM_AGENTS: ReviewAgentDef[] = [
   {
     agentId: 'orchestrator',
-    label: 'The Cerebrum',
+    label: 'HashCerebrum',
     iconName: 'shield',
     systemPrompt: ORCHESTRATOR_PROMPT,
     maxTokens: 2800,

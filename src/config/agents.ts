@@ -71,7 +71,7 @@ const GENETICS_TOOLS = [
 export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
   {
     id: 'boss',
-    label: 'The Cerebrum',
+    label: 'HashCerebrum',
     kind: 'boss',
     specialty:
       'Routes each question, delegates research to the relevant specialists, and synthesizes their findings into one cited answer.',
