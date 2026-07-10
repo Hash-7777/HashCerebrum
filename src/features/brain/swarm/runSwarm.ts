@@ -551,8 +551,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   let bossModel = modelFor('boss');
 
   // Identity / "what model are you" questions get a fixed, branded answer so the
-  // underlying language model is never disclosed — The Cerebrum of HashCerebrum,
-  // developed by Dr. Seif Hashish.
+  // underlying language model is never disclosed — The Cerebrum of HashCerebrum.
   if (isIdentityQuestion(question)) {
     callbacks.onBossPhase('answering');
     callbacks.onAnswerToken(IDENTITY_ANSWER);
