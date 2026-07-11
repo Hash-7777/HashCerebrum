@@ -234,6 +234,31 @@ describe('baseline characteristics table (dataset Table 1)', () => {
   });
 });
 
+describe('cohort characteristics (descriptives) table', () => {
+  it('renders numeric variables as mean ± SD and categorical as n (%)', () => {
+    const dataset: UploadedDatasetSummary = {
+      filename: 'patients.csv',
+      sha256: 'hash',
+      rows: 100,
+      columns: ['age', 'sex'],
+      delimiter: ',',
+      columnSummaries: [
+        { name: 'age', type: 'numeric', nonMissing: 100, missing: 0, mean: 30.96, sd: 13.36, median: 29, min: 18, max: 70 },
+        { name: 'sex', type: 'categorical', nonMissing: 100, missing: 0, levels: [{ value: 'M', count: 67 }, { value: 'F', count: 33 }] },
+      ],
+      previewRows: [],
+    };
+    const artifact = buildPublicationArtifact(manuscript, evidence, { dataset });
+    const table = artifact.tables.find((t) => t.id === 'table-dataset-descriptives')!;
+    expect(table.title).toBe('Cohort characteristics');
+    expect(table.columns).toEqual(['Variable', 'N', 'Summary (mean ± SD or n (%))']);
+    expect(table.rows.find((r) => r[0] === 'age')?.[2]).toContain('30.96 ± 13.36');
+    expect(table.rows.find((r) => r[0] === 'sex')?.[2]).toContain('M: 67 (67.0%)');
+    // Journal-style abbreviation note in the caption.
+    expect(table.caption).toContain('Abbreviations: N, number of non-missing observations; SD, standard deviation.');
+  });
+});
+
 describe('publication artifact contract', () => {
   it('deduplicates citations into Vancouver-style canonical references', () => {
     const artifact = buildPublicationArtifact(manuscript, evidence);

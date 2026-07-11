@@ -599,7 +599,7 @@ function baselineCharacteristicsTable(baseline: BaselineCharacteristics): Manusc
     title: `Baseline characteristics by ${baseline.groupColumn}`,
     caption:
       `Participant characteristics compared between ${baseline.groupColumn} = ${baseline.groupALabel} (n=${baseline.nA}) and ${baseline.groupBLabel} (n=${baseline.nB}). ` +
-      "Numeric variables are mean ± SD compared with Welch's t-test; categorical variables are n (%) compared with the chi-square or Fisher exact test. All values are computed in-app from the uploaded dataset.",
+      "Numeric variables are mean ± SD compared with Welch's t-test; categorical variables are n (%) compared with the chi-square or Fisher exact test. All values are computed in-app from the uploaded dataset. Abbreviations: SD, standard deviation; n, count; %, percentage of the group.",
     columns: [
       'Characteristic',
       `${baseline.groupALabel} (n=${baseline.nA})`,
@@ -615,20 +615,38 @@ function baselineCharacteristicsTable(baseline: BaselineCharacteristics): Manusc
   };
 }
 
+// A journal-style summary cell: numeric variables as mean ± SD (median; range),
+// categorical variables as level counts and percentages — rather than a raw
+// "n=…, missing=…, mean=…" worksheet string.
+function describeColumn(column: UploadedDatasetSummary['columnSummaries'][number]): string {
+  if (column.type === 'numeric') {
+    if (column.mean === undefined || column.sd === undefined) return '—';
+    const centre = `${fmtStat(column.mean)} ± ${fmtStat(column.sd)}`;
+    const extra = [
+      column.median !== undefined ? `median ${fmtStat(column.median)}` : '',
+      column.min !== undefined && column.max !== undefined ? `range ${fmtStat(column.min)}–${fmtStat(column.max)}` : '',
+    ]
+      .filter(Boolean)
+      .join('; ');
+    return extra ? `${centre} (${extra})` : centre;
+  }
+  const total = column.nonMissing || 1;
+  return (
+    column.levels
+      ?.slice(0, 6)
+      .map((level) => `${level.value}: ${level.count} (${((level.count / total) * 100).toFixed(1)}%)`)
+      .join('; ') ?? '—'
+  );
+}
+
 function datasetTable(dataset: UploadedDatasetSummary): ManuscriptTable {
   return {
     id: 'table-dataset-descriptives',
-    title: 'Dataset descriptive statistics',
+    title: 'Cohort characteristics',
     caption:
-      'Computed in-app from the uploaded dataset. Inferential statistics are not reported unless a validated analysis plan computes them.',
-    columns: ['Variable', 'Type', 'Summary'],
-    rows: dataset.columnSummaries.map((column) => {
-      const summary =
-        column.type === 'numeric'
-          ? `n=${column.nonMissing}, missing=${column.missing}, mean=${column.mean}, SD=${column.sd}, median=${column.median}, range=${column.min}-${column.max}`
-          : `n=${column.nonMissing}, missing=${column.missing}, levels=${column.levels?.map((level) => `${level.value} ${level.count}`).join(', ') ?? 'none'}`;
-      return [column.name, column.type, summary];
-    }),
+      'Computed in-app from the uploaded dataset. Numeric variables are summarised as mean ± SD (median; range); categorical variables as counts and percentages of non-missing values. Abbreviations: N, number of non-missing observations; SD, standard deviation.',
+    columns: ['Variable', 'N', 'Summary (mean ± SD or n (%))'],
+    rows: dataset.columnSummaries.map((column) => [column.name, String(column.nonMissing), describeColumn(column)]),
   };
 }
 
@@ -680,7 +698,7 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
     id: 'table-inferential-statistics',
     title: 'Inferential statistics',
     caption:
-      'Computed in-app by the validated analysis engine directly from the uploaded dataset. The language model narrates these values but does not generate them.',
+      'Computed in-app by the validated analysis engine directly from the uploaded dataset. The language model narrates these values but does not generate them. Abbreviations: CI, confidence interval; OR, odds ratio; RR, risk ratio; HR, hazard ratio.',
     columns: ['Analysis', 'Estimate (95% CI)', 'p-value'],
     rows,
   };
@@ -738,7 +756,7 @@ function studyCharacteristicsTable(
     id: 'table-study-characteristics',
     title: 'Characteristics of included studies',
     caption:
-      'Study-level design, sample size, and the primary reported effect estimate extracted from each cited record. Each estimate is paired with the same study’s confidence interval and p-value as reported in the source; “not reported” means the record supplied no such value. Reference numbers match the body and reference list.',
+      'Study-level design, sample size, and the primary reported effect estimate extracted from each cited record. Each estimate is paired with the same study’s confidence interval and p-value as reported in the source; “not reported” means the record supplied no such value. Reference numbers match the body and reference list. Abbreviations: OR, odds ratio; RR, risk ratio; HR, hazard ratio; CI, confidence interval.',
     columns: ['Ref', 'Study', 'Year', 'Design', 'Sample size', 'Reported effect estimate'],
     rows,
   };
