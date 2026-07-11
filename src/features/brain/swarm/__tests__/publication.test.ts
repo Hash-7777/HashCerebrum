@@ -147,6 +147,53 @@ describe('study-characteristics table (Table 1)', () => {
     const mthfrRow = table!.rows.find((r) => r[1]!.includes('MTHFR'));
     expect(mthfrRow?.[5]).toBe('not reported');
   });
+
+  it('plots individual estimates as a forest plot when they are not poolable', () => {
+    const mixed: EvidenceItem[] = [
+      {
+        source: 'pubmed',
+        title: 'ACE polymorphism and VTE odds',
+        year: 2000,
+        authors: ['González A'],
+        identifiers: { pmid: '111' },
+        snippet: 'The ACE I/D polymorphism showed an odds ratio 0.53 (95% CI 0.30-0.94) in 148 participants.',
+        fetchedAt: new Date(0).toISOString(),
+        provenanceHash: 'ace-1',
+      },
+      {
+        source: 'pubmed',
+        title: 'Factor V and recurrence hazard',
+        year: 2012,
+        authors: ['Smith J'],
+        identifiers: { pmid: '333' },
+        snippet: 'Recurrence carried a hazard ratio 2.10 (95% CI 1.20-3.70) among carriers.',
+        fetchedAt: new Date(0).toISOString(),
+        provenanceHash: 'fv-1',
+      },
+    ];
+    const ms: Manuscript = {
+      ...manuscript,
+      sections: [
+        { heading: 'Results', body: ['The ACE odds [S1] and the factor V hazard [S2] were reviewed.'] },
+        { heading: 'Declarations', body: ['Automated evidence-review draft for expert review.'] },
+      ],
+    };
+    const extractions = extractEvidenceFromRecords(mixed);
+    const artifact = buildPublicationArtifact(ms, mixed, {
+      evidenceExtractions: extractions,
+      claimLedger: buildClaimLedger(extractions),
+    });
+    const forest = artifact.figures.find((f) => f.id === 'fig-reported-effects-forest');
+    expect(forest).toBeDefined();
+    expect(forest!.kind).toBe('forest_plot');
+    expect(forest!.svg.startsWith('<svg')).toBe(true);
+    // Individual estimates are drawn, and it is explicitly NOT pooled.
+    expect(forest!.svg).toContain('0.53');
+    expect(forest!.svg).toContain('2.10');
+    expect(forest!.svg).not.toContain('Pooled');
+    // Renderer allowlist safety: no <marker>, so the Typst PDF keeps the figure.
+    expect(forest!.svg).not.toContain('<marker');
+  });
 });
 
 describe('publication artifact contract', () => {

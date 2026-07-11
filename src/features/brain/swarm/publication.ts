@@ -466,9 +466,138 @@ function numericYieldSvg(rows: Array<[string, number]>): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Extracted statistics by type</text>${bars}</svg>`;
 }
 
+// ── Descriptive forest plot of the individual reported estimates ─────────────
+// When ≥2 studies report a ratio estimate with a confidence interval but the set
+// is not comparable enough to pool (mixed OR/HR/RR, different outcomes), a real
+// review still PLOTS the individual estimates so the reader sees the data. Each
+// row is one study's reported ratio on a log scale against a no-effect line at 1;
+// no pooled diamond is drawn, because nothing was pooled.
+interface ForestRow {
+  label: string;
+  value: number;
+  ciLow: number;
+  ciHigh: number;
+}
+
+function parseCiPair(ci: string | null): [number, number] | null {
+  if (!ci) return null;
+  const match = ci.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:-|–|—|to|,)\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (!match) return null;
+  const lo = Number(match[1]);
+  const hi = Number(match[2]);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo <= 0 || hi <= 0 || lo >= hi) return null;
+  return [lo, hi];
+}
+
+const RATIO_MEASURE_RX = /\b(OR|RR|HR|odds ratio|risk ratio|relative risk|hazard ratio)\b/i;
+
+function reportedEffectForestRows(
+  extractions: EvidenceExtraction[],
+  citationMap: Record<string, CitationMapEntry>,
+): ForestRow[] {
+  const rows: ForestRow[] = [];
+  for (const extraction of extractions) {
+    const entry = citationMap[extraction.sourceMarker.replace(/[[\]]/g, '')];
+    if (!entry) continue;
+    const bound = (extraction.boundEffects ?? []).find(
+      (effect) => RATIO_MEASURE_RX.test(effect.measure) && parseCiPair(effect.ci) !== null,
+    );
+    if (!bound) continue;
+    const ci = parseCiPair(bound.ci)!;
+    const value = Number(bound.value);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    rows.push({ label: `${entry.displayMarker} ${bound.measure}`, value, ciLow: ci[0], ciHigh: ci[1] });
+  }
+  return rows;
+}
+
+function fmtRatio(value: number): string {
+  if (!Number.isFinite(value)) return 'n/a';
+  return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2);
+}
+
+function descriptiveForestSvg(rows: ForestRow[]): string {
+  const width = 760;
+  const rowHeight = 30;
+  const plotLeft = 236;
+  const plotRight = 560;
+  const plotWidth = plotRight - plotLeft;
+  const headerY = 64;
+  const firstRowY = headerY + 28;
+  const height = firstRowY + rows.length * rowHeight + 22;
+
+  const bounds = [1];
+  for (const row of rows) bounds.push(row.value, row.ciLow, row.ciHigh);
+  const finite = bounds.filter((value) => Number.isFinite(value) && value > 0);
+  const lo = Math.max(0.05, Math.min(...finite, 1) * 0.8);
+  const hi = Math.min(64, Math.max(...finite, 1) * 1.25);
+  const logLo = Math.log(lo);
+  const logHi = Math.log(hi);
+  const xFor = (ratio: number): number => {
+    const clamped = Math.min(hi, Math.max(lo, ratio));
+    return plotLeft + ((Math.log(clamped) - logLo) / (logHi - logLo)) * plotWidth;
+  };
+
+  const parts: string[] = [];
+  const axisY = height - 22;
+  parts.push(`<line x1="${plotLeft}" y1="${axisY}" x2="${plotRight}" y2="${axisY}" stroke="#2a3951"/>`);
+  for (const tick of [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32]) {
+    if (tick < lo || tick > hi) continue;
+    const x = xFor(tick);
+    parts.push(
+      `<line x1="${x}" y1="${axisY}" x2="${x}" y2="${axisY + 5}" stroke="#7f8ea8"/>` +
+        `<text x="${x}" y="${axisY + 17}" text-anchor="middle" fill="#9fb0c7" font-size="10">${tick}</text>`,
+    );
+  }
+  const refX = xFor(1);
+  parts.push(
+    `<line x1="${refX}" y1="${headerY + 10}" x2="${refX}" y2="${axisY}" stroke="#7f8ea8" stroke-dasharray="4 3"/>`,
+  );
+  rows.forEach((row, index) => {
+    const y = firstRowY + index * rowHeight;
+    const side = 9;
+    parts.push(`<text x="24" y="${y + 4}" fill="#d6deea" font-size="12">${escXml(row.label)}</text>`);
+    parts.push(
+      `<line x1="${xFor(row.ciLow)}" y1="${y}" x2="${xFor(row.ciHigh)}" y2="${y}" stroke="#8b9eff" stroke-width="2"/>` +
+        `<rect x="${xFor(row.value) - side / 2}" y="${y - side / 2}" width="${side}" height="${side}" fill="#8b9eff"/>`,
+    );
+    parts.push(
+      `<text x="${plotRight + 16}" y="${y + 4}" fill="#9fb0c7" font-size="11">${fmtRatio(row.value)} (${fmtRatio(row.ciLow)}–${fmtRatio(row.ciHigh)})</text>`,
+    );
+  });
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif">` +
+    `<rect width="${width}" height="${height}" rx="14" fill="#08111d"/>` +
+    `<text x="24" y="32" fill="#f1f6fc" font-size="16" font-weight="700">Reported effect estimates by study</text>` +
+    `<text x="24" y="50" fill="#9fb0c7" font-size="11">Each study's reported ratio (95% CI) on a log scale; measure shown per row. No pooled estimate.</text>` +
+    parts.join('') +
+    `</svg>`
+  );
+}
+
+function reportedEffectsForestFigure(
+  extractions: EvidenceExtraction[],
+  citationMap: Record<string, CitationMapEntry>,
+): ManuscriptFigure | null {
+  const rows = reportedEffectForestRows(extractions, citationMap);
+  if (rows.length < 2) return null;
+  return {
+    id: 'fig-reported-effects-forest',
+    kind: 'forest_plot',
+    title: 'Reported effect estimates by study',
+    caption:
+      'Individual effect estimates reported by the retrieved studies, each with its 95% confidence interval on a log scale against the no-effect line at 1. Estimates are shown as reported and are NOT pooled: the measure (OR, RR, HR) is labelled per row because the studies are not comparable enough for a single pooled estimate.',
+    alt: 'Forest plot of individual study effect ratios with confidence intervals on a log scale, not pooled.',
+    svg: descriptiveForestSvg(rows),
+    data: { rows },
+  };
+}
+
 function buildFigures(
   evidence: EvidenceItem[],
   referenceCount: number,
+  citationMap: Record<string, CitationMapEntry>,
   dataset?: UploadedDatasetSummary,
   pipeline?: {
     evidenceExtractions?: EvidenceExtraction[];
@@ -567,9 +696,15 @@ function buildFigures(
   }
 
   // Meta-analysis forest plot when ≥2 studies report comparable effect estimates
-  // (continuous outcomes, or ratio measures with CIs).
+  // (continuous outcomes, or ratio measures with CIs). When they are NOT poolable
+  // but ≥2 studies still report a ratio with a CI, plot the individual estimates
+  // descriptively so the data appears as a figure instead of only in prose.
   {
     const meta = evidenceMeta;
+    if (!meta?.interpretable && pipeline?.evidenceExtractions?.length) {
+      const descriptive = reportedEffectsForestFigure(pipeline.evidenceExtractions, citationMap);
+      if (descriptive) figures.push(descriptive);
+    }
     if (meta?.interpretable) {
       figures.push({
         id: 'fig-meta-analysis',
@@ -1301,7 +1436,7 @@ export function buildPublicationArtifact(
     standard,
     references,
     citationMap,
-    figures: buildFigures(evidence, references.length, options.dataset, pipeline),
+    figures: buildFigures(evidence, references.length, citationMap, options.dataset, pipeline),
     tables: buildTables(evidence, citationMap, options.dataset, pipeline),
     statistics,
     ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),
