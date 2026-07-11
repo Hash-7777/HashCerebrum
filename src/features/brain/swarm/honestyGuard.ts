@@ -197,6 +197,53 @@ export function reconcileDirection(text: string): string {
   });
 }
 
+// A direction/magnitude claim that spans more prose than the tight adjacency
+// window above can safely reach — "diabetes doubles the risk of ASCVD, as
+// reflected by a hazard ratio of 0.89" (a doubling is a ratio near 2, not 0.89),
+// or "reduced mortality … relative risk of 1.4". The tight pass stops at the
+// first comma, so a claim separated from its ratio by a clause escapes it. This
+// pass works one SENTENCE at a time and, crucially, acts only when the sentence
+// carries exactly ONE effect ratio and its directional claims all point the same
+// way — so a ratio that belongs to a different clause can never be mis-corrected.
+const RATIO_LABEL = '(?:hazard ratio|odds ratio|risk ratio|relative risk|HR|OR|RR)';
+const RATIO_VALUE_RX = new RegExp(
+  `\\b${RATIO_LABEL}\\b\\s*(?:=|of|was|at|:|,)?\\s*([0-9]+(?:\\.[0-9]+)?)`,
+  'gi',
+);
+// Words asserting the effect got BIGGER (a ratio ≥ ~1) vs SMALLER (≤ ~1). Kept to
+// unambiguous verbs — "higher"/"greater" are adjectives whose grammar an in-place
+// rewrite would break, so they are deliberately excluded here.
+const INCREASE_WORDS = 'increas(?:e|es|ed|ing)|rais(?:e|es|ed|ing)|elevat(?:e|es|ed|ing)|doubl(?:e|es|ed|ing)|tripl(?:e|es|ed|ing)|quadrupl(?:e|es|ed|ing)|augment(?:s|ed|ing)?';
+const DECREASE_WORDS = 'reduc(?:e|es|ed|ing|tion)|decreas(?:e|es|ed|ing)|halv(?:e|es|ed|ing)|lower(?:s|ed|ing)|diminish(?:es|ed|ing)?';
+const INCREASE_ANY_RX = new RegExp(`\\b(?:${INCREASE_WORDS})\\b`, 'i');
+const DECREASE_ANY_RX = new RegExp(`\\b(?:${DECREASE_WORDS})\\b`, 'i');
+// The span from a directional word THROUGH its ratio — replaced wholesale with a
+// neutral association so the misleading direction is dropped and the ratio kept.
+const DIRECTION_SPAN_RX = new RegExp(
+  `\\b(?:${INCREASE_WORDS}|${DECREASE_WORDS})\\b.*?(${RATIO_LABEL})\\s*(?:=|of|was|at|:|,)?\\s*([0-9]+(?:\\.[0-9]+)?)`,
+  'i',
+);
+
+export function reconcileSentenceDirection(text: string): string {
+  return rejoin(
+    splitSentences(text).map((sentence) => {
+      const ratios = [...sentence.matchAll(RATIO_VALUE_RX)];
+      if (ratios.length !== 1) return sentence; // none, or too many to attribute
+      const value = Number(ratios[0]?.[1]);
+      if (!Number.isFinite(value)) return sentence;
+      const hasIncrease = INCREASE_ANY_RX.test(sentence);
+      const hasDecrease = DECREASE_ANY_RX.test(sentence);
+      if (hasIncrease && hasDecrease) return sentence; // mixed claims — do not touch
+      const contradiction = (hasIncrease && value <= 0.9) || (hasDecrease && value >= 1.1);
+      if (!contradiction) return sentence;
+      return sentence.replace(
+        DIRECTION_SPAN_RX,
+        (_full, label: string, val: string) => `was associated with a ${label} of ${val}`,
+      );
+    }),
+  );
+}
+
 function rejoin(sentences: string[]): string {
   return sentences
     .map((s) => s.trim())
@@ -211,11 +258,13 @@ function rejoin(sentences: string[]): string {
 export function applyHonestyPass(text: string): string {
   if (!text) return text;
   return softenOverclaims(
-    reconcileDirection(
-      reconcileCrossingCI(
-        stripFabricatedAggregates(
-          stripSearchYieldCounts(
-            stripCounterfactualDataset(stripFabricatedAppraisal(stripNonSourceBrackets(text))),
+    reconcileSentenceDirection(
+      reconcileDirection(
+        reconcileCrossingCI(
+          stripFabricatedAggregates(
+            stripSearchYieldCounts(
+              stripCounterfactualDataset(stripFabricatedAppraisal(stripNonSourceBrackets(text))),
+            ),
           ),
         ),
       ),

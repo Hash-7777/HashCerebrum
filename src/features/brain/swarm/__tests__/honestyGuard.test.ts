@@ -9,6 +9,7 @@ import {
   softenOverclaims,
   reconcileCrossingCI,
   reconcileDirection,
+  reconcileSentenceDirection,
   applyHonestyPass,
 } from '../honestyGuard';
 
@@ -191,6 +192,44 @@ describe('reconcileDirection', () => {
     // "reduced bleeding" is correct; the HR 1.20 belongs to the mortality clause.
     const t = 'aspirin reduced bleeding, but increased mortality (HR 1.20).';
     expect(reconcileDirection(t)).toBe(t);
+  });
+});
+
+describe('reconcileSentenceDirection', () => {
+  it('neutralises a magnitude claim separated from its ratio by a clause (the real SGLT2 run)', () => {
+    const t =
+      'Diabetes roughly doubles the risk of atherosclerotic cardiovascular disease, as reflected by a hazard ratio of 0.89 (95% CI 0.84-0.95).';
+    const out = reconcileSentenceDirection(t);
+    expect(out).not.toMatch(/doubles the risk/i);
+    expect(out).toContain('was associated with a hazard ratio of 0.89');
+    expect(out).toContain('0.84-0.95'); // the CI is preserved
+  });
+
+  it('neutralises a "reduced ... relative risk of 1.4" across a clause', () => {
+    const t = 'The therapy reduced cardiovascular mortality substantially, with a relative risk of 1.4.';
+    const out = reconcileSentenceDirection(t);
+    expect(out).not.toMatch(/reduced cardiovascular mortality/i);
+    expect(out).toContain('was associated with a relative risk of 1.4');
+  });
+
+  it('leaves a consistent magnitude claim untouched', () => {
+    const t = 'Diabetes doubles the risk of ASCVD, with a hazard ratio of 2.10.';
+    expect(reconcileSentenceDirection(t)).toBe(t);
+  });
+
+  it('does not touch a sentence carrying more than one ratio', () => {
+    const t = 'SGLT2i reduced MACE (HR 0.86) but increased genital infection (HR 3.20).';
+    expect(reconcileSentenceDirection(t)).toBe(t);
+  });
+
+  it('does not touch a sentence with conflicting directional words', () => {
+    const t = 'The agent increased benefit and lowered harm, hazard ratio 0.80.';
+    expect(reconcileSentenceDirection(t)).toBe(t);
+  });
+
+  it('ignores a bare CI with no attached ratio label', () => {
+    const t = 'The reduction was clear (95% CI 0.84-0.95) across the cohort.';
+    expect(reconcileSentenceDirection(t)).toBe(t);
   });
 });
 
