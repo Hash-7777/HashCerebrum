@@ -106,17 +106,39 @@ export function extractGeneSymbols(text: string): string[] {
 }
 
 // A gene-shaped token presented AS a gene: immediately next to a gene noun
-// ("the ZXPQ7 gene", "variant BRAF", "APOE allele"). The adjacency is what keeps
-// ordinary ALL-CAPS terms (MACE, SGLT2, LDL) from being mistaken for a claimed
-// gene — only a token the user frames as a gene is captured.
-const CLAIMED_GENE_RX =
-  /\b([A-Z][A-Z0-9-]{1,11})\s+(?:gene|variant|allele|polymorphism|mutation|locus|genotype)\b|\b(?:gene|variant|allele|polymorphism|mutation|locus|genotype)\s+([A-Z][A-Z0-9-]{1,11})\b/g;
+// ("the ZXPQ7 gene", "the MTHFR, ACE, and ZndR4 genes", "variant BRAF", "APOE
+// allele"). The gene noun may be singular or plural. The adjacency is what keeps
+// ordinary terms (MACE, SGLT2, LDL) from being mistaken for a claimed gene — only
+// a token the user frames as a gene is captured. The token pattern is deliberately
+// case-tolerant so a sloppily typed made-up symbol like "ZndR4" is still caught;
+// the real filtering (symbol shape, HGNC membership) happens in claimedGeneShape.
+const GENE_NOUN = '(?:genes?|variants?|alleles?|polymorphisms?|mutations?|genotypes?|loci|locus)';
+const CLAIMED_GENE_RX = new RegExp(
+  `\\b([A-Za-z][A-Za-z0-9-]{1,11})\\s+${GENE_NOUN}\\b|\\b${GENE_NOUN}\\s+([A-Za-z][A-Za-z0-9-]{1,11})\\b`,
+  'g',
+);
+
+/** Shaped like a gene SYMBOL a user might type — tolerant of mixed case ("ZndR4")
+ *  and invented strings. It must carry a digit or be written all-caps, so an
+ *  ordinary word placed next to a gene noun ("candidate genes", "disease variants",
+ *  "Warfarin gene") is excluded. Shape ONLY; HGNC membership is checked separately. */
+function claimedGeneShape(token: string): boolean {
+  const t = token.trim();
+  if (t.length < 2 || t.length > 12) return false;
+  if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(t)) return false;
+  const hasDigit = /\d/.test(t);
+  const allCaps = /^[A-Z][A-Z0-9-]*$/.test(t);
+  if (!hasDigit && !allCaps) return false; // a plain word, not a symbol
+  // A 2-char all-caps token with no digit is too ambiguous (ID, OR, NK…).
+  if (allCaps && !hasDigit && t.length === 2) return false;
+  return true;
+}
 
 /**
  * Gene-shaped tokens the question presents as genes but that are NOT approved
- * HGNC symbols (e.g. a made-up "ZXPQ7 gene"). The genetics report must name these
- * as unrecognized and refuse to score them, never fold them under a real gene's
- * confidence. Recognized symbols and rsIDs are excluded.
+ * HGNC symbols (e.g. a made-up "ZXPQ7 gene" or "ZndR4 genes"). The report must
+ * name these as unrecognized and refuse to score them, never fold them under a
+ * real gene's confidence. Recognized symbols (in any case) and rsIDs are excluded.
  */
 export function extractUnrecognizedGeneTokens(text: string): string[] {
   const recognized = new Set(extractGeneSymbols(text));
@@ -124,8 +146,10 @@ export function extractUnrecognizedGeneTokens(text: string): string[] {
   for (const m of text.matchAll(CLAIMED_GENE_RX)) {
     const token = (m[1] ?? m[2] ?? '').trim();
     if (!token) continue;
-    if (!geneLikeToken(token)) continue; // must look like a symbol, not a word
-    if (geneLexicon().has(token)) continue; // a real approved symbol
+    if (!claimedGeneShape(token)) continue; // must look like a symbol, not a word
+    const upper = token.toUpperCase();
+    if (geneLexicon().has(upper)) continue; // a real approved symbol (any case)
+    if (NON_GENE_CAPS.has(upper)) continue; // routine non-gene abbreviation
     if (recognized.has(token)) continue;
     if (NON_DISEASE_WORDS.has(token.toLowerCase())) continue;
     if (!out.includes(token)) out.push(token);
@@ -196,4 +220,25 @@ export function clarificationMessage(readiness: GeneQueryReadiness): string {
     'Before I search the genetic databases, I need a bit more so the result is grounded in the right records:';
   const bullets = readiness.questions.map((q) => `- ${q}`).join('\n');
   return `${intro}\n\n${bullets}`;
+}
+
+/**
+ * The chat message the agent posts when a research or paper request names a
+ * gene-shaped token that is not an approved HGNC symbol. Rather than draft a
+ * manuscript that silently folds a borrowed effect size onto a gene that may not
+ * exist, ask the author to confirm or correct the symbol first.
+ */
+export function unrecognizedGeneMessage(symbols: string[]): string {
+  const list = symbols.join(', ');
+  const plural = symbols.length > 1;
+  const it = plural ? 'they' : 'it';
+  const them = plural ? 'them' : 'it';
+  return (
+    `Before I research this, I want to check one thing so the paper stays trustworthy: ` +
+    `${list} ${plural ? 'do not match' : 'does not match'} any approved human gene symbol (HGNC). ` +
+    `If ${it} really ${plural ? 'are' : 'is'} not ${plural ? 'genes' : 'a gene'}, I would end up attaching numbers from other studies to ${them}.\n\n` +
+    `Could you tell me which you mean:\n` +
+    `- A typo for a real gene symbol — reply with the correct one (for example MTHFR, F5, or SERPINC1).\n` +
+    `- Not a gene — reply "drop ${them}" and I will continue with only the recognized genes.`
+  );
 }

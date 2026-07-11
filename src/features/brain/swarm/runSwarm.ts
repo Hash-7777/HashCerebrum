@@ -36,6 +36,8 @@ import {
   diseaseTerms as geneDiseaseTerms,
   extractGeneSymbols,
   extractRsIds,
+  extractUnrecognizedGeneTokens,
+  unrecognizedGeneMessage,
 } from './genetics/geneQueryReadiness';
 import {
   detectPaperRequest,
@@ -817,6 +819,28 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       specialists: [specialist],
       modelUsed: report.modelUsed,
     };
+  }
+
+  // Unrecognized-gene gate (general research + paper path). The dedicated
+  // Genetics mode scores per gene and names an invented symbol as unrecognized
+  // on its own, but a comparative question routed to the manuscript pipeline has
+  // no such guard: a made-up "ZndR4 gene" was drafted into a paper and handed a
+  // borrowed odds ratio from an unrelated record. When the question presents a
+  // gene-shaped token AS a gene that is not an approved HGNC symbol, ask the
+  // author to confirm or correct it before drafting rather than researching a
+  // gene that may not exist. Checked on both the literal and context-resolved
+  // question so a symbol survives contextualization either way.
+  const unrecognizedGenes = Array.from(
+    new Set([
+      ...extractUnrecognizedGeneTokens(question),
+      ...extractUnrecognizedGeneTokens(researchQuestion),
+    ]),
+  );
+  if (unrecognizedGenes.length > 0) {
+    callbacks.onBossPhase('answering');
+    const message = unrecognizedGeneMessage(unrecognizedGenes);
+    callbacks.onAnswerToken(message);
+    return { kind: 'chat', answer: message, evidence: [], specialists: [], modelUsed: bossModel };
   }
 
   callbacks.onBossPhase('routing');

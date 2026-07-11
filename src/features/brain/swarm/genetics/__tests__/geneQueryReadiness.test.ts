@@ -30,6 +30,24 @@ describe('extractUnrecognizedGeneTokens', () => {
   it('returns nothing when no gene-shaped token is framed as a gene', () => {
     expect(extractUnrecognizedGeneTokens('compare warfarin and apixaban for stroke')).toEqual([]);
   });
+
+  it('catches a mixed-case made-up gene in a plural list (the ZndR4 run)', () => {
+    // The real release-blocking miss: mixed case + plural "genes" slipped past.
+    const out = extractUnrecognizedGeneTokens(
+      'Compare the association between the MTHFR, ACE, and ZndR4 genes and risk of recurrent venous thromboembolism',
+    );
+    expect(out).toEqual(['ZndR4']);
+  });
+
+  it('does not flag a real gene typed next to a plural gene noun', () => {
+    expect(extractUnrecognizedGeneTokens('the F5 and MTHFR variants in thrombosis')).toEqual([]);
+  });
+
+  it('does not flag ordinary words placed next to a gene noun', () => {
+    expect(
+      extractUnrecognizedGeneTokens('the candidate genes and disease variants were reviewed'),
+    ).toEqual([]);
+  });
 });
 
 describe('extractGeneSymbols / extractRsIds', () => {
