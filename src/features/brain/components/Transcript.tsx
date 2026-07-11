@@ -52,6 +52,21 @@ function evidenceKey(item: EvidenceItem, index: number) {
   return item.provenanceHash || `${item.source}-${item.title}-${index}`;
 }
 
+// The app-authored confidence header lines (e.g. "**MTHFR — Association
+// confidence: 30% — weak**") are shown as graded cards, so strip them from the
+// narrative to avoid a duplicate line directly under the card.
+function stripConfidenceHeaders(content: string): string {
+  return content
+    .split('\n')
+    .filter(
+      (line) =>
+        !/^\s*\*\*[^\n]*(?:association confidence:|unrecognized gene symbol)[^\n]*\*\*\s*$/i.test(line),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function isRetracted(item: EvidenceItem): boolean {
   return item.identifiers?.retracted === 'true';
 }
@@ -396,10 +411,15 @@ export const Transcript = memo(function Transcript({
           // clinical answer to be read inline (graded cards + the interaction
           // matrix), not a manuscript to open as a document — so never treat it
           // as a document, or the inline matrix branch is skipped.
+          // A Genetics result carries cited evidence too, but it is read inline as
+          // graded association cards, not opened as a document — so never treat it
+          // as a document, or the card branch is skipped.
+          const hasGeneCards = (message.associations?.length ?? 0) > 0;
           const isDocument =
             isAi &&
             !message.isStreaming &&
             !drugFocus &&
+            !hasGeneCards &&
             (!!message.manuscript || (message.citations?.length ?? 0) > 0);
           const who = isAi ? (message.modelLabel ?? modelLabel) : isUser ? 'Researcher' : 'Workspace';
           const maskStyle = { WebkitMaskImage: `url(${logoMark})`, maskImage: `url(${logoMark})` } as React.CSSProperties;
@@ -452,10 +472,12 @@ export const Transcript = memo(function Transcript({
                     </>
                   ) : (
                     <div className="assistant-text">
-                      {message.associations && message.associations.length > 0 && !message.isStreaming && (
-                        <GeneAssociationCards associations={message.associations} />
+                      {hasGeneCards && !message.isStreaming && (
+                        <GeneAssociationCards associations={message.associations!} />
                       )}
-                      <MarkdownText content={message.content} />
+                      <MarkdownText
+                        content={hasGeneCards ? stripConfidenceHeaders(message.content) : message.content}
+                      />
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                     </div>
                   )}
