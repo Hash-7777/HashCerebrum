@@ -14,6 +14,12 @@ describe('classifyIntentHeuristic', () => {
     expect(classifyIntentHeuristic('Can I take ibuprofen together with warfarin?').intent).toBe('drug_interactions');
   });
 
+  it('routes a brand-name interaction joined by "and" (the panadol/catafast regression)', () => {
+    expect(classifyIntentHeuristic('what is the interaction between the panadol and catafast').intent).toBe(
+      'drug_interactions',
+    );
+  });
+
   it('does not fire drug_interactions without two drugs', () => {
     expect(classifyIntentHeuristic('what are common drug interactions to watch for').intent).not.toBe(
       'drug_interactions',

@@ -18,6 +18,8 @@ import { paperSystemInstruction, type PaperRequest } from './paper';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import type { SpecialistResult, SpecialistTask } from './types';
 import DRUG_NAMES from './drug-names.json';
+import EGYPT_GENERICS from './egypt-generics.json';
+import { drugSynonyms, isDrugAlias } from './drugAliases';
 
 const MAX_TASKS = 4;
 
@@ -348,7 +350,10 @@ const DI_NON_DRUG_WORDS = new Set([
 // Regenerate with scripts/build-drug-names.mjs.
 let drugLexicon: Set<string> | null = null;
 function knownDrugs(): Set<string> {
-  drugLexicon ??= new Set(DRUG_NAMES as readonly string[]);
+  // RxNorm ingredients + the generic ingredient names extracted from the vendored
+  // Egyptian registry, so international generic spellings (e.g. "paracetamol") are
+  // recognised alongside the US names.
+  drugLexicon ??= new Set([...(DRUG_NAMES as readonly string[]), ...(EGYPT_GENERICS as readonly string[])]);
   return drugLexicon;
 }
 
@@ -378,7 +383,7 @@ export function drugCandidates(query: string): string[] {
         .split(/\s+/)
         .map((token) => token.replace(/^-+|-+$/g, '').trim())
         .filter((word) => word.length >= 4 && !DI_NON_DRUG_WORDS.has(word))
-        .filter((word) => knownDrugs().has(word) || drugShaped(word)),
+        .filter((word) => knownDrugs().has(word) || isDrugAlias(word) || drugShaped(word)),
     ),
   ];
 }
@@ -394,7 +399,12 @@ export function unverifiedDrugNames(query: string, evidence: EvidenceItem[]): st
     .map((record) => `${record.title} ${record.snippet ?? ''} ${Object.values(record.identifiers ?? {}).join(' ')}`)
     .join(' ')
     .toLowerCase();
-  return drugCandidates(query).filter((drug) => !hay.includes(drug));
+  // A brand is verified when its generic appears in the evidence (Catafast is
+  // present as "diclofenac"), so a real drug is not rejected for lacking its
+  // brand name in the literature.
+  return drugCandidates(query).filter(
+    (drug) => !drugSynonyms(drug).some((name) => hay.includes(name)),
+  );
 }
 
 export function unverifiedDrugMessage(unverified: string[]): string {

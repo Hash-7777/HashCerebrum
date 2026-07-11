@@ -38,7 +38,7 @@ const INTERACTION_CUE =
 // a lookup, not a specific grade request. Only treat it as drug_interactions when
 // the message actually names drugs joined in a list.
 const ABOUT_QUESTION = /^\s*(?:what|which|how|why|are there|is there|tell me|explain|list|describe)\b/i;
-const DRUG_LIST_CUE = /,|;|\bwith\b|\bversus\b|\bvs\b|\bplus\b|&/i;
+const DRUG_LIST_CUE = /,|;|\/|\band\b|\bwith\b|\bversus\b|\bvs\b|\bplus\b|&/i;
 const GENETICS_CUE = /\bassociat|\bcorrelat|\bgenotype|\bpolymorphism|\ballele\b|\bvariant\b|\brisk allele\b|\bheritab/i;
 const RAG_CUE =
   /\bfrom\s+(?:my|the)\s+(?:memory|library|notes|saved)\b|\bwhat\s+do\s+i\s+(?:know|have)\b|\balready\s+(?:found|saved|know)\b|\brecall\b|\bin\s+my\s+(?:research|library|memory)\b/i;

@@ -60,6 +60,7 @@ import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
 import { runSpecialist } from './specialist';
 import { backfillLandmarkTrials } from './trialBackfill';
+import { expandDrugQuery } from './drugAliases';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
 export function evidenceKey(record: EvidenceItem): string {
@@ -672,12 +673,16 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     // so the specialist is fed only its own trusted findings — never other
     // modes' general research.
     setMemoryScope('drug_interactions');
+    // Search under the generic ingredient names too, so a brand-name question
+    // ("panadol and catafast") retrieves the real interaction literature for
+    // paracetamol and diclofenac instead of finding nothing under the brands.
+    const interactionQuery = expandDrugQuery(researchQuestion);
     let specialist: SpecialistResult;
     try {
       specialist = await runSpecialist(
         agentById('drug_interactions'),
         modelFor('drug_interactions'),
-        researchQuestion,
+        interactionQuery,
         callbacks,
       );
     } finally {
@@ -686,7 +691,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     // Keep the drug-label (OpenFDA) and terminology (RxNorm) records here — for
     // an interaction question they are authoritative trusted sources, not just
     // background, so the report can cite them for a clear regulatory-grade answer.
-    let evidence = rankEvidenceByRelevance(researchQuestion, mergeEvidence([specialist]));
+    let evidence = rankEvidenceByRelevance(interactionQuery, mergeEvidence([specialist]));
     // Fabrication guard: if a named drug appears in none of the retrieved
     // records, it is likely misspelled or not a real drug — refuse to grade it
     // rather than inventing a clinical interaction grade for a drug that does
@@ -715,7 +720,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
         }),
       );
       if (rxRecords.length > 0) {
-        evidence = rankEvidenceByRelevance(researchQuestion, [...evidence, ...rxRecords]);
+        evidence = rankEvidenceByRelevance(interactionQuery, [...evidence, ...rxRecords]);
       }
       unverified = stillUnverified;
     }
