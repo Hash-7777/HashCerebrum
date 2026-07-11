@@ -2591,7 +2591,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
   let manuscript: Manuscript = {
     title: opts.paperBlueprint.title,
     abstract,
-    keywords: keywordsFrom(opts.question),
+    keywords: keywordsFrom(titleTopic(opts.question)),
     sections,
   };
   let qa = validatePaperPackage({
@@ -2648,7 +2648,7 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
     manuscript = {
       title: opts.paperBlueprint.title,
       abstract,
-      keywords: keywordsFrom(opts.question),
+      keywords: keywordsFrom(titleTopic(opts.question)),
       sections,
     };
     qa = validatePaperPackage({

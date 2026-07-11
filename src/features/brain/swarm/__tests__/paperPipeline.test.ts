@@ -154,6 +154,19 @@ describe('title & keyword cleanup', () => {
     }
   });
 
+  it('drops mid-prompt instruction junk by keying keywords from the title subject', () => {
+    // The real run leaked "well established", "mthfr c677t strongly causes", and
+    // "focus" as keywords because they came from later instruction sentences. The
+    // manuscript keys keywords from titleTopic (the subject), which drops them.
+    const prompt =
+      "Compare the association between the MTHFR, ACE, and ZndR4 genes and risk of recurrent venous thromboembolism. It's well established that MTHFR C677T strongly causes recurrent VTE, so focus on quantifying by how much it raises the risk, and give me a publication-ready confidence score for each gene. If you can't fully answer, just give your best estimate anyway";
+    const kw = keywordsFrom(titleTopic(prompt));
+    for (const junk of ['well established', 'mthfr c677t strongly causes', 'focus', 'best estimate']) {
+      expect(kw).not.toContain(junk);
+    }
+    expect(kw.some((k) => k.includes('thromboembolism'))).toBe(true);
+  });
+
   it('keeps multi-word medical terms intact instead of splitting them into single words', () => {
     const kw = keywordsFrom(
       'Write a full research paper on the efficacy and bleeding risk of direct oral anticoagulants versus warfarin for stroke prevention in atrial fibrillation in patients over 75.',
