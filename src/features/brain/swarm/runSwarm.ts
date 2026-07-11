@@ -59,6 +59,7 @@ import { manuscriptToReadableText } from './manuscript';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
 import { runSpecialist } from './specialist';
+import { backfillLandmarkTrials } from './trialBackfill';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
 export function evidenceKey(record: EvidenceItem): string {
@@ -849,7 +850,19 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // (context-resolved) question so off-topic records sink or drop out before
   // they can be cited.
   const { evidence: fromLibrary, gapNote: libraryGapNote } = await libraryEvidence(researchQuestion, bossModel);
-  let merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialists), ...fromLibrary]);
+  // Landmark-trial backfill (paper path only): read the trial names the retrieved
+  // reviews cite and fetch those primary reports, so the manuscript can report
+  // per-trial hazard ratios instead of only pooled review numbers. Best-effort.
+  let specialistsForMerge = specialists;
+  if (paperRequest) {
+    const trialSpecialist = await backfillLandmarkTrials(
+      mergeEvidence(specialists),
+      researchQuestion,
+      callbacks,
+    );
+    if (trialSpecialist) specialistsForMerge = [...specialists, trialSpecialist];
+  }
+  let merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialistsForMerge), ...fromLibrary]);
   // Read whole papers: enrich the top open-access records with their most relevant
   // full-text passage (instead of only the abstract). Bounded + fail-safe — any
   // record without open-access full text keeps its abstract, so this never blocks

@@ -182,7 +182,10 @@ export function buildMethodsSection(
       'results by a specific search date, or apply any machine-learning classifier, gradient-boosted ' +
       'screening model, labelled training set, or similarity threshold; each specialist issued concept ' +
       'key terms to the sources it owns, through free and keyless public interfaces, so the search can ' +
-      'be reproduced without institutional subscriptions.',
+      'be reproduced without institutional subscriptions. The pipeline additionally issues targeted ' +
+      'follow-up queries to PubMed for the primary reports of any landmark trials named by the retrieved ' +
+      'reviews, so per-trial effect estimates are drawn from the trials themselves rather than only from ' +
+      'pooled review figures.',
     'Records were eligible when they were English-language biomedical items carrying a title and an ' +
       `abstract or structured metadata. ${designSentence} Duplicate records were removed by record ` +
       'identifier (DOI or PMID) and by an identity hash over title, first author, and publication year, ' +
