@@ -20,6 +20,20 @@ const LIST = `${RANGE}(?:\\s*[,;]\\s*${RANGE})*`;
 // Fullwidth / CJK brackets some models emit instead of ASCII brackets.
 const ALT_BRACKET = new RegExp(`[【〔［]\\s*(${LIST})\\s*[】〕］]`, 'g');
 
+// Source markers the drafting model wrote OUTSIDE brackets — in parentheses
+// ("(S6)", "(S4, S9, S14)") or as a sentence word ("Source S18"). The bracketed
+// renumber pass never saw these, so raw internal IDs (and dangling ones like an
+// "S18" when only 16 records exist) leaked into the abstract and results. Both
+// forms REQUIRE the internal "S" prefix, so an ordinary numeric parenthetical —
+// "(148 participants)", "(p = 0.04)", "(2)" — is never rewritten. They are
+// converted to the canonical bracket form here so the group pass expands them
+// and the downstream renumber pass resolves or drops each one.
+const S_NUM = 'S\\d+[†‡✝*]?';
+const S_RANGE = `${S_NUM}(?:\\s*[-‑–—]\\s*${S_NUM})?`;
+const S_LIST = `${S_RANGE}(?:\\s*[,;]\\s*${S_RANGE})*`;
+const PAREN_SOURCE_GROUP = new RegExp(`\\(\\s*(${S_LIST})\\s*\\)`, 'g');
+const PROSE_SOURCE = new RegExp(`\\b[Ss]ources?\\s+(${S_NUM})\\b`, 'g');
+
 // A whole bracketed citation group: one or more S-prefixed (or bare) numbers,
 // each optionally a range, separated by commas or semicolons.
 //   [S8]  [S25, S27]  [S1-S4]  [1, 2; 5]  [S1–S3, S7]  【S5†】
@@ -49,7 +63,11 @@ function expandPart(part: string, maxSpan: number): string | null {
  */
 export function expandCitationMarkers(content: string, maxCount: number): string {
   const maxSpan = Math.max(maxCount, 50);
-  const bracketed = content.replace(ALT_BRACKET, '[$1]');
+  // Pull out-of-bracket markers (parenthetical groups, prose "Source S#") into
+  // the canonical bracket form first, so the group/renumber passes below handle
+  // every shape uniformly and nothing internal survives to the page.
+  const rebracketed = content.replace(PAREN_SOURCE_GROUP, '[$1]').replace(PROSE_SOURCE, '[$1]');
+  const bracketed = rebracketed.replace(ALT_BRACKET, '[$1]');
   return bracketed.replace(GROUP, (full, inner: string) => {
     const parts = inner.split(/\s*[,;]\s*/);
     let expanded = '';

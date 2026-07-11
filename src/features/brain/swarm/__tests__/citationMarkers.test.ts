@@ -46,4 +46,34 @@ describe('expandCitationMarkers', () => {
   it('does not touch non-citation bracketed text', () => {
     expect(expandCitationMarkers('an array [index] and [a, b]', 40)).toBe('an array [index] and [a, b]');
   });
+
+  // The real leak: the abstract/results carried out-of-bracket markers the
+  // bracketed renumber pass never saw — "(S6)", "(S4, S9, S14)", "Source S18".
+  it('rebrackets a single parenthetical source marker', () => {
+    expect(expandCitationMarkers('a study of 148 participants (S6).', 40)).toBe(
+      'a study of 148 participants [S6].',
+    );
+  });
+
+  it('rebrackets and expands a parenthetical source group', () => {
+    expect(expandCitationMarkers('three primary records (S4, S9, S14) dominate', 40)).toBe(
+      'three primary records [S4][S9][S14] dominate',
+    );
+  });
+
+  it('rebrackets a prose "Source S#" reference', () => {
+    expect(expandCitationMarkers('Source S18 provided an odds ratio', 40)).toBe(
+      '[S18] provided an odds ratio',
+    );
+    expect(expandCitationMarkers('extracted from source S7, suggesting', 40)).toBe(
+      'extracted from [S7], suggesting',
+    );
+  });
+
+  it('never rewrites an ordinary numeric parenthetical', () => {
+    // Requiring the internal "S" prefix keeps statistics and counts safe.
+    expect(expandCitationMarkers('148 participants (p = 0.04) and (2) arms', 40)).toBe(
+      '148 participants (p = 0.04) and (2) arms',
+    );
+  });
 });
