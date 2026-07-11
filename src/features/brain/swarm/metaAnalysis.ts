@@ -11,6 +11,17 @@
 
 import type { BoundEffect, EvidenceExtraction } from './publicationTypes';
 
+// A meta-analysis must pool PRIMARY studies. An effect estimate lifted from a
+// systematic review or meta-analysis is itself already pooled, so pooling it
+// again double-counts every trial that review summarised; a narrative review or
+// regulatory/terminology record reports no primary estimate at all. These are
+// excluded from the pool — when only such records exist, the app does not compute
+// its own pooled figure (the manuscript still narrates the reported estimates).
+const NON_PRIMARY_DESIGN_RX = /meta-?analysis|systematic review|narrative review|context record|terminology/i;
+function isPoolablePrimary(ex: EvidenceExtraction): boolean {
+  return !NON_PRIMARY_DESIGN_RX.test(ex.studyDesign ?? '');
+}
+
 type NumericEffect = {
   label: string;
   point: number;
@@ -101,7 +112,7 @@ export function buildSmdMeta(
 ): MetaAnalysisResult | undefined {
   const effects: NumericEffect[] = [];
 
-  for (const ex of extractions) {
+  for (const ex of extractions.filter(isPoolablePrimary)) {
     const n = sampleSizeFromExtraction(ex);
     if (!n || n < 2) continue;
     const text = ex.effectValues.map((e) => e.sourceText).join(' ');
@@ -214,7 +225,7 @@ function ratioFromBoundEffect(
  */
 export function buildRatioMeta(extractions: EvidenceExtraction[]): MetaAnalysisResult | undefined {
   const byFamily = new Map<RatioFamily, NumericEffect[]>();
-  for (const ex of extractions) {
+  for (const ex of extractions.filter(isPoolablePrimary)) {
     // Prefer the pre-bound effects (ratio already paired with its own CI); fall
     // back to parsing free text. One effect per source so a single study that
     // reports several subgroup ratios is not double-counted as many studies.
@@ -330,7 +341,17 @@ function computeInverseVariance(effects: NumericEffect[], kind: MetaAnalysisResu
     predictionCiLow: rePooled - Z_975 * predSe,
     predictionCiHigh: rePooled + Z_975 * predSe,
     studyEffects: effects,
-    interpretable: effects.length >= 2 && effects.every((e) => Number.isFinite(e.point) && Number.isFinite(e.se)),
+    // Do not present a pooled estimate when the studies significantly disagree in
+    // DIRECTION — at least one estimate wholly protective (its CI below the null)
+    // and at least one wholly harmful (its CI above the null). On this scale the
+    // null is 0 (log-ratio or mean difference), so opposing significant effects
+    // are a red flag that different OUTCOMES were mixed (e.g. a MACE hazard ratio
+    // pooled with a hypoglycaemia risk ratio); the individual estimates are shown
+    // instead of a misleading combined diamond.
+    interpretable:
+      effects.length >= 2 &&
+      effects.every((e) => Number.isFinite(e.point) && Number.isFinite(e.se)) &&
+      !(effects.some((e) => e.ciHigh < 0) && effects.some((e) => e.ciLow > 0)),
   };
 }
 

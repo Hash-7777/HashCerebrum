@@ -188,3 +188,37 @@ describe('formatMetaResult', () => {
     expect(text).toContain('Prediction interval');
   });
 });
+
+describe('valid-pooling guards', () => {
+  function ratioWithDesign(marker: string, text: string, design: string): EvidenceExtraction {
+    return { ...makeRatio(marker, text), studyDesign: design };
+  }
+
+  it('excludes already-pooled reviews so only primary studies are pooled', () => {
+    const primaries = [
+      ratioWithDesign('[S1]', 'hazard ratio 0.80 (95% CI 0.70-0.91)', 'randomized clinical trial'),
+      ratioWithDesign('[S2]', 'hazard ratio 0.86 (95% CI 0.78-0.95)', 'cohort study'),
+    ];
+    const reviews = [
+      ratioWithDesign('[S3]', 'pooled hazard ratio 0.86 (95% CI 0.81-0.92)', 'meta-analysis'),
+      ratioWithDesign('[S4]', 'hazard ratio 0.84 (95% CI 0.79-0.90)', 'systematic review'),
+    ];
+    const pooledPrimary = buildRatioMeta([...primaries, ...reviews])!;
+    // Only the two primary studies are pooled; the review estimates are dropped.
+    expect(pooledPrimary.studies).toBe(2);
+    // With no primary studies, nothing is pooled (reviews are never re-pooled).
+    expect(buildRatioMeta(reviews)).toBeUndefined();
+  });
+
+  it('refuses to pool estimates that significantly disagree in direction', () => {
+    // A protective hazard ratio and a harmful (different-outcome) hazard ratio in
+    // the same family: opposing significant effects must not become one diamond.
+    const mixed = [
+      makeRatio('[S1]', 'hazard ratio 0.70 (95% CI 0.60-0.82)'),
+      makeRatio('[S2]', 'hazard ratio 2.94 (95% CI 1.66-5.21)'),
+    ];
+    const r = buildRatioMeta(mixed);
+    expect(r).toBeDefined();
+    expect(r?.interpretable).toBe(false);
+  });
+});

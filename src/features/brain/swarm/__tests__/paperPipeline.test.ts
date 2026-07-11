@@ -284,8 +284,12 @@ describe('title & keyword cleanup', () => {
     const sglt2Evidence = [evi('pubmed'), evi('pubmed'), evi('europepmc')];
     const sglt2Extractions = [
       ext('[S1]', 'pubmed', 'randomized controlled trial', ['heart failure hospitalization'], 'hazard ratio 0.80 (95% CI 0.74-0.86)'),
+      // A meta-analysis estimate is excluded from the app's own pool (re-pooling it
+      // would double-count the trials it already summarised).
       ext('[S2]', 'europepmc', 'systematic review and meta-analysis', ['cardiovascular death'], 'hazard ratio 0.76 (95% CI 0.72-0.81)'),
-      ext('[S3]', 'pubmed', 'cohort study', ['heart failure hospitalization'], 'an observational reduction was seen'),
+      // Two PRIMARY studies (the RCT above and this cohort) carry comparable, same-
+      // direction hazard ratios, so the app pools these — not the review.
+      ext('[S3]', 'pubmed', 'cohort study', ['heart failure hospitalization'], 'hazard ratio 0.83 (95% CI 0.71-0.97)'),
     ];
     // A DIFFERENT review, minimal evidence, no poolable effects (narrative only).
     const warfarinQ = 'Write a paper on warfarin and NSAID bleeding risk in older adults';
