@@ -688,8 +688,67 @@ function claimLedgerTable(ledger: ClaimLedgerEntry[]): ManuscriptTable {
   };
 }
 
+// The renumbered [n] a source is cited as in the body, so a table cell lines up
+// with the references and the prose rather than showing the internal [S#].
+function displayMarkerFor(sourceMarker: string, citationMap: Record<string, CitationMapEntry>): string {
+  return citationMap[sourceMarker.replace(/[[\]]/g, '')]?.displayMarker ?? sourceMarker;
+}
+
+// A source-reported effect estimate for the characteristics table: the first
+// bound effect (paired with ITS OWN CI and p-value), else a labelled ratio, else
+// an honest "not reported". Never recombines numbers across studies.
+function primaryReportedEffect(extraction: EvidenceExtraction): string {
+  const bound = extraction.boundEffects?.find((effect) => effect.value);
+  if (bound) {
+    const ci = bound.ci ? `, 95% CI ${bound.ci}` : '';
+    const p = bound.pValue ? `, p=${bound.pValue}` : '';
+    return `${bound.measure} ${bound.value}${ci ? ` (${ci.replace(/^, /, '')}${p})` : p ? ` (${p.replace(/^, /, '')})` : ''}`;
+  }
+  const ratio = extraction.effectValues.find((effect) =>
+    ['odds ratio', 'risk ratio', 'hazard ratio'].includes(effect.label),
+  );
+  if (ratio) return `${ratio.label} ${ratio.value}`;
+  return 'not reported';
+}
+
+function truncateTitle(title: string, max = 80): string {
+  const clean = title.replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+}
+
+// Table 1 — Characteristics of included studies. A standard journal table (not an
+// internal worksheet): one row per cited study with its design, sample size, and
+// primary reported effect estimate. This is the DATA the review is built on,
+// shown as a table instead of only narrated in prose.
+function studyCharacteristicsTable(
+  extractions: EvidenceExtraction[],
+  citationMap: Record<string, CitationMapEntry>,
+): ManuscriptTable | null {
+  const rows = extractions
+    .filter((extraction) => citationMap[extraction.sourceMarker.replace(/[[\]]/g, '')])
+    .slice(0, 30)
+    .map((extraction) => [
+      displayMarkerFor(extraction.sourceMarker, citationMap),
+      truncateTitle(extraction.title),
+      extraction.year ?? 'not reported',
+      extraction.studyDesign || 'not reported',
+      extraction.sampleSize ?? 'not reported',
+      primaryReportedEffect(extraction),
+    ]);
+  if (rows.length === 0) return null;
+  return {
+    id: 'table-study-characteristics',
+    title: 'Characteristics of included studies',
+    caption:
+      'Study-level design, sample size, and the primary reported effect estimate extracted from each cited record. Each estimate is paired with the same study’s confidence interval and p-value as reported in the source; “not reported” means the record supplied no such value. Reference numbers match the body and reference list.',
+    columns: ['Ref', 'Study', 'Year', 'Design', 'Sample size', 'Reported effect estimate'],
+    rows,
+  };
+}
+
 function buildTables(
   evidence: EvidenceItem[],
+  citationMap: Record<string, CitationMapEntry>,
   dataset?: UploadedDatasetSummary,
   pipeline?: {
     evidenceExtractions?: EvidenceExtraction[];
@@ -715,11 +774,12 @@ function buildTables(
     },
   ];
   if (pipeline?.evidenceExtractions?.length) {
-    // The structured per-record extraction and the raw extracted-statistics
-    // tables are kept out of the publishable body — they read as internal
-    // worksheets, not journal tables. The pooled meta-analysis below is the one
-    // legitimate results table. (Both remain available in the execution trace.)
-    // Add meta-analysis table if computable.
+    // Table 1 — characteristics of the cited studies. A standard journal table
+    // that surfaces the design, sample size, and reported effect estimate of each
+    // study as DATA, rather than leaving those numbers only in prose.
+    const characteristics = studyCharacteristicsTable(pipeline.evidenceExtractions, citationMap);
+    if (characteristics) tables.push(characteristics);
+    // The pooled meta-analysis below is the quantitative-synthesis results table.
     const meta = buildEvidenceMeta(pipeline.evidenceExtractions);
     if (meta && meta.interpretable) {
       tables.push({
@@ -1242,7 +1302,7 @@ export function buildPublicationArtifact(
     references,
     citationMap,
     figures: buildFigures(evidence, references.length, options.dataset, pipeline),
-    tables: buildTables(evidence, options.dataset, pipeline),
+    tables: buildTables(evidence, citationMap, options.dataset, pipeline),
     statistics,
     ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),
     ...(options.claimLedger ? { claimLedger: options.claimLedger } : {}),

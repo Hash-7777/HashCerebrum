@@ -99,6 +99,56 @@ const manuscript: Manuscript = {
   ],
 };
 
+describe('study-characteristics table (Table 1)', () => {
+  const studyRecords: EvidenceItem[] = [
+    {
+      source: 'pubmed',
+      title: 'ACE insertion/deletion polymorphism and venous thromboembolism risk',
+      year: 2000,
+      authors: ['González A'],
+      identifiers: { pmid: '111' },
+      snippet: 'A case-control study of 148 participants reported an odds ratio 0.53 (95% CI 0.30-0.94, p=0.04) for the ACE I/D polymorphism.',
+      fetchedAt: new Date(0).toISOString(),
+      provenanceHash: 'ace-1',
+    },
+    {
+      source: 'pubmed',
+      title: 'MTHFR C677T mutation with recurrent thrombosis: a case report',
+      year: 2026,
+      authors: ['Oh S'],
+      identifiers: { pmid: '222' },
+      snippet: 'A patient with the MTHFR C677T variant had recurrent events; no comparative effect estimate was reported.',
+      fetchedAt: new Date(0).toISOString(),
+      provenanceHash: 'mthfr-1',
+    },
+  ];
+
+  it('lists each cited study with design, sample size and its reported effect', () => {
+    const ms: Manuscript = {
+      ...manuscript,
+      sections: [
+        { heading: 'Results', body: ['The ACE variant [S1] and the MTHFR case [S2] were reviewed.'] },
+        { heading: 'Declarations', body: ['Automated evidence-review draft for expert review.'] },
+      ],
+    };
+    const extractions = extractEvidenceFromRecords(studyRecords);
+    const artifact = buildPublicationArtifact(ms, studyRecords, {
+      evidenceExtractions: extractions,
+      claimLedger: buildClaimLedger(extractions),
+    });
+    const table = artifact.tables.find((t) => t.id === 'table-study-characteristics');
+    expect(table).toBeDefined();
+    expect(table!.columns).toEqual(['Ref', 'Study', 'Year', 'Design', 'Sample size', 'Reported effect estimate']);
+    // The ACE row shows its renumbered marker and its source-reported odds ratio.
+    const aceRow = table!.rows.find((r) => r[1]!.includes('ACE'));
+    expect(aceRow?.[0]).toBe('[1]');
+    expect(aceRow?.[5]).toContain('0.53');
+    // The MTHFR record reports no estimate — shown honestly, never borrowed.
+    const mthfrRow = table!.rows.find((r) => r[1]!.includes('MTHFR'));
+    expect(mthfrRow?.[5]).toBe('not reported');
+  });
+});
+
 describe('publication artifact contract', () => {
   it('deduplicates citations into Vancouver-style canonical references', () => {
     const artifact = buildPublicationArtifact(manuscript, evidence);
