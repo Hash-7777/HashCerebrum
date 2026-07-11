@@ -465,8 +465,20 @@ export async function synthesizeInteractionReport(
   evidence: EvidenceItem[],
   onToken: (delta: string) => void,
   signal?: AbortSignal,
+  namedDrugs: string[] = [],
 ): Promise<{ content: string; modelUsed: string }> {
   const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
+  // The drugs the user actually named. Retrieval expands a brand to its generic
+  // ingredients so the literature is found, but the GRADING must stay on the
+  // named drugs — otherwise a combination brand ("Panadol") is split into its
+  // ingredients and graded against itself, producing a matrix of drugs the user
+  // never asked about.
+  const drugScope =
+    namedDrugs.length >= 2
+      ? `\n\nDRUG SCOPE — grade ONLY these drugs, treating each as a SINGLE drug: ${namedDrugs.join(
+          ', ',
+        )}. Do NOT split a brand or combination product into its ingredients, and do NOT introduce any drug outside this list; ingredient names in the records are background for identifying the interaction, not additional drugs to grade.`
+      : '';
   const findings = specialists
     .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
     .join('\n\n');
@@ -512,7 +524,7 @@ End with this exact line:
     },
     {
       role: 'user',
-      content: `Interaction question: ${question}
+      content: `Interaction question: ${question}${drugScope}
 
 Retrieved records:
 ${evidenceBlock}

@@ -20,6 +20,7 @@ import {
   appraisePriorWork,
   bossChat,
   contextualizeQuestion,
+  drugCandidates,
   IDENTITY_ANSWER,
   isIdentityQuestion,
   planResearch,
@@ -742,6 +743,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       evidence,
       callbacks.onAnswerToken,
       signal,
+      drugCandidates(researchQuestion),
     );
     return {
       kind: 'research',
