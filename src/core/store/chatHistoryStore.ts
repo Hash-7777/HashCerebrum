@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import type { EvidenceItem } from '@platform/index';
 import { platform } from '@platform/index';
 import type { Manuscript } from '@features/brain/swarm/manuscript';
+import type { GeneAssociation } from '@features/brain/swarm/genetics/associationConfidence';
 import { useProjectStore } from './projectStore';
 
 const STORAGE_KEY = 'chatHistory.v1';
@@ -36,6 +37,9 @@ export interface ChatMessage {
   // Present on a full-paper assistant message — the structured manuscript
   // the PDF export renders deterministically.
   manuscript?: Manuscript;
+  // Present on a Genetics-mode assistant message — the app-computed association-
+  // confidence score per gene, rendered as a graded card above the narrative.
+  associations?: GeneAssociation[];
   // Present on an outline-first proposal message — carries the original query so
   // the "Draft full paper" action can run the real pipeline on approval.
   outlineProposal?: { query: string };

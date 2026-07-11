@@ -820,6 +820,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       evidence,
       specialists: [specialist],
       modelUsed: report.modelUsed,
+      associations,
     };
   }
 

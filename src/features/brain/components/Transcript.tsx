@@ -43,6 +43,7 @@ import { exportEvidenceTableCsv } from '../export/evidenceTable';
 import { DocumentPreviewWindow, type PreviewDocument } from './DocumentPreviewWindow';
 import { InteractionMatrix } from './InteractionMatrix';
 import { InteractionReportBody } from './InteractionReportBody';
+import { GeneAssociationCards } from './GeneAssociationCards';
 import { interactionMatrixFromReport, interactionMatrixMarkdown } from '../swarm/interactionMatrix';
 
 export type { ChatMessage };
@@ -451,6 +452,9 @@ export const Transcript = memo(function Transcript({
                     </>
                   ) : (
                     <div className="assistant-text">
+                      {message.associations && message.associations.length > 0 && !message.isStreaming && (
+                        <GeneAssociationCards associations={message.associations} />
+                      )}
                       <MarkdownText content={message.content} />
                       {message.isStreaming && <span className="chat-caret" aria-hidden="true" />}
                     </div>

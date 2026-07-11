@@ -510,6 +510,7 @@ export function BrainMode() {
                 trace: traceEntries,
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
                 ...(result.manuscript ? { manuscript: result.manuscript } : {}),
+                ...(result.associations ? { associations: result.associations } : {}),
               }
             : m,
         ),
@@ -690,6 +691,7 @@ export function BrainMode() {
                 trace: traceEntries,
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
                 ...(result.manuscript ? { manuscript: result.manuscript } : {}),
+                ...(result.associations ? { associations: result.associations } : {}),
               }
             : m,
         ),

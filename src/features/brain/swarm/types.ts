@@ -7,6 +7,7 @@ import type { EvidenceItem } from '@platform/index';
 import type { LlmMessage } from '@core/llm/types';
 import type { Manuscript } from './manuscript';
 import type { UploadedDatasetSummary } from './publicationTypes';
+import type { GeneAssociation } from './genetics/associationConfidence';
 
 export interface SpecialistTask {
   agentId: AgentId;
@@ -49,6 +50,9 @@ export interface SwarmResult {
   // Present for full-paper requests — the structured manuscript the PDF
   // export renders deterministically.
   manuscript?: Manuscript;
+  // Present for a Genetics-mode result — the app-computed association-confidence
+  // score per gene, rendered as a graded card.
+  associations?: GeneAssociation[];
 }
 
 export interface SwarmOptions {

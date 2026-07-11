@@ -1615,3 +1615,107 @@
   border-radius: var(--hc-radius-sm);
   background: color-mix(in srgb, var(--hc-fg) 8%, transparent);
 }
+
+/* ── Genetics association cards — a graded, animated confidence card per gene,
+   the genetics counterpart to the drug-interaction cards ─────────────────── */
+.gene-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 2px 0 14px;
+}
+.gene-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--band, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--band, transparent) 5%, var(--panel, transparent));
+  opacity: 0;
+  transform: translateY(8px);
+  animation: gene-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes gene-card-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+.gene-card--unrecognized { --band: #e2696e; }
+
+/* Circular confidence gauge */
+.gene-gauge { width: 80px; height: 80px; flex: none; }
+.gene-gauge-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 7;
+  opacity: 0.55;
+}
+.gene-gauge-fill {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.gene-gauge-num {
+  font: 700 22px var(--f-mono);
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.gene-gauge-pct {
+  font: 600 10px var(--f-mono);
+  fill: var(--text-4, var(--text-3));
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.gene-gauge--none {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px dashed color-mix(in srgb, var(--band) 55%, var(--line));
+  color: var(--band);
+  font: 700 26px var(--f-mono);
+}
+
+.gene-card-body { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.gene-card-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.gene-card-name {
+  font: 600 16px var(--f-serif, var(--hc-font-serif));
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+.gene-band-pill {
+  font: 600 10px var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--band);
+  background: color-mix(in srgb, var(--band) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--band) 40%, transparent);
+}
+.gene-band-pill--warn { --band: #e2696e; }
+
+.gene-card-chips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gene-dir {
+  font: 600 11px var(--f-mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.gene-dir--risk { color: #e2696e; background: color-mix(in srgb, #e2696e 12%, transparent); }
+.gene-dir--protective { color: #44c98b; background: color-mix(in srgb, #44c98b 12%, transparent); }
+.gene-dir--mixed { color: #e3bd63; background: color-mix(in srgb, #e3bd63 12%, transparent); }
+.gene-dir--none { color: var(--text-3); background: color-mix(in srgb, var(--text-3) 10%, transparent); }
+.gene-card-count { font: 500 11px var(--f-mono); color: var(--text-4, var(--text-3)); }
+.gene-card-rationale {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gene-card { animation: none; opacity: 1; transform: none; }
+  .gene-gauge-fill { transition: none; }
+}
