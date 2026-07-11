@@ -343,6 +343,13 @@ const DI_NON_DRUG_WORDS = new Set([
   'evaluating', 'compare', 'comparing', 'list', 'analyze', 'analyse', 'analyzing', 'analysing', 'rate', 'report',
   'show', 'tell', 'give', 'find', 'identify', 'review', 'explain', 'describe', 'please', 'about',
   'possible', 'potential', 'clinically', 'clinical', 'significant', 'major', 'severe', 'their',
+  // Common English connectors, pronouns, and auxiliaries that pass the drug-shape
+  // heuristic but are never drugs. Without these, "also" (from "…and also note the
+  // interaction…") was parsed as a drug, so the interaction search ran on "also"
+  // and the real second drug was dropped.
+  'also', 'note', 'noted', 'notes', 'these', 'those', 'this', 'that', 'which', 'when', 'then',
+  'than', 'they', 'them', 'here', 'have', 'been', 'being', 'such', 'into', 'from', 'were', 'will',
+  'used', 'using', 'both', 'this', 'were', 'associated',
 ]);
 
 /** Candidate drug names parsed from a free-text interaction query. */

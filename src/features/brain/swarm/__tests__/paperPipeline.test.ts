@@ -167,6 +167,17 @@ describe('title & keyword cleanup', () => {
     expect(kw.some((k) => k.includes('thromboembolism'))).toBe(true);
   });
 
+  it('drops review-framing words like "whether" and "evidence" from keywords', () => {
+    const glp1 = keywordsFrom(
+      titleTopic('Write a full systematic review and meta-analysis on whether GLP-1 receptor agonists reduce major adverse cardiovascular events compared with placebo in adults with type 2 diabetes'),
+    );
+    expect(glp1).not.toContain('whether glp-1 receptor agonists');
+    expect(glp1.some((k) => k.includes('glp-1 receptor agonists'))).toBe(true);
+    expect(glp1.some((k) => k.includes('major adverse cardiovascular events'))).toBe(true);
+    const review = keywordsFrom(titleTopic('evidence review comparing the association of the MTHFR and F5 genes with recurrent VTE'));
+    expect(review).not.toContain('evidence');
+  });
+
   it('keeps multi-word medical terms intact instead of splitting them into single words', () => {
     const kw = keywordsFrom(
       'Write a full research paper on the efficacy and bleeding risk of direct oral anticoagulants versus warfarin for stroke prevention in atrial fibrillation in patients over 75.',
@@ -372,6 +383,14 @@ describe('extractBoundEffects', () => {
   it('marks a CI that crosses 1.0 as no effect', () => {
     const [e] = extractBoundEffects('HR 0.90 (95% CI 0.79-1.02, p = 0.08)');
     expect(e?.direction).toBe('no effect');
+  });
+
+  it('drops a CI that does not bracket its own point estimate (a misparse)', () => {
+    // The real garbled pair: "OR 2.08 (95% CI 2.88 to 3.77)" — 2.08 is below the
+    // interval, so the CI belongs to a different number and must not be kept or pooled.
+    const [e] = extractBoundEffects('The endpoint had an odds ratio of 2.08 (95% CI 2.88 to 3.77).');
+    expect(e?.value).toBe('2.08');
+    expect(e?.ci).toBeNull();
   });
 
   it('tags an increase and never glues another study’s numbers', () => {

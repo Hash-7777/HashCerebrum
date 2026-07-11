@@ -763,7 +763,13 @@ export function extractBoundEffects(text: string): BoundEffect[] {
     const ciM = window.match(WINDOW_CI_RX);
     const lo = ciM ? Number(ciM[1]) : NaN;
     const hi = ciM ? Number(ciM[2]) : NaN;
-    const validCi = !!ciM && Number.isFinite(lo) && Number.isFinite(hi) && lo > 0 && lo < hi;
+    // A confidence interval must bracket its own point estimate. When the parsed
+    // interval does not contain the value (e.g. "OR 2.08 (95% CI 2.88-3.77)"), the
+    // CI was mis-bound to a different number in the abstract; treat it as no CI so
+    // the garbled pair neither renders in prose nor enters the meta-analysis. A
+    // small tolerance absorbs rounding in the reported bounds.
+    const bracketsPoint = value >= lo * 0.98 && value <= hi * 1.02;
+    const validCi = !!ciM && Number.isFinite(lo) && Number.isFinite(hi) && lo > 0 && lo < hi && bracketsPoint;
     // Keep the CI verbatim (source-faithful), use the parsed bounds for direction.
     const ciStr = validCi ? `${ciM![1]}-${ciM![2]}` : null;
     const ciNums: [number, number] | null = validCi ? [lo, hi] : null;
@@ -1411,6 +1417,9 @@ const NON_TOPIC_KEYWORDS = new Set([
   // is a generic population qualifier; "type" is a tokenization artifact left
   // behind when "type 2 diabetes" splits on the digit.
   'title', 'systematic', 'meta-analysis', 'metaanalysis', 'meta', 'impact', 'adults', 'adult', 'type',
+  // Framing words that lead a review question ("… on WHETHER X REDUCES Y", "an
+  // EVIDENCE review of …") but are not the medical subject.
+  'whether', 'evidence', 'reduce', 'reduces', 'reduced', 'reducing', 'association', 'associations',
 ]);
 
 // Connectors, articles, and request words that separate one keyword PHRASE from

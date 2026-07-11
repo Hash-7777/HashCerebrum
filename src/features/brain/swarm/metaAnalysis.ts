@@ -174,9 +174,11 @@ function extractRatioWithCi(
   const ciLow = safeNumber(ci[1]);
   const ciHigh = safeNumber(ci[2]);
   if (ciLow === undefined || ciHigh === undefined || ciLow <= 0 || ciHigh <= ciLow) return undefined;
-  // The point estimate must sit within a tolerance of its own CI, else the CI we
-  // found belongs to a different statistic in the same snippet.
-  if (point < ciLow * 0.5 || point > ciHigh * 2) return undefined;
+  // The point estimate must sit inside its own CI (small tolerance for rounding),
+  // else the interval we matched belongs to a different statistic in the snippet
+  // — e.g. "OR 2.08 (95% CI 2.88-3.77)", where 2.08 is below the interval. Such a
+  // mis-bound pair must never be pooled.
+  if (point < ciLow * 0.98 || point > ciHigh * 1.02) return undefined;
   return { family, point, ciLow, ciHigh };
 }
 

@@ -27,4 +27,12 @@ describe('interactionDrugPair', () => {
   it('does not fire without two recognized drugs', () => {
     expect(interactionDrugPair('does this drug interact with anything at all')).toBeNull();
   });
+
+  it('does not mistake the connector "also" for a drug', () => {
+    // The real bug: "…and also note the interaction between rivaroxaban and
+    // catafast" parsed "also" as a drug, dropping catafast from the pair.
+    expect(
+      interactionDrugPair('and also note the interaction between rivaroxaban and catafast for these patients'),
+    ).toEqual(['rivaroxaban', 'catafast']);
+  });
 });
