@@ -312,7 +312,7 @@ describe('publication artifact contract', () => {
     expect(markdown).not.toContain('[S2]');
   });
 
-  it('adds evidence-strength and extracted-statistics figures and a bias-risk column from the pipeline', () => {
+  it('publishes only the PRISMA flow and data figures/tables — no search-about charts', () => {
     const extractions = extractEvidenceFromRecords([
       {
         source: 'pubmed',
@@ -332,14 +332,19 @@ describe('publication artifact contract', () => {
       claimLedger,
     });
     const kinds = artifact.figures.map((figure) => figure.kind);
-    expect(kinds).toContain('evidence_strength');
-    expect(kinds).toContain('numeric_yield');
-    // The structured per-record extraction and raw extracted-statistics tables
-    // are deliberately kept out of the publishable body — they read as internal
-    // worksheets, not journal tables.
+    // The PRISMA flow is the one search-provenance figure kept.
+    expect(kinds).toContain('prisma_flow');
+    // The search/extraction meta charts are gone so every other figure is data.
+    expect(kinds).not.toContain('source_yield');
+    expect(kinds).not.toContain('evidence_years');
+    expect(kinds).not.toContain('evidence_strength');
+    expect(kinds).not.toContain('numeric_yield');
     const tableIds = artifact.tables.map((table) => table.id);
-    expect(tableIds).not.toContain('table-evidence-extraction');
-    expect(tableIds).not.toContain('table-extracted-numeric-statistics');
+    // The search-about source summary and the internal claim ledger are gone.
+    expect(tableIds).not.toContain('table-source-yield');
+    expect(tableIds).not.toContain('table-claim-ledger');
+    // The characteristics-of-studies data table remains.
+    expect(tableIds).toContain('table-study-characteristics');
   });
 
   it('cleans stale prompt leakage during export normalization', () => {

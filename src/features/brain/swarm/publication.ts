@@ -276,22 +276,6 @@ function uniqueEvidenceCount(evidence: EvidenceItem[]): number {
   return new Set(evidence.map(evidenceIdentity)).size;
 }
 
-function sourceYieldSvg(counts: Record<string, number>): string {
-  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const max = Math.max(1, ...rows.map(([, count]) => count));
-  const rowH = 26;
-  const width = 760;
-  const height = Math.max(120, 52 + rows.length * rowH);
-  const bars = rows
-    .map(([source, count], index) => {
-      const y = 42 + index * rowH;
-      const barW = Math.round((count / max) * 410);
-      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(source)}</text><rect x="190" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${210 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
-    })
-    .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Evidence source yield</text>${bars}</svg>`;
-}
-
 // A PRISMA 2020-style study-selection flow built from the counts the pipeline
 // already knows: records identified (per source), duplicates removed, records
 // screened, and records included/cited — with exclusion side-boxes. Honestly
@@ -347,61 +331,6 @@ export function prismaFlowSvg(
   );
 }
 
-function yearsSvg(years: number[]): string {
-  const counts = new Map<number, number>();
-  for (const year of years) counts.set(year, (counts.get(year) ?? 0) + 1);
-  const entries = [...counts.entries()].sort((a, b) => a[0] - b[0]).slice(-18);
-  const max = Math.max(1, ...entries.map(([, count]) => count));
-  const bars = entries
-    .map(([year, count], index) => {
-      const x = 48 + index * 36;
-      const h = Math.max(5, Math.round((count / max) * 120));
-      const y = 170 - h;
-      return `<rect x="${x}" y="${y}" width="20" height="${h}" rx="4" fill="#8b9eff"/><text x="${x + 10}" y="192" text-anchor="middle" fill="#9fb0c7" font-size="10" transform="rotate(45 ${x + 10} 192)">${year}</text>`;
-    })
-    .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 230" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="760" height="230" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence by publication year</text><line x1="42" y1="174" x2="718" y2="174" stroke="#2a3951"/>${bars}</svg>`;
-}
-
-const STRENGTH_STYLE: Array<[EvidenceStrength, string, string]> = [
-  ['strong', 'Strong — RCT / review / meta-analysis', '#3dd1bf'],
-  ['moderate', 'Moderate — cohort / registry', '#8b9eff'],
-  ['weak', 'Weak — cross-sectional / indexed record', '#e3bd63'],
-  ['context', 'Context — regulatory / terminology', '#7f8ea8'],
-];
-
-function evidenceStrengthSvg(counts: Record<EvidenceStrength, number>): string {
-  const rows = STRENGTH_STYLE.filter(([key]) => counts[key] > 0);
-  const max = Math.max(1, ...rows.map(([key]) => counts[key]));
-  const rowH = 30;
-  const width = 760;
-  const height = Math.max(120, 56 + rows.length * rowH);
-  const bars = rows
-    .map(([key, label, color], index) => {
-      const y = 48 + index * rowH;
-      const barW = Math.round((counts[key] / max) * 330);
-      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="12">${escXml(label)}</text><rect x="356" y="${y}" width="${barW}" height="18" rx="4" fill="${color}"/><text x="${376 + barW}" y="${y + 14}" fill="#9fb0c7" font-size="12">${counts[key]}</text>`;
-    })
-    .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="28" fill="#f1f6fc" font-size="16" font-weight="700">Evidence strength distribution</text>${bars}</svg>`;
-}
-
-// Count each kind of statistic extracted from source text — so the figure shows
-// the actual quantitative yield of the retrieval, not a fabricated estimate.
-function numericYieldCounts(extractions: EvidenceExtraction[]): Array<[string, number]> {
-  const counts = new Map<string, number>();
-  let sampleSizes = 0;
-  for (const item of extractions) {
-    if (item.sampleSize) sampleSizes += 1;
-    for (const effect of item.effectValues) {
-      counts.set(effect.label, (counts.get(effect.label) ?? 0) + 1);
-    }
-  }
-  const rows: Array<[string, number]> = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  if (sampleSizes > 0) rows.unshift(['sample size', sampleSizes]);
-  return rows;
-}
-
 function metaAnalysisSvg(meta: MetaAnalysisResult): string {
   const width = 760;
   const rowH = 28;
@@ -449,21 +378,6 @@ ${rows}
 <text x="12" y="${yPooled + 18}" fill="#f1f6fc" font-size="11" font-weight="700">Pooled</text>
 <text x="12" y="${yPooled + 36}" fill="#9fb0c7" font-size="10">Prediction interval</text>
 </svg>`;
-}
-
-function numericYieldSvg(rows: Array<[string, number]>): string {
-  const max = Math.max(1, ...rows.map(([, count]) => count));
-  const rowH = 26;
-  const width = 760;
-  const height = Math.max(120, 52 + rows.length * rowH);
-  const bars = rows
-    .map(([label, count], index) => {
-      const y = 42 + index * rowH;
-      const barW = Math.round((count / max) * 380);
-      return `<text x="28" y="${y + 14}" fill="#dce7f7" font-size="13">${escXml(label)}</text><rect x="240" y="${y}" width="${barW}" height="16" rx="4" fill="#3dd1bf"/><text x="${260 + barW}" y="${y + 13}" fill="#9fb0c7" font-size="12">${count}</text>`;
-    })
-    .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" font-family="DejaVu Sans Mono, Libertinus Serif"><rect width="${width}" height="${height}" rx="14" fill="#08111d"/><text x="28" y="26" fill="#f1f6fc" font-size="16" font-weight="700">Extracted statistics by type</text>${bars}</svg>`;
 }
 
 // ── Descriptive forest plot of the individual reported estimates ─────────────
@@ -605,19 +519,14 @@ function buildFigures(
   },
 ): ManuscriptFigure[] {
   const counts = sourceCounts(evidence);
-  const years = evidenceYears(evidence);
   const total = evidence.length;
   const unique = uniqueEvidenceCount(evidence);
+  // The PRISMA-style study-selection flow is the one search-provenance figure a
+  // real evidence review keeps. The other search/extraction meta charts (source
+  // yield, year distribution, evidence-strength mix, extracted-statistics counts)
+  // are intentionally omitted so every remaining figure is about the DATA, not
+  // about the search or the reference list.
   const figures: ManuscriptFigure[] = [
-    {
-      id: 'fig-source-yield',
-      kind: 'source_yield',
-      title: 'Evidence source yield',
-      caption: `Records retrieved by guarded biomedical source before final manuscript citation filtering. Total retrieved records: ${total}.`,
-      alt: 'Horizontal bar chart showing retrieved record counts by biomedical source.',
-      svg: sourceYieldSvg(counts),
-      data: { sourceCounts: counts, totalRecords: total },
-    },
     {
       id: 'fig-prisma-flow',
       kind: 'prisma_flow',
@@ -635,60 +544,9 @@ function buildFigures(
     },
   ];
 
-  if (years.length > 0) {
-    figures.push({
-      id: 'fig-evidence-years',
-      kind: 'evidence_years',
-      title: 'Evidence year distribution',
-      caption: `Distribution of available publication or registry years in retrieved records. Year metadata was present for ${years.length} record(s).`,
-      alt: 'Bar chart showing retrieved evidence by year.',
-      svg: yearsSvg(years),
-      data: { years },
-    });
-  }
-
-  // Evidence-strength distribution — a quantitative view of the quality mix the
-  // synthesis is built on. Always available once the claim ledger exists.
-  const strengthCounts = evidenceStrengthCounts(pipeline?.claimLedger);
-  if (strengthCounts && Object.values(strengthCounts).some((count) => count > 0)) {
-    figures.push({
-      id: 'fig-evidence-strength',
-      kind: 'evidence_strength',
-      title: 'Evidence strength distribution',
-      caption:
-        'Claim-level evidence-strength counts derived from study design. Strong = RCT / systematic review / meta-analysis; moderate = cohort / registry; weak = cross-sectional / indexed record; context = regulatory / terminology.',
-      alt: 'Bar chart showing the count of claims at each evidence-strength tier.',
-      svg: evidenceStrengthSvg(strengthCounts),
-      data: { evidenceStrengthCounts: strengthCounts },
-    });
-  }
-
-  // Compute the pooled synthesis once (continuous SMD, else reported ratio
-  // measures) so the captions below can tell the truth about whether a pooled
-  // estimate was actually computed.
   const evidenceMeta = pipeline?.evidenceExtractions
     ? buildEvidenceMeta(pipeline.evidenceExtractions)
     : undefined;
-  const pooledComputed = evidenceMeta?.interpretable === true;
-
-  // Extracted-statistics yield — how many quantitative results (sample sizes,
-  // effect estimates, CIs, p-values) were copied from source text.
-  if (pipeline?.evidenceExtractions?.length) {
-    const numericRows = numericYieldCounts(pipeline.evidenceExtractions);
-    if (numericRows.length > 0) {
-      figures.push({
-        id: 'fig-numeric-yield',
-        kind: 'numeric_yield',
-        title: 'Extracted statistics by type',
-        caption: pooledComputed
-          ? 'Count of numeric statistics extracted from retrieved source text, by type. These source-reported values are pooled into the random-effects meta-analysis shown separately below.'
-          : 'Count of numeric statistics extracted from retrieved source text, by type. Too few comparable effect estimates were reported to compute a pooled meta-analysis.',
-        alt: 'Bar chart showing the count of extracted statistics by type.',
-        svg: numericYieldSvg(numericRows),
-        data: { numericYield: Object.fromEntries(numericRows) },
-      });
-    }
-  }
 
   // Forest plot of the computed Mantel–Haenszel subgroup analysis.
   if (dataset?.inferential?.subgroups) {
@@ -805,24 +663,6 @@ function inferentialTable(plan: AnalysisPlan): ManuscriptTable {
   };
 }
 
-function claimLedgerTable(ledger: ClaimLedgerEntry[]): ManuscriptTable {
-  return {
-    id: 'table-claim-ledger',
-    title: 'Claim ledger',
-    caption:
-      'Section-level claim ledger used to compile the manuscript. The drafting model may use only these source-backed claims and source markers.',
-    columns: ['Claim', 'Section', 'Evidence strength', 'Sources', 'Numeric support', 'Contradictions or limits'],
-    rows: ledger.map((entry) => [
-      entry.claim,
-      entry.sectionTarget,
-      entry.evidenceStrength,
-      entry.supportingSources.join(', '),
-      entry.numericSupport.join('; ') || 'none extracted',
-      entry.contradictionNotes.join('; ') || 'none recorded',
-    ]),
-  };
-}
-
 // The renumbered [n] a source is cited as in the body, so a table cell lines up
 // with the references and the prose rather than showing the internal [S#].
 function displayMarkerFor(sourceMarker: string, citationMap: Record<string, CitationMapEntry>): string {
@@ -882,7 +722,6 @@ function studyCharacteristicsTable(
 }
 
 function buildTables(
-  evidence: EvidenceItem[],
   citationMap: Record<string, CitationMapEntry>,
   dataset?: UploadedDatasetSummary,
   pipeline?: {
@@ -890,24 +729,10 @@ function buildTables(
     claimLedger?: ClaimLedgerEntry[];
   },
 ): ManuscriptTable[] {
-  const counts = sourceCounts(evidence);
-  const rows = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([source, count]) => {
-      const sourceRecords = evidence.filter((record) => SOURCE_LABELS[record.source] === source);
-      const years = evidenceYears(sourceRecords);
-      const range = years.length ? `${Math.min(...years)}-${Math.max(...years)}` : 'not available';
-      return [source, String(count), range];
-    });
-  const tables: ManuscriptTable[] = [
-    {
-      id: 'table-source-yield',
-      title: 'Evidence source summary',
-      caption: 'Retrieved source counts used by the agentic evidence-review pipeline before final citation filtering.',
-      columns: ['Source', 'Retrieved records', 'Year range'],
-      rows,
-    },
-  ];
+  // Only DATA tables are published: the search/reference-about source summary and
+  // the internal claim-ledger table are intentionally omitted so every table is
+  // about the studies and their results, not about the search or the references.
+  const tables: ManuscriptTable[] = [];
   if (pipeline?.evidenceExtractions?.length) {
     // Table 1 — characteristics of the cited studies. A standard journal table
     // that surfaces the design, sample size, and reported effect estimate of each
@@ -962,7 +787,6 @@ function buildTables(
       });
     }
   }
-  if (pipeline?.claimLedger?.length) tables.push(claimLedgerTable(pipeline.claimLedger));
   if (dataset) tables.push(datasetTable(dataset));
   if (dataset?.inferential?.generated) tables.push(inferentialTable(dataset.inferential));
   return tables;
@@ -1437,7 +1261,7 @@ export function buildPublicationArtifact(
     references,
     citationMap,
     figures: buildFigures(evidence, references.length, citationMap, options.dataset, pipeline),
-    tables: buildTables(evidence, citationMap, options.dataset, pipeline),
+    tables: buildTables(citationMap, options.dataset, pipeline),
     statistics,
     ...(options.evidenceExtractions ? { evidenceExtractions: options.evidenceExtractions } : {}),
     ...(options.claimLedger ? { claimLedger: options.claimLedger } : {}),

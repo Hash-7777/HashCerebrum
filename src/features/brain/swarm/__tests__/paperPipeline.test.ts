@@ -717,11 +717,13 @@ describe('paper pipeline claim ledger and QA', () => {
 
     expect(artifact.evidenceExtractions).toHaveLength(1);
     expect(artifact.claimLedger).toHaveLength(1);
-    // The structured per-record extraction and raw numeric-statistics tables are
-    // kept out of the publishable body (worksheet-like); the claim ledger stays.
+    // Only data tables are published now: the worksheet-like extraction tables and
+    // the internal claim-ledger table are omitted; the study-characteristics table
+    // stays. The claim ledger still drives the synthesis (computedAnalyses below).
     expect(artifact.tables.map((table) => table.id)).not.toContain('table-evidence-extraction');
     expect(artifact.tables.map((table) => table.id)).not.toContain('table-extracted-numeric-statistics');
-    expect(artifact.tables.map((table) => table.id)).toContain('table-claim-ledger');
+    expect(artifact.tables.map((table) => table.id)).not.toContain('table-claim-ledger');
+    expect(artifact.tables.map((table) => table.id)).toContain('table-study-characteristics');
     expect(artifact.statistics.computedAnalyses).toContain('claim_ledger');
     expect(artifact.statistics.extractedNumericStatisticCount).toBeGreaterThan(0);
   });
