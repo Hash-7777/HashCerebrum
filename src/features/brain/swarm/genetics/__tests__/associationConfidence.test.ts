@@ -5,6 +5,7 @@ import {
   associationPointsFromEvidence,
   bandFor,
   confidenceFromEvidence,
+  geneAssociations,
   type AssociationDataPoint,
 } from '../associationConfidence';
 
@@ -254,5 +255,76 @@ describe('associationPointsFromEvidence', () => {
     ]);
     expect(result.pooledDirection).toBe('risk');
     expect(result.score).toBeGreaterThan(40);
+  });
+});
+
+describe('geneAssociations (per-gene scoring)', () => {
+  const rec = (partial: Partial<EvidenceItem> & { source: EvidenceItem['source'] }): EvidenceItem => ({
+    title: 'rec',
+    authors: [],
+    identifiers: {},
+    fetchedAt: '',
+    provenanceHash: 'h',
+    ...partial,
+  });
+
+  it('keeps a single-gene question on whole-evidence scoring (unchanged)', () => {
+    const out = geneAssociations(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'MICA TT and cardiovascular complications in type 1 diabetes',
+          snippet: 'TT vs CC odds ratio 24.53 (95% CI 3.94-152.85), p<0.0001.',
+        }),
+      ],
+      'MICA and cardiovascular complications in type 1 diabetes',
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]?.gene).toBe('MICA');
+    expect(out[0]?.recognized).toBe(true);
+    expect(out[0]?.confidence.band).not.toBe('insufficient');
+  });
+
+  it('scores each gene of a multi-gene question on its OWN records', () => {
+    const out = geneAssociations(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'PCSK9 variant and coronary artery disease',
+          snippet: 'PCSK9 was associated with coronary artery disease (odds ratio 2.1, 95% CI 1.5-2.9, p=0.0001).',
+        }),
+        rec({
+          source: 'pubmed',
+          title: 'APOB and coronary artery disease',
+          snippet: 'APOB carriers had no significant difference (odds ratio 1.05, 95% CI 0.90-1.22, p=0.5).',
+        }),
+      ],
+      'Compare PCSK9 versus APOB for coronary artery disease',
+    );
+    const byGene = Object.fromEntries(out.map((a) => [a.gene, a]));
+    expect(byGene['PCSK9']?.confidence.score).toBeGreaterThan(0);
+    // APOB's only record is non-significant, so it must not inherit PCSK9's score.
+    expect(byGene['APOB']?.confidence.band).toBe('insufficient');
+    expect(byGene['PCSK9']?.confidence.score).not.toBe(byGene['APOB']?.confidence.score);
+  });
+
+  it('flags a made-up gene as unrecognized with no score (the ZXPQ7 bug)', () => {
+    const out = geneAssociations(
+      [
+        rec({
+          source: 'pubmed',
+          title: 'PCSK9 and coronary artery disease',
+          snippet: 'PCSK9 was associated (odds ratio 2.1, 95% CI 1.5-2.9, p=0.0001).',
+        }),
+      ],
+      'Compare PCSK9 and whether the ZXPQ7 gene is associated with coronary artery disease',
+    );
+    const zx = out.find((a) => a.gene === 'ZXPQ7');
+    expect(zx).toBeDefined();
+    expect(zx?.recognized).toBe(false);
+    expect(zx?.confidence.score).toBe(0);
+    expect(zx?.confidence.band).toBe('insufficient');
+    // The real gene is still scored normally.
+    expect(out.find((a) => a.gene === 'PCSK9')?.confidence.score).toBeGreaterThan(0);
   });
 });

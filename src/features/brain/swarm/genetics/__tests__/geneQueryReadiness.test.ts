@@ -4,9 +4,33 @@ import {
   clarificationMessage,
   extractGeneSymbols,
   extractRsIds,
+  extractUnrecognizedGeneTokens,
   hasDiseaseSignal,
   hasGeneSignal,
 } from '../geneQueryReadiness';
+
+describe('extractUnrecognizedGeneTokens', () => {
+  it('flags a made-up gene the question frames as a gene', () => {
+    const out = extractUnrecognizedGeneTokens(
+      'Compare PCSK9 and APOB, and whether the ZXPQ7 gene is associated with coronary artery disease',
+    );
+    expect(out).toEqual(['ZXPQ7']);
+  });
+
+  it('does not flag real genes or ordinary all-caps terms', () => {
+    // MACE / SGLT2 are not framed as genes, and BRCA1 is a real symbol.
+    const out = extractUnrecognizedGeneTokens(
+      'Does the BRCA1 gene raise MACE risk with SGLT2 inhibitors',
+    );
+    expect(out).not.toContain('BRCA1');
+    expect(out).not.toContain('MACE');
+    expect(out).not.toContain('SGLT2');
+  });
+
+  it('returns nothing when no gene-shaped token is framed as a gene', () => {
+    expect(extractUnrecognizedGeneTokens('compare warfarin and apixaban for stroke')).toEqual([]);
+  });
+});
 
 describe('extractGeneSymbols / extractRsIds', () => {
   it('pulls the gene symbol out of a full sentence for the DB query', () => {

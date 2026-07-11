@@ -9,7 +9,12 @@
 
 import type { EvidenceItem } from '@platform/index';
 import { extractEffectValues } from '../paperPipeline';
-import { diseaseTerms, hasGeneSignal } from './geneQueryReadiness';
+import {
+  diseaseTerms,
+  extractGeneSymbols,
+  extractUnrecognizedGeneTokens,
+  hasGeneSignal,
+} from './geneQueryReadiness';
 
 export type AssociationSource = 'gwas_catalog' | 'clinvar' | 'literature';
 export type AssociationDirection = 'risk' | 'protective' | 'neutral';
@@ -355,4 +360,85 @@ export function confidenceFromEvidence(
     };
   }
   return associationConfidence(points);
+}
+
+// ── Per-gene scoring (multi-gene questions) ────────────────────────────────────
+
+/** One gene named in the question and the app-computed confidence for it. */
+export interface GeneAssociation {
+  /** The gene symbol as named (empty only for an rsID-only single-gene query). */
+  gene: string;
+  /** True when the symbol is an approved HGNC gene; false for a made-up token
+   *  the question framed as a gene (e.g. "ZXPQ7"), which is never scored. */
+  recognized: boolean;
+  confidence: AssociationConfidence;
+}
+
+// Does a record actually name this gene symbol (title, snippet, or the structured
+// gene identifier)? Used to attribute retrieved evidence to the right gene so each
+// gene is scored on its OWN records, not the whole multi-gene pool.
+function mentionsGene(record: EvidenceItem, gene: string): boolean {
+  const id = (record.identifiers ?? {}) as Record<string, unknown>;
+  const idGene = typeof id.gene === 'string' ? id.gene : '';
+  const hay = `${record.title} ${record.snippet ?? ''} ${idGene}`.toUpperCase();
+  return new RegExp(`(^|[^A-Z0-9])${gene.toUpperCase()}([^A-Z0-9]|$)`).test(hay);
+}
+
+// A gene the question invented — not in HGNC — cannot carry a score. Report it as
+// insufficient with a plain rationale so the reader sees WHY there is no number.
+function unrecognizedGeneConfidence(gene: string): AssociationConfidence {
+  return {
+    score: 0,
+    band: 'insufficient',
+    supportCount: 0,
+    refuteCount: 0,
+    quantitativeCount: 0,
+    totalCount: 0,
+    pooledDirection: 'none',
+    rationale: `"${gene}" is not a recognized human gene symbol (not in the HGNC set), so no gene-disease association can be scored for it.`,
+  };
+}
+
+/**
+ * Score the association confidence for EACH gene the question names, rather than
+ * emitting a single number for a whole multi-gene question. A comparative query
+ * ("PCSK9 vs APOB vs ZXPQ7") must not stamp one score onto every gene — each real
+ * gene is scored on its own records, and a made-up gene is flagged as unrecognized
+ * with no score at all.
+ *
+ * A single-gene (or rsID-only) question keeps the original whole-evidence scoring,
+ * so its behaviour is unchanged.
+ */
+export function geneAssociations(
+  evidence: EvidenceItem[],
+  question: string,
+): GeneAssociation[] {
+  const genes = extractGeneSymbols(question);
+  const unrecognized = extractUnrecognizedGeneTokens(question);
+
+  // One real gene and nothing fishy — score over the full evidence set exactly
+  // as before, so single-gene reports are untouched.
+  if (genes.length <= 1 && unrecognized.length === 0) {
+    return [
+      {
+        gene: genes[0] ?? '',
+        recognized: true,
+        confidence: confidenceFromEvidence(evidence, question),
+      },
+    ];
+  }
+
+  const results: GeneAssociation[] = [];
+  for (const gene of genes) {
+    const subset = evidence.filter((r) => mentionsGene(r, gene));
+    results.push({
+      gene,
+      recognized: true,
+      confidence: associationConfidence(associationPointsFromEvidence(subset, question)),
+    });
+  }
+  for (const gene of unrecognized) {
+    results.push({ gene, recognized: false, confidence: unrecognizedGeneConfidence(gene) });
+  }
+  return results;
 }

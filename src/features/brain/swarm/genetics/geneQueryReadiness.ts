@@ -105,6 +105,34 @@ export function extractGeneSymbols(text: string): string[] {
   return out;
 }
 
+// A gene-shaped token presented AS a gene: immediately next to a gene noun
+// ("the ZXPQ7 gene", "variant BRAF", "APOE allele"). The adjacency is what keeps
+// ordinary ALL-CAPS terms (MACE, SGLT2, LDL) from being mistaken for a claimed
+// gene — only a token the user frames as a gene is captured.
+const CLAIMED_GENE_RX =
+  /\b([A-Z][A-Z0-9-]{1,11})\s+(?:gene|variant|allele|polymorphism|mutation|locus|genotype)\b|\b(?:gene|variant|allele|polymorphism|mutation|locus|genotype)\s+([A-Z][A-Z0-9-]{1,11})\b/g;
+
+/**
+ * Gene-shaped tokens the question presents as genes but that are NOT approved
+ * HGNC symbols (e.g. a made-up "ZXPQ7 gene"). The genetics report must name these
+ * as unrecognized and refuse to score them, never fold them under a real gene's
+ * confidence. Recognized symbols and rsIDs are excluded.
+ */
+export function extractUnrecognizedGeneTokens(text: string): string[] {
+  const recognized = new Set(extractGeneSymbols(text));
+  const out: string[] = [];
+  for (const m of text.matchAll(CLAIMED_GENE_RX)) {
+    const token = (m[1] ?? m[2] ?? '').trim();
+    if (!token) continue;
+    if (!geneLikeToken(token)) continue; // must look like a symbol, not a word
+    if (geneLexicon().has(token)) continue; // a real approved symbol
+    if (recognized.has(token)) continue;
+    if (NON_DISEASE_WORDS.has(token.toLowerCase())) continue;
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
+}
+
 /** rsID tokens named in the text (e.g. "rs1051792"), de-duplicated. */
 export function extractRsIds(text: string): string[] {
   const out: string[] = [];

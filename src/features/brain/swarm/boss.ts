@@ -13,7 +13,7 @@ import { bus } from '@core/bus/EventBus';
 import type { LlmMessage } from '@core/llm/types';
 import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
-import type { AssociationConfidence } from './genetics/associationConfidence';
+import type { AssociationConfidence, GeneAssociation } from './genetics/associationConfidence';
 import { paperSystemInstruction, type PaperRequest } from './paper';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import type { SpecialistResult, SpecialistTask } from './types';
@@ -544,6 +544,49 @@ export function geneConfidenceHeader(confidence: AssociationConfidence): string 
   return `**Association confidence: ${confidence.score}% — ${confidence.band}**`;
 }
 
+// Matches a line carrying a confidence score, used to strip model-authored score
+// lines so only the app's deterministic header(s) can appear.
+const CONFIDENCE_SCORE_LINE_RX = /association confidence:\s*\d+%/i;
+
+/**
+ * The authoritative confidence header block for a genetics report. The app writes
+ * EVERY score line here; the model writes none. A single recognized gene keeps the
+ * original one-line header (unchanged behaviour). A multi-gene question gets one
+ * app-authored line per gene, and any gene the question invented is named as
+ * unrecognized with NO score — so a made-up gene can never receive a badge.
+ */
+export function geneAssociationsHeader(associations: GeneAssociation[]): string {
+  if (associations.length <= 1) {
+    const only = associations[0];
+    if (!only) return '';
+    if (!only.recognized) {
+      return `**${only.gene} — unrecognized gene symbol: no association can be scored**`;
+    }
+    // Single recognized gene: the plain header, exactly as before.
+    return geneConfidenceHeader(only.confidence);
+  }
+  return associations
+    .map((a) =>
+      a.recognized
+        ? `**${a.gene} — Association confidence: ${a.confidence.score}% — ${a.confidence.band}**`
+        : `**${a.gene} — unrecognized gene symbol: no association can be scored**`,
+    )
+    .join('\n\n');
+}
+
+/** Remove any confidence-score line the model wrote that the app did not author,
+ *  so a made-up or copied score can never appear. App-authored header lines the
+ *  model reproduced verbatim are kept in place. */
+export function stripModelConfidenceLines(body: string, allowed: string[]): string {
+  const allowedSet = new Set(allowed.map((l) => l.trim()));
+  return body
+    .split('\n')
+    .filter((line) => !CONFIDENCE_SCORE_LINE_RX.test(line) || allowedSet.has(line.trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const CONFIDENT_GENE_RX = /association confidence:\s*\d+%\s*—\s*(weak|moderate|strong|very strong)/i;
 
 /** A report is "confident" (and may feed shared memory) when the deterministic
@@ -567,7 +610,7 @@ export async function synthesizeGeneCorrelationReport(
   question: string,
   specialists: SpecialistResult[],
   evidence: EvidenceItem[],
-  confidence: AssociationConfidence,
+  associations: GeneAssociation[],
   onToken: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
@@ -575,7 +618,19 @@ export async function synthesizeGeneCorrelationReport(
   const findings = specialists
     .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
     .join('\n\n');
-  const header = geneConfidenceHeader(confidence);
+  const header = geneAssociationsHeader(associations);
+  const multiGene = associations.length > 1;
+  // The app-authored basis lines the model narrates under (never re-scores).
+  const confidenceBasis = associations
+    .map((a) =>
+      a.recognized
+        ? `- ${a.gene || 'gene'}: ${a.confidence.score}% (${a.confidence.band}) — ${a.confidence.rationale}`
+        : `- ${a.gene}: UNRECOGNIZED — not an approved HGNC gene symbol; do not score it or cite any evidence for it.`,
+    )
+    .join('\n');
+  const sectionSpec = multiGene
+    ? `The question names ${associations.length} genes. Write ONE section per gene, in the order below, each starting with its app-authored header line exactly as given. For an unrecognized gene, write a single sentence stating it is not a recognized human gene and there is no published association to report — invent nothing.`
+    : `Start with the app-authored header line exactly as given, then the single-gene report below.`;
   const messages: LlmMessage[] = [
     {
       role: 'system',
@@ -583,14 +638,16 @@ export async function synthesizeGeneCorrelationReport(
 
 Hard rules:
 - Use ONLY the retrieved records and findings. Never invent an association, gene, variant, effect size, p-value, PMID, allele frequency, or population.
-- The app has ALREADY computed the Association Confidence score deterministically from the structured evidence. Report it EXACTLY as given in the header — never recompute, round, or change it.
+- The app has ALREADY computed the Association Confidence score for each gene deterministically. NEVER write an "Association confidence: N%" line yourself and NEVER invent, copy, round, or reuse a score for any gene — the app's header lines are the only scores. A gene the app marked UNRECOGNIZED gets NO score and NO evidence.
 - The score is the STRENGTH OF THE PUBLISHED ASSOCIATION, not a personal clinical risk. Say so plainly.
 - Cite every factual claim inline with the exact [S#] marker of the record it came from. Never write a bare or list-style marker.
-- If the confidence band is "insufficient", state that the published evidence is insufficient to quantify the association and do NOT present it as established.
+- If a confidence band is "insufficient", state that the published evidence is insufficient to quantify the association and do NOT present it as established.
 
-Output EXACTLY this Markdown structure, starting with the provided header line verbatim:
+${sectionSpec}
 
-${header}
+For each recognized gene use this structure (do not repeat the score anywhere but the header line):
+
+<the app-authored header line for this gene>
 
 **Gene / variant:** <gene symbol and variant/rsID/genotype as named in the records>
 **Disease / phenotype:** <the disease asked about>
@@ -606,17 +663,18 @@ ${header}
 
 **Caveats & gaps:** <conflicting or benign records, small samples, missing direct evidence>
 
-End with this exact line:
+End the whole report with this exact line:
 *⚠ ${GENE_DISCLAIMER}*`,
     },
     {
       role: 'user',
       content: `Genetics question: ${question}
 
-App-computed association confidence (report verbatim, do not change):
-- Score: ${confidence.score}% (${confidence.band})
-- Significant supporting records: ${confidence.supportCount}; non-associating records: ${confidence.refuteCount}; pooled direction: ${confidence.pooledDirection}
-- Basis: ${confidence.rationale}
+App-computed association confidence per gene (narrate these; never write your own score line):
+${confidenceBasis}
+
+App-authored header line(s) — reproduce each verbatim to open its gene's section:
+${header}
 
 Retrieved records:
 ${evidenceBlock}
@@ -624,7 +682,7 @@ ${evidenceBlock}
 Specialist findings:
 ${findings}
 
-Write the correlation report now, beginning with the header line exactly as given and citing [S#] markers.`,
+Write the correlation report now, opening each gene's section with its header line exactly as given and citing [S#] markers.`,
     },
   ];
   const res = await streamWithModelChain(
@@ -655,9 +713,14 @@ Write the correlation report now, beginning with the header line exactly as give
         `filter fired. Rephrase the question, or switch the boss model in Agent settings.`,
     );
   }
-  if (!CONFIDENT_GENE_RX.test(content) && !/association confidence:/i.test(content)) {
-    content = `${header}\n\n${content}`;
-  }
+  // Defence-in-depth: the app authors every score. Strip any confidence line the
+  // model wrote that is not an exact app header line (a copied or invented badge —
+  // this is what once stamped a "43% — moderate" score onto a made-up gene), then
+  // make sure each app header line is present, prepending any the model dropped.
+  const allowedLines = header.split('\n\n').map((l) => l.trim()).filter(Boolean);
+  content = stripModelConfidenceLines(content, allowedLines);
+  const missing = allowedLines.filter((line) => !content.includes(line));
+  if (missing.length > 0) content = `${missing.join('\n\n')}\n\n${content}`;
   return { content: ensureGeneDisclaimer(collapseMarkerRuns(content)), modelUsed: res.modelUsed };
 }
 

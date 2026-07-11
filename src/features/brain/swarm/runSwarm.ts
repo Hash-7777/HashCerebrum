@@ -29,7 +29,7 @@ import {
   unverifiedDrugMessage,
   unverifiedDrugNames,
 } from './boss';
-import { confidenceFromEvidence } from './genetics/associationConfidence';
+import { geneAssociations } from './genetics/associationConfidence';
 import {
   assessGeneQueryReadiness,
   clarificationMessage,
@@ -788,8 +788,9 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       mergeEvidence([specialist, dbSpecialist]),
     );
     // The percentage is computed deterministically from the structured genetic
-    // records and significant published effect sizes — never by the model.
-    const confidence = confidenceFromEvidence(evidence, researchQuestion);
+    // records and significant published effect sizes — one score PER gene named,
+    // never by the model. A made-up gene is flagged unrecognized with no score.
+    const associations = geneAssociations(evidence, researchQuestion);
     callbacks.onBossPhase('synthesizing');
     // Mini / local-model path: trim the records fed to the synthesis prompt so it
     // fits a small context window. The score above already used all the evidence.
@@ -799,7 +800,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       researchQuestion,
       [specialist],
       reportEvidence,
-      confidence,
+      associations,
       callbacks.onAnswerToken,
       signal,
     );

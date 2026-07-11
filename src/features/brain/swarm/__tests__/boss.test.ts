@@ -4,8 +4,10 @@ import {
   drugCandidates,
   ensureGeneDisclaimer,
   ensureInteractionDisclaimer,
+  geneAssociationsHeader,
   geneConfidenceHeader,
   isConfidentGeneReport,
+  stripModelConfidenceLines,
   isConfidentInteractionReport,
   isIdentityQuestion,
   looksLikeRefusalOrNonQuery,
@@ -14,7 +16,7 @@ import {
   unverifiedDrugNames,
 } from '../boss';
 import type { BossPlan } from '../boss';
-import type { AssociationConfidence } from '../genetics/associationConfidence';
+import type { AssociationConfidence, GeneAssociation } from '../genetics/associationConfidence';
 import type { EvidenceItem } from '@platform/index';
 
 describe('drug-interaction fabrication guard', () => {
@@ -189,6 +191,44 @@ describe('genetics report helpers', () => {
     const out = ensureGeneDisclaimer('Gene report body.');
     expect(out.toLowerCase()).toContain('not medical advice');
     expect(ensureGeneDisclaimer(out).toLowerCase().match(/not medical advice/g)?.length).toBe(1);
+  });
+
+  const assoc = (gene: string, recognized: boolean, over: Partial<AssociationConfidence> = {}): GeneAssociation => ({
+    gene,
+    recognized,
+    confidence: conf(recognized ? over : { score: 0, band: 'insufficient', ...over }),
+  });
+
+  it('keeps the plain one-line header for a single recognized gene', () => {
+    expect(geneAssociationsHeader([assoc('PCSK9', true, { score: 72, band: 'strong' })])).toBe(
+      '**Association confidence: 72% — strong**',
+    );
+  });
+
+  it('authors one labelled score line per gene and flags an unrecognized gene', () => {
+    const header = geneAssociationsHeader([
+      assoc('PCSK9', true, { score: 61, band: 'strong' }),
+      assoc('APOB', true, { score: 15, band: 'insufficient' }),
+      assoc('ZXPQ7', false),
+    ]);
+    expect(header).toContain('**PCSK9 — Association confidence: 61% — strong**');
+    expect(header).toContain('**APOB — Association confidence: 15% — insufficient**');
+    expect(header).toContain('**ZXPQ7 — unrecognized gene symbol: no association can be scored**');
+    // A made-up gene never gets a percentage.
+    expect(header).not.toMatch(/ZXPQ7[^\n]*\d+%/);
+  });
+
+  it('strips a model-authored score line but keeps an app-authored one', () => {
+    const appLine = '**PCSK9 — Association confidence: 61% — strong**';
+    const body = [
+      appLine,
+      'PCSK9 is associated with coronary artery disease [S1].',
+      '**ZXPQ7 — Association confidence: 43% — moderate**', // model invented this
+      'ZXPQ7 shows a moderate link [S2].',
+    ].join('\n');
+    const cleaned = stripModelConfidenceLines(body, [appLine]);
+    expect(cleaned).toContain(appLine);
+    expect(cleaned).not.toContain('43% — moderate');
   });
 });
 
