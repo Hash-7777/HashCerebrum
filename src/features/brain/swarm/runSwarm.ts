@@ -63,6 +63,7 @@ import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger }
 import { runSpecialist } from './specialist';
 import { backfillLandmarkTrials } from './trialBackfill';
 import { backfillDrugInteractions } from './interactionBackfill';
+import { backfillNamedEntityEvidence } from './entityBackfill';
 import { expandDrugQuery } from './drugAliases';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
@@ -891,6 +892,11 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       callbacks,
     );
     if (trialSpecialist) specialistsForMerge = [...specialistsForMerge, trialSpecialist];
+    // Entity-targeted backfill: for a question naming genes, deterministically
+    // fetch the association literature for each gene + the disease, so a weak
+    // model's poor query choice cannot leave the paper built on off-topic records.
+    const entitySpecialist = await backfillNamedEntityEvidence(researchQuestion, callbacks);
+    if (entitySpecialist) specialistsForMerge = [...specialistsForMerge, entitySpecialist];
     // Drug-interaction backfill: when the paper request also asks about a drug
     // interaction, fold the interaction literature into the evidence so the paper
     // addresses it instead of falsely reporting "no interaction data".
