@@ -10,6 +10,7 @@ import {
 } from './manuscript';
 import type {
   AnalysisPlan,
+  BaselineCharacteristics,
   CanonicalReference,
   CitationMapEntry,
   ComplianceItem,
@@ -592,6 +593,28 @@ function buildFigures(
   return figures;
 }
 
+function baselineCharacteristicsTable(baseline: BaselineCharacteristics): ManuscriptTable {
+  return {
+    id: 'table-baseline-characteristics',
+    title: `Baseline characteristics by ${baseline.groupColumn}`,
+    caption:
+      `Participant characteristics compared between ${baseline.groupColumn} = ${baseline.groupALabel} (n=${baseline.nA}) and ${baseline.groupBLabel} (n=${baseline.nB}). ` +
+      "Numeric variables are mean ± SD compared with Welch's t-test; categorical variables are n (%) compared with the chi-square or Fisher exact test. All values are computed in-app from the uploaded dataset.",
+    columns: [
+      'Characteristic',
+      `${baseline.groupALabel} (n=${baseline.nA})`,
+      `${baseline.groupBLabel} (n=${baseline.nB})`,
+      'p-value',
+    ],
+    rows: baseline.rows.map((row) => [
+      row.variable,
+      row.groupA,
+      row.groupB,
+      row.pValue === null ? '—' : fmtPValue(row.pValue),
+    ]),
+  };
+}
+
 function datasetTable(dataset: UploadedDatasetSummary): ManuscriptTable {
   return {
     id: 'table-dataset-descriptives',
@@ -787,6 +810,9 @@ function buildTables(
       });
     }
   }
+  // Baseline characteristics lead the dataset tables — the clinical Table 1 that
+  // compares every variable across the two groups before the inferential models.
+  if (dataset?.inferential?.baseline) tables.push(baselineCharacteristicsTable(dataset.inferential.baseline));
   if (dataset) tables.push(datasetTable(dataset));
   if (dataset?.inferential?.generated) tables.push(inferentialTable(dataset.inferential));
   return tables;

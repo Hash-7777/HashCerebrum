@@ -261,9 +261,34 @@ export interface SurvivalAnalysis {
 }
 
 /** The full analysis plan stored on an uploaded dataset summary. */
+// One row of the baseline-characteristics table: a variable summarised in each
+// group with a between-group significance test. Numeric variables carry mean ±
+// SD compared by Welch's t-test; categorical variables carry n (%) compared by
+// the chi-square or Fisher exact test.
+export interface BaselineRow {
+  variable: string;
+  groupA: string;
+  groupB: string;
+  pValue: number | null;
+  test: string;
+}
+
+// "Table 1 — baseline characteristics by group": every other variable compared
+// across the two levels of the grouping column, computed in-app from the raw
+// dataset. This is the defining data table of a primary-research clinical paper.
+export interface BaselineCharacteristics {
+  groupColumn: string;
+  groupALabel: string;
+  groupBLabel: string;
+  nA: number;
+  nB: number;
+  rows: BaselineRow[];
+}
+
 export interface AnalysisPlan {
   generated: boolean;
   analyses: AnalysisResult[];
+  baseline?: BaselineCharacteristics;
   subgroups?: SubgroupAnalysis;
   survival?: SurvivalAnalysis;
   notes: string[];

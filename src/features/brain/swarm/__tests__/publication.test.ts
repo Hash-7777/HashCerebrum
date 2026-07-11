@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
 import type { Manuscript } from '../manuscript';
+import type { UploadedDatasetSummary } from '../publicationTypes';
 import {
   assertPublicationReady,
   buildPublicationArtifact,
@@ -193,6 +194,43 @@ describe('study-characteristics table (Table 1)', () => {
     expect(forest!.svg).not.toContain('Pooled');
     // Renderer allowlist safety: no <marker>, so the Typst PDF keeps the figure.
     expect(forest!.svg).not.toContain('<marker');
+  });
+});
+
+describe('baseline characteristics table (dataset Table 1)', () => {
+  it('renders as the leading dataset table with per-group columns and a p-value', () => {
+    const dataset: UploadedDatasetSummary = {
+      filename: 'patients.csv',
+      sha256: 'hash',
+      rows: 20,
+      columns: ['complication', 'hba1c'],
+      delimiter: ',',
+      columnSummaries: [],
+      previewRows: [],
+      inferential: {
+        generated: true,
+        analyses: [],
+        notes: [],
+        baseline: {
+          groupColumn: 'complication',
+          groupALabel: 'yes',
+          groupBLabel: 'no',
+          nA: 10,
+          nB: 10,
+          rows: [{ variable: 'hba1c', groupA: '8.25 ± 0.20', groupB: '7.18 ± 0.19', pValue: 0.0001, test: "Welch's t-test" }],
+        },
+      },
+    };
+    const artifact = buildPublicationArtifact(manuscript, evidence, { dataset });
+    const tableIds = artifact.tables.map((t) => t.id);
+    expect(tableIds).toContain('table-baseline-characteristics');
+    // It leads the dataset tables, before the raw descriptives.
+    expect(tableIds.indexOf('table-baseline-characteristics')).toBeLessThan(
+      tableIds.indexOf('table-dataset-descriptives'),
+    );
+    const table = artifact.tables.find((t) => t.id === 'table-baseline-characteristics')!;
+    expect(table.columns).toEqual(['Characteristic', 'yes (n=10)', 'no (n=10)', 'p-value']);
+    expect(table.rows[0]).toEqual(['hba1c', '8.25 ± 0.20', '7.18 ± 0.19', '<0.001']);
   });
 });
 

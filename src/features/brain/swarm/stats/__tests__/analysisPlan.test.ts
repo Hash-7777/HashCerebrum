@@ -22,6 +22,46 @@ function repeat(value: string, n: number): string[] {
   return Array.from({ length: n }, () => value);
 }
 
+describe('deriveAnalysisPlan — baseline characteristics (Table 1)', () => {
+  it('compares every variable across the outcome groups with mean±SD / n(%) and a p-value', () => {
+    // A MICA-style dataset: a complication outcome, a numeric biomarker higher in
+    // the complication group, and a genotype categorical variable.
+    const complication = [...repeat('yes', 10), ...repeat('no', 10)];
+    const hba1c = [
+      '8.1', '8.3', '8.0', '8.5', '8.2', '8.4', '8.1', '8.6', '8.0', '8.3',
+      '7.1', '7.3', '7.0', '7.5', '7.2', '7.4', '7.1', '6.9', '7.0', '7.3',
+    ];
+    const genotype = [
+      ...repeat('TT', 6), ...repeat('CT', 3), 'CC',
+      ...repeat('CC', 6), ...repeat('CT', 3), 'TT',
+    ];
+    const { headers, rows } = dataset({ complication, hba1c, genotype });
+    const plan = deriveAnalysisPlan(headers, rows);
+
+    expect(plan.baseline).toBeDefined();
+    const b = plan.baseline!;
+    expect(b.groupColumn).toBe('complication');
+    expect(b.groupALabel).toBe('yes');
+    expect(b.groupBLabel).toBe('no');
+    expect(b.nA).toBe(10);
+    expect(b.nB).toBe(10);
+
+    const hba1cRow = b.rows.find((r) => r.variable === 'hba1c');
+    expect(hba1cRow).toBeDefined();
+    expect(hba1cRow!.groupA).toContain('±');
+    expect(hba1cRow!.groupA.startsWith('8')).toBe(true);
+    expect(hba1cRow!.groupB.startsWith('7')).toBe(true);
+    expect(hba1cRow!.pValue).not.toBeNull();
+    expect(hba1cRow!.pValue!).toBeLessThan(0.05);
+    expect(hba1cRow!.test).toContain('Welch');
+
+    // Genotype renders one n(%) row per level and carries a categorical test.
+    const ttRow = b.rows.find((r) => r.variable === 'genotype = TT');
+    expect(ttRow).toBeDefined();
+    expect(ttRow!.groupA).toMatch(/\d+ \(\d+\.\d%\)/);
+  });
+});
+
 describe('deriveAnalysisPlan — 2×2 with subgroups', () => {
   it('runs a two-by-two analysis and a Mantel–Haenszel subgroup analysis', () => {
     const treatment = [...repeat('treated', 10), ...repeat('control', 10)];

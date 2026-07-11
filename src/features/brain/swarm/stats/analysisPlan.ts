@@ -7,6 +7,8 @@
 import type {
   AnalysisPlan,
   AnalysisResult,
+  BaselineCharacteristics,
+  BaselineRow,
   SubgroupAnalysis,
   SubgroupRow,
   SurvivalAnalysis,
@@ -473,12 +475,117 @@ function buildRiskScoreAnalysis(headers: string[], rows: Record<string, string>[
   };
 }
 
+function meanOf(values: number[]): number {
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function sdOf(values: number[], m: number): number {
+  if (values.length < 2) return 0;
+  const varc = values.reduce((sum, v) => sum + (v - m) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(varc);
+}
+
+function pctStr(count: number, total: number): string {
+  return total > 0 ? `${count} (${((count / total) * 100).toFixed(1)}%)` : `${count} (—)`;
+}
+
+/**
+ * Build the "Table 1 — baseline characteristics by group": each remaining
+ * variable summarised in both levels of the grouping column, with a between-
+ * group significance test (Welch's t for numeric, chi-square/Fisher for
+ * categorical). Deterministic — every number is computed here, never by a model.
+ */
+function buildBaselineCharacteristics(columns: Column[], group: Column): BaselineCharacteristics | null {
+  const posLabel = positiveLevel(group.levels);
+  const refLabel = group.levels.find((level) => level !== posLabel);
+  if (!posLabel || !refLabel) return null;
+  const idxA: number[] = [];
+  const idxB: number[] = [];
+  group.cells.forEach((cell, i) => {
+    if (cell === posLabel) idxA.push(i);
+    else if (cell === refLabel) idxB.push(i);
+  });
+  if (idxA.length < MIN_GROUP_N || idxB.length < MIN_GROUP_N) return null;
+
+  const rows: BaselineRow[] = [];
+  for (const col of columns) {
+    if (col === group || ID_HINT.test(col.name)) continue;
+    if (col.kind === 'numeric') {
+      const a = idxA.map((i) => col.numeric[i]).filter((v): v is number => v !== null);
+      const b = idxB.map((i) => col.numeric[i]).filter((v): v is number => v !== null);
+      if (a.length < MIN_GROUP_N || b.length < MIN_GROUP_N) continue;
+      const mA = meanOf(a);
+      const mB = meanOf(b);
+      const t = welchTTest(a, b);
+      rows.push({
+        variable: col.name,
+        groupA: `${fmt(mA)} ± ${fmt(sdOf(a, mA))}`,
+        groupB: `${fmt(mB)} ± ${fmt(sdOf(b, mB))}`,
+        pValue: 'error' in t ? null : t.pValue,
+        test: "Welch's t-test",
+      });
+    } else if (col.kind === 'binary' || col.kind === 'multi') {
+      const levels = col.levels;
+      if (levels.length < 2 || levels.length > 6) continue;
+      const countA = levels.map((lv) => idxA.filter((i) => col.cells[i] === lv).length);
+      const countB = levels.map((lv) => idxB.filter((i) => col.cells[i] === lv).length);
+      let pValue: number | null = null;
+      let test = 'Chi-square test';
+      if (levels.length === 2) {
+        const [a, b] = countA as [number, number];
+        const [c, d] = countB as [number, number];
+        if ([a, b, c, d].some((n) => n < 5)) {
+          pValue = fisherExact2x2(a, b, c, d).pValue;
+          test = 'Fisher exact test';
+        } else {
+          const cs = chiSquareTest([countA, countB]);
+          pValue = 'error' in cs ? null : cs.pValue;
+        }
+      } else {
+        const cs = chiSquareTest([countA, countB]);
+        pValue = 'error' in cs ? null : cs.pValue;
+      }
+      if (col.kind === 'binary') {
+        const pos = positiveLevel(levels);
+        const li = levels.indexOf(pos);
+        rows.push({
+          variable: `${col.name} (${pos})`,
+          groupA: pctStr(countA[li]!, idxA.length),
+          groupB: pctStr(countB[li]!, idxB.length),
+          pValue,
+          test,
+        });
+      } else {
+        levels.forEach((lv, li) => {
+          rows.push({
+            variable: `${col.name} = ${lv}`,
+            groupA: pctStr(countA[li]!, idxA.length),
+            groupB: pctStr(countB[li]!, idxB.length),
+            pValue: li === 0 ? pValue : null, // the overall test p-value once per variable
+            test,
+          });
+        });
+      }
+    }
+  }
+  if (rows.length === 0) return null;
+  return {
+    groupColumn: group.name,
+    groupALabel: posLabel,
+    groupBLabel: refLabel,
+    nA: idxA.length,
+    nB: idxB.length,
+    rows,
+  };
+}
+
 export function deriveAnalysisPlan(
   headers: string[],
   rows: Record<string, string>[],
 ): AnalysisPlan {
   const notes: string[] = [];
   const analyses: AnalysisResult[] = [];
+  let baseline: BaselineCharacteristics | undefined;
   let subgroups: SubgroupAnalysis | undefined;
   let survival: SurvivalAnalysis | undefined;
 
@@ -559,6 +666,12 @@ export function deriveAnalysisPlan(
       }
     }
 
+    // Baseline characteristics table — every other variable compared across the
+    // two levels of the grouping column (the outcome, else the exposure, else the
+    // first binary column), the way a clinical paper opens with Table 1.
+    const baselineGroup = outcomeBinary ?? exposureBinary ?? binary[0];
+    if (baselineGroup) baseline = buildBaselineCharacteristics(columns, baselineGroup) ?? undefined;
+
     if (analyses.length === 0 && !survival) {
       notes.push('No pair of columns matched a supported analysis (a 2×2 table, group comparison, ANOVA, correlation, or survival model). Only descriptive statistics are reported.');
     }
@@ -577,8 +690,9 @@ export function deriveAnalysisPlan(
   }
 
   return {
-    generated: analyses.length > 0 || subgroups !== undefined || survival !== undefined,
+    generated: analyses.length > 0 || subgroups !== undefined || survival !== undefined || baseline !== undefined,
     analyses,
+    ...(baseline ? { baseline } : {}),
     ...(subgroups ? { subgroups } : {}),
     ...(survival ? { survival } : {}),
     notes,
