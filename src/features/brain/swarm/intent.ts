@@ -34,6 +34,13 @@ const PAPER_CUE =
   /\b(full|complete|comprehensive|publishable)?\s*(research|scientific)?\s*(paper|manuscript)\b|\bsystematic review\b|\bliterature review\b|\bpublication[-\s]?ready\b|\bsubmission[-\s]?ready\b|\bpublishable\b|\bjournal article\b|\bwrite\b[^.?!]*\b(paper|manuscript|review)\b|\bdraft\b[^.?!]*\b(paper|manuscript)\b/i;
 const INTERACTION_CUE =
   /\binteract(?:ion|ions|s|ing)?\b|\bcombin(?:e|ed|ing|ation)\b|\btogether\b|\bcontraindicat|\bco-?administ|\bconcomitant\b|\bdrug[-\s]drug\b/i;
+
+/** Does the text carry a drug-interaction cue? Used to detect an interaction
+ *  sub-request riding along with a paper request, so the paper folds in the
+ *  interaction literature instead of declaring no data. */
+export function hasInteractionCue(text: string): boolean {
+  return INTERACTION_CUE.test(text);
+}
 // A generic question ABOUT interactions ("what are common drug interactions…") is
 // a lookup, not a specific grade request. Only treat it as drug_interactions when
 // the message actually names drugs joined in a list.

@@ -62,6 +62,7 @@ import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
 import { runSpecialist } from './specialist';
 import { backfillLandmarkTrials } from './trialBackfill';
+import { backfillDrugInteractions } from './interactionBackfill';
 import { expandDrugQuery } from './drugAliases';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
@@ -889,7 +890,12 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       researchQuestion,
       callbacks,
     );
-    if (trialSpecialist) specialistsForMerge = [...specialists, trialSpecialist];
+    if (trialSpecialist) specialistsForMerge = [...specialistsForMerge, trialSpecialist];
+    // Drug-interaction backfill: when the paper request also asks about a drug
+    // interaction, fold the interaction literature into the evidence so the paper
+    // addresses it instead of falsely reporting "no interaction data".
+    const interactionSpecialist = await backfillDrugInteractions(researchQuestion, callbacks);
+    if (interactionSpecialist) specialistsForMerge = [...specialistsForMerge, interactionSpecialist];
   }
   let merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialistsForMerge), ...fromLibrary]);
   // Read whole papers: enrich the top open-access records with their most relevant
