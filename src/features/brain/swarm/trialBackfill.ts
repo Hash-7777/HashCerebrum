@@ -15,6 +15,7 @@
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 import type { SpecialistResult, SwarmCallbacks } from './types';
+import { isApprovedGeneSymbol } from './genetics/geneQueryReadiness';
 
 // ALL-CAPS tokens that are NOT trial names — drug classes, endpoints, stats,
 // organisations, registries. Keeps the harvester from firing junk searches.
@@ -25,6 +26,9 @@ const NON_TRIAL_CAPS = new Set([
   'ADA', 'EASD', 'ESC', 'AHA', 'ACC', 'FDA', 'EMA', 'WHO', 'NICE', 'KDIGO', 'ACP',
   'PRISMA', 'CONSORT', 'STROBE', 'GRADE', 'PICO', 'PICOS', 'RCT', 'RCTS', 'MEDLINE',
   'USA', 'UK', 'EU', 'AND', 'THE', 'FOR', 'WITH', 'CI', 'HR', 'RR', 'OR', 'DNA', 'RNA',
+  // Drug-class / receptor / enzyme acronyms (hyphens are stripped before this
+  // check, so "GLP-1RA" is tested as "GLP1RA"). These are drug classes, not trials.
+  'GLP1RA', 'GLP1R', 'GLP1RAS', 'DPP4I', 'PAI', 'PAI1', 'PCSK9', 'ACEI', 'ARB', 'NSAID', 'NSAIDS',
 ]);
 
 // A sentence naming trials usually carries one of these context words. Requiring
@@ -44,7 +48,13 @@ function hasStrongTrialShape(core: string, tail: string | undefined): boolean {
 }
 
 function looksLikeTrialCore(core: string): boolean {
-  if (NON_TRIAL_CAPS.has(core)) return false;
+  // Normalise hyphens so a drug class written "GLP-1" is tested as "GLP1".
+  const norm = core.replace(/-/g, '').toUpperCase();
+  if (NON_TRIAL_CAPS.has(core) || NON_TRIAL_CAPS.has(norm)) return false;
+  // Genetic variants (C677T, A1298C, G20210A) and approved gene symbols (MTHFR,
+  // F5) are not trials — a genetics question harvested these as trial names.
+  if (/^[A-Z]\d+[A-Z]$/.test(norm)) return false;
+  if (isApprovedGeneSymbol(norm) || isApprovedGeneSymbol(core)) return false;
   const letters = core.replace(/[^A-Z]/g, '').length;
   // Real trial acronyms are ≥4 letters, or shorter but carrying a hyphen/digit.
   if (letters >= 4) return true;

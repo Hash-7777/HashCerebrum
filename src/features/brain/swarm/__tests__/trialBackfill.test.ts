@@ -54,4 +54,24 @@ describe('harvestTrialNames', () => {
   it('returns nothing when no trial names are present', () => {
     expect(harvestTrialNames([rec('A narrative overview of diabetes care', 'No trials are named here.')])).toEqual([]);
   });
+
+  it('does not mistake drug-class acronyms for trials but keeps the real trial names', () => {
+    const names = harvestTrialNames([
+      rec('GLP-1 RA meta-analysis', 'We pooled the LEADER trial and SUSTAIN-6 trial; GLP-1RA, SGLT-2, and DPP-4 classes were compared.'),
+    ]);
+    expect(names).toContain('LEADER');
+    expect(names).toContain('SUSTAIN-6');
+    for (const junk of ['GLP-1RA', 'GLP1RA', 'SGLT-2', 'SGLT2', 'DPP-4', 'DPP4', 'GLP-1']) {
+      expect(names).not.toContain(junk);
+    }
+  });
+
+  it('does not treat gene symbols or genetic variants as trials', () => {
+    const names = harvestTrialNames([
+      rec('MTHFR thrombophilia study', 'The MTHFR C677T and A1298C and G20210A variants were studied in a cohort.'),
+    ]);
+    for (const junk of ['MTHFR', 'C677T', 'A1298C', 'G20210A']) {
+      expect(names).not.toContain(junk);
+    }
+  });
 });

@@ -87,6 +87,12 @@ function isGeneSymbolToken(token: string, text: string): boolean {
   return true;
 }
 
+/** Is this exact token an approved HGNC gene symbol (case-insensitive)? Used to
+ *  keep gene symbols from being mistaken for trial acronyms. */
+export function isApprovedGeneSymbol(token: string): boolean {
+  return geneLexicon().has(token.trim().toUpperCase());
+}
+
 /** Does the text name a gene symbol or an rsID? */
 export function hasGeneSignal(text: string): boolean {
   if (RS_RX.test(text)) return true;
