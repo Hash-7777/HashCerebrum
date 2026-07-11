@@ -15,6 +15,7 @@ import { agentModelFor } from '@core/store/agentModelStore';
 import { useBrainModesStore } from '@core/store/brainModesStore';
 import { notify } from '@platform/notify';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
+import { useChatTraceStore } from '@core/store/chatTraceStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { exportChatMarkdown, exportChatPdf } from './export/messageExport';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -229,6 +230,20 @@ export function BrainMode() {
     setMessages(chat.messages.length > 0 ? chat.messages : [WELCOME_MESSAGE]);
   }, [activeChatId, chatMode]);
 
+  // Starting or switching a chat clears any half-typed prompt so the composer
+  // never carries a draft from one conversation into another.
+  useEffect(() => {
+    setQuery('');
+    setEditingMessageId(null);
+  }, [activeChatId]);
+
+  // A conversation with no prompt yet always shows the normal home. The topic
+  // tint (drug / genetics colouring) only applies once a matching prompt runs,
+  // so opening a new chat after a genetics run never lands on the genetics view.
+  useEffect(() => {
+    if (!messages.some((m) => m.role === 'user')) setActiveIntent('evidence_review');
+  }, [messages]);
+
   // Switching projects starts a fresh transcript so a chat is never saved
   // into the wrong project. The snapshot effect below skips welcome-only
   // transcripts, so this never persists a stray empty chat.
@@ -283,6 +298,10 @@ export function BrainMode() {
     setAgentStatuses(initialAgentStatuses());
     setEvidence([]);
     setMessages(nextMessages);
+
+    // Open a clearly marked divider in this chat's trace for every prompt sent,
+    // so a long trace stays easy to read turn by turn.
+    if (appendUser) useChatTraceStore.getState().markPrompt(cleanQuery);
 
     // Outline-first: propose the paper's structure (deterministic, no tokens)
     // and stop — the user approves with "Draft full paper", which re-enters

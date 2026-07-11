@@ -1,119 +1,105 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAgentStore, type ActivityRecord } from '@core/store/agentStore';
-import { useTraceLogStore } from '@core/store/traceLogStore';
+import { useChatTraceStore, type ChatTraceEntry } from '@core/store/chatTraceStore';
 import { downloadBlob } from '@features/brain/export/messageExport';
 import { Icon, type IconName } from '@ui/icons';
-
-type TraceScope = 'run' | 'all';
 
 // How close to the bottom (px) still counts as "following" the latest output.
 const STICK_THRESHOLD = 28;
 
-const TRACE_LIMIT = 120;
-
-// Persist the scope choice so a user who wants the full persistent log (with
-// every captured error) keeps it across restarts instead of resetting to 'run'.
-const SCOPE_KEY = 'hc.trace.scope.v1';
-function loadScope(): TraceScope {
-  try {
-    return window.localStorage.getItem(SCOPE_KEY) === 'all' ? 'all' : 'run';
-  } catch {
-    return 'run';
-  }
-}
-function saveScope(scope: TraceScope): void {
-  try {
-    window.localStorage.setItem(SCOPE_KEY, scope);
-  } catch {
-    /* storage may be unavailable */
-  }
-}
+const TRACE_LIMIT = 400;
+const EMPTY: ChatTraceEntry[] = [];
 
 const PHASE_ICON: Record<string, IconName> = {
   start: 'pulse',
+  routing: 'pulse',
+  delegating: 'pulse',
   tool_call: 'search',
   tool_result: 'check',
   token: 'pulse',
+  manuscript: 'document',
+  synthesizing: 'pulse',
   done: 'check',
   warn: 'alert',
   error: 'alert',
 };
 
+// Terminal colour class per phase — greens for progress, red/amber for trouble.
 const PHASE_CLASS: Record<string, string> = {
-  start: 'run',
-  tool_call: 'wait',
+  prompt: 'prompt',
+  start: 'start',
+  routing: 'start',
+  delegating: 'start',
+  tool_call: 'call',
   tool_result: 'ok',
   token: 'run',
+  manuscript: 'run',
+  synthesizing: 'run',
   done: 'ok',
   warn: 'warn',
   error: 'err',
 };
 
-function elapsed(record: ActivityRecord, start: number): string {
-  return `${((record.ts - start) / 1000).toFixed(1)}s`;
+// A short, human tag for the phase so the log reads clearly instead of relying
+// on colour alone (e.g. "search", "result", "done").
+const PHASE_TAG: Record<string, string> = {
+  prompt: 'you',
+  start: 'start',
+  routing: 'route',
+  delegating: 'delegate',
+  tool_call: 'search',
+  tool_result: 'result',
+  token: 'draft',
+  manuscript: 'paper',
+  synthesizing: 'synth',
+  done: 'done',
+  warn: 'warn',
+  error: 'error',
+};
+
+// Oldest-first, the ts each entry is measured against — the first entry of the
+// chat is t=0, so times read as seconds-into-this-conversation, not a giant
+// wall-clock number.
+function elapsedFrom(base: number, ts: number): string {
+  return `${((ts - base) / 1000).toFixed(1)}s`;
 }
 
-// A persisted "app session started" boundary. The trace log survives restarts, so
-// without this the relative clock counts from the very first entry ever recorded
-// and shows meaningless six-digit second counts (e.g. 606807.9s) after a few
-// sessions.
-function isSessionBoundary(r: ActivityRecord): boolean {
-  return r.agentId === 'system' && r.phase === 'start' && /session started/i.test(r.detail ?? '');
-}
-
-// For an oldest-first list, the session-start ts each entry is measured against,
-// so every "app session started" restarts the relative clock near zero.
-function sessionStarts(ordered: ActivityRecord[]): number[] {
-  let current = ordered[0]?.ts ?? Date.now();
-  return ordered.map((r) => {
-    if (isSessionBoundary(r)) current = r.ts;
-    return current;
-  });
-}
-
-function summaryFor(activity: ActivityRecord[]): string {
+function summaryFor(activity: ChatTraceEntry[]): string {
   const latest = activity[0];
-  if (!latest) return 'No run yet';
+  if (!latest) return 'No activity yet';
+  if (latest.kind === 'prompt') return `you: ${latest.detail ?? ''}`;
   return latest.detail || `${latest.agentId} ${latest.phase}`;
 }
 
-// Markdown export of the live trace, matching the `- **agent** · phase — detail`
-// format used by the chat Markdown export, with a relative timestamp prefix.
-function buildTraceMarkdown(activity: ActivityRecord[]): string {
+// Markdown export of the trace, matching the chat Markdown export style with a
+// conversation-relative timestamp and a clear marker for each sent prompt.
+function buildTraceMarkdown(activity: ChatTraceEntry[]): string {
   const ordered = [...activity].reverse(); // oldest first
-  const starts = sessionStarts(ordered); // session-relative, so times reset per session
-  const lines: string[] = [
-    '# Execution Trace',
-    '',
-    `_Exported ${new Date().toLocaleString()}_`,
-    '',
-  ];
-  ordered.forEach((r, i) => {
-    const t = `${((r.ts - (starts[i] ?? r.ts)) / 1000).toFixed(1)}s`;
+  const base = ordered[0]?.ts ?? Date.now();
+  const lines: string[] = ['# Execution Trace', '', `_Exported ${new Date().toLocaleString()}_`, ''];
+  ordered.forEach((r) => {
+    if (r.kind === 'prompt') {
+      lines.push('', `### ▸ You sent — ${r.detail ?? ''}`, '');
+      return;
+    }
+    const t = elapsedFrom(base, r.ts);
     lines.push(`- \`[${t}]\` **${r.agentId}** · ${r.phase}${r.detail ? ` — ${r.detail}` : ''}`);
   });
   lines.push('');
   return lines.join('\n');
 }
 
-function traceState(activity: ActivityRecord[]): 'idle' | 'running' | 'done' | 'error' {
+function traceState(activity: ChatTraceEntry[]): 'idle' | 'running' | 'done' | 'error' {
   const latest = activity[0];
   if (!latest) return 'idle';
   if (latest.phase === 'error') return 'error';
   if (latest.phase === 'done') return 'done';
+  if (latest.kind === 'prompt') return 'running';
   return 'running';
 }
 
 export function ExecutionTrace() {
-  const liveActivity = useAgentStore((s) => s.activity);
-  const clearRun = useAgentStore((s) => s.clear);
-  const persistent = useTraceLogStore((s) => s.entries);
-  const clearAll = useTraceLogStore((s) => s.clear);
-  // "run" shows the current run (cleared each run); "all" shows the persistent,
-  // cross-chat, survives-restart log for debugging background steps and failures.
-  const [scope, setScope] = useState<TraceScope>(loadScope);
-  const activity = scope === 'all' ? persistent : liveActivity;
-  const clear = scope === 'all' ? clearAll : clearRun;
+  const activity = useChatTraceStore((s) => s.byChat[s.activeKey] ?? EMPTY);
+  const clearActive = useChatTraceStore((s) => s.clearActive);
   const [expanded, setExpanded] = useState(false);
   const entriesRef = useRef<HTMLDivElement>(null);
   // Follow new output by default; released when the user scrolls up, re-armed
@@ -137,9 +123,10 @@ export function ExecutionTrace() {
       window.removeEventListener('hc:expand-trace', onExpand);
     };
   }, []);
+
   const state = traceState(activity);
   const visible = useMemo(() => activity.slice(0, TRACE_LIMIT).reverse(), [activity]);
-  const visibleStarts = useMemo(() => sessionStarts(visible), [visible]);
+  const baseTs = visible[0]?.ts ?? Date.now();
 
   // Opening the panel re-arms following so it jumps to the latest line.
   useEffect(() => {
@@ -170,21 +157,6 @@ export function ExecutionTrace() {
       >
         <span className="execution-trace-dot" data-state={state} />
         <span className="execution-trace-label">Trace</span>
-        <button
-          type="button"
-          className="execution-trace-scope"
-          onClick={(event) => {
-            event.stopPropagation();
-            setScope((value) => {
-              const next = value === 'run' ? 'all' : 'run';
-              saveScope(next);
-              return next;
-            });
-          }}
-          title={scope === 'all' ? 'Showing the full persistent log — click for this run only' : 'Showing this run — click for the full persistent log'}
-        >
-          {scope === 'all' ? 'All' : 'Run'}
-        </button>
         <span className="execution-trace-summary">{summaryFor(activity)}</span>
         {activity.length > 0 && (
           <button
@@ -193,11 +165,11 @@ export function ExecutionTrace() {
             onClick={(event) => {
               event.stopPropagation();
               downloadBlob(
-                scope === 'all' ? 'execution-trace-all.md' : 'execution-trace.md',
+                'execution-trace.md',
                 new Blob([buildTraceMarkdown(activity)], { type: 'text/markdown;charset=utf-8' }),
               );
             }}
-            title="Export the trace as Markdown"
+            title="Export this chat's trace as Markdown"
           >
             Export MD
           </button>
@@ -207,8 +179,9 @@ export function ExecutionTrace() {
           className="execution-trace-clear"
           onClick={(event) => {
             event.stopPropagation();
-            clear();
+            clearActive();
           }}
+          title="Clear this chat's trace"
         >
           Clear
         </button>
@@ -217,20 +190,30 @@ export function ExecutionTrace() {
 
       <div className="execution-trace-entries" ref={entriesRef} onScroll={onScroll}>
         {visible.length === 0 && (
-          <div className="execution-trace-entry trace-wait">
+          <div className="execution-trace-entry trace-start">
             <span className="trace-time">[0.0s]</span>
-            <span className="trace-agent">System</span>
-            <Icon name="pulse" size={12} />
-            <span className="trace-msg">idle</span>
+            <span className="trace-agent">system</span>
+            <span className="trace-tag">idle</span>
+            <span className="trace-msg">waiting for a prompt…</span>
           </div>
         )}
-        {visible.map((record, i) => {
-          const phase = PHASE_CLASS[record.phase] ?? 'wait';
+        {visible.map((record) => {
+          if (record.kind === 'prompt') {
+            return (
+              <div key={record.id} className="execution-trace-prompt">
+                <span className="trace-prompt-caret">▸</span>
+                <span className="trace-prompt-label">you</span>
+                <span className="trace-prompt-text">{record.detail}</span>
+              </div>
+            );
+          }
+          const phase = PHASE_CLASS[record.phase] ?? 'run';
           return (
             <div key={record.id} className={`execution-trace-entry trace-${phase}`}>
-              <span className="trace-time">[{elapsed(record, visibleStarts[i] ?? record.ts)}]</span>
+              <span className="trace-time">[{elapsedFrom(baseTs, record.ts)}]</span>
               <span className="trace-agent">{record.agentId}</span>
-              <Icon name={PHASE_ICON[record.phase] ?? 'pulse'} size={12} />
+              <Icon name={PHASE_ICON[record.phase] ?? 'pulse'} size={11} />
+              <span className="trace-tag">{PHASE_TAG[record.phase] ?? record.phase}</span>
               <span className="trace-msg">{record.detail || record.phase}</span>
             </div>
           );

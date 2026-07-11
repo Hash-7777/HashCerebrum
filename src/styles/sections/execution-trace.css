@@ -1,8 +1,30 @@
+/* Execution trace — styled as a compact green terminal console.
+ *
+ * The trace is a developer-facing log of how an answer was produced, so it
+ * deliberately reads like a terminal: near-black panel, phosphor-green
+ * monospace text, one line per step, a bright divider for every prompt the
+ * user sent. It keeps this look in both app themes because a console reads best
+ * dark, and the green makes progress vs. trouble obvious at a glance.
+ */
+
+/* Terminal palette — local to the trace so it never depends on app theme vars. */
 .execution-trace {
+  --term-bg: #05100a;
+  --term-bg-soft: #08160e;
+  --term-border: #123f28;
+  --term-green: #35d07f;
+  --term-green-bright: #7CFFB0;
+  --term-green-dim: #2b8f5a;
+  --term-cyan: #38d6c4;
+  --term-amber: #e6b13e;
+  --term-red: #ff5f56;
+  --term-muted: #4f7a63;
+
   flex: 0 0 auto;
-  height: 32px;
-  border-top: 1px solid var(--hc-border);
-  background: color-mix(in srgb, var(--ink-0) 97%, transparent);
+  height: 34px;
+  border-top: 1px solid var(--term-border);
+  background: var(--term-bg);
+  color: var(--term-green);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -14,28 +36,28 @@
 @media (prefers-reduced-motion: reduce) {
   .execution-trace { transition: none; }
 }
-.execution-trace.collapsed { height: 32px; }
-.execution-trace.expanded { height: 202px; }
+.execution-trace.collapsed { height: 34px; }
+.execution-trace.expanded { height: 230px; }
 
 .execution-trace-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 32px;
-  height: 32px;
+  flex: 0 0 34px;
+  height: 34px;
   padding: 0 14px;
   border: none;
   border-bottom: 1px solid transparent;
-  background: transparent;
-  color: var(--hc-fg-muted);
+  background: linear-gradient(180deg, var(--term-bg-soft), var(--term-bg));
+  color: var(--term-green-dim);
   cursor: pointer;
   user-select: none;
 }
-.execution-trace.expanded .execution-trace-header { border-bottom-color: var(--hc-border); }
-.execution-trace-header:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.execution-trace.expanded .execution-trace-header { border-bottom-color: var(--term-border); }
+.execution-trace-header:hover { background: var(--term-bg-soft); }
 .execution-trace-header:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--term-green) 45%, transparent);
 }
 
 .execution-trace-dot {
@@ -43,34 +65,40 @@
   height: 7px;
   flex: 0 0 7px;
   border-radius: 50%;
-  background: rgba(241, 246, 252, 0.24);
-  transition: background 180ms var(--hc-ease), box-shadow 180ms var(--hc-ease);
+  background: var(--term-muted);
+  transition: background 180ms ease, box-shadow 180ms ease;
 }
 .execution-trace-dot[data-state="running"] {
-  background: var(--hc-accent);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 72%, transparent);
+  background: var(--term-green);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--term-green) 80%, transparent);
   animation: trace-dot-blink 1s ease-in-out infinite;
 }
-.execution-trace-dot[data-state="done"] { background: var(--hc-success); }
-.execution-trace-dot[data-state="error"] { background: var(--hc-danger); }
+.execution-trace-dot[data-state="done"] {
+  background: var(--term-green-bright);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--term-green-bright) 70%, transparent);
+}
+.execution-trace-dot[data-state="error"] {
+  background: var(--term-red);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--term-red) 70%, transparent);
+}
 @keyframes trace-dot-blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.38; }
+  50% { opacity: 0.35; }
 }
 
 .execution-trace-label {
   flex: 0 0 auto;
-  color: var(--hc-accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  color: var(--term-green);
+  font: 700 10px/1 var(--hc-font-mono);
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
+.execution-trace-label::before { content: "▍ "; color: var(--term-green-dim); }
 .execution-trace-summary {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--hc-fg-dim);
+  color: var(--term-muted);
   font: 10px var(--hc-font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -79,34 +107,25 @@
 .execution-trace-export {
   flex: 0 0 auto;
   padding: 3px 9px;
-  border: 1px solid var(--hc-border);
+  border: 1px solid var(--term-border);
   border-radius: 5px;
-  color: var(--hc-accent);
+  color: var(--term-green);
   font: 9px var(--hc-font-mono);
   letter-spacing: 0.10em;
   text-transform: uppercase;
   background: transparent;
   cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
 }
-.execution-trace-scope {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid var(--hc-border);
-  border-radius: 5px;
-  color: var(--hc-muted);
-  font: 9px var(--hc-font-mono);
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  background: transparent;
-  cursor: pointer;
-}
-.execution-trace-scope:hover { background: var(--accent-soft); color: var(--hc-accent); }
 .execution-trace-clear:hover,
-.execution-trace-export:hover { background: var(--accent-soft); }
+.execution-trace-export:hover {
+  background: color-mix(in srgb, var(--term-green) 14%, transparent);
+  border-color: var(--term-green-dim);
+}
 .execution-trace-header > svg {
   flex: 0 0 auto;
-  color: var(--hc-fg-dim);
-  transition: transform 180ms var(--hc-ease);
+  color: var(--term-green-dim);
+  transition: transform 180ms ease;
 }
 .execution-trace.expanded .execution-trace-header > svg { transform: rotate(180deg); }
 
@@ -116,49 +135,108 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 6px 14px 10px;
+  gap: 2px;
+  padding: 8px 14px 12px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 21px,
+      color-mix(in srgb, var(--term-green) 3%, transparent) 21px,
+      color-mix(in srgb, var(--term-green) 3%, transparent) 22px
+    ),
+    var(--term-bg);
   /* The global root sets user-select:none; re-enable it here so trace lines
      (errors, model failovers, source counts) can be selected and copied. */
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
 }
+.execution-trace-entries::-webkit-scrollbar { width: 9px; }
+.execution-trace-entries::-webkit-scrollbar-thumb {
+  background: var(--term-border);
+  border-radius: 5px;
+}
 
 .execution-trace-entry {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  color: var(--hc-fg-muted);
-  font: 10.5px/1.5 var(--hc-font-mono);
+  color: var(--term-green-dim);
+  font: 11px/1.55 var(--hc-font-mono);
 }
 .execution-trace-entry .trace-time {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--accent) 52%, transparent);
+  color: var(--term-muted);
 }
 .execution-trace-entry .trace-agent {
-  flex: 0 0 98px;
+  flex: 0 0 118px;
   overflow: hidden;
-  color: var(--hc-fg);
+  color: var(--term-green-bright);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.execution-trace-entry svg {
-  flex: 0 0 13px;
-  align-self: center;
+.execution-trace-entry svg { flex: 0 0 12px; align-self: center; opacity: 0.9; }
+.execution-trace-entry .trace-tag {
+  flex: 0 0 56px;
+  color: var(--term-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
 }
 .execution-trace-entry .trace-msg {
   flex: 1;
+  color: var(--term-green);
   overflow-wrap: anywhere;
 }
-.trace-ok svg,
-.trace-ok .trace-msg { color: var(--hc-success); }
-.trace-run svg,
-.trace-run .trace-msg { color: var(--hc-accent); }
-.trace-wait svg,
-.trace-wait .trace-msg { color: var(--hc-fg-muted); }
+
+/* Phase colour accents. */
+.trace-ok .trace-tag,
+.trace-ok svg { color: var(--term-green-bright); }
+.trace-ok .trace-msg { color: var(--term-green-bright); }
+.trace-call .trace-tag,
+.trace-call svg,
+.trace-call .trace-msg { color: var(--term-cyan); }
+.trace-start .trace-msg,
+.trace-run .trace-msg { color: var(--term-green); }
+.trace-err .trace-tag,
 .trace-err svg,
-.trace-err .trace-msg { color: var(--hc-danger); }
+.trace-err .trace-msg { color: var(--term-red); }
+.trace-err .trace-agent { color: var(--term-red); }
+.trace-warn .trace-tag,
 .trace-warn svg,
-.trace-warn .trace-msg { color: var(--hc-warning, #d6a02a); }
+.trace-warn .trace-msg { color: var(--term-amber); }
+
+/* Prompt divider — the clear "start of a message I sent" marker. */
+.execution-trace-prompt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 7px 0 3px;
+  padding: 3px 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--term-green) 40%, transparent);
+  color: var(--term-green-bright);
+  font: 700 11px/1.5 var(--hc-font-mono);
+}
+.execution-trace-prompt .trace-prompt-caret {
+  flex: 0 0 auto;
+  color: var(--term-green-bright);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--term-green-bright) 70%, transparent);
+}
+.execution-trace-prompt .trace-prompt-label {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--term-green) 20%, transparent);
+  color: var(--term-green-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+}
+.execution-trace-prompt .trace-prompt-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--term-green-bright);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}

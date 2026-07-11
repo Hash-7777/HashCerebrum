@@ -9,6 +9,14 @@ const host = process.env['TAURI_DEV_HOST'];
 export default defineConfig({
   plugins: react(),
 
+  // A per-build identity stamped into the bundle. The persisted execution trace
+  // is tagged with it, so a freshly built app no longer matches an older build's
+  // trace and starts clean — while a normal close/relaunch of the same build
+  // keeps it. Evaluated once per build (and once per dev-server start).
+  define: {
+    __HC_BUILD_ID__: JSON.stringify(String(Date.now())),
+  },
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

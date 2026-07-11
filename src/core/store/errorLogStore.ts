@@ -10,7 +10,7 @@
 // is installed once at boot; the store itself is safe to import anywhere.
 
 import { create } from 'zustand';
-import { useTraceLogStore } from './traceLogStore';
+import { useChatTraceStore } from './chatTraceStore';
 
 export type ErrorSource = 'window' | 'promise' | 'console' | 'boundary';
 export type ErrorLevel = 'error' | 'warn';
@@ -98,7 +98,7 @@ function mirrorToTrace(level: ErrorLevel, message: string): void {
   if (!message || message === lastTraceMessage) return;
   lastTraceMessage = message;
   try {
-    useTraceLogStore.getState().add({
+    useChatTraceStore.getState().add({
       agentId: 'system',
       phase: level === 'warn' ? 'warn' : 'error',
       detail: message,
