@@ -13,6 +13,7 @@ import {
   isSubstantiveAbstract,
   keywordsFrom,
   modelForSection,
+  neutralizeMisattributedGeneStatistics,
   neutralizeUnverifiableNct,
   parseRetryAfterMs,
   shouldExpandSection,
@@ -414,6 +415,69 @@ describe('Brain Mini blueprint', () => {
     // The heavy breakdown sections are dropped in Mini.
     expect(headings).not.toContain('Mechanistic and Pharmacologic Evidence');
     expect(headings).not.toContain('Clinical Evidence and Safety Outcomes');
+  });
+});
+
+describe('neutralizeMisattributedGeneStatistics', () => {
+  const question =
+    'Compare the association between the MTHFR and ACE genes and risk of recurrent venous thromboembolism';
+  // MTHFR is discussed but its sources report NO effect estimate; the only ratio
+  // in the corpus (RR 15.2) comes from a factor-V mortality study that never
+  // mentions MTHFR — the exact shape of the real misattribution.
+  const evidence: EvidenceItem[] = [
+    record({
+      identifiers: { pmid: '7', gene: 'MTHFR' },
+      title: 'Hyperhomocysteinemia and the MTHFR C677T mutation: a case report',
+      snippet: 'A patient with the MTHFR C677T variant had recurrent thrombosis; no comparative effect estimate was reported.',
+      provenanceHash: 'mthfr-1',
+    }),
+    record({
+      identifiers: { pmid: '2' },
+      title: 'Prothrombin and factor V mutations in pregnancy-related thrombosis',
+      snippet: 'Among carriers, the relative risk of 15.2 for mortality was observed for factor V and prothrombin variants.',
+      provenanceHash: 'fv-1',
+    }),
+    record({
+      identifiers: { pmid: '6', gene: 'ACE' },
+      title: 'ACE insertion/deletion polymorphism and venous thromboembolism',
+      snippet: 'The ACE I/D polymorphism was studied in 148 participants with odds ratio 0.53, p=0.04.',
+      provenanceHash: 'ace-1',
+    }),
+  ];
+
+  it('strips a ratio pinned to a gene that gene’s own sources never report', () => {
+    const drafted =
+      'The MTHFR variant showed a relative risk of 15.2 for recurrence. The ACE polymorphism had an odds ratio 0.53.';
+    const { text, removed } = neutralizeMisattributedGeneStatistics(drafted, question, evidence);
+    expect(removed.some((r) => r.includes('15.2'))).toBe(true);
+    expect(text).not.toContain('15.2');
+    // The supported ACE odds ratio, and the MTHFR claim in words, are kept.
+    expect(text).toContain('odds ratio 0.53');
+    expect(text).toContain('MTHFR variant');
+  });
+
+  it('keeps a ratio a gene’s own source does report', () => {
+    const drafted = 'The ACE polymorphism carried an odds ratio 0.53 for recurrent VTE.';
+    const { text, removed } = neutralizeMisattributedGeneStatistics(drafted, question, evidence);
+    expect(removed).toEqual([]);
+    expect(text).toBe(drafted);
+  });
+
+  it('never judges a sentence naming two query genes at once', () => {
+    const drafted = 'Both MTHFR and ACE carried a hazard ratio 9.9 in the pooled set.';
+    const { text } = neutralizeMisattributedGeneStatistics(drafted, question, evidence);
+    expect(text).toBe(drafted);
+  });
+
+  it('is a no-op when the question names no gene', () => {
+    const drafted = 'Warfarin carried an odds ratio 15.2 for bleeding.';
+    const { text, removed } = neutralizeMisattributedGeneStatistics(
+      drafted,
+      'compare warfarin and apixaban for bleeding',
+      evidence,
+    );
+    expect(removed).toEqual([]);
+    expect(text).toBe(drafted);
   });
 });
 

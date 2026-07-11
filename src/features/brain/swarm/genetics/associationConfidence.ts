@@ -377,7 +377,7 @@ export interface GeneAssociation {
 // Does a record actually name this gene symbol (title, snippet, or the structured
 // gene identifier)? Used to attribute retrieved evidence to the right gene so each
 // gene is scored on its OWN records, not the whole multi-gene pool.
-function mentionsGene(record: EvidenceItem, gene: string): boolean {
+export function mentionsGene(record: EvidenceItem, gene: string): boolean {
   const id = (record.identifiers ?? {}) as Record<string, unknown>;
   const idGene = typeof id.gene === 'string' ? id.gene : '';
   const hay = `${record.title} ${record.snippet ?? ''} ${idGene}`.toUpperCase();

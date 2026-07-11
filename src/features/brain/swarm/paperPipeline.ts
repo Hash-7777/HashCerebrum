@@ -28,6 +28,8 @@ import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass, splitSentences } from './honestyGuard';
+import { mentionsGene } from './genetics/associationConfidence';
+import { extractGeneSymbols } from './genetics/geneQueryReadiness';
 import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
 import { buildEvidenceMeta } from './metaAnalysis';
 
@@ -951,6 +953,81 @@ export function neutralizeUnverifiedStatistics(
     .replace(/\(\s*,\s*/g, '(')
     .replace(/\s*,\s*\)/g, ')')
     .replace(/\s*,\s*,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
+  return { text: cleaned, removed };
+}
+
+// Effect-magnitude labels emitted by extractEffectValues — the ratios a claim
+// pins to a gene. Confidence intervals and p-values are excluded: they qualify a
+// ratio rather than assert a gene→magnitude association on their own.
+const RATIO_STAT_LABELS = new Set(['odds ratio', 'risk ratio', 'hazard ratio']);
+
+// The effect-magnitude values reported by the retrieved sources that actually
+// mention a given gene. This is the app-owned truth about which numbers may sit
+// next to which gene, independent of the marker the model happened to cite.
+function ratioValuesForGene(gene: string, evidence: EvidenceItem[]): Set<string> {
+  const values = new Set<string>();
+  for (const record of evidence) {
+    if (!mentionsGene(record, gene)) continue;
+    for (const effect of extractEffectValues(recordText(record))) {
+      if (RATIO_STAT_LABELS.has(effect.label)) values.add(normalizeStatNumber(effect.value));
+    }
+  }
+  return values;
+}
+
+function geneInText(gene: string, text: string): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9])${gene}([^A-Za-z0-9]|$)`, 'i').test(text);
+}
+
+/**
+ * Remove an effect magnitude the prose pins to a gene that NO retrieved source
+ * mentioning that gene reports. The marker-keyed guard (neutralizeUnverified-
+ * Statistics) cannot catch this: when the cited source reports no statistic at
+ * all it treats the pairing as an extraction gap and leaves it, so a real number
+ * lifted from an unrelated study — a factor-V mortality "relative risk of 15.2"
+ * pinned to MTHFR — survives. This guard keys on the GENE instead of the marker,
+ * so it fires even against an empty marker table. Sentence-scoped and acts only
+ * when the sentence names exactly one query gene and carries a ratio that gene's
+ * own sources never report; the surrounding claim is kept in words.
+ */
+export function neutralizeMisattributedGeneStatistics(
+  text: string,
+  question: string,
+  evidence: EvidenceItem[],
+): { text: string; removed: string[] } {
+  const genes = extractGeneSymbols(question);
+  if (genes.length === 0 || evidence.length === 0) return { text, removed: [] };
+  const approved = new Map(genes.map((gene) => [gene, ratioValuesForGene(gene, evidence)] as const));
+  const removed: string[] = [];
+  const sentences = splitSentences(text).map((sentence) => {
+    const named = genes.filter((gene) => geneInText(gene, sentence));
+    if (named.length !== 1) return sentence; // no gene, or ambiguous — never judge
+    const allowed = approved.get(named[0]!) ?? new Set<string>();
+    let out = sentence;
+    for (const stat of extractEffectValues(sentence)) {
+      if (!RATIO_STAT_LABELS.has(stat.label)) continue;
+      const nums = [...stat.value.matchAll(/[0-9]+(?:\.[0-9]+)?/g)].map((m) => normalizeStatNumber(m[0]!));
+      if (nums.length === 0 || nums.every((n) => allowed.has(n))) continue;
+      const esc = stat.sourceText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const next = out.replace(new RegExp(esc), '');
+      if (next !== out) {
+        removed.push(stat.sourceText);
+        out = next;
+      }
+    }
+    return out;
+  });
+  if (removed.length === 0) return { text, removed };
+  const cleaned = sentences
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\(\s*[,;]?\s*\)/g, '')
+    .replace(/\(\s*,\s*/g, '(')
+    .replace(/\s*,\s*\)/g, ')')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([.,;:)])/g, '$1')
     .trim();
@@ -2245,9 +2322,14 @@ async function draftOneSection(
     const qet = buildQuantEvidenceTable(opts.extractions);
     const removed: string[] = [];
     body = body.map((paragraph) => {
-      const result = neutralizeUnverifiedStatistics(paragraph, qet);
-      removed.push(...result.removed);
-      return result.text;
+      const marker = neutralizeUnverifiedStatistics(paragraph, qet);
+      // Then strip an effect magnitude pinned to a gene none of that gene's own
+      // sources report — the case the marker table cannot judge (empty cited
+      // source), so a number lifted from an unrelated study can't stay next to
+      // the wrong gene.
+      const gene = neutralizeMisattributedGeneStatistics(marker.text, opts.question, opts.evidence);
+      removed.push(...marker.removed, ...gene.removed);
+      return gene.text;
     });
     if (removed.length > 0) {
       bus.emit('agent:activity', {
@@ -2327,6 +2409,8 @@ async function compileSections(opts: CompileSectionsOpts): Promise<ManuscriptSec
 async function draftAbstract(opts: {
   model: string;
   title: string;
+  question: string;
+  evidence: EvidenceItem[];
   sections: ManuscriptSection[];
   claimLedger: ClaimLedgerEntry[];
   extractions: EvidenceExtraction[];
@@ -2384,6 +2468,22 @@ ${digest}`,
     // A model can reply without the labelled fields, leaving the parse empty —
     // never ship that. Backfill any thin field from the deterministic fallback.
     if (!isSubstantiveAbstract(parsed)) return fallback;
+    // The Results/Conclusions fields are the model's free prose over source-bound
+    // numbers, so it can pin a real figure to the wrong subject — the sections get
+    // this same attribution scrub, but the abstract did not, which is how a
+    // factor-V "relative risk of 15.2" reached the abstract labelled as MTHFR.
+    // Verify each effect magnitude against BOTH the cited source (marker table)
+    // and every source that mentions the named gene, dropping any the evidence
+    // does not support before the honesty pass and export.
+    const qet = buildQuantEvidenceTable(opts.extractions);
+    const scrub = (field: string): string =>
+      applyHonestyPass(
+        neutralizeMisattributedGeneStatistics(
+          neutralizeUnverifiedStatistics(field.trim(), qet).text,
+          opts.question,
+          opts.evidence,
+        ).text,
+      );
     // Honesty-pass each field at the source so the preview matches the export —
     // the abstract prompt is fed the evidence-strength counts, so the model tends
     // to write "strong = 33, moderate = 29 …" into Results, which reads as a
@@ -2392,8 +2492,8 @@ ${digest}`,
       background: applyHonestyPass(parsed.background.trim()) || fallback.background,
       objective: applyHonestyPass(parsed.objective.trim()) || fallback.objective,
       methods: applyHonestyPass(parsed.methods.trim()) || fallback.methods,
-      results: applyHonestyPass(parsed.results.trim()) || fallback.results,
-      conclusions: applyHonestyPass(parsed.conclusions.trim()) || fallback.conclusions,
+      results: scrub(parsed.results) || fallback.results,
+      conclusions: scrub(parsed.conclusions) || fallback.conclusions,
     };
   } catch {
     return fallback;
@@ -2481,6 +2581,8 @@ export async function compileManuscriptFromLedger(opts: PaperLedgerPrep): Promis
   const abstract = await draftAbstract({
     model: opts.bossModel,
     title: opts.paperBlueprint.title,
+    question: opts.question,
+    evidence: opts.evidence,
     sections,
     claimLedger: opts.claimLedger,
     extractions: opts.evidenceExtractions,
