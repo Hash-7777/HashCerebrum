@@ -293,6 +293,24 @@ export function parseAbstract(reply: string): ManuscriptAbstract {
 }
 
 // Readable plain-text rendering for the chat bubble.
+// Back-matter that a journal never numbers as a body section.
+const BACK_MATTER_HEADING_RX =
+  /^(declarations?|acknowledge?ments?|references?|bibliography|figures,? tables)/i;
+
+/**
+ * Number the body sections the way a published paper does — 1. Introduction,
+ * 2. Methods, … — while leaving back-matter (Declarations, References, the
+ * export-only figures/tables block) unnumbered. Shared by the readable-text
+ * renderer and the Typst PDF export so every view numbers sections identically.
+ */
+export function withNumberedSectionHeadings(sections: ManuscriptSection[]): ManuscriptSection[] {
+  let sectionNumber = 0;
+  return sections.map((section) => {
+    if (BACK_MATTER_HEADING_RX.test(section.heading.trim())) return section;
+    return { ...section, heading: `${(sectionNumber += 1)}. ${section.heading}` };
+  });
+}
+
 export function manuscriptToReadableText(manuscript: Manuscript): string {
   const lines: string[] = [manuscript.title, ''];
   lines.push('ABSTRACT');
@@ -305,8 +323,11 @@ export function manuscriptToReadableText(manuscript: Manuscript): string {
   if (manuscript.keywords.length > 0) {
     lines.push('', `Keywords: ${manuscript.keywords.join(', ')}`);
   }
-  for (const section of manuscript.sections) {
-    lines.push('', section.heading.toUpperCase(), ...flattenBody(section.body));
+  // Number the body sections the way a published paper does (1. Introduction,
+  // 2. Methods, …); keep back-matter (Declarations) unnumbered. Title case, not
+  // ALL CAPS, so it reads like a journal article rather than a template.
+  for (const section of withNumberedSectionHeadings(manuscript.sections)) {
+    lines.push('', section.heading, ...flattenBody(section.body));
   }
   return lines.join('\n');
 }

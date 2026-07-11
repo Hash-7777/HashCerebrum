@@ -1,5 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import { containsPromptLeakage, removeMarkdownTables, sectionBodyFromReply } from '../manuscript';
+import {
+  containsPromptLeakage,
+  manuscriptToReadableText,
+  removeMarkdownTables,
+  sectionBodyFromReply,
+  withNumberedSectionHeadings,
+  type Manuscript,
+} from '../manuscript';
+
+describe('published-paper section numbering', () => {
+  const sections = [
+    { heading: 'Introduction', body: ['intro'] },
+    { heading: 'Methods', body: ['methods'] },
+    { heading: 'Discussion', body: ['discussion'] },
+    { heading: 'Conclusion', body: ['conclusion'] },
+    { heading: 'Declarations', body: ['declarations'] },
+  ];
+
+  it('numbers body sections like a journal and leaves back-matter unnumbered', () => {
+    const numbered = withNumberedSectionHeadings(sections);
+    expect(numbered.map((s) => s.heading)).toEqual([
+      '1. Introduction',
+      '2. Methods',
+      '3. Discussion',
+      '4. Conclusion',
+      'Declarations',
+    ]);
+  });
+
+  it('renders numbered, title-case headings (not ALL CAPS) in the readable text', () => {
+    const manuscript: Manuscript = {
+      title: 'A study',
+      abstract: { background: 'b', objective: 'o', methods: 'm', results: 'r', conclusions: 'c' },
+      keywords: [],
+      sections,
+    };
+    const text = manuscriptToReadableText(manuscript);
+    expect(text).toContain('1. Introduction');
+    expect(text).toContain('4. Conclusion');
+    expect(text).not.toContain('INTRODUCTION');
+    // Declarations stays as back-matter, unnumbered.
+    expect(text).toContain('\nDeclarations');
+  });
+});
 
 describe('manuscript section cleanup', () => {
   it('converts markdown tables into prose before manuscript storage', () => {

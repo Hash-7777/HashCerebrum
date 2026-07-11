@@ -1,6 +1,6 @@
 import { platform, type EvidenceItem } from '@platform/index';
 import type { ChatMessage, TurnTraceEntry } from '@core/store/chatHistoryStore';
-import { manuscriptToReadableText, type Manuscript } from '../swarm/manuscript';
+import { manuscriptToReadableText, withNumberedSectionHeadings, type Manuscript } from '../swarm/manuscript';
 import {
   buildPublicationArtifact,
   normalizeManuscriptForPublication,
@@ -702,9 +702,16 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
     // the pipeline, not a reason to deny the user the PDF they asked for — the
     // document still typesets. Previously assertPublicationReady threw here,
     // which silently downgraded a QA-flagged paper to an HTML download.
-    const typstManuscript = normalizeManuscriptForPublication(message.manuscript, artifact, {
+    const typstBase = normalizeManuscriptForPublication(message.manuscript, artifact, {
       includeSupplementalSection: false,
     });
+    // Number the body sections in the PDF exactly as the readable-text and HTML
+    // views do (the Typst renderer keeps heading numbering off), so every export
+    // reads like a published paper.
+    const typstManuscript = {
+      ...typstBase,
+      sections: withNumberedSectionHeadings(typstBase.sections),
+    };
     try {
       const meta = `HashCerebrum${message.modelLabel ? ` · ${message.modelLabel}` : ''} · ${new Date().toLocaleDateString()}`;
       return assertPdfBlob(

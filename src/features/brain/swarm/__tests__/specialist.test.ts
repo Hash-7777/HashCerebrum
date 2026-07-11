@@ -169,7 +169,8 @@ describe('runSwarm', () => {
     expect(cb.onManuscriptSection).toHaveBeenCalledWith('Extracting');
     expect(cb.onManuscriptSection).toHaveBeenCalledWith('Building claims');
     expect(cb.onManuscriptSection).toHaveBeenCalledWith('Drafting');
-    expect(result.answer).toContain('INTRODUCTION');
+    // Sections render numbered and title-cased, like a published paper.
+    expect(result.answer).toContain('1. Introduction');
   }, 15_000);
 
   it('lets the boss route ordinary messages to chat without running specialists', async () => {
