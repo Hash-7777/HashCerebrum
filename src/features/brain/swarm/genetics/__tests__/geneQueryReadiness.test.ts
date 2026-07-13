@@ -5,9 +5,52 @@ import {
   extractGeneSymbols,
   extractRsIds,
   extractUnrecognizedGeneTokens,
+  extractVariantNotations,
   hasDiseaseSignal,
   hasGeneSignal,
+  isVariantNotation,
 } from '../geneQueryReadiness';
+
+describe('variant / allele notation', () => {
+  it('recognises substitution and rsID notations as variants, not gene symbols', () => {
+    for (const v of ['C677T', 'A1298C', 'G20210A', 'R506Q', 'V600E', 'rs1801133']) {
+      expect(isVariantNotation(v)).toBe(true);
+    }
+  });
+
+  it('does not treat gene symbols or clinical abbreviations as variants', () => {
+    for (const notVariant of ['MTHFR', 'BRCA1', 'C4A', 'T1D', 'T2D', 'thrombosis']) {
+      expect(isVariantNotation(notVariant)).toBe(false);
+    }
+  });
+
+  it('never flags an allele next to a gene noun as an unrecognized gene', () => {
+    // The reported bug: "MTHFR C677T variant" made the gate ask whether C677T is a gene.
+    const out = extractUnrecognizedGeneTokens(
+      'whether the MTHFR C677T variant and the gene ZQKR7 cause recurrent venous thrombosis',
+    );
+    expect(out).toEqual(['ZQKR7']); // the real invented gene is still caught; the allele is not
+  });
+
+  it('does not flag classic thrombophilia alleles framed as variants', () => {
+    expect(
+      extractUnrecognizedGeneTokens('the factor V G20210A and MTHFR A1298C variants in VTE'),
+    ).toEqual([]);
+  });
+
+  it('treats a bare allele as a genetic signal so the query is answerable', () => {
+    const r = assessGeneQueryReadiness('is the C677T variant linked to recurrent thrombosis');
+    expect(r.hasGene).toBe(true);
+    expect(r.ready).toBe(true);
+  });
+
+  it('extracts named variant notations, excluding rsIDs', () => {
+    expect(extractVariantNotations('MTHFR C677T and A1298C with rs1801133')).toEqual([
+      'C677T',
+      'A1298C',
+    ]);
+  });
+});
 
 describe('extractUnrecognizedGeneTokens', () => {
   it('flags a made-up gene the question frames as a gene', () => {

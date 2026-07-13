@@ -49,6 +49,53 @@ const AMBIGUOUS_SYMBOLS = new Set([
   'TAT', 'TAX', 'VIP',
 ]);
 
+// A VARIANT/ALLELE notation is not a gene SYMBOL — it names a specific change to a
+// gene (its allele), and every gene has many. Distinguishing the two is essential:
+// "MTHFR C677T" is the gene MTHFR and its C677T allele, so C677T must never be
+// treated as an unrecognized gene and provoke a "not a real gene" clarification.
+// The forms covered:
+//   - substitution notation: C677T, A1298C, G20210A (nucleotide) and R506Q, V600E
+//     or the three-letter Arg506Gln (amino acid) — a residue, a position, a residue;
+//   - HGVS-prefixed forms: p.Arg506Gln, c.1691G>A, g.… (used where a token is
+//     already isolated — free-text extraction keys on the substitution form);
+//   - rsIDs (rs1801133), handled by RS_RX.
+const HGVS_RX = /^[cgmnpr]\.[A-Za-z0-9_>+*=()-]+$/i;
+// Strict form (≥2 digits) — confident enough to read as a variant on its own, so a
+// bare "C677T and thrombosis" carries a genetic signal. Loose form (≥1 digit) is
+// used only when the token already sits next to a gene noun, where E6V-style
+// single-digit alleles should also be spared the unrecognized-gene gate.
+const VARIANT_SUBSTITUTION_STRICT_RX = /^[A-Za-z]{1,3}\d{2,7}[A-Za-z]{1,3}$/;
+const VARIANT_SUBSTITUTION_LOOSE_RX = /^[A-Za-z]{1,3}\d{1,7}[A-Za-z]{1,3}$/;
+
+function isVariantShape(token: string, loose = false): boolean {
+  const t = token.trim();
+  if (!t) return false;
+  if (RS_RX.test(t)) return true;
+  if (HGVS_RX.test(t)) return true;
+  const upper = t.toUpperCase();
+  if (NON_GENE_CAPS.has(upper)) return false; // T1D / T2D shaped like a substitution, but not one
+  if (geneLexicon().has(upper)) return false; // an approved symbol (C4A, C8B…) is a gene, not a variant
+  return (loose ? VARIANT_SUBSTITUTION_LOOSE_RX : VARIANT_SUBSTITUTION_STRICT_RX).test(t);
+}
+
+/** Is this token a variant/allele notation (rsID, HGVS, or a substitution like
+ *  C677T / A1298C / R506Q) rather than a gene symbol? Real HGNC symbols and the
+ *  non-gene abbreviations (T1D/T2D) are excluded. */
+export function isVariantNotation(token: string): boolean {
+  return isVariantShape(token, false);
+}
+
+/** Variant/allele notations named in the text (e.g. "C677T", "G20210A"),
+ *  de-duplicated, order kept. rsIDs are returned by extractRsIds instead. */
+export function extractVariantNotations(text: string): string[] {
+  const out: string[] = [];
+  for (const tok of text.split(/[^A-Za-z0-9]+/)) {
+    const t = tok.trim();
+    if (t && !RS_RX.test(t) && isVariantShape(t, false) && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
 // Explicit genetic framing that rescues an ambiguous symbol.
 const GENETIC_CONTEXT_RX =
   /\b(gene|genes|genetic|genetics|genomic|genome|variant|variants|allele|alleles|genotype|genotypes|polymorphism|polymorphisms|mutation|mutations|snp|snps|rs\d{2,}|locus|loci|haplotype|haplotypes|gwas|clinvar|germline|somatic|epigenetic|methylation|promoter|knockout|wild-?type|expression|amplification|fusion|rearrangement|pharmacogenomic|pharmacogenetics?)\b/i;
@@ -93,10 +140,14 @@ export function isApprovedGeneSymbol(token: string): boolean {
   return geneLexicon().has(token.trim().toUpperCase());
 }
 
-/** Does the text name a gene symbol or an rsID? */
+/** Does the text name a gene symbol, a variant/allele notation, or an rsID? A named
+ *  variant (C677T, G20210A) is itself a genetic signal, so a question that gives only
+ *  the allele is answerable rather than being asked "which gene or variant?". */
 export function hasGeneSignal(text: string): boolean {
   if (RS_RX.test(text)) return true;
-  return text.split(/[^A-Za-z0-9-]+/).some((tok) => isGeneSymbolToken(tok, text));
+  const tokens = text.split(/[^A-Za-z0-9-]+/);
+  if (tokens.some((tok) => isVariantShape(tok, false))) return true;
+  return tokens.some((tok) => isGeneSymbolToken(tok, text));
 }
 
 /** Gene-symbol tokens named in the text (e.g. "MICA"), de-duplicated, order kept.
@@ -119,8 +170,14 @@ export function extractGeneSymbols(text: string): string[] {
 // case-tolerant so a sloppily typed made-up symbol like "ZndR4" is still caught;
 // the real filtering (symbol shape, HGNC membership) happens in claimedGeneShape.
 const GENE_NOUN = '(?:genes?|variants?|alleles?|polymorphisms?|mutations?|genotypes?|loci|locus)';
+// A determiner / preposition / wh-word must not be captured as the leading token of
+// the "<token> <gene-noun>" form — otherwise "the gene ZQKR7" matches "the gene" and
+// swallows the noun, so the gene named AFTER it ("ZQKR7") is never seen. Excluding
+// these frees the noun to pair with the following token via the second alternative.
+const LEADING_STOPWORD =
+  '(?!(?:the|a|an|and|or|of|to|in|on|for|with|this|that|these|those|its|their|his|her|no|any|each|both|all|some|which|what|whether)\\b)';
 const CLAIMED_GENE_RX = new RegExp(
-  `\\b([A-Za-z][A-Za-z0-9-]{1,11})\\s+${GENE_NOUN}\\b|\\b${GENE_NOUN}\\s+([A-Za-z][A-Za-z0-9-]{1,11})\\b`,
+  `\\b${LEADING_STOPWORD}([A-Za-z][A-Za-z0-9-]{1,11})\\s+${GENE_NOUN}\\b|\\b${GENE_NOUN}\\s+([A-Za-z][A-Za-z0-9-]{1,11})\\b`,
   'g',
 );
 
@@ -155,6 +212,9 @@ export function extractUnrecognizedGeneTokens(text: string): string[] {
     if (!claimedGeneShape(token)) continue; // must look like a symbol, not a word
     const upper = token.toUpperCase();
     if (geneLexicon().has(upper)) continue; // a real approved symbol (any case)
+    // A variant/allele notation next to a gene noun ("MTHFR C677T variant") is the
+    // gene's allele, not an unrecognized gene — never gate on it.
+    if (isVariantShape(token, true)) continue;
     if (NON_GENE_CAPS.has(upper)) continue; // routine non-gene abbreviation
     if (recognized.has(token)) continue;
     if (NON_DISEASE_WORDS.has(token.toLowerCase())) continue;
@@ -183,7 +243,7 @@ export function diseaseTerms(text: string): string[] {
     const word = original.toLowerCase();
     if (word.length < 4 || !/[a-z]/.test(word)) continue;
     if (NON_DISEASE_WORDS.has(word)) continue;
-    if (geneLikeToken(original) || RS_RX.test(original)) continue;
+    if (geneLikeToken(original) || isVariantShape(original, true)) continue;
     if (!out.includes(word)) out.push(word);
   }
   return out;
@@ -197,8 +257,9 @@ export function hasDiseaseSignal(text: string, gene?: string): boolean {
     if (word.length < 4 || !/[a-z]/.test(word)) return false;
     if (NON_DISEASE_WORDS.has(word)) return false;
     if (gene && word === gene.toLowerCase()) return false;
-    // A gene symbol or rsID is not a disease, even when it isn't the named gene.
-    if (geneLikeToken(original) || RS_RX.test(original)) return false;
+    // A gene symbol or variant/allele notation is not a disease, even when it isn't
+    // the named gene.
+    if (geneLikeToken(original) || isVariantShape(original, true)) return false;
     return true;
   });
 }
