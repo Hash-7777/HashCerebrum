@@ -17,13 +17,13 @@ import { tools as toolRegistry } from '@core/tools/ToolRegistry';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 import type { SpecialistResult, SwarmCallbacks } from './types';
 import { drugCandidates } from './boss';
-import { genericsFor } from './drugAliases';
+import { primaryGeneric } from './drugAliases';
 import { hasInteractionCue } from './intent';
 
-/** The generic ingredient a token should be searched under — the brand's generic
- *  ("catafast" → "diclofenac"), else the token itself. */
+/** The generic ingredient a token should be searched under — the brand's single
+ *  active ingredient ("catafast" → "diclofenac"), else the token itself. */
 function searchNameFor(drug: string): string {
-  return genericsFor(drug)[0] ?? drug;
+  return primaryGeneric(drug);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDrugScope,
   collapseMarkerRuns,
   drugCandidates,
   ensureGeneDisclaimer,
@@ -18,6 +19,30 @@ import {
 import type { BossPlan } from '../boss';
 import type { AssociationConfidence, GeneAssociation } from '../genetics/associationConfidence';
 import type { EvidenceItem } from '@platform/index';
+
+describe('buildDrugScope', () => {
+  it('is empty when fewer than two drugs are named', () => {
+    expect(buildDrugScope([])).toBe('');
+    expect(buildDrugScope(['catafast'])).toBe('');
+  });
+
+  it('annotates each named drug with its active ingredient and pins the scope', () => {
+    const scope = buildDrugScope(['Catafast', 'Xarelto']);
+    expect(scope).toContain('Catafast (diclofenac)');
+    expect(scope).toContain('Xarelto (rivaroxaban)');
+    expect(scope).toContain('grade ONLY these drugs');
+  });
+
+  it('flags brand "similars" as the same active ingredient and forbids a self-interaction', () => {
+    const scope = buildDrugScope(['Catafast', 'Voltaren']);
+    expect(scope).toMatch(/same active ingredient/i);
+    expect(scope).toMatch(/do NOT grade a drug against itself/i);
+  });
+
+  it('does not flag genuinely different drugs as the same', () => {
+    expect(buildDrugScope(['Catafast', 'Xarelto'])).not.toMatch(/same active ingredient/i);
+  });
+});
 
 describe('drug-interaction fabrication guard', () => {
   const rec = (title: string, snippet = ''): EvidenceItem => ({

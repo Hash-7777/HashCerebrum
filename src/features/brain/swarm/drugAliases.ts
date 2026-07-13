@@ -70,6 +70,45 @@ export function drugSynonyms(token: string): string[] {
   return [lower, ...genericsFor(lower)];
 }
 
+/** A deterministic representative for an ingredient and its INN/US spelling
+ *  synonyms, so "paracetamol" and "acetaminophen" collapse to one name. Chosen as
+ *  the alphabetically-first of the token and its known synonyms. */
+function canonicalGeneric(name: string): string {
+  const lower = name.toLowerCase();
+  return [lower, ...genericsFor(lower).map((g) => g.toLowerCase())].sort()[0]!;
+}
+
+/**
+ * The single active ingredient a token denotes, or null when the token is a
+ * combination product or a brand FAMILY that spans several ingredients (Panadol's
+ * registry entry unions paracetamol, caffeine, aspirin…). A plain generic stands
+ * for itself. INN/US spelling pairs of the same drug collapse to one ingredient, so
+ * a two-name brand like Tylenol (acetaminophen/paracetamol) is still mono-ingredient.
+ */
+export function monoIngredient(token: string): string | null {
+  const lower = token.toLowerCase();
+  const generics = genericsFor(lower);
+  if (generics.length === 0) return lower; // a generic ingredient (or unknown) stands for itself
+  const canon = new Set(generics.map(canonicalGeneric));
+  return canon.size === 1 ? [...canon][0]! : null; // a real combination/family has no single ingredient
+}
+
+/** Do two tokens name the SAME active ingredient (brand "similars")? Catafast,
+ *  Cataflam and Voltaren are all diclofenac; paracetamol and acetaminophen are one
+ *  drug. A combination/family brand never asserts sameness (returns false), so the
+ *  answer is only positive when both tokens are confidently mono-ingredient. */
+export function sameActiveIngredient(a: string, b: string): boolean {
+  const ma = monoIngredient(a);
+  return ma !== null && ma === monoIngredient(b);
+}
+
+/** The single generic name a token should be searched or referred to under — its
+ *  one active ingredient when it has one, else the first ingredient of a
+ *  combination, else the token itself. Deterministic. */
+export function primaryGeneric(token: string): string {
+  return monoIngredient(token) ?? genericsFor(token)[0] ?? token.toLowerCase();
+}
+
 /**
  * Append the generic ingredient names for any brand the question mentions, so the
  * interaction search retrieves real literature ("panadol and catafast" also

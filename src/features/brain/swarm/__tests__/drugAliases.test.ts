@@ -1,5 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { drugSynonyms, expandDrugQuery, genericsFor, isDrugAlias } from '../drugAliases';
+import {
+  drugSynonyms,
+  expandDrugQuery,
+  genericsFor,
+  isDrugAlias,
+  monoIngredient,
+  primaryGeneric,
+  sameActiveIngredient,
+} from '../drugAliases';
+
+describe('drug families and similars', () => {
+  it('resolves a single-ingredient brand to its one active ingredient', () => {
+    expect(monoIngredient('catafast')).toBe('diclofenac');
+    expect(monoIngredient('voltaren')).toBe('diclofenac');
+    expect(monoIngredient('xarelto')).toBe('rivaroxaban');
+  });
+
+  it('collapses INN/US spelling of the same drug to one ingredient', () => {
+    expect(monoIngredient('paracetamol')).toBe(monoIngredient('acetaminophen'));
+  });
+
+  it('returns null for a combination / family brand that spans several ingredients', () => {
+    expect(monoIngredient('panadol')).toBeNull(); // registry unions paracetamol, caffeine, aspirin…
+  });
+
+  it('recognises brand "similars" as the same active ingredient', () => {
+    expect(sameActiveIngredient('catafast', 'voltaren')).toBe(true);
+    expect(sameActiveIngredient('cataflam', 'diclofenac')).toBe(true);
+    expect(sameActiveIngredient('paracetamol', 'acetaminophen')).toBe(true);
+  });
+
+  it('does not call different drugs — or a family brand — the same', () => {
+    expect(sameActiveIngredient('catafast', 'xarelto')).toBe(false);
+    expect(sameActiveIngredient('panadol', 'aspirin')).toBe(false);
+  });
+
+  it('primaryGeneric gives a deterministic single search name', () => {
+    expect(primaryGeneric('catafast')).toBe('diclofenac');
+    expect(primaryGeneric('ibuprofen')).toBe('ibuprofen');
+  });
+});
 
 describe('drugAliases', () => {
   it('resolves Egyptian brands to their active ingredient from the dataset', () => {

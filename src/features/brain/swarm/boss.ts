@@ -19,7 +19,7 @@ import { normalizeMedicalSpelling } from './queryNormalize';
 import type { SpecialistResult, SpecialistTask } from './types';
 import DRUG_NAMES from './drug-names.json';
 import EGYPT_GENERICS from './egypt-generics.json';
-import { drugSynonyms, isDrugAlias } from './drugAliases';
+import { drugSynonyms, isDrugAlias, primaryGeneric, sameActiveIngredient } from './drugAliases';
 
 const MAX_TASKS = 4;
 
@@ -455,6 +455,42 @@ export function ensureInteractionDisclaimer(content: string): string {
   return hasVerifyLine ? trimmed : `${trimmed}\n\n*⚠ ${INTERACTION_DISCLAIMER}*`;
 }
 
+/** The DRUG SCOPE instruction block: pins grading to the named drugs, annotates
+ *  each with its active ingredient so the model treats a brand as one drug, and —
+ *  when two named drugs are the same active ingredient (brand "similars") — tells
+ *  it to say so rather than invent a self-interaction. Empty for < 2 named drugs. */
+export function buildDrugScope(namedDrugs: string[]): string {
+  if (namedDrugs.length < 2) return '';
+  const annotated = namedDrugs
+    .map((drug) => {
+      const generic = primaryGeneric(drug);
+      return generic && generic.toLowerCase() !== drug.toLowerCase()
+        ? `${drug} (${generic})`
+        : drug;
+    })
+    .join(', ');
+  // Pairs of named drugs that are actually the same molecule under different brands.
+  const sameNotes: string[] = [];
+  for (let i = 0; i < namedDrugs.length; i += 1) {
+    for (let j = i + 1; j < namedDrugs.length; j += 1) {
+      if (sameActiveIngredient(namedDrugs[i]!, namedDrugs[j]!)) {
+        sameNotes.push(`${namedDrugs[i]} and ${namedDrugs[j]} are the same active ingredient`);
+      }
+    }
+  }
+  const sameRule = sameNotes.length
+    ? ` NOTE: ${sameNotes.join(
+        '; ',
+      )} — state this plainly and do NOT grade a drug against itself; there is no interaction between a drug and its own brand.`
+    : '';
+  return (
+    `\n\nDRUG SCOPE — grade ONLY these drugs, treating each as a SINGLE drug: ${annotated}. ` +
+    `Do NOT split a brand or combination product into its ingredients, and do NOT introduce any drug ` +
+    `outside this list; ingredient names in the records are background for identifying the interaction, ` +
+    `not additional drugs to grade.${sameRule}`
+  );
+}
+
 // Focused drug-interaction report — streamed. Used by the Brain "Interactions"
 // toggle: a single specialist gathered interaction evidence and this writes a
 // clinician-facing report from it. Strictly grounded in the retrieved records.
@@ -472,13 +508,10 @@ export async function synthesizeInteractionReport(
   // ingredients so the literature is found, but the GRADING must stay on the
   // named drugs — otherwise a combination brand ("Panadol") is split into its
   // ingredients and graded against itself, producing a matrix of drugs the user
-  // never asked about.
-  const drugScope =
-    namedDrugs.length >= 2
-      ? `\n\nDRUG SCOPE — grade ONLY these drugs, treating each as a SINGLE drug: ${namedDrugs.join(
-          ', ',
-        )}. Do NOT split a brand or combination product into its ingredients, and do NOT introduce any drug outside this list; ingredient names in the records are background for identifying the interaction, not additional drugs to grade.`
-      : '';
+  // never asked about. Each named drug is annotated with its active ingredient so
+  // the model recognises brand "similars" (Catafast and Voltaren are both
+  // diclofenac) and does not fabricate a self-interaction between them.
+  const drugScope = buildDrugScope(namedDrugs);
   const findings = specialists
     .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
     .join('\n\n');
