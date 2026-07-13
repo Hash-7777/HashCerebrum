@@ -15,6 +15,14 @@
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust backend](https://img.shields.io/badge/Rust-backend-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![Platform: macOS · Linux · Windows](https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-333333?style=flat-square)](#getting-started)
+[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-14a89a?style=flat-square)](#project-status)
+[![In development since May 2026](https://img.shields.io/badge/in%20development-since%20May%202026-333333?style=flat-square)](#project-status)
+
+</div>
+
+<div align="center">
+
+**Started 19 May 2026 · in active development ever since · 706 commits and counting**
 
 </div>
 
@@ -27,6 +35,23 @@
 > RAG with a true learning layer, and a 3D anatomical workspace.
 
 Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all** — including the embedding model that powers memory, which is bundled and runs on-device.
+
+---
+
+## Project status
+
+HashCerebrum has been built in the open-source spirit as a single-developer project, in **active daily development** — not a one-off release.
+
+| | |
+|---|---|
+| **First commit** | 19 May 2026 |
+| **Latest work** | July 2026 — ongoing |
+| **Commits** | 706 and counting |
+| **Version** | 1.1.0 |
+| **License** | GNU AGPL-3.0-or-later |
+| **Tests** | 1,054 frontend (Vitest) + 72 Rust (`cargo test`), all green; CI gates every push |
+
+Roughly two months of continuous work: the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened in this window. Development is continuing.
 
 ---
 
@@ -50,28 +75,24 @@ The result is an answer where **every sentence has a chain of custody back to a 
 
 ---
 
-## How HashCerebrum compares
+## What sets it apart
 
-I built HashCerebrum because existing tools retrieve or summarise, but none of them actually *learn*.
+Most research assistants **retrieve, extract, or summarise**. HashCerebrum is built to do the things those steps leave out — accumulate structured knowledge across sessions, revise its confidence when new evidence contradicts old, and do all of it **on your own machine**.
 
-<span>![yes](docs/assets/check.svg) = yes</span> &nbsp;&nbsp; <span>![no](docs/assets/x.svg) = no</span> &nbsp;&nbsp; <span>![partial](docs/assets/dash.svg) = partial</span>
+| Capability | What HashCerebrum does |
+|---|---|
+| **Persistent memory** | Cited findings are saved and reused across every project, searched by meaning |
+| **Belief updating** | Confidence per claim is revised as supporting and conflicting evidence accrues |
+| **Conflict detection** | Contradictions between papers are surfaced automatically |
+| **Consensus timeline** | The direction of evidence on a topic is tracked year by year, with flip detection |
+| **Knowledge graph** | Entities (drugs, conditions, outcomes, biomarkers) and their relations are queryable |
+| **Source reliability** | Journals/authors are scored, with citation and retraction tracking |
+| **Active learning** | The agent identifies coverage gaps and prioritises what it doesn't yet know |
+| **Episodic memory** | Each research session is recorded so a new run can be compared to earlier ones |
+| **Semantic drift** | Embedding snapshots detect when a term's usage shifts over time |
+| **Fully offline** | With a local Ollama model, every one of the above runs with zero external calls |
 
-| Capability | Perplexity | Elicit | Consensus | Scite | HashCerebrum |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| Web search | ![yes](docs/assets/check.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) |
-| Review automation | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) | ![partial](docs/assets/dash.svg) | ![no](docs/assets/x.svg) | ![partial](docs/assets/dash.svg) |
-| Persistent memory | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Belief updating | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Conflict detection | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) | ![yes](docs/assets/check.svg) |
-| Consensus timeline | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Knowledge graph | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Source reliability | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![partial](docs/assets/dash.svg) | ![yes](docs/assets/check.svg) |
-| Active learning | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Episodic memory | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Semantic drift | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-| Fully offline | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![no](docs/assets/x.svg) | ![yes](docs/assets/check.svg) |
-
-The gap I am targeting is simple: every other tool in this table is a retriever, an extractor, or a summariser. None of them accumulates structured knowledge across sessions, updates beliefs when evidence contradicts earlier findings, or tracks how a field's consensus *evolves* over time. HashCerebrum does — and it does so without sending your data anywhere.
+Each of these is a real, tested subsystem in this repo — not a roadmap item. Together they make the app a **reasoning-and-memory layer on top of retrieval**, not another one-shot search box.
 
 ---
 
@@ -197,6 +218,8 @@ This grading model and the failover chain are adapted from patterns in my prior 
 
 Name a gene variant and a disease in Brain (or force it with `/genetics`) and the request routes to a gene-expert checker. You give a gene symbol like `MICA` or an rsID like `rs1051792` plus a disease, and it returns an **Association Confidence score (0–100%)** plus a cited correlation report. It is **gene-agnostic** — any gene, any variant, any disease. The curated databases are queried by **gene symbol / rsID** (never a raw sentence), with a focused on-topic literature search alongside.
 
+It also tells a **gene from its allele**: an amino-acid or nucleotide notation such as `C677T`, an rsID such as `rs1801133`, or a named variant such as *Factor V Leiden* is resolved to the correct gene (MTHFR, F5, …) and scored against it — rather than being mistaken for a gene symbol of its own — while a gene-shaped string that is not an approved HGNC symbol is flagged and never given a score.
+
 What makes the number trustworthy:
 
 - **The score is computed in code, never by the model.** It is derived deterministically from the structured evidence — odds ratios, confidence intervals and p-values from the **GWAS Catalog**, clinical significance from **ClinVar**, study concordance, and source trust — so it is reproducible and cannot be hallucinated. It reflects the **strength of the published association, not a personal clinical risk**, and returns *“insufficient”* rather than a number when the evidence does not support one.
@@ -213,8 +236,9 @@ Unsafe requests are stopped at the gate — before they ever reach the research 
 
 - **Self-harm is met with care, not data.** A first-person self-harm question gets a deterministic, compassionate safety reply with crisis-line guidance — never a dose, and never routed to the literature search. Clinical toxicology questions are unaffected.
 - **No help for harm.** Requests to harm people or critical infrastructure (weapons of mass effect; sabotage of water, power, or food systems) are hard-refused, even when wrapped as a "historical" or "emergency-drill" framing.
-- **Prompt-injection resistant.** Jailbreaks, roleplay personas, translation-bypass, token-smuggling, fake-authority claims, and instructions hidden inside pasted "evidence" are caught at the gate and never executed.
-- **Identity stays sealed.** The assistant answers as *The Cerebrum of HashCerebrum, developed by Dr. Seif Hashish* and never discloses the underlying model, provider, system prompt, API keys, or endpoints — even to a caller claiming to be the developer.
+- **Prompt-injection resistant.** Jailbreaks, roleplay personas, translation-bypass, token-smuggling, and fake-authority claims are caught at the gate and never executed. Instructions hidden inside **retrieved or pasted "evidence"** are neutralised before the text ever reaches the model, so a poisoned abstract or imported PDF cannot hijack an answer.
+- **Grounded in real lexicons, not guesswork.** Genes are validated against the **HGNC** symbol set and drugs against **RxNorm** (plus a public, CC0 regional-brand registry) — a made-up gene like `ZQKR7` is flagged and never scored, an invented drug is refused rather than graded, and a variant notation (`C677T`, `rs1801133`) is correctly resolved to its gene rather than mistaken for one. Entities are recognised by real reference data, not by how a token happens to be spelled.
+- **Identity stays sealed.** The assistant answers only as *the HashCerebrum agent* and never discloses the underlying model, provider, system prompt, API keys, or endpoints — even to a caller claiming to be the developer.
 - **Honest about itself.** Questions about how HashCerebrum works are answered from real facts, not invented features.
 
 ---
@@ -256,6 +280,18 @@ infarction." Nothing is downloaded at runtime and no text leaves the machine.
 Embeddings are stored compactly (int8-quantised) with oldest-first eviction. A
 **Reset all data** control in Settings wipes memory, chats, runs, and cache for a
 clean slate (settings and API keys are kept).
+
+### Long-chat context — remembers without losing the thread
+
+A long conversation is kept coherent without resending the whole transcript on
+every message. Recent turns are carried verbatim; older turns are **folded into a
+rolling summary** so their gist survives; and the most **relevant** earlier turns
+are **semantically recalled** even from far back in the chat — so a follow-up like
+*"what was that odds ratio you found for MTHFR?"* pulls the exact earlier turn back
+into context. The amount replayed is sized to the model's context window, so a long
+session no longer overflows a small model. Crucially, this **conversation memory is
+a separate store from the medical-knowledge memory above** — a chat turn can never
+surface as paper evidence, and a cited finding can never surface as chat recall.
 
 ---
 
@@ -306,6 +342,7 @@ even for Ollama, and every other caller keeps the strict allowlist.
 |---|---|
 | No renderer-to-internet HTTP | CSP `connect-src 'self' blob:` (blob: is in-memory only — for the in-app PDF preview — and cannot reach the network); all external calls are Tauri commands |
 | SSRF protection | Hosts are **parsed as IP addresses** and matched against real RFC1918 / CGNAT / IPv6-ULA ranges + a cloud-metadata denylist, checked before the allowlist — a public FQDN can never masquerade as a private host |
+| DNS-rebinding protection | A custom DNS resolver resolves each host **once** and drops any private / loopback / link-local address for a public host before connecting, so an allowlisted hostname cannot be rebound to an internal service (the intentional localhost / LAN Ollama path is preserved) |
 | Bounded response bodies | Every response is read with a streaming 50 MB cap, so a reply **without a `Content-Length` header** still cannot exhaust memory |
 | LLM header injection prevention | Rust-side allowlist — only `content-type`, `authorization`, `x-api-key`, `http-referer`, `x-title`, `anthropic-*`, `openai-*` |
 | Tamper-evident audit trail | SHA-256 hash chain; each entry commits `seq \| prev_hash \| ts \| category \| subject \| action \| data_hash` |
@@ -350,7 +387,7 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (814 tests) + `cargo test` (62 tests) |
+| Testing | Vitest (1,054 tests) + `cargo test` (72 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -360,12 +397,12 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 814 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 62 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,054 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 72 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
-| Frontend | `npm test` | 814 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
-| Backend | `cargo test` (in `src-tauri/`) | 62 tests — the network guard & SSRF denylist, capped reads, rate limiting, keychain, and the tamper-evident audit log |
+| Frontend | `npm test` | 1,054 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
+| Backend | `cargo test` (in `src-tauri/`) | 72 tests — the network guard & SSRF denylist, capped reads, rate limiting, keychain, and the tamper-evident audit log |
 | Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
 | Security | `cargo audit` | Dependency advisories, run in CI on every push |
 
@@ -454,7 +491,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 814 unit tests
+npm test               # Vitest — 1,054 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -516,12 +553,12 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 204 | ~37,428 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 78 | ~7,655 |
-| Rust Tauri backend (`src-tauri/src/`) | 41 | ~6,411 |
-| **Total core source** | **323** | **~51,494** |
+| React/TypeScript app code (`src/`, excluding tests) | 244 | ~46,114 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 116 | ~12,624 |
+| Rust Tauri backend (`src-tauri/src/`) | 40 | ~7,227 |
+| **Total core source** | **400** | **~65,965** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (814 Vitest tests plus 62 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,054 Vitest tests plus 72 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 
