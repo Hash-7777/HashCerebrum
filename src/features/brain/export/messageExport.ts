@@ -861,18 +861,28 @@ export function exportChatMarkdown(
   messages: ChatMessage[],
   meta: ChatExportMeta,
 ): void {
-  const body = buildChatMarkdownExport(messages, meta);
-  const filename = `${slugifyFilename(meta.title)}-chat.md`;
-  downloadTextFile(filename, body, 'text/markdown;charset=utf-8');
+  // Contain any failure building or saving the transcript so a click on Export MD
+  // can never surface as an unhandled error.
+  try {
+    const body = buildChatMarkdownExport(messages, meta);
+    const filename = `${slugifyFilename(meta.title)}-chat.md`;
+    downloadTextFile(filename, body, 'text/markdown;charset=utf-8');
+  } catch (err) {
+    console.error('[exportChatMarkdown] failed:', err instanceof Error ? err.message : String(err));
+  }
 }
 
 export async function exportChatPdf(
   messages: ChatMessage[],
   meta: ChatExportMeta,
 ): Promise<void> {
-  const markdown = buildChatMarkdownExport(messages, meta);
-  const { buildPaperPdfBlob } = await import('./paperPdf');
-  const blob = await buildPaperPdfBlob({ title: meta.title, content: markdown });
-  const filename = `${slugifyFilename(meta.title)}-chat.pdf`;
-  downloadBlob(filename, assertPdfBlob(blob, 'jsPDF chat renderer'));
+  try {
+    const markdown = buildChatMarkdownExport(messages, meta);
+    const { buildPaperPdfBlob } = await import('./paperPdf');
+    const blob = await buildPaperPdfBlob({ title: meta.title, content: markdown });
+    const filename = `${slugifyFilename(meta.title)}-chat.pdf`;
+    downloadBlob(filename, assertPdfBlob(blob, 'jsPDF chat renderer'));
+  } catch (err) {
+    console.error('[exportChatPdf] failed:', err instanceof Error ? err.message : String(err));
+  }
 }
