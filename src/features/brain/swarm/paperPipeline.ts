@@ -115,6 +115,25 @@ function joinList(items: string[]): string {
 // computable for THIS evidence — are woven in from the retrieved records, so two
 // different reviews produce genuinely different Methods. No inline [S#] citations
 // (it describes the pipeline, not findings), hence 'Methods' is citation-exempt.
+// The calendar date(s) on which the evidence was actually retrieved, read from each
+// record's fetchedAt stamp — the standard "databases were searched on …" element a
+// reader needs to judge currency. Returns a leading-space clause, or '' when no
+// record carries a usable timestamp (never fabricates a date).
+export function searchDatePhrase(evidence: EvidenceItem[]): string {
+  const days = new Set<string>();
+  for (const item of evidence) {
+    const day = (item.fetchedAt ?? '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) days.add(day);
+  }
+  if (days.size === 0) return '';
+  const sorted = [...days].sort();
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  return first === last
+    ? `, searched on ${first}`
+    : `, searched between ${first} and ${last}`;
+}
+
 export function buildMethodsSection(
   question: string,
   evidence: EvidenceItem[],
@@ -129,9 +148,10 @@ export function buildMethodsSection(
   const sourceList = [...sourceCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([source, count]) => `${displaySourceName(source)} (${count})`);
+  const searchDate = searchDatePhrase(evidence);
   const sourcesSentence = sourceList.length
-    ? `Evidence for this review comprised ${evidence.length} record(s) retrieved from ${joinList(sourceList)}.`
-    : `Evidence for this review was retrieved from the pipeline's biomedical sources.`;
+    ? `Evidence for this review comprised ${evidence.length} record(s) retrieved from ${joinList(sourceList)}${searchDate}.`
+    : `Evidence for this review was retrieved from the pipeline's biomedical sources${searchDate}.`;
 
   // Actual study-design mix of the retrieved evidence.
   const designCounts = new Map<string, number>();

@@ -14,6 +14,7 @@ import {
   keywordsFrom,
   modelForSection,
   neutralizeMisattributedGeneStatistics,
+  searchDatePhrase,
   neutralizeUnverifiableNct,
   parseRetryAfterMs,
   shouldExpandSection,
@@ -317,6 +318,29 @@ describe('title & keyword cleanup', () => {
       expect(a.toLowerCase()).toContain('sglt2');
       expect(b.toLowerCase()).toContain('warfarin');
       expect(b).not.toContain('PubMed/MEDLINE (2)'); // warfarin had 1 pubmed record
+    });
+
+    describe('searchDatePhrase', () => {
+      const dated = (day: string) => ({ ...evi('pubmed'), fetchedAt: `${day}T09:00:00.000Z` });
+
+      it('stamps the single retrieval date read from the records', () => {
+        expect(searchDatePhrase([dated('2026-07-14')])).toBe(', searched on 2026-07-14');
+      });
+
+      it('reports a date range when records were fetched on different days', () => {
+        expect(searchDatePhrase([dated('2026-07-10'), dated('2026-07-14')])).toBe(
+          ', searched between 2026-07-10 and 2026-07-14',
+        );
+      });
+
+      it('never fabricates a date when no record carries a usable timestamp', () => {
+        expect(searchDatePhrase([{ ...evi('pubmed'), fetchedAt: '' }])).toBe('');
+      });
+
+      it('is surfaced in the Methods section', () => {
+        const text = buildMethodsSection(sglt2Q, [dated('2026-07-14')], sglt2Extractions).join(' ');
+        expect(text).toContain('searched on 2026-07-14');
+      });
     });
 
     it('states a real pooled meta-analysis only when the evidence supports it', () => {
