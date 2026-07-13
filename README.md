@@ -6,6 +6,8 @@
 
 ### A private, local-first agentic desktop app for medical research
 
+**Ask a clinical question → get a cited answer, or a full typeset research paper — every fact traceable to a real publication, all on your own machine.**
+
 [![Website](https://img.shields.io/badge/website-hashcerebrum.com-14a89a?style=flat-square)](https://hashcerebrum.com)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-333333?style=flat-square)](LICENSE)
 [![Local-first](https://img.shields.io/badge/local--first-on--device-333333?style=flat-square)](#privacy--data-locality)
@@ -35,6 +37,29 @@
 > RAG with a true learning layer, and a 3D anatomical workspace.
 
 Your research stays on your machine. HashCerebrum is a **local-first desktop app** — no account, no sign-up, no cloud, no telemetry, nothing phones home. A boss agent routes your clinical question to topic specialists that fetch **source-grounded evidence from real, authoritative biomedical databases**, then answer with inline citations or compile a typeset research paper — all without the model inventing a single fact it cannot prove. The web layer cannot make a network call; every outbound request is gated, allowlisted, and recorded in a tamper-evident audit log you can read yourself. Use a local model (Ollama) and the app makes **zero external calls at all** — including the embedding model that powers memory, which is bundled and runs on-device.
+
+---
+
+## Highlights
+
+- 🔒 **Private by architecture** — the UI physically cannot reach the internet; only the Rust core can, and only to a fixed, audited allowlist. Point it at Ollama for **zero external calls**.
+- 📑 **No invented facts** — every claim carries a `[S#]` citation back to a real record; a validation gate blocks any paper whose statistics or citations don't resolve.
+- 🧬 **Grounded, not guessed** — genes checked against **HGNC**, drugs against **RxNorm**; a made-up gene or drug is flagged, never scored.
+- 🧠 **It learns** — persistent memory, belief updating, conflict detection, a knowledge graph, and consensus tracking — all on-device.
+- 🩺 **Two graded clinical tools** — an A–X drug-interaction checker and a 0–100 % gene-disease association score computed **in code, never by the model**.
+- 🧾 **Provenance you can audit** — a tamper-evident, hash-chained log of every source contacted, readable from Settings.
+- 🖥️ **Real desktop app** — Tauri v2 (Rust + React), macOS · Linux · Windows, with a live 3D brain (or a GPU-free 2D view).
+
+<details>
+<summary><b>Table of contents</b></summary>
+
+- [Project status](#project-status) · [Why HashCerebrum](#why-hashcerebrum) · [What sets it apart](#what-sets-it-apart)
+- [Smart Agentic RAG](#smart-agentic-rag) · [The 3D workspace](#the-3d-workspace) · [One mega-mind, three modes](#one-mega-mind-three-modes)
+- [Peer review & document editing](#peer-review-and-document-editing) · [Graded drug-interaction checker](#graded-drug-interaction-checker) · [Scored gene-disease associations](#scored-gene-disease-associations)
+- [Safety & guardrails](#safety--guardrails) · [Semantic memory](#semantic-memory-private-on-device) · [Privacy & data locality](#privacy--data-locality) · [Security architecture](#security-architecture)
+- [Tech stack](#tech-stack) · [Testing](#testing) · [Getting started](#getting-started) · [Codebase map](#codebase-map)
+
+</details>
 
 ---
 
@@ -204,7 +229,7 @@ On a low-quota or local model the review runs **serially with backoff** that hon
 
 ---
 
-## Drug interactions — a graded clinical checker
+## Graded drug-interaction checker
 
 Ask about drug interactions in Brain (or force it with `/interactions`) and the request routes to a focused interaction checker rather than the general research team. A single specialist gathers evidence and the report **grades every drug pair on the A–X scale** — A (none) · B (minor) · C (moderate) · D (major) · X (contraindicated) — as one card per pair with **Mechanism · Effect · Action · Evidence**, a critical-alerts summary, and a verify-with-a-clinician line. It biases toward the more serious grade when evidence is thin, treats **drug-label (openFDA) and RxNorm** records as authoritative, verifies each named drug against **RxNorm** before grading it, and cites `[S#]` throughout — it will not invent an interaction.
 
@@ -214,7 +239,7 @@ This grading model and the failover chain are adapted from patterns in my prior 
 
 ---
 
-## Genetics — gene-variant ↔ disease correlation, scored
+## Scored gene-disease associations
 
 Name a gene variant and a disease in Brain (or force it with `/genetics`) and the request routes to a gene-expert checker. You give a gene symbol like `MICA` or an rsID like `rs1051792` plus a disease, and it returns an **Association Confidence score (0–100%)** plus a cited correlation report. It is **gene-agnostic** — any gene, any variant, any disease. The curated databases are queried by **gene symbol / rsID** (never a raw sentence), with a focused on-topic literature search alongside.
 
