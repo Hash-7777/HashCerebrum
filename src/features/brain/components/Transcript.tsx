@@ -21,6 +21,7 @@ import { usePeerReviewStore } from '@core/store/peerReviewStore';
 import { useModeStore } from '@core/store/modeStore';
 import { manuscriptToReadableText } from '../swarm/manuscript';
 import { findSupportingSpans } from '../swarm/citationSpans';
+import { summarizeSources } from './sourceSummary';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import { MarkdownText } from '@ui/MarkdownText';
@@ -524,6 +525,21 @@ export const Transcript = memo(function Transcript({
                       })()}
                     </div>
                   )}
+                  {isAi && !isDocument && (() => {
+                    const s = summarizeSources(message.citations);
+                    if (!s) return null;
+                    const breakdown = s.breakdown.map((b) => `${b.label} (${b.count})`).join(', ');
+                    return (
+                      <div
+                        className="claim-check-verified"
+                        title={`This answer draws on ${s.records} source record(s) across ${s.databases} database(s): ${breakdown}. Every fetch is allowlisted and audited.`}
+                      >
+                        <Icon name="shield" size={11} /> {s.records} source
+                        {s.records === 1 ? '' : 's'} · {s.databases} database
+                        {s.databases === 1 ? '' : 's'}
+                      </div>
+                    );
+                  })()}
                   {message.verification && message.verification.checked > 0 && !isDocument && (
                     <div
                       className="claim-check-verified"
