@@ -11,6 +11,7 @@ import {
 import { BRAIN_SPECIALIST_AGENTS, type AgentId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import type { LlmMessage } from '@core/llm/types';
+import { budgetConversation } from './conversationBudget';
 import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
 import type { AssociationConfidence, GeneAssociation } from './genetics/associationConfidence';
@@ -118,7 +119,7 @@ export async function contextualizeQuestion(
           content:
             "Rewrite the user's latest message into a SINGLE self-contained biomedical question for a literature search. Resolve every pronoun and reference using the conversation, and name the specific drugs, conditions, populations, or entities from context. Keep the user's intent. Reply with ONLY the rewritten question on one line — no preamble, no quotes.",
         },
-        ...conversation.slice(-6),
+        ...budgetConversation(conversation, { maxChars: 4000, perAssistantChars: 800, maxTurns: 6 }),
         { role: 'user', content: question },
       ],
       temperature: 0.1,
@@ -180,7 +181,9 @@ or
 
   const messages: LlmMessage[] = [
     { role: 'system', content: 'You reply with a single JSON object and nothing else.' },
-    ...conversation,
+    // Only recent context is needed to route the latest message. Sending the whole
+    // history here is what grew a long chat until it 413'd on a small-context model.
+    ...budgetConversation(conversation, { maxChars: 6000, perAssistantChars: 1000, maxTurns: 6 }),
     { role: 'user', content: `${planPrompt}\n\nUser message: ${question}` },
   ];
 
@@ -303,10 +306,11 @@ export async function bossChat(
 ): Promise<{ content: string; modelUsed: string }> {
   // Plain chat only needs recent context, not the whole research history — a
   // greeting in a long session otherwise carried ~10k tokens and 413'd on a
-  // small-TPM model. Cap to the last few turns.
+  // small-TPM model. Budget by size AND turns so a single long paper in the
+  // recent window cannot blow the request up on its own.
   const messages: LlmMessage[] = [
     { role: 'system', content: BOSS_CHAT_SYSTEM_PROMPT },
-    ...conversation.slice(-8),
+    ...budgetConversation(conversation, { maxChars: 8000, perAssistantChars: 1500, maxTurns: 8 }),
     { role: 'user', content: question },
   ];
   const res = await streamWithModelChain(model, { messages, temperature: 0.5, maxTokens: 1100 }, { onToken, signal }, emitFailover);
