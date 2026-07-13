@@ -11,10 +11,10 @@ import type { EvidenceItem } from '@platform/index';
 import { extractEffectValues } from '../paperPipeline';
 import {
   diseaseTerms,
-  extractGeneSymbols,
   extractUnrecognizedGeneTokens,
   hasGeneSignal,
 } from './geneQueryReadiness';
+import { genesForQuestion } from './variantGenes';
 
 export type AssociationSource = 'gwas_catalog' | 'clinvar' | 'literature';
 export type AssociationDirection = 'risk' | 'protective' | 'neutral';
@@ -413,7 +413,7 @@ export function geneAssociations(
   evidence: EvidenceItem[],
   question: string,
 ): GeneAssociation[] {
-  const genes = extractGeneSymbols(question);
+  const genes = genesForQuestion(question);
   const unrecognized = extractUnrecognizedGeneTokens(question);
 
   // One real gene and nothing fishy — score over the full evidence set exactly

@@ -16,7 +16,8 @@
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
 import type { SpecialistResult, SwarmCallbacks } from './types';
-import { extractGeneSymbols, diseaseTerms } from './genetics/geneQueryReadiness';
+import { diseaseTerms } from './genetics/geneQueryReadiness';
+import { genesForQuestion } from './genetics/variantGenes';
 
 // Words that describe the REQUEST or the review type, not the disease, so they
 // never belong in a literature query.
@@ -41,7 +42,9 @@ export function diseaseCoreFor(question: string): string {
 /** The targeted queries for a genetics question: each named gene paired with the
  *  disease/outcome phrase. Pure and deterministic so it is testable offline. */
 export function entitySearchQueries(question: string): string[] {
-  const genes = extractGeneSymbols(question);
+  // Resolve variants/rsIDs to their gene too, so "rs1801133 and VTE" still retrieves
+  // the MTHFR association literature rather than nothing.
+  const genes = genesForQuestion(question);
   const core = diseaseCoreFor(question);
   if (genes.length === 0 || !core) return [];
   return [...new Set(genes.map((gene) => `${gene} ${core}`))];
