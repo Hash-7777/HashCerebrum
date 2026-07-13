@@ -1,4 +1,5 @@
 import type { EvidenceItem } from '@platform/index';
+import { neutralizeInjection } from './evidenceSanitize';
 
 const SNIPPET_CHARS = 320;
 
@@ -27,10 +28,13 @@ export function formatEvidenceItem(
     : record.identifiers?.doi
       ? ` DOI:${record.identifiers.doi}`
       : '';
+  // Title and snippet are untrusted source text — neutralize any embedded
+  // prompt-injection before it reaches the model as part of the citation line.
+  const title = neutralizeInjection(record.title);
   const snippet = record.snippet
-    ? ` — ${record.snippet.replace(/\s+/g, ' ').slice(0, snippetChars)}`
+    ? ` — ${neutralizeInjection(record.snippet.replace(/\s+/g, ' ')).slice(0, snippetChars)}`
     : '';
-  return `[${markerPrefix}${index + 1}] ${record.source.toUpperCase()}${year} ${record.title}.${id}${snippet}`;
+  return `[${markerPrefix}${index + 1}] ${record.source.toUpperCase()}${year} ${title}.${id}${snippet}`;
 }
 
 /**
