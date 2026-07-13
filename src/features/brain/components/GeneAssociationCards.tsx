@@ -113,6 +113,16 @@ export function GeneAssociationCards({ associations }: { associations: GeneAssoc
                 <span className="gene-card-count">
                   {a.confidence.supportCount} supporting record{a.confidence.supportCount === 1 ? '' : 's'}
                 </span>
+                {a.confidence.quantitativeCount > 0 && (
+                  <span className="gene-card-count">
+                    {a.confidence.quantitativeCount} with effect size
+                  </span>
+                )}
+                {a.confidence.refuteCount > 0 && (
+                  <span className="gene-card-count gene-card-count--refute">
+                    {a.confidence.refuteCount} refuting
+                  </span>
+                )}
               </div>
               <p className="gene-card-rationale">{a.confidence.rationale}</p>
             </div>

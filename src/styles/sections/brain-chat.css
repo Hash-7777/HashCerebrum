@@ -1708,6 +1708,7 @@
 .gene-dir--mixed { color: #e3bd63; background: color-mix(in srgb, #e3bd63 12%, transparent); }
 .gene-dir--none { color: var(--text-3); background: color-mix(in srgb, var(--text-3) 10%, transparent); }
 .gene-card-count { font: 500 11px var(--f-mono); color: var(--text-4, var(--text-3)); }
+.gene-card-count--refute { color: var(--danger, #e2696e); }
 .gene-card-rationale {
   margin: 0;
   font-size: 12.5px;
