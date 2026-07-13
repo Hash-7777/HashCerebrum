@@ -23,6 +23,8 @@ import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
 import { classifyEvidenceStrength, getEmbeddingProvider } from '@core/rag';
 import { recallTurns, rememberTurns } from './context/conversationMemory';
+import { updateRunningSummary } from './context/runningSummary';
+import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import { useToastStore } from '@core/store/toastStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
@@ -585,6 +587,9 @@ export function BrainMode() {
         // context survives a long conversation without resending the transcript.
         // No-op when the embedder is cold — recall simply returns nothing.
         contextMemory: {
+          summary: useChatHistoryStore
+            .getState()
+            .chats.find((c) => c.id === activeChatId)?.contextSummary,
           recall: (q) =>
             recallTurns(
               useChatHistoryStore.getState().activeChatId ?? '',
@@ -636,6 +641,30 @@ export function BrainMode() {
           ],
           getEmbeddingProvider(),
         );
+        // Roll the older turns into the chat's running summary so their gist
+        // survives once they age out of the recent window. Incremental (only the
+        // newly-evicted turns are folded), throttled, and fire-and-forget so it
+        // never blocks or slows the answer.
+        const KEEP_RECENT = 8;
+        const fullConvo = [
+          ...toConversation(nextMessages),
+          { role: 'assistant' as const, content: finalContent },
+        ];
+        const foldUpTo = Math.max(0, fullConvo.length - KEEP_RECENT);
+        const chatNow = useChatHistoryStore.getState().chats.find((c) => c.id === memChatId);
+        const already = chatNow?.contextSummaryThrough ?? 0;
+        const toFold = fullConvo.slice(already, foldUpTo);
+        if (toFold.length >= 4) {
+          void updateRunningSummary(chatNow?.contextSummary ?? '', toFold, (msgs) =>
+            completeWithModelChain(agentModelFor('boss'), {
+              messages: msgs,
+              temperature: 0.1,
+              maxTokens: 500,
+            }).then((r) => r.content),
+          ).then((summary) =>
+            useChatHistoryStore.getState().setContextSummary(memChatId, summary, foldUpTo),
+          );
+        }
       }
 
       if (!isMounted.current) return;

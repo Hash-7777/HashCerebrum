@@ -70,6 +70,12 @@ export interface SavedChat {
   // True once the user has manually renamed the chat — saveActive then
   // keeps that title instead of re-deriving it from the first message.
   titleCustom?: boolean;
+  // Rolling summary of the turns that have aged out of the recent window, so a
+  // long chat keeps its context without resending the whole transcript.
+  contextSummary?: string;
+  // Number of leading messages already folded into contextSummary, so folding is
+  // incremental (only newly-evicted turns are summarised).
+  contextSummaryThrough?: number;
 }
 
 interface PersistShape {
@@ -84,6 +90,7 @@ interface ChatHistoryStore {
   newChat: (mode?: ChatMode) => string;
   selectChat: (id: string) => void;
   renameChat: (id: string, title: string) => void;
+  setContextSummary: (id: string, summary: string, through: number) => void;
   saveActive: (messages: ChatMessage[], mode?: ChatMode) => void;
   clearActive: () => void;
   deleteChat: (id: string) => void;
@@ -175,6 +182,16 @@ export const useChatHistoryStore = create<ChatHistoryStore>((set) => ({
       persist(chats);
       return { chats };
     }),
+
+  setContextSummary: (id, summary, through) => {
+    set((state) => {
+      const chats = state.chats.map((c) =>
+        c.id === id ? { ...c, contextSummary: summary, contextSummaryThrough: through } : c,
+      );
+      persist(chats);
+      return { chats };
+    });
+  },
 
   saveActive: (messages, mode = 'brain') => {
     const cleaned = messages.map((message) => ({ ...message, isStreaming: false }));
