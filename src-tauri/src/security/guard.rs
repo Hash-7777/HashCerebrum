@@ -175,6 +175,15 @@ pub fn check_llm_net(provider: &str, host: &str, port: Option<u16>) -> AppResult
     check(Action::Net { host, port })
 }
 
+/// May this host legitimately resolve to a private / loopback IP? True only for
+/// the intentional local targets — `localhost`, a LAN IP, an mDNS `.local` name,
+/// or a bare LAN hostname (the Ollama path). For every public host the DNS
+/// resolver drops private addresses, so an allowlisted FQDN that is rebound to an
+/// internal address cannot be connected to.
+pub fn host_may_use_private_ip(host: &str) -> bool {
+    is_localhost(host) || is_lan_ollama_host(host)
+}
+
 /// A host the Ollama provider is permitted to reach: loopback, a private/LAN IP,
 /// an mDNS `.local` name, or a bare single-label hostname. Hard-blocked targets
 /// (cloud metadata / link-local) are excluded, and a dotted public FQDN is not

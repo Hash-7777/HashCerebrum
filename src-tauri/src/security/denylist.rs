@@ -67,6 +67,35 @@ pub fn is_blocked(host: &str) -> bool {
     is_hard_blocked(host) || is_private_lan(host)
 }
 
+/// A resolved IP that a PUBLIC host must never connect to — loopback, RFC1918 /
+/// CGNAT / ULA private ranges, link-local (incl. the 169.254.169.254 cloud
+/// metadata endpoint), unspecified, and multicast. Used by the DNS resolver to
+/// drop such addresses after resolution, closing the DNS-rebinding window in
+/// which an allowlisted hostname resolves to an internal address.
+pub fn is_internal_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || v4.is_documentation()
+                || (o[0] == 100 && (64..=127).contains(&o[1])) // CGNAT 100.64.0.0/10
+        }
+        IpAddr::V6(v6) => {
+            let seg0 = v6.segments()[0];
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (seg0 & 0xfe00) == 0xfc00 // ULA fc00::/7
+                || (seg0 & 0xffc0) == 0xfe80 // link-local fe80::/10
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

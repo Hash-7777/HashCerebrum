@@ -31,6 +31,12 @@ static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(600))
         .redirect(reqwest::redirect::Policy::none())
+        // Drop private / loopback addresses for public providers while still
+        // allowing the intentional localhost / LAN Ollama target (see
+        // GuardedResolver), closing the DNS-rebinding window on LLM egress too.
+        .dns_resolver(std::sync::Arc::new(
+            crate::security::resolver::GuardedResolver,
+        ))
         .user_agent("HashCerebrum/1.1 (research-app; mailto:support@hashcerebrum.com)")
         .build()
     {

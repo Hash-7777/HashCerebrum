@@ -17,6 +17,11 @@ static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
     match reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
+        // Resolve DNS ourselves and drop private / loopback addresses for public
+        // hosts, so an allowlisted hostname cannot be rebound to an internal IP.
+        .dns_resolver(std::sync::Arc::new(
+            crate::security::resolver::GuardedResolver,
+        ))
         .user_agent("HashCerebrum/1.1 (research-app; mailto:support@hashcerebrum.com)")
         .build()
     {
