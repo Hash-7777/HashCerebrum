@@ -59,6 +59,16 @@ export interface SwarmOptions {
   question: string;
   // Prior conversation turns (user/assistant only, no system message).
   conversation: LlmMessage[];
+  // Optional long-chat memory. When present, the boss model calls run on an
+  // assembled context (rolling summary + semantically-recalled earlier turns +
+  // recent window) instead of only the recent turns, so a long chat keeps its
+  // context without resending the whole transcript. `recall` returns earlier
+  // turns of THIS chat relevant to the query (from the isolated conversation
+  // store, never the paper RAG). Absent = today's recent-window behaviour.
+  contextMemory?: {
+    summary?: string;
+    recall?: (query: string) => Promise<LlmMessage[]>;
+  };
   // Optional user-uploaded CSV/TSV summary for original-data manuscripts.
   dataset?: UploadedDatasetSummary | null;
   // Resolves the LLM model each agent runs on.

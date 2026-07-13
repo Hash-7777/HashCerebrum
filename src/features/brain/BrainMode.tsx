@@ -21,7 +21,8 @@ import { exportChatMarkdown, exportChatPdf } from './export/messageExport';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
-import { classifyEvidenceStrength } from '@core/rag';
+import { classifyEvidenceStrength, getEmbeddingProvider } from '@core/rag';
+import { recallTurns, rememberTurns } from './context/conversationMemory';
 import { useToastStore } from '@core/store/toastStore';
 import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
@@ -579,6 +580,18 @@ export function BrainMode() {
         mini: turnMini,
         drugFocus: turnDrugFocus,
         geneticsFocus: turnGeneticsFocus,
+        // Long-chat memory: let the boss recall the most relevant EARLIER turns of
+        // this chat (from the isolated conversation store, never the paper RAG), so
+        // context survives a long conversation without resending the transcript.
+        // No-op when the embedder is cold — recall simply returns nothing.
+        contextMemory: {
+          recall: (q) =>
+            recallTurns(
+              useChatHistoryStore.getState().activeChatId ?? '',
+              q,
+              getEmbeddingProvider(),
+            ),
+        },
         onClaimLedger: (ledger) =>
           new Promise((resolve, reject) => {
             claimLedgerResolve.current = resolve;
@@ -608,6 +621,22 @@ export function BrainMode() {
         result.answer ||
         streamedContent ||
         (result.kind === 'research' ? summarizeEvidence(result.evidence) : 'No response returned by the selected model.');
+
+      // Index this completed turn into the isolated conversation memory (its own
+      // chat-keyed embeddings, kept entirely separate from the paper-knowledge
+      // RAG) so later messages can semantically recall it. Fire-and-forget — a
+      // failure or a cold embedder never affects the turn.
+      const memChatId = useChatHistoryStore.getState().activeChatId;
+      if (memChatId) {
+        void rememberTurns(
+          memChatId,
+          [
+            { id: userMessage.id, role: 'user', content: cleanQuery },
+            { id: assistantId, role: 'assistant', content: finalContent },
+          ],
+          getEmbeddingProvider(),
+        );
+      }
 
       if (!isMounted.current) return;
       if (result.kind === 'research') {

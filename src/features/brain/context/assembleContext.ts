@@ -16,11 +16,11 @@ import { estimateTokens } from './tokenBudget';
 
 export interface AssembleInput {
   /** Standing instructions / the active task — always included if present. */
-  pinned?: string;
+  pinned?: string | undefined;
   /** Rolling summary of older turns (Layer 2). */
-  summary?: string;
+  summary?: string | undefined;
   /** Semantically-recalled older turns relevant to the current message (Layer 3). */
-  recalled?: LlmMessage[];
+  recalled?: LlmMessage[] | undefined;
   /** Recent verbatim window (Layer 1), chronological. */
   recent: LlmMessage[];
   /** Token ceiling for the whole returned context. */

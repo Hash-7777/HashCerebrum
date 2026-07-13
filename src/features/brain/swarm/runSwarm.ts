@@ -66,6 +66,9 @@ import { backfillLandmarkTrials } from './trialBackfill';
 import { backfillDrugInteractions } from './interactionBackfill';
 import { backfillNamedEntityEvidence } from './entityBackfill';
 import { expandDrugQuery } from './drugAliases';
+import { budgetConversation } from './conversationBudget';
+import { assembleContext } from '../context/assembleContext';
+import { historyTokenBudget } from '../context/tokenBudget';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
 
 export function evidenceKey(record: EvidenceItem): string {
@@ -592,13 +595,42 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     }
   }
 
+  // Assemble the cross-turn context for the boss model calls: the recent window,
+  // plus (when long-chat memory is supplied) the rolling summary and the
+  // semantically-recalled earlier turns, within the model's history budget. The
+  // raw `conversation` is intentionally kept for appraisal and gene-readiness,
+  // which need full prior turns. Falls back to the recent window when no memory
+  // is supplied or recall is unavailable, so behaviour is unchanged by default.
+  const recentWindow = budgetConversation(conversation, {
+    maxChars: 8000,
+    perAssistantChars: 1500,
+    maxTurns: 8,
+  });
+  let recalledTurns: LlmMessage[] = [];
+  if (opts.contextMemory?.recall) {
+    try {
+      const recentSet = new Set(recentWindow.map((m) => m.content));
+      recalledTurns = (await opts.contextMemory.recall(question)).filter(
+        (m) => !recentSet.has(m.content),
+      );
+    } catch {
+      recalledTurns = [];
+    }
+  }
+  const bossContext = assembleContext({
+    summary: opts.contextMemory?.summary,
+    recalled: recalledTurns,
+    recent: recentWindow,
+    budgetTokens: historyTokenBudget(bossModel),
+  });
+
   // Meta / app-introspection / prompt-injection questions are not biomedical
   // research — answer them in plain chat (the boss explains or declines)
   // instead of launching the research swarm, which turned them into refusals
   // rendered as "Research result · N references" documents.
   if (isMetaOrAppQuestion(question)) {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -607,7 +639,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // mode where the hardened system prompt refuses them cleanly.
   if (isJailbreakAttempt(question)) {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -617,7 +649,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // bogus manuscript. Route to chat with a refusal.
   if (isOffTopicQuestion(question)) {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -626,7 +658,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // literature search that returns nothing on point.
   if (isCodingRequest(question)) {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -636,7 +668,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // a plain "hi" became a literature search).
   if (isSmallTalk(question)) {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
@@ -650,7 +682,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // a typo here otherwise cascades into a false "no direct evidence" gap and a
   // misspelled title.
   const researchQuestion = normalizeMedicalSpelling(
-    await contextualizeQuestion(bossModel, question, conversation),
+    await contextualizeQuestion(bossModel, question, bossContext),
   );
 
   // Surface the PICO frame (Population/Intervention/Comparator/Outcome) of the
@@ -849,7 +881,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   }
 
   callbacks.onBossPhase('routing');
-  let plan = await planResearch(bossModel, researchQuestion, conversation);
+  let plan = await planResearch(bossModel, researchQuestion, bossContext);
   if (paperRequest) {
     const requiredPaperTasks = fallbackPaperTasks(researchQuestion);
     plan = {
@@ -866,7 +898,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   if (plan.mode === 'chat') {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, conversation, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 
