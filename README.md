@@ -42,13 +42,13 @@ Your research stays on your machine. HashCerebrum is a **local-first desktop app
 
 ## Highlights
 
-- 🔒 **Private by architecture** — the UI physically cannot reach the internet; only the Rust core can, and only to a fixed, audited allowlist. Point it at Ollama for **zero external calls**.
-- 📑 **No invented facts** — every claim carries a `[S#]` citation back to a real record; a validation gate blocks any paper whose statistics or citations don't resolve.
-- 🧬 **Grounded, not guessed** — genes checked against **HGNC**, drugs against **RxNorm**; a made-up gene or drug is flagged, never scored.
-- 🧠 **It learns** — persistent memory, belief updating, conflict detection, a knowledge graph, and consensus tracking — all on-device.
-- 🩺 **Two graded clinical tools** — an A–X drug-interaction checker and a 0–100 % gene-disease association score computed **in code, never by the model**.
-- 🧾 **Provenance you can audit** — a tamper-evident, hash-chained log of every source contacted, readable from Settings.
-- 🖥️ **Real desktop app** — Tauri v2 (Rust + React), macOS · Linux · Windows, with a live 3D brain (or a GPU-free 2D view).
+- <img src="docs/assets/icon-lock.svg" width="16" align="center" alt=""> &nbsp;**Private by architecture** — the UI physically cannot reach the internet; only the Rust core can, and only to a fixed, audited allowlist. Point it at Ollama for **zero external calls**.
+- <img src="docs/assets/icon-cited.svg" width="16" align="center" alt=""> &nbsp;**No invented facts** — every claim carries a `[S#]` citation back to a real record; a validation gate blocks any paper whose statistics or citations don't resolve.
+- <img src="docs/assets/icon-grounded.svg" width="16" align="center" alt=""> &nbsp;**Grounded, not guessed** — genes checked against **HGNC**, drugs against **RxNorm**; a made-up gene or drug is flagged, never scored.
+- <img src="docs/assets/icon-learn.svg" width="16" align="center" alt=""> &nbsp;**It learns** — persistent memory, belief updating, conflict detection, a knowledge graph, and consensus tracking — all on-device.
+- <img src="docs/assets/icon-graded.svg" width="16" align="center" alt=""> &nbsp;**Two graded clinical tools** — an A–X drug-interaction checker and a 0–100 % gene-disease association score computed **in code, never by the model**.
+- <img src="docs/assets/icon-audit.svg" width="16" align="center" alt=""> &nbsp;**Provenance you can audit** — a tamper-evident, hash-chained log of every source contacted, readable from Settings.
+- <img src="docs/assets/icon-desktop.svg" width="16" align="center" alt=""> &nbsp;**Real desktop app** — Tauri v2 (Rust + React), macOS · Linux · Windows, with a live 3D brain (or a GPU-free 2D view).
 
 <details>
 <summary><b>Table of contents</b></summary>
