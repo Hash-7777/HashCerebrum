@@ -13,6 +13,8 @@ export {
   SELF_HARM_MESSAGE,
   HARMFUL_REQUEST_REFUSAL,
   PROMPT_INJECTION_REFUSAL,
+  isSystemPromptRequest,
+  SYSTEM_PROMPT_REFUSAL,
 } from '@core/llm/safety';
 
 export type PaperStandard = 'imrad_review' | 'prisma_review' | 'consort_trial' | 'strobe_observational' | 'care_case';

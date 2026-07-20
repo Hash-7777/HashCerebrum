@@ -51,6 +51,8 @@ import {
   isPriorWorkReviewRequest,
   isPromptInjection,
   PROMPT_INJECTION_REFUSAL,
+  isSystemPromptRequest,
+  SYSTEM_PROMPT_REFUSAL,
   isSelfHarmQuery,
   isSmallTalk,
   isCodingRequest,
@@ -639,6 +641,24 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     return {
       kind: 'chat',
       answer: PROMPT_INJECTION_REFUSAL,
+      evidence: [],
+      specialists: [],
+      modelUsed: bossModel,
+    };
+  }
+
+  // A request to disclose, reproduce, "improve", or reconfigure the app's own
+  // system prompt / configuration is refused deterministically — never handed to
+  // the model. Free-generating it produced a plausible but entirely fabricated
+  // HashCerebrum system prompt, invented modes, and file-edit steps for a prompt
+  // file that does not exist; authoring a fake copy of the app's own security
+  // rules is as harmful as leaking the real ones. Costs no model call.
+  if (isSystemPromptRequest(question)) {
+    callbacks.onBossPhase('answering');
+    callbacks.onAnswerToken(SYSTEM_PROMPT_REFUSAL);
+    return {
+      kind: 'chat',
+      answer: SYSTEM_PROMPT_REFUSAL,
       evidence: [],
       specialists: [],
       modelUsed: bossModel,
