@@ -7,10 +7,12 @@ import { titleTopic } from './paperPipeline';
 export {
   isJailbreakAttempt,
   isOffTopicQuestion,
+  isPromptInjection,
   isSelfHarmQuery,
   isHarmfulRequest,
   SELF_HARM_MESSAGE,
   HARMFUL_REQUEST_REFUSAL,
+  PROMPT_INJECTION_REFUSAL,
 } from '@core/llm/safety';
 
 export type PaperStandard = 'imrad_review' | 'prisma_review' | 'consort_trial' | 'strobe_observational' | 'care_case';
@@ -81,8 +83,18 @@ export function isPriorWorkReviewRequest(question: string): boolean {
 // These are NOT biomedical research and must be answered in plain chat — not
 // run through the research swarm, which turned them into refusals dressed up as
 // "Research result · N references" documents.
+// PRECISION RULE — this detector only recognises harmless curiosity about the
+// app, which is answered in chat. It must NOT match ordinary clinical English:
+// a bare `reveal (the)` sent "can a biopsy reveal the extent of fibrosis" to an
+// ungrounded answer, and a bare `disregard previous` did the same to "should
+// clinicians disregard previous guidelines". Every alternative therefore needs a
+// possessive or an app-specific noun.
+//
+// Instruction-override phrasing ("ignore prior instructions") is NOT handled
+// here — it is prompt injection, and `isPromptInjection` in @core/llm/safety
+// stops the run and asks the user to remove it rather than answering anyway.
 const META_QUESTION_RX =
-  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack|database|endpoint|pipeline|data\s+flow)|ignore\s+(any|all|the|previous|prior|your)?\s*(prompts?|instructions?|rules?)|disregard\s+(your|the|any|all|previous)|reveal\s+(your|the)|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+(used|key|endpoint|stored|names?)|prompt\s+injection|jail\s?break|debug\s+mode|administrator\s+override|hospital\s+engineering\s+board|emergency\s+code|failure\s+to\s+display|backend\s+code)\b/i;
+  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack|database|endpoint|pipeline|data\s+flow)|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+(used|key|endpoint|stored|names?)|prompt\s+injection|jail\s?break|debug\s+mode|administrator\s+override|hospital\s+engineering\s+board|emergency\s+code|failure\s+to\s+display|backend\s+code)\b/i;
 
 export function isMetaOrAppQuestion(question: string): boolean {
   return META_QUESTION_RX.test(question);

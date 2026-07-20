@@ -13,7 +13,19 @@
 // drug-named findings.
 
 import type { RagChunk } from '@core/store/ragStore';
-import { isMetaOrAppQuestion } from '@features/brain/swarm/paper';
+import { isMetaOrAppQuestion, isPromptInjection } from '@features/brain/swarm/paper';
+
+/** Neither an app-introspection topic nor an injected instruction is ever a
+ *  medical finding, so both are pruned on the same gate. Injection is checked
+ *  here as well as at the run gate because a chunk may predate that gate. */
+function isNotAFinding(query: string, title: string): boolean {
+  return (
+    isMetaOrAppQuestion(query) ||
+    isMetaOrAppQuestion(title) ||
+    isPromptInjection(query) ||
+    isPromptInjection(title)
+  );
+}
 
 const FILLER = new Set([
   'about', 'after', 'against', 'among', 'and', 'any', 'are', 'between', 'both', 'compare', 'comparison',
@@ -74,7 +86,7 @@ function lexicalOffTopic(chunk: RagChunk, query: string): boolean {
 export function keepMemoryChunk(chunk: RagChunk): boolean {
   const query = chunk.query ?? '';
   // Gate 1 — a meta / app-introspection topic is never a real finding.
-  if (isMetaOrAppQuestion(query) || isMetaOrAppQuestion(chunk.title)) return false;
+  if (isNotAFinding(query, chunk.title)) return false;
   // Gate 2 — an evidence record must be on-topic for its own query.
   if (chunk.kind === 'evidence' && query && lexicalOffTopic(chunk, query)) return false;
   return true;
@@ -155,7 +167,7 @@ export function planPrune(chunks: RagChunk[], options: PlanPruneOptions = {}): P
   for (const chunk of chunks) {
     const query = chunk.query ?? '';
     // 1. Meta / app-introspection topics are never real findings.
-    if (isMetaOrAppQuestion(query) || isMetaOrAppQuestion(chunk.title)) {
+    if (isNotAFinding(query, chunk.title)) {
       decisions.set(chunk.id, { chunk, reason: 'meta', detail: 'app/meta question, not research' });
       continue;
     }

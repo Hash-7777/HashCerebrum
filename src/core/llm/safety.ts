@@ -3,12 +3,67 @@
 // can share the same protections without importing from a feature module.
 
 // Jailbreak / roleplay / translation-bypass / token-smuggling / reverse-psychology
+//
+// PRECISION RULE — this app is biomedical, so every alternative must require a
+// token that has no ordinary clinical reading. Bare `virus`, `worm`, `exploit`,
+// `act as`, and `play a` were previously listed here and silently diverted real
+// research questions ("hepatitis B virus", "statins act as", "exploit the PD-1
+// pathway", "does inflammation play a role") away from the evidence pipeline.
+// Anchor a persona noun, a security object, or a computing qualifier instead.
 const JAILBREAK_RX =
-  /\b(act\s+as|in\s+character|play\s+(?:as|a|the)|pretend\s+(?:to\s+be|you\s+are)|you\s+are\s+now|roleplay|fictional\s+game|text-based\s+game|translate.*(?:execute|run|perform)|exécute|traduis.*exécute|forget\s+(?:all|any)\s+(?:medical\s+)?rules?|bypass\s+(?:your|the|any|all|standard|patient)\s+(?:disclaimer|rules?|guardrails?|safeguard|limitation)|hack\s+(?:into|a|the)|word\s+game|combine\s+(?:the\s+)?letters?|spell\s+out|token\s+smuggl|do\s+not\s+(?:list|tell|reveal|share|show|provide)|to\s+avoid.*repeat\s+(?:them|it|back)|what\s+you\s+are\s+avoiding|red-team|security\s+attack|penetration\s+test|exploit|malware|virus|worm|ransomware)\b/i;
+  /\b(act\s+as\s+(?:a\s+|an\s+|the\s+)?(?:\w+\s+){0,2}?(?:doctor|physician|nurse|pharmacist|clinician|expert|specialist|ai\b|(?:ai|language)\s+model|assistant|character|persona|dan\b|hacker|jailbreak)|in\s+character|play\s+(?:as\b|the\s+role\s+of\b)|pretend\s+(?:to\s+be|you\s+are)|you\s+are\s+now|roleplay|fictional\s+game|text-based\s+game|translate.*(?:execute|run|perform)|exécute|traduis.*exécute|forget\s+(?:all|any)\s+(?:medical\s+)?rules?|bypass\s+(?:your|the|any|all|standard|patient)\s+(?:disclaimer|rules?|guardrails?|safeguard|limitation)|hack\s+(?:into|a|the)|word\s+game|combine\s+(?:the\s+)?letters?|spell\s+out|token\s+smuggl|do\s+not\s+(?:list|tell|reveal|share|mention)\s+(?:them|it|this|that|these|any|your|the)|to\s+avoid.*repeat\s+(?:them|it|back)|what\s+you\s+are\s+avoiding|red-team|security\s+attack|penetration\s+test|exploit\s+(?:a\s+|an\s+|the\s+|this\s+)?(?:vulnerabilit\w+|cve\b|buffer\s+overflow|kernel|zero-day|rce\b|sql\s+injection)|computer\s+virus|malware|ransomware|spyware|rootkit)\b/i;
 
 export function isJailbreakAttempt(text: string): boolean {
   return JAILBREAK_RX.test(text);
 }
+
+// Prompt injection — an instruction aimed at THIS assistant, embedded inside a
+// message. Distinct from `isJailbreakAttempt` (persona/roleplay coercion) and
+// from `isMetaOrAppQuestion` (harmless curiosity about the app, answerable in
+// chat). An injection is never answered: the run stops and the user is asked to
+// remove it, because continuing would either obey the instruction or silently
+// downgrade a legitimate research question onto an ungrounded path.
+//
+// Every pattern requires an object that governs the ASSISTANT — a possessive,
+// a system scope, or a chat-protocol marker — so ordinary clinical phrasing
+// ("reveal the extent of fibrosis", "disregard previous guidelines") is inert.
+
+// Chat-protocol / turn markers injected into free text.
+const ROLE_MARKER_RX =
+  /\[\s*(?:system|assistant|developer|inst)\s*[:\]]|<\|?(?:im_start|im_end|system|assistant)\|?>|(?:^|\n)\s*#{2,}\s*(?:system|instruction)|\bnew\s+instructions?\s*:|\bsystem\s+override\b|\bfrom\s+now\s+on\s+you\s+(?:are|will|must|should)\b/i;
+
+// Demands to disclose the assistant's own governing text or credentials. The
+// possessive/system scope is mandatory — a bare article is ordinary English.
+const EXFIL_RX =
+  /\b(?:reveal|show|print|output|repeat|display|dump|disclose|tell\s+me)\s+(?:me\s+)?(?:your|the)\s+(?:full\s+|entire\s+|exact\s+|original\s+|verbatim\s+|system\s+)*(?:prompt|instructions?|rules?|api\s+keys?|credentials?|configuration|config|source\s+code)\b/i;
+
+// Override aimed at governing text that is unambiguously the assistant's, by
+// possessive or system scope. Clinical "guidelines"/"rules" need that scope.
+const SCOPED_OVERRIDE_RX =
+  /\b(?:ignore|disregard|forget|override|bypass|discard|drop)\s+(?:your|the\s+system|all\s+(?:your|previous|prior)|any\s+(?:of\s+your|previous|prior))\s+(?:\w+\s+){0,2}?(?:rules?|guidelines?|constraints?|restrictions?|limitations?|policies|policy|guardrails?)\b/i;
+
+// Override aimed at nouns that only an assistant has. Any determiner is enough.
+const OVERRIDE_RX =
+  /\b(?:ignore|disregard|forget|override|bypass|discard|drop)\s+(?:(?:all|any|the|these|those|previous|prior|earlier|above|preceding|initial|original|system|your)\s+){0,3}(?:system\s+)?(?:instructions?|prompts?|directives?|guardrails?)\b/i;
+
+// "Do patients who disregard discharge instructions get readmitted?" is a real
+// research question. An override verb aimed at clinical paperwork is not an
+// injection, so it only counts when another signal is also present.
+const CLINICAL_INSTRUCTION_RX =
+  /\b(?:patient|discharge|dosing|prescrib\w+|administration|manufacturer|aftercare|care|medication|pre-?operative|post-?operative|safety)\s+instructions?\b/i;
+
+export function isPromptInjection(text: string): boolean {
+  if (ROLE_MARKER_RX.test(text) || EXFIL_RX.test(text) || SCOPED_OVERRIDE_RX.test(text)) return true;
+  if (!OVERRIDE_RX.test(text)) return false;
+  return !CLINICAL_INSTRUCTION_RX.test(text);
+}
+
+export const PROMPT_INJECTION_REFUSAL =
+  'This message contains an instruction addressed to the assistant itself — for example text telling it to ignore ' +
+  'its instructions, follow a new system message, or reveal its configuration. I have not run the research, because ' +
+  'acting on an embedded instruction like that is exactly how a sourced answer gets quietly turned into an unsourced ' +
+  'one.\n\nPlease remove that part and send the question again. Everything else about it is fine — the medical content ' +
+  'was not the problem, and nothing was blocked because of the topic.';
 
 // Off-topic detector: questions that are clearly not biomedical research
 const OFF_TOPIC_RX =

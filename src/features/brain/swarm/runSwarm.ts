@@ -49,6 +49,8 @@ import {
   isMetaOrAppQuestion,
   isOffTopicQuestion,
   isPriorWorkReviewRequest,
+  isPromptInjection,
+  PROMPT_INJECTION_REFUSAL,
   isSelfHarmQuery,
   isSmallTalk,
   isCodingRequest,
@@ -624,10 +626,29 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     budgetTokens: historyTokenBudget(bossModel),
   });
 
-  // Meta / app-introspection / prompt-injection questions are not biomedical
-  // research — answer them in plain chat (the boss explains or declines)
-  // instead of launching the research swarm, which turned them into refusals
-  // rendered as "Research result · N references" documents.
+  // An instruction addressed to the assistant, embedded in the message, stops
+  // the run. It is NOT answered in chat: routing an otherwise legitimate
+  // research question onto the chat path silently strips retrieval, the drug
+  // and gene lexicons, citation handling, and the honesty pass, and the answer
+  // still renders with the same authority — so a detected injection would have
+  // *disabled* every other guard. Ask the user to remove it instead. The reply
+  // is deterministic and costs no model call.
+  if (isPromptInjection(question)) {
+    callbacks.onBossPhase('answering');
+    callbacks.onAnswerToken(PROMPT_INJECTION_REFUSAL);
+    return {
+      kind: 'chat',
+      answer: PROMPT_INJECTION_REFUSAL,
+      evidence: [],
+      specialists: [],
+      modelUsed: bossModel,
+    };
+  }
+
+  // Meta / app-introspection questions are not biomedical research — answer
+  // them in plain chat (the boss explains or declines) instead of launching the
+  // research swarm, which turned them into refusals rendered as "Research
+  // result · N references" documents.
   if (isMetaOrAppQuestion(question)) {
     callbacks.onBossPhase('answering');
     const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
