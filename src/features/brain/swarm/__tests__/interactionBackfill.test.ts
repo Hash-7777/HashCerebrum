@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { interactionDrugPair } from '../interactionBackfill';
+import { interactionDrugPair, drugIdentityNote } from '../interactionBackfill';
+import { drugCandidates } from '../boss';
+
+const SLCO1B1_KLACID =
+  'Write a publication-ready evidence review on whether the SLCO1B1 c.521T>C variant (rs4149056, Val174Ala) ' +
+  'predicts simvastatin-induced myopathy, and compare it with ABCG2 Q141K (rs2231142) for statin intolerance. ' +
+  'Give per-study effect sizes with confidence intervals, tell me how confident I can be that each association ' +
+  'is real, and flag the interaction to watch for in a patient taking simvastatin who is also prescribed Klacid.';
+
+describe('drug parsing does not mistake English words or class stems for drugs', () => {
+  it('drops the registry English-word collision "confident" and the bare class word "statin"', () => {
+    const candidates = drugCandidates(SLCO1B1_KLACID);
+    expect(candidates).not.toContain('confident');
+    expect(candidates).not.toContain('each');
+    expect(candidates).not.toContain('statin'); // the class, not a specific agent
+    expect(candidates).toContain('simvastatin');
+    expect(candidates).toContain('klacid');
+  });
+
+  it('pairs the real drugs (simvastatin + Klacid), not the noise (statin + confident)', () => {
+    expect(interactionDrugPair(SLCO1B1_KLACID)).toEqual(['simvastatin', 'klacid']);
+  });
+
+  it('names each brand by its registry generic so the paper cannot invent a drug identity', () => {
+    // The real bug: the paper wrote "clindamycin (Klacid)" — Klacid is clarithromycin.
+    expect(drugIdentityNote('simvastatin', 'klacid')).toContain('klacid = clarithromycin');
+    // A plain generic is not renamed.
+    expect(drugIdentityNote('simvastatin', 'atorvastatin')).toBe('');
+  });
+});
 
 describe('interactionDrugPair', () => {
   it('detects an interaction sub-request embedded in a paper query', () => {

@@ -996,7 +996,10 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       question: researchQuestion,
       bossModel,
       evidence: merged,
-      specialists,
+      // Include the backfill specialists (trial / entity / drug-interaction) so
+      // their role digest reaches the drafting model — this is what carries the
+      // registry drug-identity note ("Klacid = clarithromycin") into the paper.
+      specialists: specialistsForMerge,
       standard: manuscriptStandardForQuestion(researchQuestion),
       ...(dataset ? { dataset } : {}),
       ...(gap.note ? { evidenceGap: gap.note } : {}),

@@ -21,6 +21,7 @@ import type { SpecialistResult, SpecialistTask } from './types';
 import DRUG_NAMES from './drug-names.json';
 import EGYPT_GENERICS from './egypt-generics.json';
 import { drugSynonyms, isDrugAlias, primaryGeneric, sameActiveIngredient } from './drugAliases';
+import { LEXICON_STOPWORDS } from './drugLexiconStopwords';
 
 const MAX_TASKS = 4;
 
@@ -363,8 +364,14 @@ let drugLexicon: Set<string> | null = null;
 function knownDrugs(): Set<string> {
   // RxNorm ingredients + the generic ingredient names extracted from the vendored
   // Egyptian registry, so international generic spellings (e.g. "paracetamol") are
-  // recognised alongside the US names.
-  drugLexicon ??= new Set([...(DRUG_NAMES as readonly string[]), ...(EGYPT_GENERICS as readonly string[])]);
+  // recognised alongside the US names. The Egyptian generic list carries English-
+  // word junk ("each", "with", "high", "active"); LEXICON_STOPWORDS drops those
+  // (never an RxNorm ingredient) so ordinary words are not parsed as drugs.
+  drugLexicon ??= new Set(
+    [...(DRUG_NAMES as readonly string[]), ...(EGYPT_GENERICS as readonly string[])].filter(
+      (name) => !LEXICON_STOPWORDS.has(name.toLowerCase()),
+    ),
+  );
   return drugLexicon;
 }
 
@@ -378,6 +385,17 @@ const DRUG_STEM_RX =
 function drugShaped(word: string): boolean {
   return word.length >= 6 && DRUG_STEM_RX.test(word);
 }
+
+// Bare drug-CLASS words — the INN stems themselves, singular or plural. "statin",
+// "sartans", "gliptins" name a whole class, not a specific agent, so they must not
+// be treated as a named drug for interaction pairing: a real run picked the bare
+// "statin" (from "statin intolerance") over the actual "simvastatin" the user
+// named. A specific drug like "simvastatin" is a longer word than the stem, so it
+// still matches drugShaped and is unaffected; only the bare class word is dropped.
+const DRUG_CLASS_WORDS = new Set([
+  'statin', 'statins', 'sartan', 'sartans', 'gliptin', 'gliptins', 'glitazone', 'glitazones',
+  'triptan', 'triptans', 'coxib', 'coxibs', 'fibrate', 'fibrates',
+]);
 
 /** The words in a query that name — or purport to name — a drug.
  *
@@ -394,7 +412,10 @@ export function drugCandidates(query: string): string[] {
         .split(/\s+/)
         .map((token) => token.replace(/^-+|-+$/g, '').trim())
         .filter((word) => word.length >= 4 && !DI_NON_DRUG_WORDS.has(word))
-        .filter((word) => knownDrugs().has(word) || isDrugAlias(word) || drugShaped(word)),
+        .filter((word) => knownDrugs().has(word) || isDrugAlias(word) || drugShaped(word))
+        // A bare drug-class word (statin, sartans) is not a specific agent — keep it
+        // only if it is also a real ingredient in the lexicon.
+        .filter((word) => knownDrugs().has(word) || !DRUG_CLASS_WORDS.has(word)),
     ),
   ];
 }

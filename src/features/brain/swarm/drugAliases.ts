@@ -14,8 +14,20 @@
 // does not carry and generic↔generic synonyms (INN vs US spelling).
 
 import EGYPT_ALIASES from './egypt-drug-aliases.json';
+import { LEXICON_STOPWORDS } from './drugLexiconStopwords';
 
-const egyptAliases = EGYPT_ALIASES as Record<string, string[]>;
+// A chunk of the Egyptian registry's brand keys are ordinary English words that
+// are NOT themselves a generic ingredient — "Confident" (a peppermint/rosemary
+// herbal), "Effect", "Safe", "Value", "Sleep". Left in, isDrugAlias() flags them
+// as drugs, so a question like "…how confident I can be…" parses "confident" as a
+// drug and the real drug is dropped from the interaction pair. Drop these keys at
+// load so every consumer of the map ignores them uniformly. A brand key that IS a
+// real RxNorm ingredient (aspirin, caffeine) is not in this list and is kept.
+const egyptAliases: Record<string, string[]> = Object.fromEntries(
+  Object.entries(EGYPT_ALIASES as Record<string, string[]>).filter(
+    ([key]) => !LEXICON_STOPWORDS.has(key.toLowerCase()),
+  ),
+);
 
 // International brands / generic synonyms not covered by the Egyptian registry.
 const SUPPLEMENT: Record<string, string[]> = {

@@ -26,6 +26,22 @@ function searchNameFor(drug: string): string {
   return primaryGeneric(drug);
 }
 
+/** A factual identity line for any brand in the pair, threaded into the drafting
+ *  context so the manuscript refers to each drug by its real active ingredient
+ *  rather than inventing one. A real run wrote "clindamycin (Klacid)" — Klacid is
+ *  clarithromycin — because the paper model never saw the registry mapping. */
+export function drugIdentityNote(a: string, b: string): string {
+  const ids = [a, b]
+    .map((drug) => {
+      const generic = primaryGeneric(drug);
+      return generic && generic.toLowerCase() !== drug.toLowerCase() ? `${drug} = ${generic}` : null;
+    })
+    .filter((entry): entry is string => entry !== null);
+  return ids.length
+    ? `Drug identities from the pharmacy registry — refer to each drug by this exact active ingredient, never a different drug name: ${ids.join('; ')}.`
+    : '';
+}
+
 /**
  * The drug pair an interaction sub-request names, or null when the text carries
  * no interaction cue or fewer than two recognized drugs. Pure and deterministic
@@ -81,7 +97,7 @@ export async function backfillDrugInteractions(
     agentId: 'pharmacist',
     label: 'Drug interaction literature',
     subQuery: `interaction evidence for ${a} + ${b}`,
-    findings: '',
+    findings: drugIdentityNote(a, b),
     evidence: records,
     toolCalls,
   };
