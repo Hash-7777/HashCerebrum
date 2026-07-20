@@ -122,11 +122,23 @@ only ever reach local/LAN hosts and cannot be used to exfiltrate to the internet
 or hit cloud metadata. Every non-Ollama caller (medical sources, all cloud LLMs)
 keeps the strict allowlist with no private-range access.
 
-Known limitation: guarding is performed on the host as supplied, not on the
-resolved IP. An allowlisted domain whose DNS resolves to an internal address
-(DNS-rebinding) is not re-checked at the resolved-IP level. This is acceptable
-given the fixed set of government and academic API hosts the app talks to, but
-it is a deliberate, documented gap.
+**Resolved-IP guarding (DNS rebinding).** Validating the hostname alone is not
+sufficient: a hostname that passes the allowlist could resolve — or be
+re-resolved by a poisoned or hostile DNS answer — to a loopback or LAN address,
+reaching an internal service. `security/resolver.rs` closes this window. The
+`GuardedResolver` is attached as reqwest's DNS resolver on both outbound clients
+(`commands/net.rs` for medical sources, `commands/llm.rs` for providers), so it
+performs the resolution itself, filters every returned address through
+`denylist::is_internal_ip`, and hands reqwest only the vetted addresses. There is
+a single resolution and the connection can only reach an address that was
+approved, so no gap remains between the check and the connect.
+
+If a public host resolves exclusively to internal addresses, the request is
+refused rather than connected. The intentional local target is preserved:
+`guard::host_may_use_private_ip` returns true for the Ollama loopback/LAN hosts,
+and a private address is accepted only for those. Loopback, RFC1918, CGNAT, ULA,
+link-local, and the cloud-metadata endpoint are covered for both IPv4 and IPv6;
+regression-tested in `security/resolver.rs`.
 
 ## Logging hygiene
 
@@ -176,6 +188,25 @@ These are availability/integrity properties, not just hardening:
 - **No panics on untrusted text.** Snippet truncation is character-based
   (`chars().take(n)`), never byte-slicing, so a multi-byte UTF-8 abstract cannot
   panic the fetch (the crate builds with `panic = "abort"`).
+
+## Dependency posture
+
+`npm audit` currently reports three high advisories against `adm-zip`, reached
+only through `onnxruntime-node` ← `@huggingface/transformers`. **None of them
+ship in the application.**
+
+`@huggingface/transformers` is imported exclusively by the three web workers
+(`src/workers/embed.worker.ts`, `rerank.worker.ts`, `nli.worker.ts`), which run
+in the renderer against the WASM backend. `onnxruntime-node` is the Node-only
+native backend: it is never imported, never bundled, and cannot be reached from
+a WebKit worker. Confirmed by inspecting the built `dist/` output, which
+contains no reference to `onnxruntime-node` or `adm-zip`.
+
+The advisory therefore describes a transitive development-tree package, not
+runtime attack surface, and the breaking upgrade `npm audit fix --force` would
+apply is not warranted on that basis alone. Re-verify this before each release:
+if a future build ever pulls `onnxruntime-node` into `dist/`, the assessment
+changes and the dependency must be upgraded or pruned.
 
 ## Adding a new permission
 
