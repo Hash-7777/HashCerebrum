@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatTraceStore, type ChatTraceEntry } from '@core/store/chatTraceStore';
-import { downloadBlob } from '@features/brain/export/messageExport';
+import { useChatHistoryStore } from '@core/store/chatHistoryStore';
+import { downloadBlob, slugifyFilename } from '@features/brain/export/messageExport';
 import { Icon, type IconName } from '@ui/icons';
 
 // How close to the bottom (px) still counts as "following" the latest output.
@@ -100,6 +101,11 @@ function traceState(activity: ChatTraceEntry[]): 'idle' | 'running' | 'done' | '
 export function ExecutionTrace() {
   const activity = useChatTraceStore((s) => s.byChat[s.activeKey] ?? EMPTY);
   const clearActive = useChatTraceStore((s) => s.clearActive);
+  // The active chat's title, so the exported trace file is named after this
+  // chat instead of a generic "execution-trace.md" that overwrites the last one.
+  const activeChatTitle = useChatHistoryStore(
+    (s) => s.chats.find((c) => c.id === s.activeChatId)?.title ?? '',
+  );
   const [expanded, setExpanded] = useState(false);
   const entriesRef = useRef<HTMLDivElement>(null);
   // Follow new output by default; released when the user scrolls up, re-armed
@@ -164,8 +170,10 @@ export function ExecutionTrace() {
             className="execution-trace-export"
             onClick={(event) => {
               event.stopPropagation();
+              const named = activeChatTitle && activeChatTitle !== 'New chat';
+              const filename = named ? `${slugifyFilename(activeChatTitle)}-trace.md` : 'execution-trace.md';
               downloadBlob(
-                'execution-trace.md',
+                filename,
                 new Blob([buildTraceMarkdown(activity)], { type: 'text/markdown;charset=utf-8' }),
               );
             }}
