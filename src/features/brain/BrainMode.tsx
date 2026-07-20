@@ -514,6 +514,7 @@ export function BrainMode() {
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
                 ...(result.manuscript ? { manuscript: result.manuscript } : {}),
                 ...(result.associations ? { associations: result.associations } : {}),
+                grounding: result.kind === 'research' ? 'evidence' : 'conversational',
               }
             : m,
         ),
@@ -750,6 +751,7 @@ export function BrainMode() {
                 ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
                 ...(result.manuscript ? { manuscript: result.manuscript } : {}),
                 ...(result.associations ? { associations: result.associations } : {}),
+                grounding: result.kind === 'research' ? 'evidence' : 'conversational',
               }
             : m,
         ),

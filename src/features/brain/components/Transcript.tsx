@@ -53,6 +53,12 @@ function evidenceKey(item: EvidenceItem, index: number) {
   return item.provenanceHash || `${item.source}-${item.title}-${index}`;
 }
 
+// A greeting or a one-line acknowledgement is conversational by nature and needs
+// no disclaimer; the notice is for a substantive answer that could be mistaken
+// for a researched one. Length is the only honest signal available here, since
+// small talk and a real answer both return without sources.
+const CONVERSATIONAL_NOTICE_MIN_CHARS = 240;
+
 // The app-authored confidence header lines (e.g. "**MTHFR — Association
 // confidence: 30% — weak**") are shown as graded cards, so strip them from the
 // narrative to avoid a duplicate line directly under the card.
@@ -525,6 +531,22 @@ export const Transcript = memo(function Transcript({
                       })()}
                     </div>
                   )}
+                  {/* A conversational answer carries no sources, so the trust row
+                      above renders nothing at all — and a missing badge is not a
+                      signal a reader registers. Say it outright instead, so an
+                      ungrounded answer is never mistaken for a researched one. */}
+                  {isAi &&
+                    !isDocument &&
+                    !message.isStreaming &&
+                    message.grounding === 'conversational' &&
+                    message.content.trim().length >= CONVERSATIONAL_NOTICE_MIN_CHARS && (
+                      <div
+                        className="claim-check-note"
+                        title="This reply came from the language model on its own. The research pipeline did not run, so no databases were searched, no sources were retrieved, and the citation and fact-check passes did not apply. Ask the question on its own to get a sourced answer."
+                      >
+                        <Icon name="alert" size={11} /> Conversational answer · no sources searched
+                      </div>
+                    )}
                   {isAi && !isDocument && (() => {
                     const s = summarizeSources(message.citations);
                     if (!s) return null;

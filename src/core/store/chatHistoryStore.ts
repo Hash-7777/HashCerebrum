@@ -48,6 +48,13 @@ export interface ChatMessage {
   // Cited sentences the offline NLI fact-check did not find clearly supported by
   // their source. Present only after a research answer has been verified.
   unsupportedClaims?: string[];
+  // How this answer was produced. 'evidence' ran the research pipeline and is
+  // grounded in retrieved sources; 'conversational' answered from the model
+  // alone — no retrieval, no drug/gene lexicon resolution, no citation or
+  // honesty pass. Recorded explicitly because the two are otherwise
+  // indistinguishable in the transcript: a conversational answer merely lacks
+  // badges, and an absent badge is not something a reader notices.
+  grounding?: 'evidence' | 'conversational';
   // Result of the offline NLI fact-check over this answer's cited sentences:
   // how many were checked and how many the model entailed from their source.
   // Drives the "N% of cited claims verified against source" trust badge.
