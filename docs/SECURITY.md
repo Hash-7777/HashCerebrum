@@ -215,9 +215,26 @@ never bundled, and unreachable from a WebKit worker; the built `dist/` output
 contains no reference to it or to `adm-zip`. That bounded the impact but is not
 a reason to carry a known-vulnerable package, so it is pinned regardless.
 
-When bumping `@huggingface/transformers`, re-check whether the override is still
-needed: once its `onnxruntime-node` requires a patched `adm-zip` directly, drop
-the entry rather than leaving a pin that silently constrains the tree.
+**Resolved advisory — `protobufjs`.** A moderate advisory
+([GHSA-j3f2-48v5-ccww](https://github.com/advisories/GHSA-j3f2-48v5-ccww), a
+denial-of-service infinite loop in `.proto` option parsing, range `>=7.5.0
+<=7.6.4`) reached the tree transitively through `@huggingface/transformers` →
+`onnxruntime-web` → `protobufjs@7.6.4`. It is resolved by an `overrides` entry in
+`package.json` pinning `protobufjs` to `^7.6.5`, the patched line;
+`onnxruntime-web` requires `^7.2.4`, so the pin is semver-compatible and needs no
+`--force`.
+
+The realistic exposure was low even before the pin: `protobufjs` is used by
+`onnxruntime-web` (the WASM backend the three workers run) only to parse the ONNX
+model graph, and the sole model parsed is the app's own **bundled, trusted**
+MedEmbed file — never an attacker-supplied `.proto`. The advisory is still
+patched regardless, because carrying a known-vulnerable transitive dependency is
+not acceptable and CI blocks it.
+
+When bumping `@huggingface/transformers`, re-check whether these overrides are
+still needed: once its `onnxruntime-node` requires a patched `adm-zip` and its
+`onnxruntime-web` a patched `protobufjs` directly, drop the entries rather than
+leaving pins that silently constrain the tree.
 
 ## Adding a new permission
 
