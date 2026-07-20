@@ -1792,7 +1792,7 @@ function isCallTooLarge(err: unknown): boolean {
 // A rate / quota limit (per-minute requests or tokens, daily quota, cooldown).
 // Shrinking does not help; a brief backoff (the failover chain has already
 // tried every provider) gives a cooling key time to recover.
-function isCallRateLimited(err: unknown): boolean {
+export function isCallRateLimited(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return (
     m.includes('429') ||
@@ -1810,13 +1810,21 @@ function isCallRateLimited(err: unknown): boolean {
 // A hard billing failure (402 / insufficient credits). The failover chain has
 // already abandoned the dead provider; if this error reaches callModel it means
 // every provider in the chain is billing-dead — do not retry, surface immediately.
-function isCallBillingDead(err: unknown): boolean {
+export function isCallBillingDead(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  // A 429 / quota / rate-limit is transient, NOT an out-of-credits account — even
+  // though several providers phrase their FREE-tier 429 as "check your plan and
+  // billing details" (Gemini does exactly this). Matching the bare word "billing"
+  // therefore misread every free-tier rate-limit as a permanent billing death and
+  // aborted the whole section, shipping an "INCOMPLETE DRAFT", when a short
+  // wait-and-retry would have finished it. Only a genuine 402 / insufficient-
+  // credits / payment-required signal is a hard death; a rate-limited error must
+  // fall through to the retry path below.
+  if (isCallRateLimited(err)) return false;
   return (
     m.includes('402') ||
     m.includes('insufficient credits') ||
-    m.includes('payment required') ||
-    m.includes('billing')
+    m.includes('payment required')
   );
 }
 

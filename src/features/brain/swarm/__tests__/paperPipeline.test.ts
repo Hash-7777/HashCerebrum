@@ -10,6 +10,8 @@ import {
   buildSectionUserPrompt,
   extractBoundEffects,
   extractEvidenceFromRecords,
+  isCallBillingDead,
+  isCallRateLimited,
   isSubstantiveAbstract,
   keywordsFrom,
   modelForSection,
@@ -866,6 +868,29 @@ describe('buildSectionUserPrompt (free-tier prompt budget)', () => {
     expect(prompt).not.toMatch(/further retrieved record/);
     expect(prompt).toContain('[S1]');
     expect(prompt).toContain('[S2]');
+  });
+});
+
+describe('isCallBillingDead vs isCallRateLimited', () => {
+  it('treats a free-tier 429 that mentions "billing details" as rate-limited, not dead', () => {
+    // Gemini's real free-tier 429 body. It contains the word "billing", which a
+    // bare-substring billing check misread as a permanent out-of-credits death and
+    // aborted the whole section. It must be classified as a transient rate-limit so
+    // the pipeline waits and retries instead of shipping an incomplete draft.
+    const gemini429 = new Error(
+      'gemini HTTP 429: {"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details."}}',
+    );
+    expect(isCallRateLimited(gemini429)).toBe(true);
+    expect(isCallBillingDead(gemini429)).toBe(false);
+  });
+
+  it('still treats a genuine 402 / insufficient-credits error as billing-dead', () => {
+    expect(isCallBillingDead(new Error('HTTP 402: insufficient credits for this request'))).toBe(true);
+    expect(isCallBillingDead(new Error('payment required'))).toBe(true);
+  });
+
+  it('does not treat an ordinary rate limit as billing-dead', () => {
+    expect(isCallBillingDead(new Error('groq HTTP 429: rate limit reached'))).toBe(false);
   });
 });
 
