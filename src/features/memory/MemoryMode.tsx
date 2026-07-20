@@ -10,6 +10,7 @@ import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
+import { DeleteAllDialog } from './components/DeleteAllDialog';
 import { MemoryCard } from './components/MemoryCard';
 import { PrunePreview } from './components/PrunePreview';
 import { MemoryVectorGraph3D } from './graph/MemoryVectorGraph3D';
@@ -184,14 +185,20 @@ export function MemoryMode() {
     } else useToastStore.getState().show('Nothing was pruned', 'info');
   };
 
+  // Confirmation is a themed dialog rather than window.confirm: the action is
+  // irreversible (clearProject keeps no snapshot), so it states exactly what is
+  // being destroyed and requires the project name to be typed.
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const deleteAll = () => {
     if (!activeProjectId || activeProjectCount === 0) return;
-    const ok = window.confirm(
-      `Delete all ${activeProjectCount} saved ${
-        activeProjectCount === 1 ? 'finding' : 'findings'
-      } in "${projectName}"? This permanently empties this project's memory and cannot be undone.`,
-    );
-    if (ok) clearProject(activeProjectId);
+    clearProject(activeProjectId);
+    setConfirmDeleteAll(false);
+    useToastStore
+      .getState()
+      .show(
+        `Deleted ${activeProjectCount} ${activeProjectCount === 1 ? 'finding' : 'findings'} from "${projectName}"`,
+        'info',
+      );
   };
 
   const handleUndo = () => {
@@ -384,7 +391,7 @@ export function MemoryMode() {
                 className="memory-clear"
                 disabled={activeProjectCount === 0}
                 title={`Permanently delete every saved finding in "${projectName}"`}
-                onClick={deleteAll}
+                onClick={() => setConfirmDeleteAll(true)}
               >
                 <Icon name="close" size={12} /> Delete all
               </button>
@@ -462,6 +469,16 @@ export function MemoryMode() {
           onAggressiveChange={setPruneAggressive}
           onConfirm={confirmPrune}
           onClose={() => setPruneCtx(null)}
+        />
+      )}
+
+      {confirmDeleteAll && activeProjectCount > 0 && (
+        <DeleteAllDialog
+          projectName={projectName}
+          chunks={activeChunks}
+          documentCount={libraryDocuments(activeProjectId ?? undefined).length}
+          onConfirm={deleteAll}
+          onClose={() => setConfirmDeleteAll(false)}
         />
       )}
 
