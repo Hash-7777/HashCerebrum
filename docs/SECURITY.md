@@ -191,22 +191,33 @@ These are availability/integrity properties, not just hardening:
 
 ## Dependency posture
 
-`npm audit` currently reports three high advisories against `adm-zip`, reached
-only through `onnxruntime-node` ← `@huggingface/transformers`. **None of them
-ship in the application.**
+`npm audit` reports clean, and CI enforces that: `npm audit --audit-level=moderate`
+fails the build on any moderate-or-higher advisory.
 
-`@huggingface/transformers` is imported exclusively by the three web workers
-(`src/workers/embed.worker.ts`, `rerank.worker.ts`, `nli.worker.ts`), which run
-in the renderer against the WASM backend. `onnxruntime-node` is the Node-only
-native backend: it is never imported, never bundled, and cannot be reached from
-a WebKit worker. Confirmed by inspecting the built `dist/` output, which
-contains no reference to `onnxruntime-node` or `adm-zip`.
+**Resolved advisory — `adm-zip`.** Three high advisories
+([GHSA-xcpc-8h2w-3j85](https://github.com/advisories/GHSA-xcpc-8h2w-3j85), a
+crafted ZIP triggering a 4 GB allocation) reached the tree transitively through
+`@huggingface/transformers` → `onnxruntime-node` → `adm-zip@0.5.x`. They are
+resolved by an `overrides` entry in `package.json` pinning `adm-zip` to
+`^0.6.0`, the patched line.
 
-The advisory therefore describes a transitive development-tree package, not
-runtime attack surface, and the breaking upgrade `npm audit fix --force` would
-apply is not warranted on that basis alone. Re-verify this before each release:
-if a future build ever pulls `onnxruntime-node` into `dist/`, the assessment
-changes and the dependency must be upgraded or pruned.
+The override is used rather than `npm audit fix --force`, which resolves the
+advisory by **downgrading** `@huggingface/transformers` from `4.2.0` to `3.8.1`
+— trading a patched transitive dependency for an older embedding stack across
+the semantic-memory, rerank, and NLI fact-check workers. Pinning the one
+vulnerable package keeps both the fix and the current major.
+
+The exposure was limited even before the pin: `@huggingface/transformers` is
+imported only by the three web workers (`src/workers/embed.worker.ts`,
+`rerank.worker.ts`, `nli.worker.ts`), which run in the renderer against the WASM
+backend. `onnxruntime-node` is the Node-only native backend — never imported,
+never bundled, and unreachable from a WebKit worker; the built `dist/` output
+contains no reference to it or to `adm-zip`. That bounded the impact but is not
+a reason to carry a known-vulnerable package, so it is pinned regardless.
+
+When bumping `@huggingface/transformers`, re-check whether the override is still
+needed: once its `onnxruntime-node` requires a patched `adm-zip` directly, drop
+the entry rather than leaving a pin that silently constrains the tree.
 
 ## Adding a new permission
 
