@@ -248,63 +248,94 @@ export function MemoryMode() {
   return (
     <div className="mode memory-mode">
       <section className="memory-main" aria-label="Project memory">
-        <header className="memory-toolbar">
-          <div>
-            <h1>{scope === 'library' ? 'Library' : projectName}</h1>
-            <span className="mode-accent-tick" aria-hidden="true" />
-            <p className="memory-subtitle">
-              <b>{visible.length}</b> {visible.length === 1 ? 'saved finding' : 'saved findings'}
-              {scope === 'library' ? ' across all projects' : ''}
-              {search.trim() ? ` · matching "${search.trim()}"` : ''}
-            </p>
-          </div>
-          <div className="memory-tools">
+        {/* Header, import status, and the papers panel are wrapped in ONE element
+            so `.memory-main` always has exactly two grid children. With them as
+            siblings, showing the status or the papers panel pushed the list/graph
+            into an implicit auto row, which cost it the bounded `minmax(0,1fr)`
+            track it needs to scroll and gave the R3F canvas an unstable height. */}
+        <div className="memory-head">
+          <header className="memory-toolbar">
+            <div className="memory-heading">
+              <h1>{scope === 'library' ? 'Library' : projectName}</h1>
+              <span className="mode-accent-tick" aria-hidden="true" />
+              <p className="memory-subtitle">
+                <b>{visible.length}</b> {visible.length === 1 ? 'saved finding' : 'saved findings'}
+                {scope === 'library' ? ' across all projects' : ''}
+                {search.trim() ? ` · matching "${search.trim()}"` : ''}
+              </p>
+            </div>
+          </header>
+
+          {/* Controls live on their own row. Sharing the title's row meant seven
+              controls wrapped unpredictably against the heading. */}
+          <div className="memory-controls">
             <label className="memory-search">
               <Icon name="search" size={13} />
               <input
-                placeholder="Search this project's memory…"
+                placeholder={
+                  scope === 'library' ? 'Search every project…' : `Search ${projectName}…`
+                }
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                aria-label={scope === 'library' ? 'Search every project' : `Search ${projectName}`}
               />
             </label>
-            <div className="memory-view-toggle" role="group" aria-label="Memory scope">
-              <button
-                type="button"
-                data-active={scope === 'project'}
-                onClick={() => setScope('project')}
-                aria-pressed={scope === 'project'}
-                title="Browse only this project's memory"
-              >
-                <Icon name="database" size={13} /> Project
-              </button>
-              <button
-                type="button"
-                data-active={scope === 'library'}
-                onClick={() => setScope('library')}
-                aria-pressed={scope === 'library'}
-                title="Browse the whole cross-project library (every trusted finding, de-duplicated)"
-              >
-                <Icon name="graph" size={13} /> Library
-              </button>
+
+            {/* Two segmented groups sat adjacent and identically styled, so it was
+                not apparent that one picks WHAT is listed and the other HOW it is
+                drawn. Each now carries a caption, and no icon means two things. */}
+            <div className="memory-control-group">
+              <span className="memory-control-label" id="memory-scope-label">
+                Showing
+              </span>
+              <div className="memory-view-toggle" role="group" aria-labelledby="memory-scope-label">
+                <button
+                  type="button"
+                  data-active={scope === 'project'}
+                  onClick={() => setScope('project')}
+                  aria-pressed={scope === 'project'}
+                  title="Browse only this project's memory"
+                >
+                  <Icon name="database" size={13} /> This project
+                </button>
+                <button
+                  type="button"
+                  data-active={scope === 'library'}
+                  onClick={() => setScope('library')}
+                  aria-pressed={scope === 'library'}
+                  title="Browse the whole cross-project library (every trusted finding, de-duplicated)"
+                >
+                  <Icon name="graph" size={13} /> All projects
+                </button>
+              </div>
             </div>
-            <div className="memory-view-toggle" role="group" aria-label="Memory view">
-              <button
-                type="button"
-                data-active={view === 'list'}
-                onClick={() => setView('list')}
-                aria-pressed={view === 'list'}
-              >
-                <Icon name="list" size={13} /> List
-              </button>
-              <button
-                type="button"
-                data-active={view === 'graph'}
-                onClick={() => setView('graph')}
-                aria-pressed={view === 'graph'}
-              >
-                <Icon name="graph" size={13} /> Graph
-              </button>
+
+            <div className="memory-control-group">
+              <span className="memory-control-label" id="memory-view-label">
+                View as
+              </span>
+              <div className="memory-view-toggle" role="group" aria-labelledby="memory-view-label">
+                <button
+                  type="button"
+                  data-active={view === 'list'}
+                  onClick={() => setView('list')}
+                  aria-pressed={view === 'list'}
+                  title="Read the findings as a list of cards"
+                >
+                  <Icon name="list" size={13} /> List
+                </button>
+                <button
+                  type="button"
+                  data-active={view === 'graph'}
+                  onClick={() => setView('graph')}
+                  aria-pressed={view === 'graph'}
+                  title="See the findings as a 3D topic map"
+                >
+                  <Icon name="brain" size={13} /> Map
+                </button>
+              </div>
             </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -313,73 +344,88 @@ export function MemoryMode() {
               hidden
               onChange={(e) => void onFilesChosen(e)}
             />
-            <button
-              type="button"
-              className="memory-import"
-              disabled={importing || !activeProjectId}
-              title="Add PDF papers from your computer so the Brain knows and can cite them"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Icon name={importing ? 'spinner' : 'plus'} size={13} />
-              {importing ? 'Importing…' : 'Import papers'}
-            </button>
-            {documents.length > 0 && (
+            <div className="memory-control-actions">
               <button
                 type="button"
                 className="memory-import"
-                data-active={showDocs}
-                title="Show imported papers"
-                onClick={() => setShowDocs((v) => !v)}
+                disabled={importing || !activeProjectId}
+                title="Add PDF papers from your computer so the Brain knows and can cite them"
+                onClick={() => fileInputRef.current?.click()}
               >
-                <Icon name="book" size={13} /> {documents.length} {documents.length === 1 ? 'paper' : 'papers'}
+                <Icon name={importing ? 'spinner' : 'plus'} size={13} />
+                {importing ? 'Importing…' : 'Import papers'}
               </button>
-            )}
-            <button
-              type="button"
-              className="memory-prune"
-              disabled={activeProjectCount === 0 || pruneComputing}
-              title="Review off-topic, duplicate, and meta findings before removing them"
-              onClick={() => void openPrune()}
-            >
-              <Icon name="refresh" size={13} /> {pruneComputing ? 'Analyzing…' : 'Prune'}
-            </button>
-          </div>
-        </header>
-
-        {importStatus && (
-          <div className="memory-import-status" role="status">
-            <Icon name="spinner" size={13} /> {importStatus}
-          </div>
-        )}
-
-        {showDocs && documents.length > 0 && (
-          <div className="memory-docs" aria-label="Imported papers">
-            {documents.map((doc) => (
-              <div className="memory-doc" key={doc.docId}>
-                <Icon name="book" size={13} />
-                <div className="memory-doc-meta">
-                  <strong>{doc.title}</strong>
-                  <span>
-                    {doc.chunkCount} passage{doc.chunkCount === 1 ? '' : 's'} · imported{' '}
-                    {new Date(doc.importedAt).toLocaleDateString()}
-                  </span>
-                </div>
+              {documents.length > 0 && (
                 <button
                   type="button"
-                  className="memory-doc-remove"
-                  title="Remove this paper from memory"
-                  onClick={() => {
-                    if (window.confirm(`Remove "${doc.title}" and all its passages from memory?`)) {
-                      removeDocument(doc.docId);
-                    }
-                  }}
+                  className="memory-import"
+                  data-active={showDocs}
+                  aria-pressed={showDocs}
+                  title="Show imported papers"
+                  onClick={() => setShowDocs((v) => !v)}
                 >
-                  <Icon name="close" size={12} />
+                  <Icon name="book" size={13} /> {documents.length}{' '}
+                  {documents.length === 1 ? 'paper' : 'papers'}
                 </button>
-              </div>
-            ))}
+              )}
+              <button
+                type="button"
+                className="memory-prune"
+                disabled={activeProjectCount === 0 || pruneComputing}
+                title="Review off-topic, duplicate, and meta findings before removing them"
+                onClick={() => void openPrune()}
+              >
+                <Icon name="refresh" size={13} /> {pruneComputing ? 'Analyzing…' : 'Prune'}
+              </button>
+              {/* Delete all used to float inside the 3D map, so it simply vanished
+                  in List view. It belongs with the other actions, in both views. */}
+              <button
+                type="button"
+                className="memory-clear"
+                disabled={activeProjectCount === 0}
+                title={`Permanently delete every saved finding in "${projectName}"`}
+                onClick={deleteAll}
+              >
+                <Icon name="close" size={12} /> Delete all
+              </button>
+            </div>
           </div>
-        )}
+
+          {importStatus && (
+            <div className="memory-import-status" role="status">
+              <Icon name="spinner" size={13} /> {importStatus}
+            </div>
+          )}
+
+          {showDocs && documents.length > 0 && (
+            <div className="memory-docs" aria-label="Imported papers">
+              {documents.map((doc) => (
+                <div className="memory-doc" key={doc.docId}>
+                  <Icon name="book" size={13} />
+                  <div className="memory-doc-meta">
+                    <strong>{doc.title}</strong>
+                    <span>
+                      {doc.chunkCount} passage{doc.chunkCount === 1 ? '' : 's'} · imported{' '}
+                      {new Date(doc.importedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="memory-doc-remove"
+                    title="Remove this paper from memory"
+                    onClick={() => {
+                      if (window.confirm(`Remove "${doc.title}" and all its passages from memory?`)) {
+                        removeDocument(doc.docId);
+                      }
+                    }}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {visible.length === 0 ? (
           <div className="memory-empty">
@@ -398,12 +444,7 @@ export function MemoryMode() {
             </p>
           </div>
         ) : view === 'graph' ? (
-          <MemoryVectorGraph3D
-            chunks={visible}
-            onRemove={removeChunk}
-            onDeleteAll={deleteAll}
-            deleteAllCount={activeProjectCount}
-          />
+          <MemoryVectorGraph3D chunks={visible} onRemove={removeChunk} />
         ) : (
           <div className="memory-list">
             {visible.map((chunk) => (

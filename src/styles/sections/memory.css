@@ -25,19 +25,62 @@
   min-width: 0;
   min-height: 0;
 }
+/* Everything above the list/graph, as ONE grid child of .memory-main so the
+   content below always keeps its bounded minmax(0,1fr) track. */
+.memory-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hc-border);
+}
 .memory-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--hc-border);
   min-width: 0;
 }
 /* The title/subtitle column must be allowed to shrink so its single-line text
    ellipsises instead of overflowing into the tools or forcing the bar taller. */
-.memory-toolbar > div:first-child { min-width: 0; flex: 1 1 auto; }
+.memory-heading { min-width: 0; flex: 1 1 auto; }
+
+/* Controls sit on their own row: search takes the free space, the two segmented
+   groups keep their captions, and the actions stay together on the right. A
+   single control height and one label size keep the row optically level — the
+   groups were 26px against 32px siblings, so nothing shared a baseline. */
+.memory-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+  min-width: 0;
+}
+.memory-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: none;
+  min-width: 0;
+}
+.memory-control-label {
+  color: var(--text-4);
+  font: 10px/1 var(--hc-font-mono, var(--f-mono));
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  padding-left: 2px;
+  white-space: nowrap;
+}
+.memory-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
 .memory-toolbar .eyebrow {
   margin: 0 0 5px;
   color: var(--hc-accent-strong);
@@ -86,8 +129,14 @@
   border-radius: var(--hc-radius-pill);
   background: var(--hc-bg-elev);
   color: var(--hc-fg-muted);
-  flex: 1 1 240px;
+  /* Grows into free space but is capped, so on a wide window it does not stretch
+     to half the bar and leave the grouped controls stranded at the far edge. */
+  flex: 1 1 220px;
+  max-width: 380px;
   min-width: 0;
+}
+.memory-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hc-border));
 }
 .memory-search input {
   background: transparent;
@@ -95,7 +144,13 @@
   color: var(--hc-fg);
   font-size: 12px;
   width: 100%;
+  min-width: 0;
   outline: none;
+}
+.memory-search input::placeholder {
+  color: var(--text-4);
+  /* A project name can be long; never let the placeholder widen the field. */
+  text-overflow: ellipsis;
 }
 .memory-empty {
   display: grid;
@@ -211,14 +266,7 @@
 .memory-date { font: 10px var(--hc-font-mono); color: var(--hc-fg-dim); }
 
 /* --- Toolbar tools + list/graph toggle --- */
-.memory-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
+
 .memory-view-toggle {
   display: inline-flex;
   flex: none;
@@ -1241,27 +1289,3 @@
   background: var(--hc-accent-soft);
 }
 
-.memory-vec3d-deleteall {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 122, 138, 0.3);
-  border-radius: var(--hc-radius-pill);
-  background: color-mix(in srgb, var(--ink-0) 66%, transparent);
-  backdrop-filter: blur(10px);
-  color: var(--hc-fg-muted);
-  font-size: 11px;
-  cursor: pointer;
-  transition: color var(--hc-ease), border-color var(--hc-ease), background var(--hc-ease);
-}
-.memory-vec3d-deleteall:hover {
-  color: var(--hc-danger);
-  border-color: rgba(255, 122, 138, 0.5);
-  background: rgba(255, 122, 138, 0.12);
-}

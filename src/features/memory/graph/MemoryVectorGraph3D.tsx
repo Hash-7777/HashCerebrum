@@ -358,16 +358,15 @@ function Node({
   );
 }
 
+// Delete-all is deliberately NOT here: as a button floating over the canvas it
+// existed only in this view and disappeared when the user switched to the list.
+// It now sits with the other actions in the Memory toolbar, present in both.
 export function MemoryVectorGraph3D({
   chunks,
   onRemove,
-  onDeleteAll,
-  deleteAllCount = 0,
 }: {
   chunks: RagChunk[];
   onRemove: (id: string) => void;
-  onDeleteAll?: () => void;
-  deleteAllCount?: number;
 }) {
   const graph = useMemo(() => buildGraph(chunks), [chunks]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -485,17 +484,6 @@ export function MemoryVectorGraph3D({
           <Icon name="gauge" size={13} />
         </button>
       </div>
-
-      {onDeleteAll && deleteAllCount > 0 && (
-        <button
-          type="button"
-          className="memory-vec3d-deleteall"
-          onClick={onDeleteAll}
-          title="Delete all saved memory in this project"
-        >
-          <Icon name="close" size={12} /> Delete all
-        </button>
-      )}
 
       <div className="memory-vec3d-clusters">
         {graph.clusters.map((cl) => (
