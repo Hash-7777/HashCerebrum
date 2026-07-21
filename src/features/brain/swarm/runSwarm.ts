@@ -30,7 +30,8 @@ import {
   unverifiedDrugMessage,
   unverifiedDrugNames,
 } from './boss';
-import { geneAssociations } from './genetics/associationConfidence';
+import { geneAssociations, type GeneAssociation } from './genetics/associationConfidence';
+import { genesForQuestion } from './genetics/variantGenes';
 import {
   assessGeneQueryReadiness,
   clarificationMessage,
@@ -557,6 +558,37 @@ async function geneticDatabaseEvidence(
   return [...gwas, ...clinvar, ...pubmed, ...europepmc];
 }
 
+/**
+ * Per-variant association-confidence cards for a PAPER that names genes/variants.
+ *
+ * The dedicated Genetics path already scores each named gene; a comparative paper
+ * ("compare Factor V Leiden, prothrombin G20210A, and MTHFR C677T …") routes to
+ * the manuscript pipeline instead and produced no such cards, even when it
+ * explicitly asked for a "per-variant confidence assessment". This surfaces the
+ * same deterministic scoring on the paper path.
+ *
+ * It pulls GWAS Catalog / ClinVar structured records (which carry a gene
+ * identifier), because the paper's own literature writes "factor V Leiden", not
+ * "F5", so free-text attribution alone would under-count each gene's evidence.
+ * Gene-gated (empty and cost-free for a non-genetic paper) and best-effort — a
+ * failed database fetch just scores on the paper evidence already retrieved.
+ */
+async function paperVariantAssociations(
+  question: string,
+  evidence: EvidenceItem[],
+  callbacks: SwarmCallbacks,
+): Promise<GeneAssociation[]> {
+  const named = genesForQuestion(question).length > 0 || extractUnrecognizedGeneTokens(question).length > 0;
+  if (!named) return [];
+  let dbEvidence: EvidenceItem[] = [];
+  try {
+    dbEvidence = await geneticDatabaseEvidence(question, callbacks);
+  } catch {
+    /* best-effort — score on the paper evidence when the database fetch fails */
+  }
+  return geneAssociations([...evidence, ...dbEvidence], question);
+}
+
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const { question, conversation, modelFor, callbacks, dataset, signal } = opts;
   const mini = opts.mini ?? false;
@@ -1011,6 +1043,11 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   // Full-paper requests are drafted section by section into a structured
   // manuscript from a source-backed evidence extraction and claim ledger.
   if (paperRequest) {
+    // Score per-variant association confidence in parallel with preparation and
+    // drafting, so a gene-naming paper carries the same confidence cards the
+    // Genetics path shows without adding wall-clock time. Empty for a non-genetic
+    // paper. Awaited only at the return sites below.
+    const associationsPromise = paperVariantAssociations(researchQuestion, merged, callbacks);
     // Phase 1: blocking preparation (title, extraction, claims, user review)
     const prep = await preparePaperLedger({
       question: researchQuestion,
@@ -1033,7 +1070,8 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     if (opts.onPaperDraftComplete) {
       // Fire-and-forget: drafting continues in the background.
       compileManuscriptFromLedger(prep)
-        .then((manuscript) => {
+        .then(async (manuscript) => {
+          const associations = await associationsPromise;
           opts.onPaperDraftComplete!({
             kind: 'research',
             answer: manuscriptToReadableText(manuscript),
@@ -1041,6 +1079,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
             specialists,
             manuscript,
             modelUsed: bossModel,
+            ...(associations.length ? { associations } : {}),
           });
         })
         .catch((error) => {
@@ -1063,6 +1102,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
     // Fallback: old blocking behaviour when no async callback is provided.
     const manuscript = await compileManuscriptFromLedger(prep);
+    const associations = await associationsPromise;
     return {
       kind: 'research',
       answer: manuscriptToReadableText(manuscript),
@@ -1070,6 +1110,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       specialists,
       manuscript,
       modelUsed: bossModel,
+      ...(associations.length ? { associations } : {}),
     };
   }
 
