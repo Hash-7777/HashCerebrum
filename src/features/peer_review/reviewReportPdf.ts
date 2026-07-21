@@ -23,6 +23,49 @@ const FONT_NORMAL = 10;
 const FONT_SMALL  = 8.5;
 const LINE_H      = 5.2;
 
+// jsPDF's core fonts (helvetica/times) render only WinAnsi (CP1252), and jsPDF
+// does not parse markdown. Model review text carries both — "**bold**" printed
+// its asterisks and the suggestion arrow "→" printed as garbage (a stray "!'").
+// Strip markdown and fold unsupported symbols to ASCII before any doc.text() call.
+
+// Code points CP1252 maps in its 0x80–0x9F block (curly quotes, en/em dashes,
+// ellipsis, bullet, euro, …). These draw correctly and are preserved; any other
+// character above U+00FF is folded to ASCII or dropped.
+const WINANSI_HIGH = new Set([
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
+  0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
+  0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+]);
+
+const SYMBOL_MAP: Record<string, string> = {
+  '→': '->', '⇒': '=>', '➔': '->', '←': '<-', '↔': '<->', '⟶': '->',
+  '≥': '>=', '≤': '<=', '≠': '!=', '≈': '~', '±': '+/-', '×': 'x', '÷': '/',
+  '∞': 'infinity', '√': 'sqrt', 'µ': 'u', 'μ': 'u', 'α': 'alpha', 'β': 'beta',
+  'γ': 'gamma', 'δ': 'delta', 'Δ': 'delta', 'χ': 'chi', 'σ': 'sigma',
+  '°': ' deg', '′': "'", '″': '"', '‰': ' per mille',
+};
+
+/** Markdown-strip and WinAnsi-fold a model string so the standard PDF font can
+ *  draw it — no leaked asterisks, no garbage where an arrow or comparator was. */
+export function plainText(raw: string): string {
+  let s = raw ?? '';
+  s = s
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // **bold**
+    .replace(/\*([^*\n]+)\*/g, '$1') //  *italic*
+    .replace(/__([^_]+)__/g, '$1') //   __bold__
+    .replace(/`([^`]+)`/g, '$1') //     `code`
+    .replace(/~~([^~]+)~~/g, '$1') //   ~~strike~~
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '') // # heading
+    .replace(/\*/g, ''); //             any stray leftover asterisk
+  s = s.replace(/[→⇒➔←↔⟶≥≤≠≈±×÷∞√µμαβγδΔχσ°′″‰]/g, (c) => SYMBOL_MAP[c] ?? c);
+  return Array.from(s)
+    .map((c) => {
+      const cp = c.codePointAt(0)!;
+      return cp <= 0xff || WINANSI_HIGH.has(cp) ? c : '';
+    })
+    .join('');
+}
+
 function accentBar(doc: jsPDF) {
   doc.setFillColor(ACCENT_R, ACCENT_G, ACCENT_B);
   doc.rect(0, 0, PAGE_W, 3.5, 'F');
@@ -55,7 +98,7 @@ function paragraph(doc: jsPDF, text: string, y: number): number {
   doc.setFontSize(FONT_NORMAL);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(INK_R, INK_G, INK_B);
-  const lines = doc.splitTextToSize(text, CONTENT_W) as string[];
+  const lines = doc.splitTextToSize(plainText(text), CONTENT_W) as string[];
   for (const line of lines) {
     y = checkPage(doc, y, LINE_H);
     doc.text(line, ML, y);
@@ -70,7 +113,7 @@ function bulletList(doc: jsPDF, items: string[], y: number): number {
   doc.setTextColor(INK_R, INK_G, INK_B);
   for (const item of items) {
     y = checkPage(doc, y, LINE_H * 2);
-    const lines = doc.splitTextToSize(item, CONTENT_W - 6) as string[];
+    const lines = doc.splitTextToSize(plainText(item), CONTENT_W - 6) as string[];
     doc.setTextColor(ACCENT_R, ACCENT_G, ACCENT_B);
     doc.text('–', ML, y);
     doc.setTextColor(INK_R, INK_G, INK_B);
@@ -121,7 +164,7 @@ export async function buildReviewReportPdf(paper: ReviewedPaper): Promise<Blob> 
   doc.setFont('times', 'normal');
   doc.setFontSize(17);
   doc.setTextColor(20, 20, 24);
-  const titleLines = doc.splitTextToSize(paper.title, CONTENT_W - 22) as string[];
+  const titleLines = doc.splitTextToSize(plainText(paper.title), CONTENT_W - 22) as string[];
   for (const line of titleLines) {
     doc.text(line, ML, y);
     y += 7.5;
