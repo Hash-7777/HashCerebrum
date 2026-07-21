@@ -26,28 +26,75 @@ const REVIEW_META = new Set([
   'systematic', 'meta', 'analysis', 'analyses', 'paper', 'research', 'study', 'studies', 'risk',
   'effect', 'effects', 'size', 'sizes', 'confidence', 'interval', 'intervals', 'report', 'publication',
   'ready', 'full', 'write', 'give', 'assess', 'appraisal',
+  // Request/framing verbs and generic genetics nouns that describe the ASK, not
+  // the disease — they leaked into a scoped gene query ("whether variant modifies
+  // simvastatin associated myopathy") and add nothing to retrieval.
+  'whether', 'variant', 'variants', 'allele', 'alleles', 'modifies', 'modify', 'modifying',
+  'assessment', 'assessments', 'evaluate', 'determine', 'polymorphism', 'polymorphisms',
 ]);
 
 /** The disease/outcome phrase a literature query should carry — the question's
  *  medical content words, minus gene symbols (already excluded) and request or
  *  review-type words. Capped so the query stays a focused phrase. */
+function isMetaOrFragment(word: string): boolean {
+  // A leftover variant fragment ("521t" from "c.521T>C") always starts with a
+  // digit — no disease term does — so it is dropped.
+  if (/^\d/.test(word)) return true;
+  // A hyphenated compound is meta if any of its segments is a request/framing
+  // word: "per-variant" drops (variant), but "simvastatin-associated" is kept.
+  return word.split('-').some((seg) => REVIEW_META.has(seg));
+}
+
 export function diseaseCoreFor(question: string): string {
   return diseaseTerms(question)
-    .filter((word) => !REVIEW_META.has(word))
+    .filter((word) => !isMetaOrFragment(word))
     .slice(0, 6)
     .join(' ')
     .trim();
 }
 
+// The clause that names a gene, so a multi-part question pairs each gene with
+// ITS OWN sub-topic. A SGLT2-vs-GLP1 paper that also asked about SLCO1B1 built
+// the query "SLCO1B1 inhibitors receptor agonists major" — it took the whole
+// question's first disease words (the cardiovascular arm's) instead of the
+// "simvastatin myopathy" clause that actually names SLCO1B1, so the gene was
+// searched against the wrong topic and returned nothing on-point. Clauses are
+// split on sentence and list-item boundaries (";", newline, ". "); the period
+// inside a variant token ("c.521T>C") is never a boundary because it is not
+// followed by a space.
+function clauseNamingGene(question: string, gene: string): string | undefined {
+  const clauses = question.split(/[;\n]+|\.\s+/);
+  const geneRx = new RegExp(`\\b${gene.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  return clauses.find((clause) => geneRx.test(clause));
+}
+
+/** The disease phrase to pair with one gene: the gene's own clause when the
+ *  question names it there and that clause carries a disease/outcome term;
+ *  otherwise the whole-question core (single-topic questions are unchanged). */
+function diseaseCoreForGene(question: string, gene: string): string {
+  const clause = clauseNamingGene(question, gene);
+  if (clause) {
+    const scoped = diseaseCoreFor(clause);
+    if (scoped) return scoped;
+  }
+  return diseaseCoreFor(question);
+}
+
 /** The targeted queries for a genetics question: each named gene paired with the
- *  disease/outcome phrase. Pure and deterministic so it is testable offline. */
+ *  disease/outcome phrase from its own clause. Pure and deterministic so it is
+ *  testable offline. */
 export function entitySearchQueries(question: string): string[] {
   // Resolve variants/rsIDs to their gene too, so "rs1801133 and VTE" still retrieves
   // the MTHFR association literature rather than nothing.
   const genes = genesForQuestion(question);
-  const core = diseaseCoreFor(question);
-  if (genes.length === 0 || !core) return [];
-  return [...new Set(genes.map((gene) => `${gene} ${core}`))];
+  if (genes.length === 0) return [];
+  const queries = genes
+    .map((gene) => {
+      const core = diseaseCoreForGene(question, gene);
+      return core ? `${gene} ${core}` : '';
+    })
+    .filter(Boolean);
+  return [...new Set(queries)];
 }
 
 /**

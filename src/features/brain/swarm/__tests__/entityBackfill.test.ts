@@ -25,4 +25,25 @@ describe('entitySearchQueries', () => {
   it('returns nothing when the question names no gene', () => {
     expect(entitySearchQueries('compare warfarin and apixaban for stroke prevention')).toEqual([]);
   });
+
+  it('scopes each gene to its own clause in a multi-part question (the SLCO1B1 miss)', () => {
+    // The real bug: this question searched "SLCO1B1 inhibitors receptor agonists
+    // major" — it paired the gene with the cardiovascular arm's first words
+    // instead of the "simvastatin myopathy" clause that actually names it.
+    const q =
+      'Write a systematic review comparing SGLT2 inhibitors with GLP-1 receptor agonists for major adverse cardiovascular events; ' +
+      'assess whether the SLCO1B1 rs4149056 (c.521T>C) variant modifies simvastatin-associated myopathy risk, with a per-variant confidence assessment';
+    const queries = entitySearchQueries(q);
+    const slco = queries.find((s) => s.startsWith('SLCO1B1 '));
+    expect(slco).toBeDefined();
+    // Paired with its own clause's disease terms, not the cardiovascular arm's.
+    expect(slco).toContain('simvastatin');
+    expect(slco).toContain('myopathy');
+    expect(slco).not.toContain('inhibitors');
+    expect(slco).not.toContain('receptor');
+    expect(slco).not.toContain('agonists');
+    // Framing words never leak into the query.
+    expect(slco).not.toContain('whether');
+    expect(slco).not.toContain('variant');
+  });
 });
