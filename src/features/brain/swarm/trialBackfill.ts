@@ -36,6 +36,18 @@ const NON_TRIAL_CAPS = new Set([
   // genetics paper. These are never trials.
   'COVID', 'COVID19', 'SARS', 'SARSCOV', 'SARSCOV2', 'APCR', 'APC',
   'VTE', 'DVT', 'CVT', 'FVL', 'PTM', 'APS', 'HIT', 'DIC', 'TTP', 'ITP', 'VWF', 'ATIII',
+  // Bibliographic databases — a review's Methods names the databases searched
+  // ("we searched PubMed, EMBASE, and Scopus"), which are trial-shaped ALL-CAPS
+  // tokens in a sentence carrying the word "study/search". MEDLINE is already
+  // above. A cardiometabolic run harvested "EMBASE" as a trial.
+  'EMBASE', 'SCOPUS', 'CINAHL', 'CENTRAL', 'COCHRANE', 'WOS', 'LILACS', 'PSYCINFO',
+  // Steatotic-liver-disease nomenclature and its predecessors — diseases, not
+  // trials. The SUMMIT tirzepatide abstract names these alongside its endpoints.
+  'MASLD', 'MASH', 'MAFLD', 'NAFLD', 'NASH',
+  // Patient-reported-outcome instruments and functional endpoints that read as
+  // trial acronyms. "KCCQ-CSS" (Kansas City Cardiomyopathy Questionnaire clinical
+  // summary score) and the six-minute walk were harvested as trials in a HFpEF run.
+  'KCCQ', 'KCCQCSS', 'KCCQOSS', 'KCCQTSS', 'MLHFQ', 'MALO',
 ]);
 
 // A pure Roman numeral. Coagulation factors are written this way (factor II, V,

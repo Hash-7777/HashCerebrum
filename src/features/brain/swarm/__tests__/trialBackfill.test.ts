@@ -90,4 +90,22 @@ describe('harvestTrialNames', () => {
       expect(names).not.toContain(junk);
     }
   });
+
+  it('does not harvest databases, liver-disease names, or questionnaire scores as trials', () => {
+    // The real bug: a SGLT2-vs-GLP1 run harvested "MASLD", "EMBASE", and
+    // "KCCQ-CSS" as trial names and fired junk searches (0 useful results), while
+    // the actual landmark trials were never captured.
+    const names = harvestTrialNames([
+      rec(
+        'SUMMIT trial of tirzepatide in HFpEF',
+        'We searched PubMed and EMBASE for the study; the primary endpoint was the KCCQ-CSS, ' +
+          'and MASLD was common in this cohort. The LEADER trial reported the comparator.',
+      ),
+    ]);
+    for (const junk of ['MASLD', 'EMBASE', 'KCCQ-CSS', 'KCCQ']) {
+      expect(names).not.toContain(junk);
+    }
+    // A real trial in the same text is still captured.
+    expect(names).toContain('LEADER');
+  });
 });
