@@ -573,20 +573,21 @@ async function geneticDatabaseEvidence(
  * Gene-gated (empty and cost-free for a non-genetic paper) and best-effort — a
  * failed database fetch just scores on the paper evidence already retrieved.
  */
-async function paperVariantAssociations(
-  question: string,
-  evidence: EvidenceItem[],
-  callbacks: SwarmCallbacks,
-): Promise<GeneAssociation[]> {
-  const named = genesForQuestion(question).length > 0 || extractUnrecognizedGeneTokens(question).length > 0;
-  if (!named) return [];
-  let dbEvidence: EvidenceItem[] = [];
-  try {
-    dbEvidence = await geneticDatabaseEvidence(question, callbacks);
-  } catch {
-    /* best-effort — score on the paper evidence when the database fetch fails */
-  }
-  return geneAssociations([...evidence, ...dbEvidence], question);
+/** True when the paper question names a gene or a gene-shaped token, so the
+ *  structured genetic-database (GWAS/ClinVar) fetch and the per-variant cards
+ *  apply. */
+function paperNamesAGene(question: string): boolean {
+  return genesForQuestion(question).length > 0 || extractUnrecognizedGeneTokens(question).length > 0;
+}
+
+/** Score per-variant association confidence from the SAME evidence pool the
+ *  manuscript is drafted from. The structured genetic-database records are merged
+ *  into that pool up front (see runSwarm), so the confidence cards and the paper
+ *  narrative can never diverge — the card reading "strong" while the paper calls
+ *  the variant "unaddressed" was exactly that split source of truth. */
+function paperVariantAssociations(question: string, evidence: EvidenceItem[]): GeneAssociation[] {
+  if (!paperNamesAGene(question)) return [];
+  return geneAssociations(evidence, question);
 }
 
 export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
@@ -1011,7 +1012,26 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     const interactionSpecialist = await backfillDrugInteractions(researchQuestion, callbacks);
     if (interactionSpecialist) specialistsForMerge = [...specialistsForMerge, interactionSpecialist];
   }
-  let merged = rankEvidenceByRelevance(researchQuestion, [...mergeEvidence(specialistsForMerge), ...fromLibrary]);
+  // For a gene-naming paper, fetch the structured genetic-database evidence
+  // (GWAS Catalog / ClinVar) ONCE, up front, and fold it into the drafting pool.
+  // The per-variant confidence cards are then scored from this same pool, so the
+  // card and the manuscript can never diverge (the card reading "strong" while the
+  // paper called the variant "unaddressed" came from the card using these records
+  // and the manuscript never seeing them). Best-effort — a fetch failure leaves the
+  // paper unchanged.
+  let variantDbEvidence: EvidenceItem[] = [];
+  if (paperRequest && paperNamesAGene(researchQuestion)) {
+    try {
+      variantDbEvidence = await geneticDatabaseEvidence(researchQuestion, callbacks);
+    } catch {
+      /* best-effort */
+    }
+  }
+  let merged = rankEvidenceByRelevance(researchQuestion, [
+    ...mergeEvidence(specialistsForMerge),
+    ...fromLibrary,
+    ...variantDbEvidence,
+  ]);
   // Read whole papers: enrich the top open-access records with their most relevant
   // full-text passage (instead of only the abstract). Bounded + fail-safe — any
   // record without open-access full text keeps its abstract, so this never blocks
@@ -1047,7 +1067,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     // drafting, so a gene-naming paper carries the same confidence cards the
     // Genetics path shows without adding wall-clock time. Empty for a non-genetic
     // paper. Awaited only at the return sites below.
-    const associationsPromise = paperVariantAssociations(researchQuestion, merged, callbacks);
+    const associations = paperVariantAssociations(researchQuestion, merged);
     // Phase 1: blocking preparation (title, extraction, claims, user review)
     const prep = await preparePaperLedger({
       question: researchQuestion,
@@ -1070,8 +1090,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     if (opts.onPaperDraftComplete) {
       // Fire-and-forget: drafting continues in the background.
       compileManuscriptFromLedger(prep)
-        .then(async (manuscript) => {
-          const associations = await associationsPromise;
+        .then((manuscript) => {
           opts.onPaperDraftComplete!({
             kind: 'research',
             answer: manuscriptToReadableText(manuscript),
@@ -1102,7 +1121,6 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
     // Fallback: old blocking behaviour when no async callback is provided.
     const manuscript = await compileManuscriptFromLedger(prep);
-    const associations = await associationsPromise;
     return {
       kind: 'research',
       answer: manuscriptToReadableText(manuscript),
