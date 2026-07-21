@@ -58,6 +58,28 @@ describe('stripFabricatedAppraisal', () => {
     const honest = 'No formal risk‑of‑bias appraisal (Cochrane RoB, GRADE certainty) was applied in this automated review.';
     expect(stripFabricatedAppraisal(honest)).toBe(honest);
   });
+
+  it('excises a fabricated verdict clause but keeps the honest negation clause (the real compound-sentence run)', () => {
+    // The old whole-sentence negation exemption let this through intact: the
+    // sentence has an honest negation ("without a formal assessment…") AND a
+    // fabricated AMSTAR-2 verdict, so the verdict — a lie — reached the reader.
+    const text =
+      'The analysis was conducted without a formal assessment of publication bias, leading the authors to rate the overall methodological quality as "some concerns" on the AMSTAR-2 instrument and the certainty of evidence as low.';
+    const out = stripFabricatedAppraisal(text);
+    expect(out).toContain('without a formal assessment of publication bias');
+    expect(out).not.toMatch(/some concerns/i);
+    expect(out).not.toMatch(/AMSTAR/i);
+  });
+
+  it('drops an internal source id (S1) that rides inside a fabricated verdict clause', () => {
+    const text =
+      'No formal risk-of-bias assessment or GRADE appraisal was applied to the included records, and the only quality indicator available is the AMSTAR-2 rating of "some concerns" noted for the meta-analysis in S1, which readers must interpret with caution.';
+    const out = stripFabricatedAppraisal(text);
+    expect(out).toContain('No formal risk-of-bias assessment');
+    expect(out).toContain('readers must interpret with caution');
+    expect(out).not.toMatch(/some concerns/i);
+    expect(out).not.toMatch(/\bin S1\b/);
+  });
 });
 
 describe('stripCounterfactualDataset', () => {
@@ -106,6 +128,14 @@ describe('stripNonSourceBrackets', () => {
   it('leaves single-token bracket notation (e.g. an isotope label) alone', () => {
     const iso = 'Uptake of [18F]FDG was increased.';
     expect(stripNonSourceBrackets(iso)).toBe(iso);
+  });
+
+  it('drops a leaked internal claim-ledger id but keeps real [S#] citations', () => {
+    // The real run printed "[claim-1]" in the Conclusion — an internal ledger id,
+    // never a citation. It has no whitespace, so the single-token rule kept it.
+    expect(
+      stripNonSourceBrackets('This advance is pivotal [claim-1], as the evidence shows [S3].'),
+    ).toBe('This advance is pivotal, as the evidence shows [S3].');
   });
 });
 

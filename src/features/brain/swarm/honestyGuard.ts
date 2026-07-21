@@ -63,12 +63,60 @@ const APPRAISAL_NEGATION_RX =
 const COUNTERFACTUAL_DATASET_RX =
   /\bhad\s+a\s+dataset\s+been\s+(?:provided|uploaded|supplied)\b|\bif\s+a\s+dataset\s+had\s+been\b|\bwould\s+have\s+(?:recorded|applied|computed|run)\b.*\b(?:filename|row\s+count|dataset)\b/i;
 
-/** Remove sentences that fabricate a formal appraisal that was never performed. */
+// A specific appraisal VERDICT the pipeline never produced — "some concerns",
+// "low certainty", "rated as low". This is distinct from merely NAMING a tool: an
+// honest negation ("no GRADE appraisal was applied") names the tool but asserts
+// no verdict, and must be kept.
+const APPRAISAL_VERDICT_RX = new RegExp(
+  [
+    `["\\u2018\\u2019']\\s*some\\s+concerns\\s*["\\u2018\\u2019']`,
+    `\\brating\\s+of\\s+["\\u2018\\u2019']?\\s*some\\s+concerns`,
+    `\\bas\\s+["\\u2018\\u2019']?\\s*some\\s+concerns`,
+    `(?:low|moderate|high|very[\\s\\u2010-\\u2015\\u2212-]low)\\s+(?:grade\\s+)?certaint(?:y|ies)`,
+    `certainty\\s+of\\s+evidence\\s+as\\s+(?:low|moderate|high)`,
+    `rated\\s+(?:with|as)\\s+(?:low|moderate|high)`,
+  ].join('|'),
+  'i',
+);
+
+// A reference to a formal appraisal tool or a quality judgement. Naming one is
+// honest; naming one alongside a VERDICT (above) is the fabrication.
+const APPRAISAL_TOOL_RX = new RegExp(
+  `\\bamstar${DASH}?\\s?2?\\b|\\bgrade\\b|\\brobins${DASH}?i\\b|\\bcochrane\\s+ro?b\\b|methodological\\s+quality|certainty\\s+of\\s+evidence|quality\\s+indicator`,
+  'i',
+);
+
+/** Excise only the CLAUSES of a sentence that assert a fabricated verdict, keeping
+ *  honest negation clauses in the same sentence. This also removes any internal
+ *  source id that rides inside the fabricated clause (e.g. "… in S1"). The comma
+ *  or semicolon stays attached to the preceding clause, so dropping a clause never
+ *  leaves a dangling connector; a terminal period is restored if the dropped
+ *  clause carried it. */
+function dropFabricatedVerdictClauses(sentence: string): string {
+  const clauses = sentence.split(/(?<=[;,])\s+/);
+  const kept = clauses.filter((c) => !(APPRAISAL_TOOL_RX.test(c) && APPRAISAL_VERDICT_RX.test(c)));
+  if (kept.length === clauses.length) return sentence;
+  let joined = kept.join(' ').replace(/\s+([.,;:)])/g, '$1').trim();
+  joined = joined.replace(/[,;\s]+$/, '');
+  if (joined && !/[.!?]$/.test(joined)) joined += '.';
+  return joined;
+}
+
+/** Remove fabricated formal-appraisal claims. A sentence that ONLY asserts a
+ *  fabricated appraisal (no honest negation) is dropped whole; a compound sentence
+ *  that carries an honest negation AND a fabricated verdict — which the old
+ *  whole-sentence negation exemption let through intact — has only the fabricated
+ *  verdict clause excised. */
 export function stripFabricatedAppraisal(text: string): string {
   return rejoin(
-    splitSentences(text).filter(
-      (s) => !(APPRAISAL_CLAIM_RX.test(s) && !APPRAISAL_NEGATION_RX.test(s)),
-    ),
+    splitSentences(text)
+      .filter((s) => !(APPRAISAL_CLAIM_RX.test(s) && !APPRAISAL_NEGATION_RX.test(s)))
+      .map((s) =>
+        APPRAISAL_TOOL_RX.test(s) && APPRAISAL_VERDICT_RX.test(s)
+          ? dropFabricatedVerdictClauses(s)
+          : s,
+      )
+      .filter(Boolean),
   );
 }
 
@@ -88,8 +136,13 @@ const CITATION_MARKER_INNER = /^\s*S?\d+(?:\s*[,;&–—-]\s*S?\d+)*\s*$/i;
 export function stripNonSourceBrackets(text: string): string {
   return text
     .replace(/\[([^\]]*)\]/g, (full, inner: string) => {
+      const trimmed = inner.trim();
+      // An internal ledger id ("claim-3") that leaked from the claim ledger into
+      // reader prose — never a citation, drop it. It has no whitespace, so the
+      // single-token rule below would otherwise keep it.
+      if (/^claim-/i.test(trimmed)) return '';
       if (CITATION_MARKER_INNER.test(inner)) return full; // a real citation marker
-      if (/\s/.test(inner.trim())) return ''; // multi-word → placeholder, drop it
+      if (/\s/.test(trimmed)) return ''; // multi-word → placeholder, drop it
       return full; // single token (e.g. [18F]) — leave alone
     })
     .replace(/\s{2,}/g, ' ')
