@@ -28,8 +28,25 @@ const NON_TRIAL_CAPS = new Set([
   'USA', 'UK', 'EU', 'AND', 'THE', 'FOR', 'WITH', 'CI', 'HR', 'RR', 'OR', 'DNA', 'RNA',
   // Drug-class / receptor / enzyme acronyms (hyphens are stripped before this
   // check, so "GLP-1RA" is tested as "GLP1RA"). These are drug classes, not trials.
-  'GLP1RA', 'GLP1R', 'GLP1RAS', 'DPP4I', 'PAI', 'PAI1', 'PCSK9', 'ACEI', 'ARB', 'NSAID', 'NSAIDS',
+  'GLP1RA', 'GLP1R', 'GLP1RAS', 'DPP4I', 'PAI', 'PAI1', 'PAII', 'PCSK9', 'ACEI', 'ARB', 'NSAID', 'NSAIDS',
+  // Haematology / thrombophilia terms, diseases, and lab phenomena that collide
+  // with the trial-acronym shape. A real thrombophilia run harvested "COVID",
+  // "PAI-I", "VIII" (factor VIII), and "APCR" (activated protein C resistance) as
+  // trial names and fired junk searches — one fetched COVID-19 records into a
+  // genetics paper. These are never trials.
+  'COVID', 'COVID19', 'SARS', 'SARSCOV', 'SARSCOV2', 'APCR', 'APC',
+  'VTE', 'DVT', 'CVT', 'FVL', 'PTM', 'APS', 'HIT', 'DIC', 'TTP', 'ITP', 'VWF', 'ATIII',
 ]);
+
+// A pure Roman numeral. Coagulation factors are written this way (factor II, V,
+// VIII, X, XI, XIII), so a thrombophilia abstract is full of them; none is a
+// trial acronym. Matched only for bare tokens (a strong-shape trial carries a
+// hyphen or an OUTCOME/CV/HF tail and is never pure Roman).
+const ROMAN_NUMERAL_RX = /^M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/;
+function isRomanNumeral(core: string): boolean {
+  const norm = core.replace(/-/g, '').toUpperCase();
+  return norm.length > 0 && ROMAN_NUMERAL_RX.test(norm);
+}
 
 // A sentence naming trials usually carries one of these context words. Requiring
 // it (unless the token has a strong trial shape) keeps precision high.
@@ -55,6 +72,8 @@ function looksLikeTrialCore(core: string): boolean {
   // F5) are not trials — a genetics question harvested these as trial names.
   if (/^[A-Z]\d+[A-Z]$/.test(norm)) return false;
   if (isApprovedGeneSymbol(norm) || isApprovedGeneSymbol(core)) return false;
+  // Roman numerals are coagulation factors, not trials (factor VIII, factor II).
+  if (isRomanNumeral(core)) return false;
   const letters = core.replace(/[^A-Z]/g, '').length;
   // Real trial acronyms are ≥4 letters, or shorter but carrying a hyphen/digit.
   if (letters >= 4) return true;

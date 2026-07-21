@@ -74,4 +74,20 @@ describe('harvestTrialNames', () => {
       expect(names).not.toContain(junk);
     }
   });
+
+  it('does not harvest coagulation factors, diseases, or lab phenomena as trials', () => {
+    // The real bug: a thrombophilia run harvested COVID-19, PAI-I, factor VIII, and
+    // APCR (activated protein C resistance) as "trials" and fired junk searches —
+    // one pulled COVID-19 records into a genetics paper.
+    const names = harvestTrialNames([
+      rec(
+        'Thrombophilia cohort study',
+        'The study measured factor VIII and PAI-I 675 levels; APCR reflects factor V Leiden, ' +
+          'and COVID-19 raised thrombotic risk in this cohort.',
+      ),
+    ]);
+    for (const junk of ['COVID-19', 'COVID', 'PAI-I', 'PAI-I 675', 'VIII', 'APCR']) {
+      expect(names).not.toContain(junk);
+    }
+  });
 });
