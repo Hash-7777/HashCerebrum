@@ -64,4 +64,19 @@ describe('interactionDrugPair', () => {
       interactionDrugPair('and also note the interaction between rivaroxaban and catafast for these patients'),
     ).toEqual(['rivaroxaban', 'catafast']);
   });
+
+  it('reads the pair from the interaction clause, not a coagulation factor named earlier', () => {
+    // The real miss: a thrombophilia paper that named "prothrombin G20210A" (a
+    // coagulation factor, and a registered drug alias) parsed the pair as
+    // "prothrombin + rivaroxaban", so Klacid was never searched — the paper then
+    // declared a false no-interaction and invented "clindamycin (Klacid)".
+    expect(
+      interactionDrugPair(
+        'Write a publication-ready evidence review comparing Factor V Leiden (R506Q), ' +
+          'prothrombin G20210A, and MTHFR C677T for the risk of recurrent venous thromboembolism. ' +
+          'Give a per-variant confidence assessment, and in the same paper address the interaction ' +
+          'between rivaroxaban and Klacid for a patient on anticoagulation.',
+      ),
+    ).toEqual(['rivaroxaban', 'klacid']);
+  });
 });

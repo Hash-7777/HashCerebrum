@@ -43,13 +43,33 @@ export function drugIdentityNote(a: string, b: string): string {
 }
 
 /**
+ * The clause a drug-interaction sub-request lives in — the sentence or
+ * comma-joined ", and …" segment that carries the interaction cue. Scoping drug
+ * extraction to this clause stops unrelated drug-shaped tokens elsewhere in a long
+ * question — coagulation factors ("prothrombin"), other compared drugs — from
+ * being mistaken for the interacting pair. A real run asked about "rivaroxaban and
+ * Klacid" while the whole question also named "prothrombin G20210A", so the pair
+ * came out "prothrombin + rivaroxaban", Klacid (the real interacting drug) was
+ * never searched, and the paper both declared a false no-interaction and invented
+ * "clindamycin (Klacid)".
+ */
+function interactionClause(question: string): string {
+  const segments = question.split(/(?<=[.!?;])\s+|,\s+and\s+/);
+  const hit = segments.find((seg) => hasInteractionCue(seg));
+  return hit ?? question;
+}
+
+/**
  * The drug pair an interaction sub-request names, or null when the text carries
  * no interaction cue or fewer than two recognized drugs. Pure and deterministic
- * so the routing decision is testable without the network.
+ * so the routing decision is testable without the network. The pair is read from
+ * the interaction clause first; the whole question is only a fallback, so a
+ * drug-shaped token in an unrelated clause cannot displace a named drug.
  */
 export function interactionDrugPair(question: string): [string, string] | null {
   if (!hasInteractionCue(question)) return null;
-  const drugs = drugCandidates(question);
+  const scoped = drugCandidates(interactionClause(question));
+  const drugs = scoped.length >= 2 ? scoped : drugCandidates(question);
   if (drugs.length < 2) return null;
   return [drugs[0]!, drugs[1]!];
 }
