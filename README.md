@@ -24,7 +24,7 @@
 
 <div align="center">
 
-**Started 19 May 2026 · in active development ever since · 706 commits and counting**
+**Started 19 May 2026 · in active development ever since · 727 commits and counting**
 
 </div>
 
@@ -71,10 +71,10 @@ HashCerebrum has been built in the open-source spirit as a single-developer proj
 |---|---|
 | **First commit** | 19 May 2026 |
 | **Latest work** | July 2026 — ongoing |
-| **Commits** | 706 and counting |
+| **Commits** | 727 and counting |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
-| **Tests** | 1,054 frontend (Vitest) + 72 Rust (`cargo test`), all green; CI gates every push |
+| **Tests** | 1,126 frontend (Vitest) + 72 Rust (`cargo test`), all green; CI gates every push |
 
 Roughly two months of continuous work: the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened in this window. Development is continuing.
 
@@ -412,7 +412,7 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (1,054 tests) + `cargo test` (72 tests) |
+| Testing | Vitest (1,126 tests) + `cargo test` (72 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -422,11 +422,11 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,054 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 72 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,126 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 72 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
-| Frontend | `npm test` | 1,054 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
+| Frontend | `npm test` | 1,126 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
 | Backend | `cargo test` (in `src-tauri/`) | 72 tests — the network guard & SSRF denylist, capped reads, rate limiting, keychain, and the tamper-evident audit log |
 | Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
 | Security | `cargo audit` | Dependency advisories, run in CI on every push |
@@ -516,7 +516,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 1,054 unit tests
+npm test               # Vitest — 1,126 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -578,12 +578,12 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 244 | ~46,114 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 116 | ~12,624 |
-| Rust Tauri backend (`src-tauri/src/`) | 40 | ~7,227 |
-| **Total core source** | **400** | **~65,965** |
+| React/TypeScript app code (`src/`, excluding tests) | 248 | ~46,908 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 118 | ~12,919 |
+| Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,498 |
+| **Total core source** | **409** | **~67,325** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,054 Vitest tests plus 72 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,126 Vitest tests plus 72 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 
