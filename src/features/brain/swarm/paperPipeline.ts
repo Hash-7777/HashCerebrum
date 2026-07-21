@@ -28,6 +28,7 @@ import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass, splitSentences } from './honestyGuard';
+import { neutralizeUnsupportedComparator } from './comparatorGuard';
 import { mentionsGene } from './genetics/associationConfidence';
 import { extractGeneSymbols } from './genetics/geneQueryReadiness';
 import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
@@ -2365,8 +2366,12 @@ async function draftOneSection(
       // source), so a number lifted from an unrelated study can't stay next to
       // the wrong gene.
       const gene = neutralizeMisattributedGeneStatistics(marker.text, opts.question, opts.evidence);
-      removed.push(...marker.removed, ...gene.removed);
-      return gene.text;
+      // Then strip a fabricated head-to-head comparator: an effect estimate the
+      // draft frames as "arm A relative to arm B" when no retrieved source
+      // compared the two arms (they were each compared to placebo / other drugs).
+      const comparator = neutralizeUnsupportedComparator(gene.text, opts.question, opts.evidence);
+      removed.push(...marker.removed, ...gene.removed, ...comparator.removed);
+      return comparator.text;
     });
     if (removed.length > 0) {
       bus.emit('agent:activity', {
@@ -2515,8 +2520,12 @@ ${digest}`,
     const qet = buildQuantEvidenceTable(opts.extractions);
     const scrub = (field: string): string =>
       applyHonestyPass(
-        neutralizeMisattributedGeneStatistics(
-          neutralizeUnverifiedStatistics(field.trim(), qet).text,
+        neutralizeUnsupportedComparator(
+          neutralizeMisattributedGeneStatistics(
+            neutralizeUnverifiedStatistics(field.trim(), qet).text,
+            opts.question,
+            opts.evidence,
+          ).text,
           opts.question,
           opts.evidence,
         ).text,
