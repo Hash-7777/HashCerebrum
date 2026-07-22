@@ -15,6 +15,7 @@ pub mod llm;
 pub mod manuscript;
 pub mod medical;
 pub mod net;
+pub mod notch;
 pub mod pdf;
 pub mod purge;
 pub mod swarm;
