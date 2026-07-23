@@ -61,7 +61,12 @@ async function postNotchFinished(detail: string): Promise<void> {
       id: 'hashcerebrum',
       icon: 'checkmark.circle.fill',
       title: 'HashCerebrum',
-      endsAt: new Date(Date.now() + 45000).toISOString().replace(/\.\d+Z$/, 'Z'),
+      // A notice, not a countdown: this has already happened, so the notch
+      // shows it briefly and drops it rather than ticking a timer down beside
+      // the word "complete". endsAt rides along only so the entry expires from
+      // the shared file on its own.
+      dismissAfter: 3,
+      endsAt: new Date(Date.now() + 3000).toISOString().replace(/\.\d+Z$/, 'Z'),
     };
     const sub = (detail || '').trim();
     if (sub) record.subtitle = sub.slice(0, 120);
