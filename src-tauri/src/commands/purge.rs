@@ -1,11 +1,11 @@
 //! GDPR right-to-erasure — project-scoped data purge.
 //! Removes all project-specific RAG, chat, run, and cache data.
-//! Audit entries are redacted (overwritten with [REDACTED]) to preserve
-//! the append-only chain integrity.
+//! Audit entries naming the project are redacted (overwritten with
+//! [REDACTED]) and the hash chain is then recomputed, so erasing a project
+//! leaves `audit_log_verify` reporting the log intact rather than corrupted.
 
 use crate::audit::store as audit;
 use crate::error::{AppError, AppResult};
-use rusqlite::params;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -45,9 +45,8 @@ pub async fn purge_project_data(
     // The cache schema does not have a project_id column, so we skip.
     // Future: add project tag to cache rows.
 
-    // 2. Redact audit entries mentioning this project_id
-    // Audit is append-only; we UPDATE the subject to [REDACTED] while
-    // preserving the chain structure (seq, prev_hash, entry_hash stay).
+    // 2. Redact audit entries mentioning this project_id, then re-chain the
+    // log so it still verifies (see audit::store::redact_and_rechain).
     let audit_count = redact_audit_for_project(&project_id).await?;
     results.insert("audit_redacted".into(), audit_count);
 
@@ -80,17 +79,29 @@ pub async fn purge_project_data(
     Ok(results)
 }
 
+/// Escape the LIKE metacharacters so a project id is matched literally.
+///
+/// `is_valid_project_id` permits `_`, which LIKE reads as "any single
+/// character" — without escaping, purging `trial_1` would also redact entries
+/// belonging to `trialX1`, erasing audit history for a project the user did not
+/// ask to erase. `%` and `\` cannot appear in a valid id but are escaped anyway
+/// so this stays correct if the id rules are ever loosened.
+fn escape_like(term: &str) -> String {
+    let mut out = String::with_capacity(term.len());
+    for ch in term.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 async fn redact_audit_for_project(project_id: &str) -> AppResult<u64> {
-    let redacted = "[REDACTED]";
-    let pattern = format!("%{}%", project_id);
+    let pattern = escape_like(project_id);
     let project_id = project_id.to_string();
-    let count = audit::with_connection_async(move |conn| {
-        let count = conn.execute(
-            "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL WHERE subject LIKE ?2 OR action LIKE ?2 OR category LIKE ?2",
-            params![redacted, pattern],
-        )?;
-        Ok(count)
-    }).await?;
+    let count =
+        audit::with_connection_async(move |conn| audit::redact_and_rechain(conn, &pattern)).await?;
     // Append a tombstone entry so auditors can see *that* a redaction happened,
     // when it happened, and which project was erased, without revealing content.
     let _ = audit::append_async(

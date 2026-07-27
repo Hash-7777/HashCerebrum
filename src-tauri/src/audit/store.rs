@@ -1,7 +1,8 @@
 //! SQLite-backed audit log. Append-only for individual entries — the only
 //! bulk mutations are retention pruning (drops a contiguous prefix of the
-//! oldest rows) and the explicit `reset()` (clears the log to a fresh chain).
-//! No code edits an entry in place.
+//! oldest rows), the explicit `reset()` (clears the log to a fresh chain), and
+//! `redact_and_rechain()` (the user-invoked project erasure, which overwrites
+//! the naming fields and re-hashes the chain so it still verifies).
 //!
 //! Storage model:
 //!   - Entries are stored in plain text on the local machine (app-data dir).
@@ -281,6 +282,92 @@ fn prune_to(conn: &Connection, keep: u64) -> AppResult<()> {
         params![keep],
     )?;
     Ok(())
+}
+
+/// Redact every entry naming `subject_like`, then re-chain the log so
+/// `verify()` still reports intact.
+///
+/// The re-chain is the whole point. `entry_hash` covers category, subject,
+/// action, and data_hash, so overwriting those four with a redaction marker and
+/// leaving the stored hash behind makes every redacted row fail recomputation —
+/// and because each entry links to the previous one, the break propagates to
+/// the end of the log. Erasing one project would otherwise leave the user's
+/// tamper-evidence permanently reporting corruption, which destroys its ability
+/// to reveal any *later* tampering. So redacted rows are re-hashed and every
+/// following row is re-linked.
+///
+/// This does not weaken the threat model. The chain is already documented as
+/// tamper-*evident*, not tamper-proof: the hash is unkeyed, so anyone able to
+/// write the database could re-chain it too. What the chain detects is an
+/// outside edit; an erasure the user asked for is not one, and the caller
+/// appends a tombstone recording that a redaction happened and when.
+///
+/// `subject_like` is matched as a substring against category, subject, and
+/// action. It is passed as a LIKE pattern with `\` as the escape character, so
+/// callers must escape `%` and `_` in the term itself — a project id may
+/// legitimately contain `_`, which would otherwise act as a single-character
+/// wildcard and redact unrelated entries.
+///
+/// Returns the number of rows redacted.
+pub(crate) fn redact_and_rechain(conn: &mut Connection, subject_like: &str) -> AppResult<u64> {
+    let tx = conn
+        .transaction()
+        .map_err(|e| AppError::Audit(format!("redact transaction: {e}")))?;
+
+    let redacted = "[REDACTED]";
+    let pattern = format!("%{subject_like}%");
+    let count = tx.execute(
+        "UPDATE audit SET category = ?1, subject = ?1, action = ?1, data_hash = ?1, enc_data = NULL
+         WHERE subject LIKE ?2 ESCAPE '\\'
+            OR action LIKE ?2 ESCAPE '\\'
+            OR category LIKE ?2 ESCAPE '\\'",
+        params![redacted, pattern],
+    )?;
+
+    if count > 0 {
+        // Re-link and re-hash the whole log in sequence order. Walking from the
+        // start keeps this simple and correct: untouched rows re-hash to exactly
+        // the value already stored, so only the redacted rows and everything
+        // after them actually change.
+        let entries = {
+            let mut stmt = tx.prepare(
+                "SELECT seq, ts, category, subject, action, data_hash, prev_hash, entry_hash
+                 FROM audit ORDER BY seq ASC",
+            )?;
+            let rows = stmt
+                .query_map([], row_to_entry)?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows
+        };
+
+        // The first retained entry is the trust anchor — keep its prev_hash as
+        // stored, exactly as verify_entries treats it, so a pruned tail does not
+        // turn into a false break here either.
+        let mut prev_hash: Option<String> = None;
+        for entry in &entries {
+            let linked_prev = prev_hash.unwrap_or_else(|| entry.prev_hash.clone());
+            let entry_hash = AuditEntry::compute_entry_hash(
+                entry.seq,
+                &linked_prev,
+                &entry.ts,
+                &entry.category,
+                &entry.subject,
+                &entry.action,
+                &entry.data_hash,
+            );
+            if linked_prev != entry.prev_hash || entry_hash != entry.entry_hash {
+                tx.execute(
+                    "UPDATE audit SET prev_hash = ?1, entry_hash = ?2 WHERE seq = ?3",
+                    params![linked_prev, entry_hash, entry.seq],
+                )?;
+            }
+            prev_hash = Some(entry_hash);
+        }
+    }
+
+    tx.commit()
+        .map_err(|e| AppError::Audit(format!("redact commit: {e}")))?;
+    Ok(count as u64)
 }
 
 /// Clear the log to a fresh chain. The next append re-seeds from GENESIS, so
@@ -589,6 +676,97 @@ mod tests {
         // Pruning below the row count is a no-op.
         prune_to(&conn, 10).unwrap();
         assert_eq!(read_all_conn(&conn).unwrap().len(), 3);
+    }
+
+    /// The regression this guards: redaction overwrote the four fields that
+    /// `entry_hash` is computed from and left the stored hash behind, so a user
+    /// who erased one project was left with an audit log that reported itself
+    /// corrupted from that point on — and could no longer reveal real tampering.
+    #[test]
+    fn redaction_erases_the_named_project_and_the_chain_still_verifies() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for subject in [
+            "pubmed",
+            "proj-alpha",
+            "openalex",
+            "proj-alpha",
+            "api.fda.gov",
+        ] {
+            append_conn(&mut conn, "net", subject, "get", &serde_json::Value::Null).unwrap();
+        }
+
+        let count = redact_and_rechain(&mut conn, "proj-alpha").unwrap();
+        assert_eq!(count, 2, "both entries naming the project are redacted");
+
+        let entries = read_all_conn(&conn).unwrap();
+        assert_eq!(
+            verify_entries(&entries),
+            None,
+            "erasing a project must not leave the log reporting corruption"
+        );
+        assert!(
+            !entries.iter().any(|e| e.subject.contains("proj-alpha")),
+            "the erased project must not remain readable in the log"
+        );
+        // Entries belonging to other work keep their real subjects.
+        assert!(entries.iter().any(|e| e.subject == "pubmed"));
+        assert!(entries.iter().any(|e| e.subject == "api.fda.gov"));
+        // Redaction rewrites in place; it never drops rows.
+        assert_eq!(entries.len(), 5);
+    }
+
+    #[test]
+    fn redaction_of_an_underscored_id_leaves_a_similar_project_alone() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        // `_` is a LIKE single-character wildcard: unescaped, "trial_1" also
+        // matches "trialX1" and would erase a project the user never named.
+        for subject in ["trial_1", "trialX1"] {
+            append_conn(&mut conn, "net", subject, "get", &serde_json::Value::Null).unwrap();
+        }
+
+        let count = redact_and_rechain(&mut conn, "trial\\_1").unwrap();
+        assert_eq!(count, 1);
+
+        let entries = read_all_conn(&conn).unwrap();
+        assert!(entries.iter().any(|e| e.subject == "trialX1"));
+        assert!(!entries.iter().any(|e| e.subject == "trial_1"));
+        assert_eq!(verify_entries(&entries), None);
+    }
+
+    #[test]
+    fn redacting_nothing_leaves_the_log_byte_identical() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        for i in 0..4 {
+            append_conn(
+                &mut conn,
+                "net",
+                &format!("host{i}"),
+                "get",
+                &serde_json::Value::Null,
+            )
+            .unwrap();
+        }
+        let before = read_all_conn(&conn).unwrap();
+
+        let count = redact_and_rechain(&mut conn, "no-such-project").unwrap();
+        assert_eq!(count, 0);
+
+        let after = read_all_conn(&conn).unwrap();
+        assert_eq!(
+            before
+                .iter()
+                .map(|e| e.entry_hash.clone())
+                .collect::<Vec<_>>(),
+            after
+                .iter()
+                .map(|e| e.entry_hash.clone())
+                .collect::<Vec<_>>(),
+            "a purge that matches nothing must not rewrite any hash"
+        );
+        assert_eq!(verify_entries(&after), None);
     }
 
     #[test]
