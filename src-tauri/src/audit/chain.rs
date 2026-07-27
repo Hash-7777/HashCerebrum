@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 pub struct AuditEntry {
     pub seq: u64,
     pub ts: DateTime<Utc>,
-    pub category: String, // "net" | "keychain" | "fs" | "llm" | "agent"
-    pub subject: String,  // host / key / path / provider / agent name
-    pub action: String,   // "allow" | "deny" | "store" | "retrieve" | "delete" | "invoke"
+    pub category: String, // "net" | "fs" | "llm" | "agent"
+    pub subject: String,  // host / path / provider / agent name
+    pub action: String,   // "allow" | "deny" | "invoke"
     pub data_hash: String,
     pub prev_hash: String,
     pub entry_hash: String,

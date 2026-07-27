@@ -27,7 +27,6 @@ tauri = { version = "2", features = ["config-json5"] }
 # Tauri plugins — only what we actually use
 tauri-plugin-dialog       = "2"
 tauri-plugin-notification = "2"
-tauri-plugin-opener       = "2"
 tauri-plugin-store        = "2"
 
 # Serde — required by Tauri IPC
@@ -40,10 +39,6 @@ chrono = { version = "0.4", features = ["serde"] }
 # Paths — cross-platform data dirs (audit log, sqlite cache)
 dirs        = "5"
 shellexpand = "3"
-
-# OS keychain — see the per-platform [target.*.dependencies] blocks below:
-# macOS uses security-framework directly (binary-bound ACL avoidance); Linux and
-# Windows use the keyring crate with the OS credential backends enabled.
 
 # HTTP — all external network goes through Rust, never the renderer
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
@@ -89,19 +84,6 @@ lopdf = "0.42"
 typst-as-lib = "0.15"
 typst-pdf    = "0.14"
 typst-assets = { version = "0.14", features = ["fonts"] }
-
-# macOS: direct keychain access (avoid binary-bound ACL)
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2"
-
-# Linux & Windows: keyring crate with the OS credential backends enabled.
-# keyring 3.x builds NO credential store by default, so without these features
-# storing an API key would fail on Linux/Windows. windows-native uses the Windows
-# Credential Manager; sync-secret-service + crypto-rust use the freedesktop Secret
-# Service over D-Bus in pure Rust (no libsecret / system -dev packages needed to
-# build). Only the backend matching the target OS is compiled.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-keyring = { version = "3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
 
 [profile.release]
 strip         = true

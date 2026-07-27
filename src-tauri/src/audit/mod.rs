@@ -1,6 +1,6 @@
 //! Hash-chained, append-only audit log.
 //!
-//! Every privileged action — network call, keychain access, agent tool
+//! Every privileged action — network call, guarded file read, agent tool
 //! invocation — appends one entry. Each entry contains the SHA-256 of
 //! the previous entry, so any tampering invalidates the chain from that
 //! point onward. `audit_log_verify` walks the chain and reports breaks.

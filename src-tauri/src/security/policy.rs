@@ -1,4 +1,4 @@
-//! Declarative policy — allowed hosts, allowed keychain keys, etc.
+//! Declarative policy — allowed hosts, allowed LLM providers, etc.
 //!
 //! Loaded once at startup; checked on every `guard::check()` call.
 //! Lives in code (not config) so it cannot be tampered with at runtime
@@ -10,7 +10,6 @@ use std::sync::OnceLock;
 #[derive(Debug)]
 pub struct Policy {
     pub allowed_hosts: &'static [&'static str],
-    pub allowed_keychain_keys: &'static [&'static str],
     pub allowed_llm_providers: &'static [&'static str],
 }
 
@@ -60,25 +59,6 @@ const ALLOWED_HOSTS: &[&str] = &[
     "::1",
 ];
 
-const ALLOWED_KEYCHAIN_KEYS: &[&str] = &[
-    "llm.groq",
-    "llm.gemini",
-    "llm.openrouter",
-    "llm.cerebras",
-    "llm.samba",
-    "llm.openai",
-    "llm.anthropic",
-    "llm.moonshot",
-    "llm.deepseek",
-    "llm.mistral",
-    "llm.nvidia",
-    "llm.minimax",
-    "llm.xai",
-    "llm.together",
-    "llm.fireworks",
-    "llm.deepinfra",
-];
-
 const ALLOWED_LLM_PROVIDERS: &[&str] = &[
     "ollama",
     "groq",
@@ -102,7 +82,6 @@ const ALLOWED_LLM_PROVIDERS: &[&str] = &[
 pub fn load_default() -> AppResult<()> {
     let _ = POLICY.set(Policy {
         allowed_hosts: ALLOWED_HOSTS,
-        allowed_keychain_keys: ALLOWED_KEYCHAIN_KEYS,
         allowed_llm_providers: ALLOWED_LLM_PROVIDERS,
     });
     Ok(())
@@ -112,13 +91,6 @@ pub fn host_allowed(host: &str) -> bool {
     POLICY
         .get()
         .map(|p| p.allowed_hosts.contains(&host))
-        .unwrap_or(false)
-}
-
-pub fn keychain_key_allowed(key: &str) -> bool {
-    POLICY
-        .get()
-        .map(|p| p.allowed_keychain_keys.contains(&key))
         .unwrap_or(false)
 }
 

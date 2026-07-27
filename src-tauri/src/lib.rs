@@ -3,7 +3,7 @@
 //
 // LAYERS (top-down):
 //   commands::*     — Tauri IPC surface, the ONLY thing renderer can call
-//   security::guard — every command that touches network/fs/keychain goes through here
+//   security::guard — every command that touches network/fs goes through here
 //   audit::*        — hash-chained append-only log of every guarded action
 //   cache::*        — SQLite cache for medical-source responses
 //   ratelimit::*    — per-host token-bucket limiters
@@ -14,8 +14,9 @@
 //      from Rust. The renderer's connect-src has no external hosts.
 //   2. Every Rust network call passes through security::guard::check().
 //   3. Every guarded action emits an audit entry chained to the previous.
-//   4. API keys live in the renderer keychain bundle; Rust receives them
-//      per call inside request headers and never logs header values.
+//   4. API keys live in the renderer's own localStorage bundle; Rust never
+//      stores them, receives them per call inside request headers, and never
+//      logs header values.
 //   5. The renderer cannot bypass any of this — capabilities.json restricts
 //      it to the small allowlist of commands registered below.
 // ==============================================================
@@ -38,7 +39,6 @@ use commands::{
     },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     files::write_file_bytes,
-    keychain::{keychain_delete, keychain_retrieve, keychain_store},
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
@@ -72,7 +72,6 @@ pub fn run() {
         .init();
 
     match tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
@@ -92,9 +91,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            keychain_store,
-            keychain_retrieve,
-            keychain_delete,
             audit_log_read,
             audit_log_read_page,
             audit_log_count,

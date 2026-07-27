@@ -1,9 +1,8 @@
-//! Permission guard — every network/fs/keychain operation calls `check()`
+//! Permission guard — every network/fs operation calls `check()`
 //! before doing work. Denials are audited; approvals are audited.
 //!
 //! Categories:
 //!   - Net(host)      — outbound HTTP to a host
-//!   - Keychain(key)  — read/write/delete a keychain item
 //!   - Fs(path)       — guarded file reads such as PDF extraction
 //!   - Llm(provider)  — invoke an LLM provider
 
@@ -25,7 +24,6 @@ const LOCALHOST_PORTS: &[u16] = &[11434];
 #[allow(dead_code)]
 pub enum Action<'a> {
     Net { host: &'a str, port: Option<u16> },
-    Keychain { key: &'a str },
     Fs { path: &'a str },
     Llm { provider: &'a str },
 }
@@ -56,15 +54,6 @@ pub fn check(action: Action<'_>) -> AppResult<()> {
                         "localhost port not allowed".into(),
                     ));
                 }
-            }
-            Ok(())
-        }
-        Action::Keychain { key } => {
-            if !policy::keychain_key_allowed(key) {
-                tracing::debug!(key, "keychain key not allowlisted");
-                return Err(AppError::PermissionDenied(
-                    "keychain key not allowlisted".into(),
-                ));
             }
             Ok(())
         }
