@@ -78,7 +78,7 @@ function asOpenAiTools(tools: LlmToolSpec[] = []) {
 async function requireKey(providerId: LlmProviderId): Promise<string> {
   const keyName = providerKeyName(providerId);
   if (!keyName) return '';
-  const key = await platform().keychain.retrieve(keyName);
+  const key = await platform().secrets.retrieve(keyName);
   if (!key) throw new Error(`${providerId} API key is missing. Add it in Settings.`);
   return key;
 }
@@ -881,7 +881,7 @@ async function hasStoredKey(provider: LlmProviderId): Promise<boolean> {
   const keyName = providerKeyName(provider);
   if (!keyName) return false;
   try {
-    const value = await platform().keychain.retrieve(keyName);
+    const value = await platform().secrets.retrieve(keyName);
     return !!value;
   } catch {
     return false;

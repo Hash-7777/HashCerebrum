@@ -36,44 +36,44 @@ const mocked = (source: EvidenceItem['source'], title: string) => ({
 });
 
 const storageKey = (key: string) => `hc.storage.${key}`;
-const devKeychainKey = (key: string) => `hc.dev.keychain.${key}`;
-const devKeychain = new Map<string, string>();
+const devSecretKey = (key: string) => `hc.dev.secret.${key}`;
+const devSecrets = new Map<string, string>();
 
-function browserKeychainSet(key: string, value: string) {
-  devKeychain.set(key, value);
+function browserSecretSet(key: string, value: string) {
+  devSecrets.set(key, value);
   try {
-    localStorage.setItem(devKeychainKey(key), value);
+    localStorage.setItem(devSecretKey(key), value);
   } catch {
     /* map fallback is enough for browser dev */
   }
 }
 
-function browserKeychainGet(key: string): string | null {
+function browserSecretGet(key: string): string | null {
   try {
-    return localStorage.getItem(devKeychainKey(key)) ?? devKeychain.get(key) ?? null;
+    return localStorage.getItem(devSecretKey(key)) ?? devSecrets.get(key) ?? null;
   } catch {
-    return devKeychain.get(key) ?? null;
+    return devSecrets.get(key) ?? null;
   }
 }
 
-function browserKeychainDelete(key: string) {
-  devKeychain.delete(key);
+function browserSecretDelete(key: string) {
+  devSecrets.delete(key);
   try {
-    localStorage.removeItem(devKeychainKey(key));
+    localStorage.removeItem(devSecretKey(key));
   } catch {
     /* ignore */
   }
 }
 
 export const browserPlatform: Platform = {
-  keychain: {
+  secrets: {
     store: async (key, value) => {
-      if (value) browserKeychainSet(key, value);
-      else browserKeychainDelete(key);
+      if (value) browserSecretSet(key, value);
+      else browserSecretDelete(key);
     },
-    retrieve: async (key) => browserKeychainGet(key),
+    retrieve: async (key) => browserSecretGet(key),
     delete: async (key) => {
-      browserKeychainDelete(key);
+      browserSecretDelete(key);
     },
   },
   audit: {

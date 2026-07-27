@@ -210,7 +210,7 @@ function makeStatus(
 async function savedKey(provider: LlmProviderId): Promise<string | null> {
   const keyName = providerKeyName(provider);
   if (!keyName) return null;
-  return platform().keychain.retrieve(keyName);
+  return platform().secrets.retrieve(keyName);
 }
 
 async function discoverOllama(): Promise<ProviderDiscoveryResult> {

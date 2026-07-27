@@ -102,13 +102,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     void Promise.all(
       PROVIDER_DEFS.map(async (group) => {
         if (!group.keyName) return [group.provider, false] as const;
-        const value = await platform().keychain.retrieve(group.keyName);
+        const value = await platform().secrets.retrieve(group.keyName);
         return [group.provider, !!value] as const;
       }),
     ).then((entries) => {
       if (!cancelled) setKeyStatus(Object.fromEntries(entries) as Partial<Record<LlmProviderId, boolean>>);
     }).catch(() => {
-      // Keychain read failure is non-fatal — settings panel renders without key indicators.
+      // A secret-store read failure is non-fatal — the panel renders without key indicators.
     });
     return () => {
       cancelled = true;
@@ -132,10 +132,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     setSaving(provider);
     setKeyErrors((current) => ({ ...current, [provider]: '' }));
     try {
-      await platform().keychain.store(keyName, value);
-      const verified = await platform().keychain.retrieve(keyName);
+      await platform().secrets.store(keyName, value);
+      const verified = await platform().secrets.retrieve(keyName);
       if (verified !== value) {
-        throw new Error('Keychain verification failed. The key was not readable after saving.');
+        throw new Error('Could not save the key. It was not readable after saving.');
       }
       setApiKeys((current) => ({ ...current, [provider]: '' }));
       setKeyStatus((current) => ({ ...current, [provider]: true }));
@@ -160,7 +160,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     setSaving(provider);
     setKeyErrors((current) => ({ ...current, [provider]: '' }));
     try {
-      await platform().keychain.delete(keyName);
+      await platform().secrets.delete(keyName);
       setKeyStatus((current) => ({ ...current, [provider]: false }));
       removeProviderModels(provider);
     } finally {

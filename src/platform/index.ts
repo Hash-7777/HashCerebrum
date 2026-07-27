@@ -73,8 +73,11 @@ export interface UsageLogRecord {
 }
 
 export interface Platform {
-  // Keychain — secret values are stored in the OS keychain at rest.
-  keychain: {
+  // Secrets — provider API keys. These live in the renderer's own storage
+  // inside the app's private data directory, NOT in the OS keychain. Nothing
+  // here is encrypted at rest; the protection is the OS file permissions on
+  // that directory. Say so plainly wherever this is described to a user.
+  secrets: {
     store(key: string, value: string): Promise<void>;
     retrieve(key: string): Promise<string | null>;
     delete(key: string): Promise<void>;

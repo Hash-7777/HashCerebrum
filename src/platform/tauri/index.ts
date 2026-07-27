@@ -38,9 +38,10 @@ function store() {
 //
 // Tauri's WebKit data dir is keyed by the bundle identifier, not the binary's
 // code signature, so the bundle survives every rebuild and signed-DMG update
-// without macOS Keychain prompting on every read. The Rust `keychain_*`
-// commands remain registered for future migration tooling but are no longer
-// hit on the hot path.
+// without macOS Keychain prompting on every read. That convenience is the
+// whole trade: the keys are NOT encrypted at rest, and the only thing keeping
+// another local process out is the OS file permissions on the app's data
+// directory. Describe it that way everywhere — never as "the OS keychain".
 const LS_BUNDLE_KEY = 'hc_api_bundle_v2';
 
 function getBundle(): Record<string, string> {
@@ -63,7 +64,7 @@ function saveBundle(data: Record<string, string>): void {
 }
 
 export const tauriPlatform: Platform = {
-  keychain: {
+  secrets: {
     store: async (key, value) => {
       const data = getBundle();
       if (value) data[key] = value;
