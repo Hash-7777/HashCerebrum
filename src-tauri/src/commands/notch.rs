@@ -40,14 +40,69 @@ fn logo_path(id: &str) -> PathBuf {
         .join(format!("{id}.png"))
 }
 
+/// Longest value we will forward for any single text field.
+const MAX_FIELD_LEN: usize = 200;
+
+/// Fields the notch contract defines. Anything else the caller sends is
+/// dropped rather than forwarded.
+const ALLOWED_FIELDS: &[&str] = &[
+    "id",
+    "icon",
+    "title",
+    "subtitle",
+    "image",
+    "dismissAfter",
+    "endsAt",
+];
+
+/// A poster id must be a plain token: it names our slot in a file shared with
+/// other applications, and it is interpolated into a logo filename. Restricting
+/// it to alphanumerics, hyphen, and underscore keeps a separator or a `..` out
+/// of that path, and keeps one poster from spoofing another's id.
+fn is_valid_poster_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// Copy across only the contract's own fields, with text values bounded.
+///
+/// This is a trust boundary, not just tidiness: the file is parsed by a
+/// separate application, so whatever passes through here becomes another
+/// process's input. Forwarding the renderer's object verbatim would let any
+/// future caller — or a compromised renderer — put unbounded, arbitrary keys
+/// into it. A fixed field list and a length cap keep the write to the shape
+/// the contract documents.
+fn sanitize_record(record: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for &field in ALLOWED_FIELDS {
+        match record.get(field) {
+            Some(Value::String(s)) => {
+                let mut text = s.clone();
+                text.truncate(MAX_FIELD_LEN);
+                out.insert(field.to_string(), Value::String(text));
+            }
+            Some(value @ (Value::Number(_) | Value::Bool(_))) => {
+                out.insert(field.to_string(), value.clone());
+            }
+            _ => {}
+        }
+    }
+    Value::Object(out)
+}
+
 #[tauri::command]
 pub fn notch_activity_post(record: Value) -> Result<(), String> {
     let id = record
         .get("id")
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .filter(|s| !s.is_empty())
         .ok_or("notch activity needs a non-empty id")?;
+    if !is_valid_poster_id(&id) {
+        return Err("notch activity id must be alphanumeric/hyphen/underscore".into());
+    }
 
     let path = feed_path();
 
@@ -58,8 +113,9 @@ pub fn notch_activity_post(record: Value) -> Result<(), String> {
         .and_then(|text| serde_json::from_str::<Vec<Value>>(&text).ok())
         .unwrap_or_default();
 
+    let mut record = sanitize_record(&record);
+
     // Offer our logo, unless the caller named one itself.
-    let mut record = record;
     if record.get("image").is_none() {
         if let Some(object) = record.as_object_mut() {
             object.insert(
@@ -88,4 +144,49 @@ pub fn notch_activity_post(record: Value) -> Result<(), String> {
     fs::write(&tmp, body.as_bytes()).map_err(|e| e.to_string())?;
     fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poster_id_rejects_separators_and_traversal() {
+        assert!(is_valid_poster_id("hashcerebrum"));
+        assert!(is_valid_poster_id("hash-cerebrum_1"));
+        // The id is interpolated into a logo filename, so nothing that can
+        // leave the logos directory may pass.
+        assert!(!is_valid_poster_id("../../etc/passwd"));
+        assert!(!is_valid_poster_id("a/b"));
+        assert!(!is_valid_poster_id("a\\b"));
+        assert!(!is_valid_poster_id(""));
+        assert!(!is_valid_poster_id(&"a".repeat(65)));
+    }
+
+    #[test]
+    fn sanitize_keeps_the_contract_fields_and_drops_the_rest() {
+        let record = serde_json::json!({
+            "id": "hashcerebrum",
+            "icon": "checkmark.circle.fill",
+            "title": "HashCerebrum",
+            "subtitle": "Manuscript complete",
+            "dismissAfter": 3,
+            "somethingElse": {"nested": "payload"},
+        });
+        let clean = sanitize_record(&record);
+        assert_eq!(clean.get("id").unwrap(), "hashcerebrum");
+        assert_eq!(clean.get("subtitle").unwrap(), "Manuscript complete");
+        assert_eq!(clean.get("dismissAfter").unwrap(), 3);
+        assert!(
+            clean.get("somethingElse").is_none(),
+            "fields outside the contract must not reach another app's input file"
+        );
+    }
+
+    #[test]
+    fn sanitize_bounds_long_text() {
+        let record = serde_json::json!({ "title": "x".repeat(5000) });
+        let clean = sanitize_record(&record);
+        assert_eq!(clean.get("title").unwrap().as_str().unwrap().len(), 200);
+    }
 }
