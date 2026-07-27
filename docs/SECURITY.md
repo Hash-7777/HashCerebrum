@@ -55,8 +55,7 @@ privacy is a property of the architecture rather than a policy:
    run through Rust, behind the same guard, rate limiter, and audit path.
    The renderer's CSP declares no external `connect-src` host at all.
 2. **Every privileged action passes `security::guard::check`.**
-   Categories: `Net`, `Keychain`, `Fs`, `Llm`. Denials and approvals
-   are both audited.
+   Categories: `Net`, `Fs`, `Llm`. Denials and approvals are both audited.
 3. **Audit log is hash-chained.** Each entry hashes the previous entry's
    hash. `audit_log_verify` walks the chain and returns the first broken
    sequence number, or `null` if intact.
@@ -66,9 +65,15 @@ privacy is a property of the architecture rather than a policy:
    never written to the audit log, and never stored in model metadata or
    the response cache. A key is read only at the moment a provider call is
    made, then passed to the Rust proxy inside request headers — which are
-   never logged. Trade-off: this avoids an OS-keychain unlock prompt on
-   every launch, at the cost of at-rest encryption. An opt-in OS-keychain
-   path is implemented in `commands/keychain.rs`.
+   never logged. **Trade-off, stated plainly: this avoids an OS-keychain
+   unlock prompt on every launch, and the cost is that the keys are not
+   encrypted at rest.** What keeps another local process out is the
+   operating system's file permissions on the app's data directory, not
+   encryption. There is no OS-keychain path and no migration to one: the
+   Rust keychain commands were withdrawn once nothing called them, so the
+   renderer store is the only place a key is ever kept. Anyone who wants
+   no stored credential at all should run a local model through Ollama,
+   which needs no key.
 5. **CSP is strict.** No external `script-src`, no `'unsafe-inline'` on
    scripts, and no broad `'unsafe-eval'`. The only script relaxation is
    `'wasm-unsafe-eval'`, which permits WebAssembly compilation needed by
@@ -231,9 +236,32 @@ MedEmbed file — never an attacker-supplied `.proto`. The advisory is still
 patched regardless, because carrying a known-vulnerable transitive dependency is
 not acceptable and CI blocks it.
 
-When bumping `@huggingface/transformers`, re-check whether these overrides are
-still needed: once its `onnxruntime-node` requires a patched `adm-zip` and its
-`onnxruntime-web` a patched `protobufjs` directly, drop the entries rather than
+**Resolved advisory — `sharp`.** Four high advisories
+([GHSA-f88m-g3jw-g9cj](https://github.com/advisories/GHSA-f88m-g3jw-g9cj),
+inherited libvips CVEs on image decode) reached the tree through
+`@huggingface/transformers` → `sharp@0.34.x`. `npm audit` reports these as
+having no fix available, because `@huggingface/transformers` requires
+`sharp: ^0.34.5` and the patched line is `0.35.x` — a major bump that npm will
+not make on its own. An `overrides` entry pins `sharp` to `^0.35.3`.
+
+The bump is safe here precisely because the app never runs `sharp`: it is
+the Node-only native image backend, and HashCerebrum's image work happens in
+the renderer. As with `onnxruntime-node`, the built `dist/` output contains no
+reference to it — the only `sharp` strings in the bundle are a hippocampal
+`sharp wave ripple` MeSH term and the `musicsharpsign` glyph name in the pdf.js
+worker. It is pinned anyway rather than waived, so the CI gate stays honest.
+
+**Resolved advisory — `postcss`.** A high advisory
+([GHSA-r28c-9q8g-f849](https://github.com/advisories/GHSA-r28c-9q8g-f849), path
+traversal via `sourceMappingURL` auto-loading) reached the build tree through
+Vite. Pinned to `^8.5.23` by an `overrides` entry. This is build-time only —
+`postcss` never ships in the bundle — but the CI gate does not distinguish, and
+neither should a release.
+
+When bumping `@huggingface/transformers` or Vite, re-check whether these
+overrides are still needed: once `onnxruntime-node` requires a patched
+`adm-zip`, `onnxruntime-web` a patched `protobufjs`, `transformers` a patched
+`sharp`, and Vite a patched `postcss` directly, drop the entries rather than
 leaving pins that silently constrain the tree.
 
 ## Adding a new permission
