@@ -73,7 +73,7 @@
     ],
     "category": "Medical",
     "shortDescription": "Medical research agent desktop app",
-    "longDescription": "HashCerebrum — A medical research agent desktop app for source-grounded outputs, evidence-hierarchy aware synthesis, and citation discipline. API keys stay in your OS keychain; all external requests route through an audited Rust backend.",
+    "longDescription": "HashCerebrum — A medical research agent desktop app for source-grounded outputs, evidence-hierarchy aware synthesis, and citation discipline. API keys stay on your machine, in the app's own private data directory; all external requests route through an audited Rust backend.",
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": null,

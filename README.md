@@ -74,7 +74,7 @@ HashCerebrum has been built in the open-source spirit as a single-developer proj
 | **Commits** | 727 and counting |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
-| **Tests** | 1,126 frontend (Vitest) + 72 Rust (`cargo test`), all green; CI gates every push |
+| **Tests** | 1,141 frontend (Vitest) + 72 Rust (`cargo test`), all green; CI gates every push |
 
 Roughly two months of continuous work: the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened in this window. Development is continuing.
 
@@ -329,7 +329,7 @@ HashCerebrum is designed so that **your data stays yours**. It is a single-user 
 | Projects, chat history, saved findings (memory) | Local app storage on your device | **Never** |
 | Learning data (beliefs, graph, episodes, reliability) | Local app storage on your device | **Never** |
 | Retrieved-evidence cache, audit log | Local SQLite in the app data dir | **Never** |
-| Provider API keys | Renderer `localStorage` inside the app's WebKit data directory (isolated by bundle identifier). OS-keychain storage is available via Settings for opt-in migration | **Never** committed, logged, or cached |
+| Provider API keys | Renderer `localStorage` inside the app's WebKit data directory (isolated by bundle identifier). **Not encrypted at rest** — protected by your OS file permissions, not by the OS keychain | **Never** committed, logged, or cached |
 | Generated papers / PDFs | Written to your Downloads folder | Only if you export them |
 | Your question + retrieved evidence | Sent **only** to the one LLM provider you configure | Yes — to that provider, unless you use a local model |
 
@@ -412,7 +412,7 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
 | LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (1,126 tests) + `cargo test` (72 tests) |
+| Testing | Vitest (1,141 tests) + `cargo test` (72 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -422,12 +422,12 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,126 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 72 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,141 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 72 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
-| Frontend | `npm test` | 1,126 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
-| Backend | `cargo test` (in `src-tauri/`) | 72 tests — the network guard & SSRF denylist, capped reads, rate limiting, keychain, and the tamper-evident audit log |
+| Frontend | `npm test` | 1,141 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
+| Backend | `cargo test` (in `src-tauri/`) | 72 tests — the network guard & SSRF denylist, the guarded DNS resolver, capped reads, export-path validation, rate limiting, and the tamper-evident audit log |
 | Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
 | Security | `cargo audit` | Dependency advisories, run in CI on every push |
 
@@ -463,10 +463,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 sudo apt update
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
-> API keys are stored in the OS keychain. On Linux that is the freedesktop
-> **Secret Service** — a desktop session (GNOME Keyring or KWallet) provides it,
-> so it works out of the box on a normal desktop. On a headless/minimal setup,
-> install and unlock a keyring (e.g. `gnome-keyring`) or the app cannot save keys.
+> API keys are kept in the app's own data directory, not in a system keyring, so
+> there is nothing extra to install or unlock — the app saves keys the same way
+> on a full desktop and on a minimal or headless setup.
 
 **Windows**
 ```powershell
@@ -516,7 +515,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 1,126 unit tests
+npm test               # Vitest — 1,141 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -527,7 +526,7 @@ Open **Settings** (gear icon), find the provider row, paste your API key, and cl
 
 `OpenAI` · `Anthropic` · `Google Gemini` · `Groq` · `OpenRouter` · `Mistral` · `DeepSeek` · `Moonshot` · `Cerebras` · `SambaNova` · `NVIDIA` · `MiniMax` · `xAI (Grok)` · `Together AI` · `Fireworks AI` · `DeepInfra` · `Ollama (local)`
 
-Keys are stored in renderer `localStorage` inside the app's WebKit data directory (isolated by the Tauri bundle identifier). They are never committed, never written to the audit log, and never stored in the response cache. If you prefer OS-keychain storage, use **Settings → Migrate keys to keychain** (Rust keychain commands are registered and audited).
+Keys are stored in renderer `localStorage` inside the app's WebKit data directory (isolated by the Tauri bundle identifier). They are never committed, never written to the audit log, and never stored in the response cache. Worth knowing before you paste one in: **the keys are not encrypted at rest, and the app does not use your OS keychain** — what protects them is the file permissions your operating system puts on the app's data directory. That is the deliberate trade for never prompting you to unlock a keyring on launch. If you would rather store no key at all, choose `Ollama (local)`.
 
 > **For maximum privacy, choose `Ollama (local)`.** Your prompts are then served by a model running on your own machine and the app makes no external LLM call at all. With any cloud provider, the prompt (question + retrieved evidence) is sent to that provider under their terms — see [Privacy & data locality](#privacy--data-locality).
 
@@ -566,7 +565,7 @@ src/
 src-tauri/
   src/
     commands/      IPC surface — llm, medical (incl. GWAS Catalog, ClinVar),
-                   pdf, audit, cache, keychain
+                   pdf, audit, cache, files, swarm
     security/      guard, denylist, policy, allowlist
     audit/         hash-chain + SQLite store + verify
     cache/         SQLite response cache
@@ -583,7 +582,7 @@ src-tauri/
 | Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,498 |
 | **Total core source** | **409** | **~67,325** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,126 Vitest tests plus 72 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,141 Vitest tests plus 72 Rust tests). There is no dead code — every module in the tree is imported, tested, and serves a live feature.
 
 ---
 
