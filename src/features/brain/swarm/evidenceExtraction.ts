@@ -371,7 +371,7 @@ function sectionForExtraction(extraction: EvidenceExtraction): string {
 
 /** Fix erratic internal capitalization from OCR / model output:
  *  e.g. "acUte heart faiLure … StabilizEd" → "Acute heart failure … Stabilized" */
-function fixOcrCasing(text: string): string {
+export function fixOcrCasing(text: string): string {
   return text
     .replace(/\b[a-z]*[a-z][A-Z][a-z]*\b/g, (word) => word.toLowerCase())
     .replace(/^([a-z])/, (_, c) => c.toUpperCase());

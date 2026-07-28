@@ -3,24 +3,22 @@ import type { EvidenceItem } from '@platform/index';
 import type { Manuscript } from '../manuscript';
 import { buildPublicationArtifact } from '../publication';
 import {
-  buildMethodsSection,
   buildPaperBlueprint,
   buildPaperOutline,
   buildSectionUserPrompt,
   isCallBillingDead,
   isCallRateLimited,
   isSubstantiveAbstract,
-  keywordsFrom,
   modelForSection,
-  searchDatePhrase,
   neutralizeUnverifiableNct,
   parseRetryAfterMs,
   shouldExpandSection,
   stripUnapprovedMarkers,
-  titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
 import { extractBoundEffects } from '../effectExtraction';
+import { buildMethodsSection, searchDatePhrase } from '../methodsSection';
+import { keywordsFrom, titleTopic } from '../paperTitle';
 import {
   buildClaimLedger,
   extractEvidenceFromRecords,

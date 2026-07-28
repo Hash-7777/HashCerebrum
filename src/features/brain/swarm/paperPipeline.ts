@@ -23,7 +23,6 @@ import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
-import { normalizeMedicalSpelling } from './queryNormalize';
 import { applyHonestyPass } from './honestyGuard';
 import { neutralizeUnsupportedComparator } from './comparatorGuard';
 import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
@@ -39,209 +38,12 @@ import {
   neutralizeMisattributedGeneStatistics,
   neutralizeUnverifiedStatistics,
 } from './statisticVerification';
+import { buildMethodsSection, deterministicMethodsNotes } from './methodsSection';
+import { extractExplicitTitle, keywordsFrom, titleTopic } from './paperTitle';
 import { clean } from './textNormalize';
-import { buildEvidenceMeta } from './metaAnalysis';
 
 
 const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
-
-// ── C5: deterministic Methods notes ─────────────────────────────────────────
-// The Methods section must narrate the REAL pipeline, not a hallucinated one.
-// These notes are injected into the Methods prompt so the model has exact
-// sources, counts, query terms, and run date to expand — not invent.
-function deterministicMethodsNotes(
-  question: string,
-  evidence: EvidenceItem[],
-  extractions: EvidenceExtraction[],
-): string {
-  const sourceCounts = new Map<string, number>();
-  for (const e of evidence) {
-    sourceCounts.set(e.source, (sourceCounts.get(e.source) ?? 0) + 1);
-  }
-  const sourceList = [...sourceCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([s, n]) => `${s.replace(/_/g, ' ')} (${n})`)
-    .join(', ');
-  const uniqueRecords = evidence.length;
-  const extractionCount = extractions.length;
-  const runDate = new Date().toISOString().slice(0, 10);
-  return (
-    `SEARCHED: ${sourceList}. ` +
-    `RETRIEVED: ${uniqueRecords} unique records. ` +
-    `EXTRACTED: ${extractionCount} structured evidence items. ` +
-    `QUERY: "${question.replace(/"/g, "'")}". ` +
-    `RUN DATE: ${runDate}. ` +
-    `DEDUPLICATION: identity hash on title + first author + year. ` +
-    `ELIGIBILITY: English-language biomedical records with title and abstract or structured metadata.`
-  );
-}
-
-const SOURCE_DISPLAY_NAME: Record<string, string> = {
-  pubmed: 'PubMed/MEDLINE',
-  europepmc: 'Europe PMC',
-  openalex: 'OpenAlex',
-  clinicaltrials: 'ClinicalTrials.gov',
-  clinicaltrials_gov: 'ClinicalTrials.gov',
-  openfda: 'openFDA',
-  rxnorm: 'RxNorm',
-  semantic_scholar: 'Semantic Scholar',
-  gwas_catalog: 'GWAS Catalog',
-  clinvar: 'ClinVar',
-};
-function displaySourceName(source: string): string {
-  return SOURCE_DISPLAY_NAME[source] ?? source.replace(/_/g, ' ');
-}
-
-// Bucket a free-text study design into one reporting category, so the Methods can
-// state the actual design mix of THIS review's evidence.
-function classifyStudyDesign(design: string): string {
-  const t = design.toLowerCase();
-  if (/meta-analys|systematic review/.test(t)) return 'systematic reviews or meta-analyses';
-  if (/random|\brct\b/.test(t)) return 'randomised controlled trials';
-  if (/cohort|registry|prospective|retrospective|longitudinal/.test(t)) return 'cohort or registry studies';
-  if (/case[-\s]control/.test(t)) return 'case-control studies';
-  if (/cross[-\s]sectional|survey/.test(t)) return 'cross-sectional studies';
-  if (/case (report|series)/.test(t)) return 'case reports or series';
-  if (/guideline|regulatory|label|terminology/.test(t)) return 'regulatory or guideline records';
-  return 'other indexed records';
-}
-
-function joinList(items: string[]): string {
-  if (items.length === 0) return '';
-  if (items.length === 1) return items[0]!;
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
-}
-
-// Deterministic Methods section for an automated evidence review (no uploaded
-// dataset). It is generated in code — not by a model — so it never drifts into a
-// conclusion, never reuses a sample size as a record count, is identical for the
-// same run regardless of rate limits, and saves one model call on free-tier
-// quotas. It is NOT a fixed template: the constant part honestly describes the
-// pipeline (which really is the same each run), but the study-specific facts —
-// the actual topic, the databases that CONTRIBUTED records and their counts, the
-// real design mix, the outcomes tracked, and whether a pooled meta-analysis was
-// computable for THIS evidence — are woven in from the retrieved records, so two
-// different reviews produce genuinely different Methods. No inline [S#] citations
-// (it describes the pipeline, not findings), hence 'Methods' is citation-exempt.
-// The calendar date(s) on which the evidence was actually retrieved, read from each
-// record's fetchedAt stamp — the standard "databases were searched on …" element a
-// reader needs to judge currency. Returns a leading-space clause, or '' when no
-// record carries a usable timestamp (never fabricates a date).
-export function searchDatePhrase(evidence: EvidenceItem[]): string {
-  const days = new Set<string>();
-  for (const item of evidence) {
-    const day = (item.fetchedAt ?? '').slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) days.add(day);
-  }
-  if (days.size === 0) return '';
-  const sorted = [...days].sort();
-  const first = sorted[0]!;
-  const last = sorted[sorted.length - 1]!;
-  return first === last
-    ? `, searched on ${first}`
-    : `, searched between ${first} and ${last}`;
-}
-
-export function buildMethodsSection(
-  question: string,
-  evidence: EvidenceItem[],
-  extractions: EvidenceExtraction[],
-  evidenceGap?: string,
-): string[] {
-  const topic = titleTopic(question) || 'the review question';
-
-  // Databases that actually returned records, with counts, most-productive first.
-  const sourceCounts = new Map<string, number>();
-  for (const item of evidence) sourceCounts.set(item.source, (sourceCounts.get(item.source) ?? 0) + 1);
-  const sourceList = [...sourceCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([source, count]) => `${displaySourceName(source)} (${count})`);
-  const searchDate = searchDatePhrase(evidence);
-  const sourcesSentence = sourceList.length
-    ? `Evidence for this review comprised ${evidence.length} record(s) retrieved from ${joinList(sourceList)}${searchDate}.`
-    : `Evidence for this review was retrieved from the pipeline's biomedical sources${searchDate}.`;
-
-  // Actual study-design mix of the retrieved evidence.
-  const designCounts = new Map<string, number>();
-  for (const ex of extractions) {
-    const bucket = classifyStudyDesign(ex.studyDesign);
-    designCounts.set(bucket, (designCounts.get(bucket) ?? 0) + 1);
-  }
-  const designList = [...designCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([design, count]) => `${count} ${design}`);
-  const designSentence = designList.length
-    ? `Across the ${extractions.length} structured evidence item(s) extracted, the design mix comprised ${joinList(designList)}.`
-    : 'The retrieved records were parsed into structured evidence items where sufficient metadata was present.';
-
-  // Outcomes actually tracked across the evidence.
-  const outcomeSet = new Set<string>();
-  for (const ex of extractions) for (const outcome of ex.outcomes) if (outcome.trim()) outcomeSet.add(outcome.trim());
-  const outcomes = [...outcomeSet].slice(0, 6);
-  const outcomesSentence = outcomes.length
-    ? `The outcomes tracked across the retrieved evidence included ${joinList(outcomes)}.`
-    : '';
-
-  // Whether a quantitative pooled meta-analysis was computable for THIS evidence.
-  const metaComputable = buildEvidenceMeta(extractions)?.interpretable === true;
-  const synthesisSentence = metaComputable
-    ? 'Because at least two records reported a comparable effect measure with a confidence interval, an ' +
-      'inverse-variance random-effects meta-analysis (DerSimonian–Laird) was computed in-app on the ' +
-      'logarithmic scale and back-transformed for display, together with the I² heterogeneity statistic ' +
-      'and a prediction interval; the pooled estimate and forest plot appear in the results, and the ' +
-      'pooling is performed deterministically in code, independent of any language model.'
-    : 'The retrieved records did not report enough comparable effect measures with confidence intervals ' +
-      'to support a quantitative pooled meta-analysis, so the synthesis is narrative; where individual ' +
-      'effect estimates were reported they are described with their source rather than pooled.';
-
-  const paragraphs = [
-    `This automated evidence review examined ${topic}. It is a source-grounded synthesis rather than a ` +
-      'hand-curated systematic review conducted under formal PRISMA methodology: the question was ' +
-      'decomposed into concept-scoped sub-queries — covering the population, the exposure or ' +
-      'intervention, the comparator, and the outcomes of interest — and dispatched to a team of ' +
-      'specialist agents that queried authoritative biomedical databases in parallel. Every outbound ' +
-      'request passed through a guarded, allowlisted network layer and was recorded in a tamper-evident ' +
-      'audit log, so the provenance of each retrieved record is reproducible. No manual literature ' +
-      'screening, no dual independent reviewers, and no consensus adjudication were involved; the entire ' +
-      'retrieval, extraction, and synthesis workflow was executed programmatically and is described here ' +
-      'exactly as it operated.',
-    `${sourcesSentence} The pipeline draws only from a fixed allowlist — PubMed/MEDLINE, Europe PMC, ` +
-      'OpenAlex, ClinicalTrials.gov, openFDA, and RxNorm — and no other database was queried; in ' +
-      'particular, Embase, Scopus, Cochrane CENTRAL, Ovid, and Web of Science were not searched, which ' +
-      'is a coverage limitation. The pipeline did not construct a fixed Boolean search string, restrict ' +
-      'results by a specific search date, or apply any machine-learning classifier, gradient-boosted ' +
-      'screening model, labelled training set, or similarity threshold; each specialist issued concept ' +
-      'key terms to the sources it owns, through free and keyless public interfaces, so the search can ' +
-      'be reproduced without institutional subscriptions. The pipeline additionally issues targeted ' +
-      'follow-up queries to PubMed for the primary reports of any landmark trials named by the retrieved ' +
-      'reviews, so per-trial effect estimates are drawn from the trials themselves rather than only from ' +
-      'pooled review figures.',
-    'Records were eligible when they were English-language biomedical items carrying a title and an ' +
-      `abstract or structured metadata. ${designSentence} Duplicate records were removed by record ` +
-      'identifier (DOI or PMID) and by an identity hash over title, first author, and publication year, ' +
-      'so the same study retrieved from more than one source was counted once, and retained records were ' +
-      'ranked by how many distinct question concepts each one addressed, so multi-concept records led ' +
-      'and single-concept noise sank. The full identification, de-duplication, and citation flow is ' +
-      'shown in the study-selection figure, and a study sample size is never reused as a record count.',
-    'Each structured evidence item captured its study design, population, exposure or intervention, ' +
-      'comparator, reported outcomes, and any effect estimates — hazard ratios, odds ratios, risk ' +
-      'ratios, mean differences, confidence intervals, and p-values — transcribed exactly as reported in ' +
-      `the source text. ${outcomesSentence} A claim ledger then mapped every extracted finding to its ` +
-      'source marker and graded its evidence strength on a fixed scale: strong for randomised trials, ' +
-      'systematic reviews, and meta-analyses; moderate for cohort and registry studies; weak for ' +
-      'cross-sectional and single indexed records; and context for regulatory or terminology sources. ' +
-      'The manuscript was compiled only from approved ledger entries, and any statistic attributed to a ' +
-      'source that does not report it was removed while the surrounding claim was kept in words.',
-    `Synthesis was narrative and organised by evidence strength. ${synthesisSentence} No formal ` +
-      'risk-of-bias instrument (such as the Cochrane risk-of-bias tool) and no GRADE certainty ' +
-      'assessment were applied. Because retrieval operated on titles, abstracts, and structured metadata ' +
-      'rather than full texts, the extracted effect estimates may differ from the final published ' +
-      'analyses, and this is acknowledged as a limitation of the approach.',
-  ];
-  if (evidenceGap && evidenceGap.trim()) paragraphs.push(evidenceGap.trim());
-  return paragraphs;
-}
 
 // ── C3: validate identifiers in draft prose ─────────────────────────────────
 // Scan drafted text for PMID / DOI / NCT tokens and flag any that do not
@@ -372,70 +174,6 @@ FORMAT — deviations corrupt the pipeline:
 - Do not invent PMIDs, DOIs, p-values, CIs, ORs, HRs, or pooled estimates.
 - Use numeric statistics ONLY from the extracted numeric support block or uploaded dataset.`;
 
-// Words that describe the REQUEST or the deliverable ("make a full research
-// paper about ...") rather than the subject. Stripped from the fallback title
-// and from keyword extraction so neither echoes the user's instruction verbatim
-// (the source of titles like "Full reaserch paper about ..." and keywords like
-// "full, reaserch"). Includes common misspellings of "research".
-const META_INSTRUCTION_WORDS = new Set([
-  'make', 'write', 'draft', 'create', 'generate', 'produce', 'compose', 'prepare', 'give', 'need',
-  'want', 'please', 'full', 'complete', 'comprehensive', 'detailed', 'thorough', 'professional',
-  'publishable', 'proper', 'research', 'reaserch', 'reasearch', 'reserch', 'paper', 'manuscript',
-  'article', 'report', 'document', 'about', 'regarding', 'concerning', 'statistics', 'statistical',
-  'stats', 'numbers', 'numeric', 'data',
-  // publication-ready / ready / assessing leaked into the title and keywords
-  // because the leading-meta strip stopped at the first unrecognised word.
-  'publication', 'publicationready', 'ready', 'assessing', 'assess', 'assessment', 'evaluating',
-  'evaluate', 'evaluation', 'analysing', 'analyzing', 'analyse', 'analyze', 'investigating',
-  'investigate', 'examining', 'examine', 'summarize', 'summarise', 'summary', 'overview', 'building',
-  'build', 'using', 'reuse', 'leverage', 'incorporate',
-]);
-
-// Common typos corrected before a token reaches a title or keyword list.
-const TYPO_FIXES: Record<string, string> = {
-  reaserch: 'research',
-  reasearch: 'research',
-  reserch: 'research',
-  mecanism: 'mechanism',
-  mechanim: 'mechanism',
-  pharmacolgy: 'pharmacology',
-  warafin: 'warfarin',
-  digoxine: 'digoxin',
-  cardiovascual: 'cardiovascular',
-  cardiovasclar: 'cardiovascular',
-  cardivascular: 'cardiovascular',
-  diabetis: 'diabetes',
-  hypertention: 'hypertension',
-};
-
-const STRUCTURAL_WORDS = new Set(['a', 'an', 'the', 'me', 'on', 'of', 'for', 'to', 'with', 'in']);
-
-function fixTypos(text: string): string {
-  return text.replace(/[A-Za-z]+/g, (w) => TYPO_FIXES[w.toLowerCase()] ?? w);
-}
-
-// Strip leading request/deliverable words ("make a full research paper about")
-// token by token — robust to word order and misspellings, unlike a fixed regex.
-function stripLeadingMeta(text: string): string {
-  const tokens = text.trim().split(/\s+/);
-  let i = 0;
-  while (i < tokens.length) {
-    const w = tokens[i]!.toLowerCase().replace(/[^a-z]/g, '');
-    if (META_INSTRUCTION_WORDS.has(w) || STRUCTURAL_WORDS.has(w)) i += 1;
-    else break;
-  }
-  return tokens.slice(i).join(' ');
-}
-
-// Strip a trailing "with statistics / and stats / including numeric data" clause
-// — an instruction about presentation, not part of the subject.
-function stripTrailingMeta(text: string): string {
-  return text
-    .replace(/[\s,]+(with|and|including|plus|featuring)\s+(statistics|statistical analysis|stats|numbers|numeric data|data|figures)\s*$/i, '')
-    .trim();
-}
-
-
 /**
  * Returns true when a model has clearly written a complete document structure
  * (numbered section outline, multiple markdown headings, or multi-section body)
@@ -480,33 +218,15 @@ function extractSectionFromDocument(text: string, heading: string): string | nul
   return null;
 }
 
-const EXPLICIT_TITLE_RX = /\b(?:titled|entitled|title)\s*:?\s*["“”']([^"“”']{8,200})["“”']/i;
-
-export function extractExplicitTitle(question: string): string | undefined {
-  const match = question.match(EXPLICIT_TITLE_RX);
-  if (!match) return undefined;
-  // Strip a trailing sentence period that sat inside the quotes — titles do not
-  // end in a full stop — but keep meaningful punctuation like a colon.
-  const title = (match[1] ?? '').replace(/\s+/g, ' ').replace(/\s*\.\s*$/, '').trim();
-  return title.length >= 8 ? title : undefined;
-}
-
-export function titleTopic(question: string): string {
-  // An explicit user-supplied title wins outright.
-  const explicit = extractExplicitTitle(question);
-  if (explicit) return fixTypos(explicit);
-  // A title is a single subject phrase, never the formatting instructions. Take
-  // the first sentence so a trailing "Use full IMRaD structure… Compute the
-  // statistics… flag any evidence gaps honestly." tail is dropped, then strip the
-  // leading request words and any trailing presentation clause.
-  const firstSentence = question.split(/(?<=[.!?])\s+/)[0] ?? question;
-  const subject = stripTrailingMeta(stripLeadingMeta(firstSentence)).replace(/\s+/g, ' ').trim();
-  if (subject.split(/\s+/).filter(Boolean).length >= 3) return fixTypos(subject);
-  // The first sentence was too thin (e.g. an abbreviation period) — fall back to
-  // stripping the whole question.
-  const full = stripTrailingMeta(stripLeadingMeta(question)).replace(/\s+/g, ' ').trim();
-  return fixTypos(full || question.trim());
-}
+// Topic-specific sections that must be earned by evidence. If the retrieval
+// produced no claim that actually targets one of these, the section is dropped
+// rather than padded with unrelated claims — which is how a pharmacology-free
+// asthma-education topic ended up with a fabricated PK/PD section the model
+// "supported" with citations to pharmacist-intervention papers.
+const EVIDENCE_GATED_HEADINGS = new Set([
+  'Mechanistic and Pharmacologic Evidence',
+  'Trial and Registry Evidence',
+]);
 
 function blueprintTitle(question: string): string {
   const topic = titleTopic(question);
@@ -546,16 +266,10 @@ const MINI_SECTION_HEADINGS = new Set([
   'Declarations',
 ]);
 
-// Topic-specific sections that must be earned by evidence. If the retrieval
-// produced no claim that actually targets one of these, the section is dropped
-// rather than padded with unrelated claims — which is how a pharmacology-free
-// asthma-education topic ended up with a fabricated PK/PD section the model
-// "supported" with citations to pharmacist-intervention papers.
-const EVIDENCE_GATED_HEADINGS = new Set([
-  'Mechanistic and Pharmacologic Evidence',
-  'Trial and Registry Evidence',
-]);
 
+// Comparison / temporal / question words that describe the QUESTION, not the
+// medical subject, so they must never become keywords ("how does the effect
+// DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
 export function buildPaperBlueprint(
   question: string,
   ledger: ClaimLedgerEntry[],
@@ -636,91 +350,6 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
 // Generic academic connective nouns that carry no indexing value on their own
 // — dropped so the keyword list reads as real subject terms ("asthma",
 // "pharmacist", "inhaler") rather than "role" / "approach" / "use".
-// Comparison / temporal / question words that describe the QUESTION, not the
-// medical subject, so they must never become keywords ("how does the effect
-// DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
-const NON_TOPIC_KEYWORDS = new Set([
-  'differ', 'differs', 'differed', 'difference', 'differences', 'differential',
-  'compare', 'compared', 'comparing', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
-  'decade', 'decades', 'recent', 'recently', 'trend', 'trends', 'last', 'over', 'past', 'consensus',
-  // Request/format words that leaked from "publishable-quality research paper
-  // titled …" into the keyword list.
-  'publishable', 'publishable-quality', 'quality', 'titled', 'across', 'spectrum', 'current',
-  // Action / instruction verbs that describe the REQUEST, not the subject
-  // ("comparing … for SLOWING … , REPORT … , WEIGH the risk … , DISCUSS …").
-  'slowing', 'weigh', 'weighing', 'weighed', 'reporting', 'discuss', 'discussing', 'discussed',
-  'including', 'include', 'includes', 'measuring', 'measured', 'examining', 'exploring',
-  // Statistical-reporting descriptors ("report the EFFECT SIZES, CONFIDENCE
-  // INTERVALS, and P-VALUES") — they name what to report, not the medical topic,
-  // and produced junk keywords like "effect sizes" and "p-values weigh".
-  'effect', 'effects', 'size', 'sizes', 'confidence', 'interval', 'intervals', 'p-value', 'p-values',
-  'pvalue', 'pvalues', 'significance', 'estimate', 'estimates', 'value', 'values',
-  // Structural / study-type / label words that describe the DELIVERABLE or the
-  // review TYPE, not the medical subject. "title" leaked from an explicit
-  // "Title:" label into the keyword line; "systematic"/"meta-analysis" name the
-  // review type; "impact" is a vague connective ("impact of X on Y"); "adults"
-  // is a generic population qualifier; "type" is a tokenization artifact left
-  // behind when "type 2 diabetes" splits on the digit.
-  'title', 'systematic', 'meta-analysis', 'metaanalysis', 'meta', 'impact', 'adults', 'adult', 'type',
-  // Framing words that lead a review question ("… on WHETHER X REDUCES Y", "an
-  // EVIDENCE review of …") but are not the medical subject.
-  'whether', 'evidence', 'reduce', 'reduces', 'reduced', 'reducing', 'association', 'associations',
-]);
-
-// Connectors, articles, and request words that separate one keyword PHRASE from
-// the next. Splitting the title at these keeps multi-word medical terms intact
-// ("direct oral anticoagulants", "atrial fibrillation") instead of shattering
-// them into single words, which is what made the keyword line read
-// "direct, oral, anticoagulants, warfarin, …".
-const KEYWORD_PHRASE_STOP = new Set([
-  'and', 'or', 'of', 'the', 'a', 'an', 'for', 'in', 'on', 'with', 'to', 'by', 'at', 'from', 'into',
-  'versus', 'vs', 'over', 'under', 'between', 'among', 'than', 'as', 'is', 'are', 'be', 'their', 'its',
-  'this', 'that', 'these', 'those', 'about', 'regarding', 'concerning',
-  // request / deliverable words
-  'write', 'draft', 'create', 'generate', 'produce', 'make', 'full', 'complete', 'comprehensive',
-  'detailed', 'thorough', 'professional', 'research', 'paper', 'manuscript', 'article', 'report',
-  'review', 'summary', 'patient', 'patients', 'publication', 'publication-ready', 'ready',
-  'assess', 'assessing', 'evaluate', 'evaluating', 'examine', 'explore', 'investigate', 'determine',
-  'using', 'use', 'uses', 'used', 'statistics', 'statistical', 'stats', 'numeric', 'numbers', 'data',
-  'analysis', 'analyse', 'analyze',
-]);
-
-export function keywordsFrom(question: string): string[] {
-  // Split the subject text into PHRASES at connector/request words and keep each
-  // run of consecutive content words as one keyword, so multi-word medical terms
-  // survive. When the user gave an explicit title, key from the TITLE (the real
-  // subject), not the surrounding instruction. Normalise spelling first.
-  const source = extractExplicitTitle(question) ?? question;
-  const tokens = normalizeMedicalSpelling(source)
-    .toLowerCase()
-    // Drop the possessive so "Alzheimer's disease" stays one phrase instead of
-    // shattering into "alzheimer" + a stray "s" + "disease".
-    .replace(/['’]s\b/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const phrases: string[] = [];
-  let run: string[] = [];
-  const flush = () => {
-    if (run.length > 0) {
-      const phrase = run.slice(0, 4).join(' ').trim(); // cap a phrase at 4 words
-      if (phrase.length >= 3) phrases.push(phrase);
-    }
-    run = [];
-  };
-  for (const token of tokens) {
-    if (token.length < 3 || /^\d+$/.test(token) || KEYWORD_PHRASE_STOP.has(token) || NON_TOPIC_KEYWORDS.has(token)) {
-      flush();
-    } else {
-      run.push(token);
-    }
-  }
-  flush();
-
-  return [...new Set(phrases)].slice(0, 8);
-}
-
 function wordCount(value: string): number {
   return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
 }

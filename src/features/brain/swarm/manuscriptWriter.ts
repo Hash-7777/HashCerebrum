@@ -18,7 +18,7 @@ import {
 import { formatEvidenceList } from './evidenceFormat';
 import { buildPublicationArtifact } from './publication';
 import { datasetSummaryForPrompt } from './statistics';
-import { keywordsFrom } from './paperPipeline';
+import { keywordsFrom } from './paperTitle';
 import type { ManuscriptStandard, UploadedDatasetSummary } from './publicationTypes';
 import type { SpecialistResult } from './types';
 

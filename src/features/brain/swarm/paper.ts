@@ -1,7 +1,7 @@
 import type { EvidenceItem } from '@platform/index';
 import type { SpecialistResult, SpecialistTask } from './types';
 import type { ManuscriptStandard } from './publicationTypes';
-import { titleTopic } from './paperPipeline';
+import { titleTopic } from './paperTitle';
 // Safety gates are now centralised in @core/llm/safety so Peer Review + editor
 // paths can share the same protections. Re-exported here for backward compat.
 export {
