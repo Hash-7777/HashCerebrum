@@ -1,17 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import {
-  buildChatMarkdownExport,
-  buildExportHtml,
-  buildMarkdownExport,
-  deriveDocumentTitle,
-  escapeHtml,
-  markdownToHtml,
-  renumberCitations,
-  slugifyFilename,
-  stripGeneratedReferenceSections,
-  stripResidualSourceMarkers,
-} from '../messageExport';
+import { buildChatMarkdownExport, buildExportHtml, buildMarkdownExport, deriveDocumentTitle, escapeHtml, markdownToHtml, renumberCitations, stripGeneratedReferenceSections, stripResidualSourceMarkers } from '../messageExport';
+import { slugifyFilename } from '@platform/download';
 import { buildPublicationArtifact } from '../../swarm/publication';
 import type { Manuscript } from '../../swarm/manuscript';
 import type { EvidenceExtraction } from '../../swarm/publicationTypes';

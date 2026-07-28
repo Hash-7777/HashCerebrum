@@ -7,7 +7,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { RagChunk } from '@core/store/ragStore';
 import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
-import { regionForChunk } from '../../brain/data/memoryRegions';
+import { regionForChunk } from '@core/topic/memoryRegions';
 import { type MemoryGraphCluster } from './memoryGraph';
 import { graphBounds, type GraphBounds, type NodePosition } from './layout';
 import { useMemoryGraph } from './memoryGraphWorkerClient';

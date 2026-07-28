@@ -25,18 +25,8 @@ import { summarizeSources } from './sourceSummary';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
 import { MarkdownText } from '@ui/MarkdownText';
-import {
-  buildExportHtml,
-  buildMarkdownExport,
-  buildMessagePdfBlob,
-  deriveDocumentTitle,
-  exportMessageDocx,
-  renumberCitations,
-  slugifyFilename,
-  stripGeneratedReferenceSections,
-  stripResidualSourceMarkers,
-  type ExportableMessage,
-} from '../export/messageExport';
+import { buildExportHtml, buildMarkdownExport, buildMessagePdfBlob, deriveDocumentTitle, exportMessageDocx, renumberCitations, stripGeneratedReferenceSections, stripResidualSourceMarkers, type ExportableMessage } from '../export/messageExport';
+import { slugifyFilename } from '@platform/download';
 import { exportMessageLatex } from '../export/latexExport';
 import { referenceUrl } from '../export/citationStyles';
 import { exportReferencesBibtex, exportReferencesRis } from '../export/bibliography';

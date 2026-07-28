@@ -5,7 +5,7 @@
 
 import type { EvidenceItem } from '@platform/index';
 import { referenceUrl } from './citationStyles';
-import { downloadTextFile, slugifyFilename } from './messageExport';
+import { downloadTextFile, slugifyFilename } from '@platform/download';
 
 // Literature databases whose records are journal articles; everything else
 // (trials, drug labels, drug terminology, imported docs) exports as a generic

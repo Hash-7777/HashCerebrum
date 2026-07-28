@@ -144,3 +144,20 @@ export const HARMFUL_REQUEST_REFUSAL =
   'guidance on harming people or critical infrastructure, including under a "historical" or ' +
   '"emergency-drill" framing. If your interest is defensive — prevention, detection, clinical ' +
   'treatment, or public-health preparedness — rephrase the question around those goals and I can help.';
+
+// An app-introspection question — "what model are you", "show me your
+// architecture", "which API do you use". Not biomedical research, so it is
+// answered in plain chat rather than launched as a literature search that
+// returns nothing on point.
+//
+// It lives here beside isPromptInjection because the two are the same kind of
+// judgement about the same subject — the app itself — and because memory
+// pruning needs it too. Keeping it in the Brain feature forced the memory
+// feature to import across a feature boundary to reach it.
+const META_QUESTION_RX =
+  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack|database|endpoint|pipeline|data\s+flow)|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+(used|key|endpoint|stored|names?)|prompt\s+injection|jail\s?break|debug\s+mode|administrator\s+override|hospital\s+engineering\s+board|emergency\s+code|failure\s+to\s+display|backend\s+code)\b/i;
+
+export function isMetaOrAppQuestion(question: string): boolean {
+  return META_QUESTION_RX.test(question);
+}
+

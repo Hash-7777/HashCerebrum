@@ -13,7 +13,7 @@
 // drug-named findings.
 
 import type { RagChunk } from '@core/store/ragStore';
-import { isMetaOrAppQuestion, isPromptInjection } from '@features/brain/swarm/paper';
+import { isMetaOrAppQuestion, isPromptInjection } from '@core/llm/safety';
 
 /** Neither an app-introspection topic nor an injected instruction is ever a
  *  medical finding, so both are pruned on the same gate. Injection is checked

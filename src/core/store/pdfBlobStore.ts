@@ -1,4 +1,9 @@
-// Durable storage for uploaded / generated peer-review PDFs.
+// Durable storage for uploaded / generated PDFs, keyed by document id.
+//
+// Lives in core rather than the peer-review feature because the store that owns
+// the paper records is itself in core, and a core module reaching into a feature
+// at runtime is the one layering breach that can produce a real cycle. Nothing
+// in here is peer-review-specific beyond the database name.
 //
 // The session-only object URL (blobUrl) on a ReviewedPaper dies when the app is
 // closed, so after a restart the preview fell back to extracted text — "messy,

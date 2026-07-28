@@ -15,13 +15,13 @@ import {
 } from '../reviewSwarm';
 import { buildReviewReportPdf } from '../reviewReportPdf';
 import { buildReviewReportMarkdown } from '../reviewReportMarkdown';
-import { loadPdf } from '../pdfStore';
+import { loadPdf } from '@core/store/pdfBlobStore';
 import { buildCitedClaims, sourcesForMarkers, type FaithfulnessGrade } from '../citationAudit';
 import { gradeCitationFaithfulness, type CitationAudit, type FaithfulnessItem } from '../citationGrade';
 import { REWRITE_REGISTERS, rewriteSelection, type RewriteRegister } from '../rewriteSelection';
 import { askPaper, citedPassageNumbers, type PaperPassage } from '../askPaper';
 import { continueWriting } from '../continueWriting';
-import { downloadBlob } from '@features/brain/export/messageExport';
+import { downloadBlob } from '@platform/download';
 import { notify } from '@platform/notify';
 import { streamWithModelSafe } from '@core/llm/ProviderRegistry';
 

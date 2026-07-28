@@ -1,14 +1,14 @@
 // Store for Peer Review mode — holds uploaded or Brain-generated papers and
 // their AI critique results. Papers, reviews, edits, and citations persist
 // across restarts (durable app storage); the large raw PDF bytes are kept
-// separately in IndexedDB (see pdfStore) so the rasterised preview survives a
+// separately in IndexedDB (see pdfBlobStore) so the rasterised preview survives a
 // restart, while the session-only object URL is rebuilt on demand.
 
 import { create } from 'zustand';
 import { platform } from '@platform/index';
 import type { EvidenceItem } from '@platform/index';
 import type { CitationAudit } from '@features/peer_review/citationGrade';
-import { savePdf, deletePdf } from '@features/peer_review/pdfStore';
+import { savePdf, deletePdf } from './pdfBlobStore';
 
 export interface AgentReviewResult {
   agentId: string;

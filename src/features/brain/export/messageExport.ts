@@ -1,3 +1,4 @@
+import { downloadBlob, downloadTextFile, slugifyFilename } from '@platform/download';
 import { platform, type EvidenceItem } from '@platform/index';
 import type { ChatMessage, TurnTraceEntry } from '@core/store/chatHistoryStore';
 import { manuscriptToReadableText, withNumberedSectionHeadings, type Manuscript } from '../swarm/manuscript';
@@ -76,14 +77,6 @@ export function deriveDocumentTitle(content: string, fallback: string): string {
   return fallback;
 }
 
-export function slugifyFilename(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 72);
-  return slug || 'hashcerebrum-export';
-}
 
 export function escapeHtml(value: string): string {
   return value
@@ -603,21 +596,7 @@ export function buildMarkdownExport(message: ExportableMessage): string {
   return `# ${message.title}\n\n${renumbered.content}${citations}\n`;
 }
 
-export function downloadBlob(filename: string, blob: Blob): void {
-  // Route through the platform: a native save dialog + write on the desktop
-  // (WKWebView ignores <a download> for blob URLs), the anchor download in the
-  // browser. Fire-and-forget; surface a failure but never a cancel.
-  void platform()
-    .files.save(filename, blob)
-    .catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.error('[downloadBlob] save failed:', detail);
-    });
-}
 
-export function downloadTextFile(filename: string, body: string, mime: string): void {
-  downloadBlob(filename, new Blob([body], { type: mime }));
-}
 
 function assertPdfBlob(blob: Blob, renderer: string): Blob {
   if (blob.size < MIN_PDF_BYTES) {

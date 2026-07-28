@@ -7,6 +7,7 @@ import { titleTopic } from './paperTitle';
 export {
   isJailbreakAttempt,
   isOffTopicQuestion,
+  isMetaOrAppQuestion,
   isPromptInjection,
   isSelfHarmQuery,
   isHarmfulRequest,
@@ -95,13 +96,6 @@ export function isPriorWorkReviewRequest(question: string): boolean {
 // Instruction-override phrasing ("ignore prior instructions") is NOT handled
 // here — it is prompt injection, and `isPromptInjection` in @core/llm/safety
 // stops the run and asks the user to remove it rather than answering anyway.
-const META_QUESTION_RX =
-  /\b(system\s+prompt|your\s+(instructions?|prompt|rules|guidelines|configuration|config|source\s+code|code\s?base|architecture|implementation|api\s+keys?|backend|stack|database|endpoint|pipeline|data\s+flow)|what\s+(model|llm|ai)\s+are\s+you|which\s+(model|llm)\s+are\s+you|who\s+(made|built|created|trained|developed)\s+you|api\s+(used|key|endpoint|stored|names?)|prompt\s+injection|jail\s?break|debug\s+mode|administrator\s+override|hospital\s+engineering\s+board|emergency\s+code|failure\s+to\s+display|backend\s+code)\b/i;
-
-export function isMetaOrAppQuestion(question: string): boolean {
-  return META_QUESTION_RX.test(question);
-}
-
 // A message that is *entirely* a greeting, thanks, or acknowledgement — no
 // biomedical content. Answered conversationally instead of routed to a
 // literature search. The planner is told to treat these as chat, but its safe

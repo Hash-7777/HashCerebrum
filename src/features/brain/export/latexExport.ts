@@ -4,7 +4,8 @@
 // unit-tested. We deliberately reuse the Markdown export as the single source of
 // truth so the LaTeX body and references match every other format exactly.
 
-import { buildMarkdownExport, downloadTextFile, slugifyFilename, type ExportableMessage } from './messageExport';
+import { buildMarkdownExport, type ExportableMessage } from './messageExport';
+import { downloadTextFile, slugifyFilename } from '@platform/download';
 
 /** Escape the ten LaTeX special characters in body text. */
 export function escapeLatex(value: string): string {

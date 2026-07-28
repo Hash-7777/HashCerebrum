@@ -8,7 +8,7 @@
 import type { EvidenceItem } from '@platform/index';
 import { extractEvidenceFromRecords } from '../swarm/evidenceExtraction';
 import { referenceUrl } from './citationStyles';
-import { downloadTextFile, slugifyFilename } from './messageExport';
+import { downloadTextFile, slugifyFilename } from '@platform/download';
 
 // Escape a value for a CSV cell: double embedded quotes and wrap when the value
 // contains a comma, quote, or newline. A leading =, +, -, or @ is prefixed with a

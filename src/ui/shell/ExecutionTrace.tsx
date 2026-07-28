@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatTraceStore, type ChatTraceEntry } from '@core/store/chatTraceStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
-import { downloadBlob, slugifyFilename } from '@features/brain/export/messageExport';
+import { downloadBlob, slugifyFilename } from '@platform/download';
 import { Icon, type IconName } from '@ui/icons';
 
 // How close to the bottom (px) still counts as "following" the latest output.

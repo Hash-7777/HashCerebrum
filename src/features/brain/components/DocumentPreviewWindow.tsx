@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { createPortal } from 'react-dom';
 import { Icon } from '@ui/icons';
 import { PdfGlyph } from '@ui/icons/PdfGlyph';
-import { downloadBlob } from '../export/messageExport';
+import { downloadBlob } from '@platform/download';
 import { useToastStore } from '@core/store/toastStore';
 
 const STORAGE_KEY = 'hc.documentPreview.rect.v1';
