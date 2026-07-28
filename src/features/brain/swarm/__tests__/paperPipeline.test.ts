@@ -8,7 +8,6 @@ import {
   buildPaperBlueprint,
   buildPaperOutline,
   buildSectionUserPrompt,
-  extractBoundEffects,
   extractEvidenceFromRecords,
   isCallBillingDead,
   isCallRateLimited,
@@ -25,6 +24,7 @@ import {
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
+import { extractBoundEffects } from '../effectExtraction';
 
 describe('modelForSection', () => {
   const specialists = [

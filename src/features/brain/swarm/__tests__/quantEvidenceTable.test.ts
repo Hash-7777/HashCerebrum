@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   abstractStatsDigest,
   buildQuantEvidenceTable,
-  extractSampleSize,
   findUnverifiedStatistics,
   neutralizeUnverifiedStatistics,
   withIncompleteDraftBanner,
   INCOMPLETE_DRAFT_BANNER,
 } from '../paperPipeline';
+import { extractSampleSize } from '../effectExtraction';
 import type { EvidenceExtraction } from '../publicationTypes';
 import type { Manuscript } from '../manuscript';
 

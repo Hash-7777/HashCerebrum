@@ -8,7 +8,7 @@
 // model only narrates the result and its citations.
 
 import type { EvidenceItem } from '@platform/index';
-import { extractEffectValues } from '../paperPipeline';
+import { extractEffectValues } from '../effectExtraction';
 import {
   diseaseTerms,
   extractUnrecognizedGeneTokens,
