@@ -191,6 +191,23 @@ describe('unusable-model registry', () => {
     expect(isModelUnusableError(new Error('failed to fetch'))).toBe(false);
   });
 
+  // A bare 404 used to be enough to retire a model for the whole session, so a
+  // mistyped path, a proxy that did not know the route, or a provider routing
+  // hiccup permanently removed a healthy model from failover, auto-assignment
+  // and the picker until the app restarted.
+  it('does NOT condemn a model on a 404 that says nothing about the model', () => {
+    expect(isModelUnusableError(new Error('HTTP 404 Not Found'))).toBe(false);
+    expect(isModelUnusableError(new Error('404 page not found'))).toBe(false);
+    expect(isModelUnusableError(new Error('Request failed with status code 404'))).toBe(false);
+    expect(isModelUnusableError(new Error('<html><title>404 Not Found</title></html>'))).toBe(false);
+  });
+
+  it('still condemns a 404 that names the model as the thing missing', () => {
+    expect(isModelUnusableError(new Error('HTTP 404: model not found'))).toBe(true);
+    expect(isModelUnusableError(new Error('404 {"error":{"code":"model_not_found"}}'))).toBe(true);
+    expect(isModelUnusableError(new Error('404 - no such model: gpt-9'))).toBe(true);
+  });
+
   it('removes a condemned model from failover candidates', () => {
     const all = (_: LlmProviderId) => true;
     expect(listCloudCandidates(all, groups).some((c) => c.value === 'cloud:gemini:gemini-2.5-pro')).toBe(true);

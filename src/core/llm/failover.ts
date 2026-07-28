@@ -156,8 +156,14 @@ export function shouldRetrySameProvider(error: unknown): boolean {
 // those are excluded here and handled by the cooldown path instead. Provider-wide
 // auth failures (bad key → 401/403) are also excluded — that is a key problem,
 // not a model problem, and belongs to the billing/key handling.
+// NOTE: a bare `404` is deliberately NOT one of these alternatives. A 404 is
+// returned for a mistyped endpoint path, a proxy that does not know the route,
+// and a provider's own routing hiccup — none of which mean the model is gone,
+// yet any of them would retire it for the rest of the session. Every 404 that
+// genuinely reports a dead model carries model-not-found language too, which
+// the alternatives below already match.
 const MODEL_GONE =
-  /\bmodel.{0,10}not.{0,10}found\b|\bno such model\b|does not exist|has been (deprecated|decommissioned|retired|removed|sunset)|is (deprecated|decommissioned|retired|no longer available)|unknown model|invalid model|model_not_found|not a valid model|\b404\b/i;
+  /\bmodel.{0,10}not.{0,10}found\b|\bno such model\b|does not exist|has been (deprecated|decommissioned|retired|removed|sunset)|is (deprecated|decommissioned|retired|no longer available)|unknown model|invalid model|model_not_found|not a valid model/i;
 
 export function isModelUnusableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? '');
