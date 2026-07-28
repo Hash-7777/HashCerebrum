@@ -17,12 +17,9 @@ import { useProjectStore } from '@core/store/projectStore';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { platform, type EvidenceItem } from '@platform/index';
 import {
-  appraisePriorWork,
   bossChat,
   contextualizeQuestion,
   drugCandidates,
-  IDENTITY_ANSWER,
-  isIdentityQuestion,
   planResearch,
   synthesize,
   synthesizeGeneCorrelationReport,
@@ -44,21 +41,7 @@ import {
 import {
   detectPaperRequest,
   fallbackPaperTasks,
-  HARMFUL_REQUEST_REFUSAL,
-  isHarmfulRequest,
-  isJailbreakAttempt,
-  isMetaOrAppQuestion,
-  isOffTopicQuestion,
-  isPriorWorkReviewRequest,
-  isPromptInjection,
-  PROMPT_INJECTION_REFUSAL,
-  isSystemPromptRequest,
-  SYSTEM_PROMPT_REFUSAL,
-  isSelfHarmQuery,
-  isSmallTalk,
-  isCodingRequest,
   manuscriptStandardForQuestion,
-  SELF_HARM_MESSAGE,
 } from './paper';
 import type { LlmMessage } from '@core/llm/types';
 import { isProviderOnCooldown } from '@core/llm/failover';
@@ -66,6 +49,7 @@ import { parseModelRef } from '@core/llm/modelCatalog';
 import { manuscriptToReadableText } from './manuscript';
 import { normalizeMedicalSpelling } from './queryNormalize';
 import { CONTEXT_ONLY_SOURCES, preparePaperLedger, compileManuscriptFromLedger } from './paperPipeline';
+import { runRoutingGates } from './routingGates';
 import { runSpecialist } from './specialist';
 import { backfillLandmarkTrials } from './trialBackfill';
 import { backfillDrugInteractions } from './interactionBackfill';
@@ -597,154 +581,60 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
   const geneticsFocus = opts.geneticsFocus ?? false;
   let bossModel = modelFor('boss');
 
-  // Identity / "what model are you" questions get a fixed, branded answer so the
-  // underlying language model is never disclosed — the HashCerebrum agent.
-  if (isIdentityQuestion(question)) {
-    callbacks.onBossPhase('answering');
-    callbacks.onAnswerToken(IDENTITY_ANSWER);
-    return { kind: 'chat', answer: IDENTITY_ANSWER, evidence: [], specialists: [], modelUsed: bossModel };
-  }
-
-  // Safety gates run before any routing so a harmful or self-harm request can
-  // never be turned into a research run or a model-improvised answer. Both
-  // replies are deterministic.
-  if (isSelfHarmQuery(question)) {
-    callbacks.onBossPhase('answering');
-    callbacks.onAnswerToken(SELF_HARM_MESSAGE);
-    return { kind: 'chat', answer: SELF_HARM_MESSAGE, evidence: [], specialists: [], modelUsed: bossModel };
-  }
-  if (isHarmfulRequest(question)) {
-    callbacks.onBossPhase('answering');
-    callbacks.onAnswerToken(HARMFUL_REQUEST_REFUSAL);
-    return { kind: 'chat', answer: HARMFUL_REQUEST_REFUSAL, evidence: [], specialists: [], modelUsed: bossModel };
-  }
-
-  // A follow-up that asks the team to appraise its own previous output ("rate
-  // that paper", "review this draft") is answered by reviewing that document
-  // directly — never by launching a fresh research swarm, which is what caused
-  // the boss to rate unrelated retrieved literature instead of the user's paper.
-  if (isPriorWorkReviewRequest(question)) {
-    const priorWork = mostRecentSubstantialAnswer(conversation);
-    if (priorWork) {
-      callbacks.onBossPhase('answering');
-      const appraisal = await appraisePriorWork(bossModel, priorWork, question, callbacks.onAnswerToken, signal);
-      return { kind: 'chat', answer: appraisal.content, evidence: [], specialists: [], modelUsed: appraisal.modelUsed };
-    }
-  }
-
   // Assemble the cross-turn context for the boss model calls: the recent window,
   // plus (when long-chat memory is supplied) the rolling summary and the
   // semantically-recalled earlier turns, within the model's history budget. The
   // raw `conversation` is intentionally kept for appraisal and gene-readiness,
   // which need full prior turns. Falls back to the recent window when no memory
   // is supplied or recall is unavailable, so behaviour is unchanged by default.
-  const recentWindow = budgetConversation(conversation, {
-    maxChars: 8000,
-    perAssistantChars: 1500,
-    maxTurns: 8,
+  //
+  // Built on demand and memoised. The gates that refuse deterministically return
+  // before this runs, so a refused message costs no recall work — and the
+  // research path below awaits the same single assembly.
+  let bossContextPromise: Promise<LlmMessage[]> | null = null;
+  const buildBossContext = (): Promise<LlmMessage[]> => {
+    bossContextPromise ??= (async () => {
+      const recentWindow = budgetConversation(conversation, {
+        maxChars: 8000,
+        perAssistantChars: 1500,
+        maxTurns: 8,
+      });
+      let recalledTurns: LlmMessage[] = [];
+      if (opts.contextMemory?.recall) {
+        try {
+          const recentSet = new Set(recentWindow.map((m) => m.content));
+          recalledTurns = (await opts.contextMemory.recall(question)).filter(
+            (m) => !recentSet.has(m.content),
+          );
+        } catch {
+          recalledTurns = [];
+        }
+      }
+      return assembleContext({
+        summary: opts.contextMemory?.summary,
+        recalled: recalledTurns,
+        recent: recentWindow,
+        budgetTokens: historyTokenBudget(bossModel),
+      });
+    })();
+    return bossContextPromise;
+  };
+
+  // Walk the routing gate chain. The order is declared in routingGates.ts and
+  // asserted by its test — see that file for why it is a list rather than a
+  // ladder, and for the rule that the two refusal gates must stay above every
+  // gate that reaches a model.
+  const gated = await runRoutingGates({
+    question,
+    bossModel,
+    callbacks,
+    signal,
+    bossContext: buildBossContext,
+    priorWork: () => mostRecentSubstantialAnswer(conversation),
   });
-  let recalledTurns: LlmMessage[] = [];
-  if (opts.contextMemory?.recall) {
-    try {
-      const recentSet = new Set(recentWindow.map((m) => m.content));
-      recalledTurns = (await opts.contextMemory.recall(question)).filter(
-        (m) => !recentSet.has(m.content),
-      );
-    } catch {
-      recalledTurns = [];
-    }
-  }
-  const bossContext = assembleContext({
-    summary: opts.contextMemory?.summary,
-    recalled: recalledTurns,
-    recent: recentWindow,
-    budgetTokens: historyTokenBudget(bossModel),
-  });
+  if (gated) return gated;
 
-  // An instruction addressed to the assistant, embedded in the message, stops
-  // the run. It is NOT answered in chat: routing an otherwise legitimate
-  // research question onto the chat path silently strips retrieval, the drug
-  // and gene lexicons, citation handling, and the honesty pass, and the answer
-  // still renders with the same authority — so a detected injection would have
-  // *disabled* every other guard. Ask the user to remove it instead. The reply
-  // is deterministic and costs no model call.
-  if (isPromptInjection(question)) {
-    callbacks.onBossPhase('answering');
-    callbacks.onAnswerToken(PROMPT_INJECTION_REFUSAL);
-    return {
-      kind: 'chat',
-      answer: PROMPT_INJECTION_REFUSAL,
-      evidence: [],
-      specialists: [],
-      modelUsed: bossModel,
-    };
-  }
-
-  // A request to disclose, reproduce, "improve", or reconfigure the app's own
-  // system prompt / configuration is refused deterministically — never handed to
-  // the model. Free-generating it produced a plausible but entirely fabricated
-  // HashCerebrum system prompt, invented modes, and file-edit steps for a prompt
-  // file that does not exist; authoring a fake copy of the app's own security
-  // rules is as harmful as leaking the real ones. Costs no model call.
-  if (isSystemPromptRequest(question)) {
-    callbacks.onBossPhase('answering');
-    callbacks.onAnswerToken(SYSTEM_PROMPT_REFUSAL);
-    return {
-      kind: 'chat',
-      answer: SYSTEM_PROMPT_REFUSAL,
-      evidence: [],
-      specialists: [],
-      modelUsed: bossModel,
-    };
-  }
-
-  // Meta / app-introspection questions are not biomedical research — answer
-  // them in plain chat (the boss explains or declines) instead of launching the
-  // research swarm, which turned them into refusals rendered as "Research
-  // result · N references" documents.
-  if (isMetaOrAppQuestion(question)) {
-    callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
-    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
-  }
-
-  // Jailbreak / roleplay / translation-bypass / token-smuggling / reverse-
-  // psychology attempts must NEVER reach the research swarm. Route to chat
-  // mode where the hardened system prompt refuses them cleanly.
-  if (isJailbreakAttempt(question)) {
-    callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
-    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
-  }
-
-  // Off-topic questions disguised as medical requests (e.g. "evaluate the
-  // psychological themes of historical figures...Napoleon at Waterloo") should
-  // not launch a research swarm that retrieves unrelated evidence and writes a
-  // bogus manuscript. Route to chat with a refusal.
-  if (isOffTopicQuestion(question)) {
-    callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
-    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
-  }
-
-  // A software/coding request ("code a RAG system", "write a Python script") is
-  // not a biomedical question — answer it in chat instead of launching a
-  // literature search that returns nothing on point.
-  if (isCodingRequest(question)) {
-    callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
-    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
-  }
-
-  // A bare greeting / thanks / acknowledgement is answered conversationally and
-  // never routed to the research swarm — deterministic, so it holds even when
-  // the planner is rate-limited (whose safe default is "research", which is how
-  // a plain "hi" became a literature search).
-  if (isSmallTalk(question)) {
-    callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
-    return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
-  }
+  const bossContext = await buildBossContext();
 
   // Resolve a context-dependent follow-up ("so which is safer?") into a
   // self-contained query so the specialists search the real topic, not the
