@@ -7,6 +7,13 @@ import {
   type ProviderModelStatus,
 } from '@core/llm/modelDiscovery';
 import { unusableModelValues } from '@core/llm/failover';
+// Imported statically. It was previously pulled in with a dynamic `import()`
+// inside probeConnectedGroups to keep it out of this chunk, but the module is
+// also statically imported by BrainMode, SettingsPanel, boss, paperPipeline and
+// the query planner — so it was always already in the graph, the split never
+// happened, and every build logged an INEFFECTIVE_DYNAMIC_IMPORT warning that
+// buried the ones worth reading.
+import { probeModelUsable } from '@core/llm/ProviderRegistry';
 import type { LlmProviderId } from '@core/llm/types';
 
 interface ModelCatalogStore {
@@ -48,7 +55,6 @@ const PROBE_CONCURRENCY = 4;
 // after a refresh (never blocks the picker from showing) and only ever removes
 // models — a transient/busy failure leaves the model in place.
 async function probeConnectedGroups(): Promise<void> {
-  const { probeModelUsable } = await import('@core/llm/ProviderRegistry');
   const groups = useModelCatalogStore.getState().groups;
   const targets = groups
     .filter((group) => group.provider !== 'ollama')
