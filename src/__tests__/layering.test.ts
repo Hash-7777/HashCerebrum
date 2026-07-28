@@ -63,9 +63,119 @@ function importedFeature(spec: string, fromPath: string): string | null {
   return featureOf(dir.join('/'));
 }
 
+/** Resolve an import specifier to a file path in the tree, or null if external. */
+function resolveImport(spec: string, fromPath: string): string | null {
+  let base: string;
+  const ALIASES: Record<string, string> = {
+    '@core': 'core', '@features': 'features', '@platform': 'platform',
+    '@ui': 'ui', '@lib': 'lib', '@config': 'config', '@modes': 'modes', '@agents': 'agents',
+  };
+  const alias = Object.keys(ALIASES).find((a) => spec === a || spec.startsWith(`${a}/`));
+  if (alias) base = spec.replace(alias, ALIASES[alias]!);
+  else if (spec.startsWith('@/')) base = spec.slice(2);
+  else if (spec.startsWith('.')) {
+    const dir = fromPath.split('/').slice(0, -1);
+    for (const part of spec.split('/')) {
+      if (part === '.') continue;
+      else if (part === '..') dir.pop();
+      else dir.push(part);
+    }
+    base = dir.join('/');
+  } else return null; // node_modules
+
+  const known = new Set(FILES.map((f) => f.path));
+  for (const cand of [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
+    if (known.has(cand)) return cand;
+  }
+  return null;
+}
+
+/**
+ * Modules that exist but no import path reaches, as of the layering sweep.
+ *
+ * This list is OUTSTANDING WORK, not an approved exception. Each entry is either
+ * scaffolding that was never wired up or a feature that lost its last caller,
+ * and each should be either connected or deleted. It exists so the check above
+ * can hold the line at today's state: anything that becomes unreachable from
+ * here on fails the suite immediately, instead of joining a pile nobody is
+ * counting.
+ *
+ * The rule for this list is that it only ever shrinks.
+ */
+const KNOWN_UNREACHABLE = new Set<string>([
+  'core/citations/manager.ts',
+  'core/compliance/deidentify.ts',
+  'core/llm/promptVersioning.ts',
+  'core/rag/agentic/semanticDrift.ts',
+  'core/rag/search/evalMetrics.ts',
+  'core/store/promptVersionStore.ts',
+  'core/store/ragSearch.ts',
+  'core/store/resourcesStore.ts',
+  'core/swarm/blackboard.ts',
+  'core/swarm/consensus.ts',
+  'core/swarm/livingReview.ts',
+  'core/swarm/marketplace.ts',
+  'core/telemetry/index.ts',
+  'core/topic/memoryRegions.ts',
+  'features/brain/components/DrugInteractionDisclaimer.tsx',
+  'features/brain/swarm/manuscriptWriter.ts',
+  'features/brain/swarm/stats/metaAnalysis.ts',
+  'features/brain/swarm/stats/power.ts',
+  'features/memory/graph/MemoryGraphView.tsx',
+  'features/memory/graph/brainShape.ts',
+  'features/memory/graph/memoryGraphWorkerClient.ts',
+  'features/memory/graph/umlsLink.ts',
+  'lib/hash.ts',
+  'lib/log.ts',
+  'lib/result.ts',
+  'ui/shell/StatusBar.tsx',
+]);
+
 describe('layering', () => {
   it('finds the source tree', () => {
     expect(FILES.length).toBeGreaterThan(200);
+  });
+
+  // The rule that keeps scaffolding from quietly accumulating. Four unfinished
+  // modules — a collaboration layer, regulatory drafting, study-design forms —
+  // once sat in the tree with passing tests and no caller at all, which is
+  // precisely why nobody noticed them: a test suite proves a module works, never
+  // that anything uses it.
+  it('leaves no module unreachable from the entry point', () => {
+    const byPath = new Map(FILES.map((f) => [f.path, f]));
+    const entries = FILES.filter(
+      (f) => f.path === 'main.tsx' || f.path.startsWith('workers/') || f.path.endsWith('.d.ts'),
+    ).map((f) => f.path);
+
+    const seen = new Set<string>(entries);
+    const queue = [...entries];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const file = byPath.get(current);
+      if (!file) continue;
+      for (const spec of importsOf(file.body)) {
+        const target = resolveImport(spec, current);
+        if (target && !seen.has(target)) {
+          seen.add(target);
+          queue.push(target);
+        }
+      }
+    }
+
+    const unreachable = FILES.map((f) => f.path)
+      .filter((p) => !seen.has(p))
+      // Styles and asset modules are pulled in by CSS/bundler, not by an import
+      // this walker can follow.
+      .filter((p) => !p.startsWith('styles/') && !p.endsWith('.css'))
+      .filter((p) => !KNOWN_UNREACHABLE.has(p));
+    expect(unreachable).toEqual([]);
+  });
+
+  it('does not carry stale entries in the known-unreachable list', () => {
+    // Once a module is wired up or deleted, its entry here must go too, or the
+    // list quietly stops meaning anything.
+    const paths = new Set(FILES.map((f) => f.path));
+    expect([...KNOWN_UNREACHABLE].filter((p) => !paths.has(p))).toEqual([]);
   });
 
   it('routes every Tauri invoke() through the platform adapter', () => {
