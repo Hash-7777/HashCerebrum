@@ -53,7 +53,7 @@ describe('prismaFlowSvg', () => {
     for (const tag of tags) expect(allowed.has(tag)).toBe(true);
   });
 });
-import { buildClaimLedger, extractEvidenceFromRecords } from '../paperPipeline';
+import { buildClaimLedger, extractEvidenceFromRecords } from '../evidenceExtraction';
 
 const evidence: EvidenceItem[] = [
   {

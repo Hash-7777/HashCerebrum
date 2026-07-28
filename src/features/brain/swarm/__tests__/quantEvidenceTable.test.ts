@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  abstractStatsDigest,
   withIncompleteDraftBanner,
   INCOMPLETE_DRAFT_BANNER,
 } from '../paperPipeline';
 import { extractSampleSize } from '../effectExtraction';
+import { abstractStatsDigest } from '../evidenceExtraction';
 import {
   buildQuantEvidenceTable,
   findUnverifiedStatistics,

@@ -3,12 +3,10 @@ import type { EvidenceItem } from '@platform/index';
 import type { Manuscript } from '../manuscript';
 import { buildPublicationArtifact } from '../publication';
 import {
-  buildClaimLedger,
   buildMethodsSection,
   buildPaperBlueprint,
   buildPaperOutline,
   buildSectionUserPrompt,
-  extractEvidenceFromRecords,
   isCallBillingDead,
   isCallRateLimited,
   isSubstantiveAbstract,
@@ -19,11 +17,15 @@ import {
   parseRetryAfterMs,
   shouldExpandSection,
   stripUnapprovedMarkers,
-  parseEvidenceExtractionJson,
   titleTopic,
   validatePaperPackage,
 } from '../paperPipeline';
 import { extractBoundEffects } from '../effectExtraction';
+import {
+  buildClaimLedger,
+  extractEvidenceFromRecords,
+  parseEvidenceExtractionJson,
+} from '../evidenceExtraction';
 import { neutralizeMisattributedGeneStatistics } from '../statisticVerification';
 
 describe('modelForSection', () => {

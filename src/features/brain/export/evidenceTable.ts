@@ -6,7 +6,7 @@
 // is needed. Local + keyless, like every other export.
 
 import type { EvidenceItem } from '@platform/index';
-import { extractEvidenceFromRecords } from '../swarm/paperPipeline';
+import { extractEvidenceFromRecords } from '../swarm/evidenceExtraction';
 import { referenceUrl } from './citationStyles';
 import { downloadTextFile, slugifyFilename } from './messageExport';
 
