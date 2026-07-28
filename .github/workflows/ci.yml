@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # Also run on a release tag, which is the only thing that triggers the
+    # bundle job below.
+    tags: ['v*']
     # Skip CI for changes that cannot affect the build or tests, so a docs or
     # asset-only commit never triggers a full Rust recompile.
     paths-ignore:
@@ -85,3 +88,35 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
         working-directory: ./src-tauri
+
+  # The two jobs above never invoke Tauri itself: `build:web` stops at the Vite
+  # bundle, and cargo only compiles the library. Anything Tauri validates while
+  # assembling the app — the capability set against its generated schema, the
+  # icon set, the bundle identifier and config — is therefore invisible to CI,
+  # and would first surface by hand at the moment a release is being cut.
+  #
+  # A full bundle is far too expensive to run on every push against a private
+  # repository's minute budget, so it runs on a release tag only, which is
+  # exactly when the answer matters. `--no-bundle` compiles and validates the
+  # app without producing installers, which is the part that catches breakage;
+  # the signed artefacts are still produced locally on macOS.
+  bundle:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [frontend, rust]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm run tauri -- build --no-bundle
