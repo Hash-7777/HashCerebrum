@@ -38,6 +38,7 @@ import { isConfidentGeneReport, isConfidentInteractionReport, looksLikeRefusalOr
 import { verifyAnswer } from './swarm/claimVerify';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
+import { DrugInteractionDisclaimer, hasAckedDiDisclaimer } from './components/DrugInteractionDisclaimer';
 // Lazy so the heavy three.js / WebGL bundle and the 3D brain model load ONLY
 // when the canvas is actually rendered — never in Lite mode or on weak hardware.
 const BrainCanvas = lazy(() =>
@@ -97,6 +98,9 @@ export function BrainMode() {
   // The intent resolved for the current/last turn, so the workflow view shows the
   // right track (paper vs interactions vs genetics vs lookup).
   const [activeIntent, setActiveIntent] = useState<WorkflowIntent>('evidence_review');
+  // Resolver for the pending drug-interaction safety gate, or null when no gate
+  // is open. Held as a function so setState does not call it as an updater.
+  const [diGate, setDiGate] = useState<((accepted: boolean) => void) | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [claimLedgerOpen, setClaimLedgerOpen] = useState(false);
   const [pendingClaims, setPendingClaims] = useState<ClaimLedgerEntry[] | null>(null);
@@ -286,8 +290,19 @@ export function BrainMode() {
     // Pharmacist/Genetics mode, that focus wins. `paper`/`lookup`/`rag`/
     // `evidence_review` all use the normal research path for now.
     const resolved = resolveIntent(cleanQuery, overrides);
-    setActiveIntent(resolved.intent);
     const turnDrugFocus = resolved.intent === 'drug_interactions';
+
+    // A drug-interaction answer is a clinical-decision surface, so the safety
+    // notice is acknowledged once per session before the first one runs. The
+    // gate sits here — before any state is touched — so declining leaves the
+    // question in the composer and changes nothing.
+    if (turnDrugFocus && !hasAckedDiDisclaimer()) {
+      const accepted = await new Promise<boolean>((resolve) => setDiGate(() => resolve));
+      setDiGate(null);
+      if (!accepted) return;
+    }
+
+    setActiveIntent(resolved.intent);
     const turnGeneticsFocus = resolved.intent === 'genetics';
     const turnSoloFocus = turnDrugFocus || turnGeneticsFocus;
     const turnMini = useBrainModesStore.getState().mini || resolved.effort === 'mini';
@@ -928,6 +943,13 @@ export function BrainMode() {
 
   return (
     <div className={`mode brain-mode brain-workspace${activeIntent === 'drug_interactions' ? ' brain-mode--drug' : activeIntent === 'genetics' ? ' brain-mode--genetics' : ''}`}>
+      {diGate && (
+        <DrugInteractionDisclaimer
+          mode="gate"
+          onClose={() => diGate(true)}
+          onCancel={() => diGate(false)}
+        />
+      )}
       <section className="research-chat" aria-label="Brain research chat">
         <header className="chat-header">
           <div className="chat-header-row">

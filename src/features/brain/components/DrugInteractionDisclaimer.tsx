@@ -1,17 +1,33 @@
-// Full, must-acknowledge safety disclaimer for the Drug-Interactions checker.
+// Full, must-acknowledge safety disclaimer for the drug-interaction checker.
 // Drug-interaction calls are critical clinical decisions, so the gate must be
-// acknowledged once per app session; it can be re-opened any time from the
-// panel. Portaled to <body> with a high z-index so it sits above all app chrome.
+// acknowledged once per app session. Portaled to <body> with a high z-index so
+// it sits above all app chrome.
+//
+// It used to gate ENTRY into a dedicated Drug-Interactions mode. That mode was
+// merged into the single Brain workspace, which left the gate with no screen to
+// live on, so for a period it never appeared at all. It now gates the first
+// drug-interaction QUESTION of a session instead.
+//
+// That move is why the gate is cancellable. Blocking entry to a mode the user
+// deliberately opened is fair; trapping someone who has just typed a question,
+// with no way out but agreement, is not. Declining simply means the question is
+// not run — the text stays in the composer and nothing is lost.
 
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@ui/icons';
 
 // Acknowledgement is intentionally per app SESSION, not permanent. A
 // module-level flag resets every time the app is launched (the JS context
-// reloads), so the gate appears once on the first entry into Drug-Interactions
-// mode and not again until the app is closed and reopened. (It used to persist
-// in localStorage, which is why it stopped appearing after the first ever use.)
+// reloads), so the gate appears once on the first drug-interaction question and
+// not again until the app is closed and reopened. (It used to persist in
+// localStorage, which is why it stopped appearing after the first ever use.)
 let ackedThisSession = false;
+
+/** Test-only: forget the acknowledgement so a case can exercise the gate. */
+export function resetDiDisclaimerAck(): void {
+  ackedThisSession = false;
+}
 
 export function hasAckedDiDisclaimer(): boolean {
   return ackedThisSession;
@@ -43,23 +59,39 @@ const POINTS: Array<{ heading: string; body: string }> = [
 export function DrugInteractionDisclaimer({
   mode,
   onClose,
+  onCancel,
 }: {
-  /** 'gate' = first-run acknowledgement required; 'review' = re-opened, dismissible. */
+  /** 'gate' = acknowledgement required to continue; 'review' = re-opened, dismissible. */
   mode: 'gate' | 'review';
+  /** Accepted (gate) or dismissed (review). */
   onClose: () => void;
+  /** Declined the gate. The caller should abandon whatever it was gating. */
+  onCancel?: () => void;
 }) {
   const accept = () => {
     ackDiDisclaimer();
     onClose();
   };
+  const dismiss = () => {
+    if (mode === 'review') onClose();
+    else onCancel?.();
+  };
+
+  // Escape declines rather than accepting: a keystroke must never stand in for
+  // reading a safety notice.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss();
+    };
+    globalThis.document.addEventListener('keydown', onKey);
+    return () => globalThis.document.removeEventListener('keydown', onKey);
+  });
 
   return createPortal(
     <div
       className="di-disc-layer"
       onPointerDown={(event) => {
-        // Only the re-opened view dismisses on backdrop click; the first-run
-        // gate must be explicitly acknowledged.
-        if (mode === 'review' && event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) dismiss();
       }}
     >
       <section className="di-disc-modal" onPointerDown={(event) => event.stopPropagation()} aria-label="Drug interaction safety disclaimer">
@@ -84,9 +116,14 @@ export function DrugInteractionDisclaimer({
         </div>
         <footer className="di-disc-foot">
           {mode === 'gate' ? (
-            <button type="button" className="di-disc-accept" onClick={accept}>
-              I understand and agree
-            </button>
+            <>
+              <button type="button" className="di-disc-dismiss" onClick={dismiss}>
+                Not now
+              </button>
+              <button type="button" className="di-disc-accept" onClick={accept}>
+                I understand and agree
+              </button>
+            </>
           ) : (
             <button type="button" className="di-disc-dismiss" onClick={onClose}>
               Close

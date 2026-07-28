@@ -117,7 +117,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'core/swarm/marketplace.ts',
   'core/telemetry/index.ts',
   'core/topic/memoryRegions.ts',
-  'features/brain/components/DrugInteractionDisclaimer.tsx',
   'features/brain/swarm/manuscriptWriter.ts',
   'features/brain/swarm/stats/metaAnalysis.ts',
   'features/brain/swarm/stats/power.ts',
