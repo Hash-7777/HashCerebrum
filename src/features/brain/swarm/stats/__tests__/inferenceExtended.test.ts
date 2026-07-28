@@ -56,6 +56,28 @@ describe('Diagnostic accuracy', () => {
     expect(r!.ppv).toBeCloseTo(0.9, 2);
     expect(r!.npv).toBeCloseTo(0.8, 2);
   });
+
+  // Regression: LR- was computed as (1 - specificity) / sensitivity — the
+  // reciprocal of LR+, not LR- at all. Both operands were the wrong quantity.
+  it('reports the textbook likelihood ratios', () => {
+    // tp=90 fn=10 -> sens 0.90; tn=80 fp=20 -> spec 0.80
+    const r = diagnosticAccuracy(90, 20, 80, 10);
+    expect(r!.sensitivity).toBeCloseTo(0.9, 6);
+    expect(r!.specificity).toBeCloseTo(0.8, 6);
+    // LR+ = 0.90 / (1 - 0.80) = 4.5
+    expect(r!.lrPositive).toBeCloseTo(4.5, 6);
+    // LR- = (1 - 0.90) / 0.80 = 0.125.  The old formula gave 0.222.
+    expect(r!.lrNegative).toBeCloseTo(0.125, 6);
+    expect(r!.lrNegative).not.toBeCloseTo(0.222, 2);
+  });
+
+  it('gives a perfectly sensitive test an LR- of zero rather than NaN', () => {
+    // sens = 1 rules the disease out on a negative result — the single most
+    // useful case, which the old `sens < 1` guard suppressed to NaN.
+    const r = diagnosticAccuracy(50, 10, 90, 0);
+    expect(r!.sensitivity).toBe(1);
+    expect(r!.lrNegative).toBe(0);
+  });
 });
 
 describe('ROC AUC', () => {
@@ -66,6 +88,31 @@ describe('ROC AUC', () => {
     expect(r).not.toBeNull();
     expect(r!.auc).toBeGreaterThan(0.5);
     expect(r!.auc).toBeLessThanOrEqual(1);
+  });
+
+  // Regression: AUC was derived from the SMALLER of the two U values, which
+  // forced every result to 0.5 or above. An inverse marker was reported as its
+  // own mirror image, reversing the direction of the finding.
+  it('reports AUC below 0.5 when the positive group scores lower', () => {
+    const pos = [0.2, 0.3, 0.1, 0.25, 0.15];
+    const neg = [0.8, 0.9, 0.7, 0.85, 0.95];
+    const r = rocAuc(pos, neg);
+    expect(r).not.toBeNull();
+    expect(r!.auc).toBe(0); // perfectly separated, the wrong way round
+  });
+
+  it('mirrors exactly when the groups are swapped', () => {
+    const pos = [5, 6, 7, 1];
+    const neg = [2, 3, 4, 8];
+    const forward = rocAuc(pos, neg)!.auc;
+    const reversed = rocAuc(neg, pos)!.auc;
+    expect(forward + reversed).toBeCloseTo(1, 10);
+  });
+
+  it('returns 0.5 for two identical distributions', () => {
+    const a = [1, 2, 3, 4];
+    const b = [1, 2, 3, 4];
+    expect(rocAuc(a, b)!.auc).toBeCloseTo(0.5, 10);
   });
 });
 

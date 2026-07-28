@@ -153,7 +153,14 @@ export interface MannWhitneyResult {
   test: 'mann_whitney_u';
   nA: number;
   nB: number;
+  /** The smaller of the two U values — the conventional reported test statistic. */
   u: number;
+  /**
+   * U for group A specifically, which keeps the direction `u` throws away.
+   * Anything that needs to know *which* group ranked higher (ROC AUC, for one)
+   * must read this: `u` is symmetric and cannot distinguish A > B from B > A.
+   */
+  uA: number;
   z: number;
   pValue: number;
 }
@@ -177,6 +184,7 @@ export function mannWhitneyU(groupA: number[], groupB: number[]): MannWhitneyRes
     nA,
     nB,
     u: Math.min(uA, nA * nB - uA),
+    uA,
     z,
     pValue: normalTwoSidedP(z),
   };
@@ -660,8 +668,11 @@ export function diagnosticAccuracy(tp: number, fp: number, tn: number, fn: numbe
   const spec = tn / (tn + fp);
   const ppv = tp + fp > 0 ? tp / (tp + fp) : Number.NaN;
   const npv = tn + fn > 0 ? tn / (tn + fn) : Number.NaN;
+  // LR+ = sensitivity / (1 - specificity); LR- = (1 - sensitivity) / specificity.
+  // Each guard protects its own denominator — a perfect test (sens = 1) yields
+  // LR- = 0, which is the most informative result there is, not an undefined one.
   const lrPos = spec < 1 ? sens / (1 - spec) : Number.NaN;
-  const lrNeg = sens < 1 ? (1 - spec) / sens : Number.NaN;
+  const lrNeg = spec > 0 ? (1 - sens) / spec : Number.NaN;
   return {
     test: 'diagnostic_accuracy',
     tp, fp, tn, fn,
@@ -689,16 +700,19 @@ export function rocAuc(positiveScores: number[], negativeScores: number[]): RocA
   if (positiveScores.length === 0 || negativeScores.length === 0) return null;
   const mw = mannWhitneyU(positiveScores, negativeScores);
   if (!mw) return null;
-  // mannWhitneyU returns the smaller U; AUC uses the larger U
+  // AUC must be read from the POSITIVE group's own U (`uA`), not from the
+  // reported `u`. `u` is the smaller of the two U values, so deriving AUC from
+  // it forces the result above 0.5 and silently mirrors any marker that runs the
+  // other way: a genuinely inverse predictor with AUC 0.20 would be reported as
+  // 0.80 good discrimination, reversing the finding.
   const totalPairs = positiveScores.length * negativeScores.length;
-  const uMax = totalPairs - mw.u;
-  const auc = uMax / totalPairs;
+  const auc = mw.uA / totalPairs;
   return {
     test: 'roc_auc',
     auc,
     nPositive: positiveScores.length,
     nNegative: negativeScores.length,
-    reportText: `AUC = ${fmt(auc)} (Mann-Whitney U = ${uMax.toFixed(1)}, p = ${fmtP(mw.pValue)}).`,
+    reportText: `AUC = ${fmt(auc)} (Mann-Whitney U = ${mw.uA.toFixed(1)}, p = ${fmtP(mw.pValue)}).`,
   };
 }
 
