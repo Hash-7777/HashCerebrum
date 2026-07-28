@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   abstractStatsDigest,
-  buildQuantEvidenceTable,
-  findUnverifiedStatistics,
-  neutralizeUnverifiedStatistics,
   withIncompleteDraftBanner,
   INCOMPLETE_DRAFT_BANNER,
 } from '../paperPipeline';
 import { extractSampleSize } from '../effectExtraction';
+import {
+  buildQuantEvidenceTable,
+  findUnverifiedStatistics,
+  neutralizeUnverifiedStatistics,
+} from '../statisticVerification';
 import type { EvidenceExtraction } from '../publicationTypes';
 import type { Manuscript } from '../manuscript';
 

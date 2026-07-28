@@ -14,7 +14,6 @@ import {
   isSubstantiveAbstract,
   keywordsFrom,
   modelForSection,
-  neutralizeMisattributedGeneStatistics,
   searchDatePhrase,
   neutralizeUnverifiableNct,
   parseRetryAfterMs,
@@ -25,6 +24,7 @@ import {
   validatePaperPackage,
 } from '../paperPipeline';
 import { extractBoundEffects } from '../effectExtraction';
+import { neutralizeMisattributedGeneStatistics } from '../statisticVerification';
 
 describe('modelForSection', () => {
   const specialists = [
