@@ -297,9 +297,12 @@ function computeInverseVariance(effects: NumericEffect[], kind: MetaAnalysisResu
   // Fixed-effect inverse-variance weights
   const weights = effects.map((e) => 1 / (e.se * e.se));
   const sumW = weights.reduce((a, b) => a + b, 0);
+  // The fixed-effect pooled point is needed for Q below. Its standard error is
+  // deliberately not computed: everything reported downstream — the pooled
+  // estimate, its interval, and the prediction interval — comes from the
+  // random-effects model, so a fixed-effect SE would be a number no reader ever
+  // sees.
   const pooledPoint = effects.reduce((sum, e, i) => sum + e.point * weights[i]!, 0) / sumW;
-  // pooledSe computed but used via rePooled below; keep for documentation
-  void Math.sqrt(1 / sumW);
 
   // Q statistic for heterogeneity
   const q = effects.reduce((sum, e, i) => sum + weights[i]! * (e.point - pooledPoint) ** 2, 0);
