@@ -3,11 +3,10 @@ import type { AgentReviewResult } from '@core/store/peerReviewStore';
 import {
   buildPaperReview,
   chunkDocument,
-  isContextTooLarge,
-  isRateLimited,
   parseSuggestions,
   reviewParts,
 } from '../reviewSwarm';
+import { isContextTooLarge, isRateLimited } from '@core/llm/errorKind';
 
 describe('chunkDocument', () => {
   it('keeps a short document as a single chunk', () => {

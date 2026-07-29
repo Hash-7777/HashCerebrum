@@ -1,4 +1,10 @@
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
+import {
+  isBillingDead as isCallBillingDead,
+  isContextTooLarge as isCallTooLarge,
+  isRateLimited as isCallRateLimited,
+  retryAfterMs as parseRetryAfterMs,
+} from '@core/llm/errorKind';
 import { bus } from '@core/bus/EventBus';
 import type { EvidenceItem } from '@platform/index';
 import {
@@ -625,63 +631,6 @@ function specialistRoleDigest(specialists: SpecialistResult[]): string {
     .join('\n');
 }
 
-// A provider rejecting the request because the prompt is too big for the
-// model's CONTEXT WINDOW (HTTP 413 / "request too large" / "context length").
-// When the failover chain lands on a small-budget model (e.g. gpt-oss-120b at
-// 8k), a full section prompt overflows; we recover by shrinking it. NOTE: a
-// "tokens per minute" message is a RATE limit, not a context-size error —
-// shrinking cannot fix a per-minute quota, so it is classified separately below.
-function isCallTooLarge(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return (
-    m.includes('413') ||
-    m.includes('request too large') ||
-    m.includes('context length') ||
-    m.includes('context_length') ||
-    m.includes('too many tokens') ||
-    m.includes('maximum context')
-  );
-}
-
-// A rate / quota limit (per-minute requests or tokens, daily quota, cooldown).
-// Shrinking does not help; a brief backoff (the failover chain has already
-// tried every provider) gives a cooling key time to recover.
-export function isCallRateLimited(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return (
-    m.includes('429') ||
-    m.includes('rate limit') ||
-    m.includes('rate_limit') ||
-    m.includes('quota') ||
-    m.includes('requests per minute') ||
-    m.includes('tokens per minute') ||
-    m.includes('too many requests') ||
-    m.includes('cooling down') ||
-    m.includes('cooldown')
-  );
-}
-
-// A hard billing failure (402 / insufficient credits). The failover chain has
-// already abandoned the dead provider; if this error reaches callModel it means
-// every provider in the chain is billing-dead — do not retry, surface immediately.
-export function isCallBillingDead(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  // A 429 / quota / rate-limit is transient, NOT an out-of-credits account — even
-  // though several providers phrase their FREE-tier 429 as "check your plan and
-  // billing details" (Gemini does exactly this). Matching the bare word "billing"
-  // therefore misread every free-tier rate-limit as a permanent billing death and
-  // aborted the whole section, shipping an "INCOMPLETE DRAFT", when a short
-  // wait-and-retry would have finished it. Only a genuine 402 / insufficient-
-  // credits / payment-required signal is a hard death; a rate-limited error must
-  // fall through to the retry path below.
-  if (isCallRateLimited(err)) return false;
-  return (
-    m.includes('402') ||
-    m.includes('insufficient credits') ||
-    m.includes('payment required')
-  );
-}
-
 const MIN_CALL_CHARS = 4_000;
 const MAX_CALL_RATE_RETRIES = 3;
 // Longest we will honor a provider's advertised cooldown. Free tiers sometimes
@@ -689,35 +638,6 @@ const MAX_CALL_RATE_RETRIES = 3;
 // for minutes per call is worse than failing the section fast and letting the
 // user re-run on Auto / a less-limited provider, so we cap the wait.
 const MAX_RATE_WAIT_MS = 20_000;
-
-// Read a provider's advertised cooldown, in milliseconds, from a rate-limit
-// error message. Providers phrase it many ways — Groq "Please try again in
-// 8.522s" or "in 2m30s", Gemini "retryDelay: 12s" / "retry after 30 seconds",
-// OpenAI-style "Retry-After: 20". Parsing is anchored to a cooldown phrase so a
-// stray number elsewhere in the message is never mistaken for a delay. Returns
-// undefined when no explicit delay is stated, so the caller falls back to
-// exponential backoff. Honoring a SHORT advertised wait (e.g. 8s) lets the very
-// next retry succeed where a blind 2s wait would 429 again.
-export function parseRetryAfterMs(err: unknown): number | undefined {
-  const lower = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  const anchor = /(?:try again in|again in|retry[- ]?delay["']?\s*[:=]?|retry[- ]?after:?|retry in|available in|wait(?:\s+for)?)\s*["']?/;
-  const m = anchor.exec(lower);
-  if (!m) return undefined;
-  const tail = lower.slice(m.index + m[0].length);
-  // Compound "2m30s" / "1m 30s".
-  const compound = tail.match(/^(\d+)\s*m(?:in(?:ute)?s?)?\s*(\d+(?:\.\d+)?)\s*s/);
-  if (compound) return Math.round((Number(compound[1]) * 60 + Number(compound[2])) * 1000);
-  const ms = tail.match(/^(\d+(?:\.\d+)?)\s*ms\b/);
-  if (ms) return Math.round(Number(ms[1]));
-  const sec = tail.match(/^(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?\b/);
-  if (sec) return Math.round(Number(sec[1]) * 1000);
-  const min = tail.match(/^(\d+(?:\.\d+)?)\s*m(?:in(?:ute)?s?)?\b/);
-  if (min) return Math.round(Number(min[1]) * 60_000);
-  // Bare number immediately after the anchor (e.g. "Retry-After: 20" → seconds).
-  const bare = tail.match(/^(\d+(?:\.\d+)?)\b/);
-  if (bare) return Math.round(Number(bare[1]) * 1000);
-  return undefined;
-}
 
 function callSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -9,6 +9,7 @@
 // one tier at a time. Free-tier providers are preferred at equal tier
 // to avoid burning paid credit on a hot path.
 
+import { isBillingDead, isRateLimited } from './errorKind';
 import { parseModelRef, type ModelGroup } from './modelCatalog';
 import type { LlmProviderId } from './types';
 
@@ -135,11 +136,13 @@ export function isHardProviderError(error: unknown): boolean {
 // Account-level billing failures (no credits / payment required). The whole
 // provider is dead, not just one model — the chain must abandon every model
 // from that provider, not just fail over to a sibling model.
-const BILLING_DEAD = /\b(insufficient ?credits|payment ?required|402)\b/i;
-
+//
+// Delegates to the shared classifier, which also refuses to call a message
+// billing-dead when it reads as a rate limit. Several providers word a
+// free-tier throttle in billing language, and retiring a whole provider for the
+// session over a transient 429 is the expensive mistake.
 export function isBillingError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  return BILLING_DEAD.test(message);
+  return isBillingDead(error);
 }
 
 export function shouldRetrySameProvider(error: unknown): boolean {
@@ -199,16 +202,24 @@ export function resetModelHealth(): void {
 // provider on every section, thrashing through the whole chain each time. We
 // park such a provider for a short window so subsequent calls skip it.
 const providerCooldownUntil = new Map<LlmProviderId, number>();
-const RATE_LIMIT = /\b(rate ?limit|quota|too many|capacity|overloaded|429|exceeded)\b/i;
+// A provider that is merely BUSY rather than throttling us. Not a rate limit —
+// nothing about our request rate caused it — but it earns the same short
+// cooldown, because hammering an overloaded endpoint helps nobody. Kept local
+// because only the routing layer treats these as equivalent.
+const OVERLOADED = /\b(capacity|overloaded|exceeded)\b/i;
+
+function shouldCoolDown(message: string): boolean {
+  return isRateLimited(message) || OVERLOADED.test(message);
+}
 
 /** Mark a provider as cooling down based on the failure: long for billing
  *  exhaustion (the account is dead), short for a transient rate limit. */
 export function cooldownProvider(provider: LlmProviderId, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error ?? '');
-  const ms = BILLING_DEAD.test(message)
+  const ms = isBillingDead(message)
     ? 5 * 60_000 // credits exhausted — skip for 5 minutes
-    : RATE_LIMIT.test(message)
-      ? 15_000 // rate limited — skip for 15 seconds (was 45s; routing stalls were ~95s)
+    : shouldCoolDown(message)
+      ? 15_000 // rate limited or busy — skip for 15 seconds (was 45s; routing stalls were ~95s)
       : 0;
   if (ms > 0) providerCooldownUntil.set(provider, Date.now() + ms);
 }

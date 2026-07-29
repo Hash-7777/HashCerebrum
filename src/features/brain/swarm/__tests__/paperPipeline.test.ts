@@ -6,16 +6,18 @@ import {
   buildPaperBlueprint,
   buildPaperOutline,
   buildSectionUserPrompt,
-  isCallBillingDead,
-  isCallRateLimited,
   isSubstantiveAbstract,
   modelForSection,
   neutralizeUnverifiableNct,
-  parseRetryAfterMs,
   shouldExpandSection,
   stripUnapprovedMarkers,
   validatePaperPackage,
 } from '../paperPipeline';
+import {
+  isBillingDead as isCallBillingDead,
+  isRateLimited as isCallRateLimited,
+  retryAfterMs as parseRetryAfterMs,
+} from '@core/llm/errorKind';
 import { extractBoundEffects } from '../effectExtraction';
 import { buildMethodsSection, searchDatePhrase } from '../methodsSection';
 import { keywordsFrom, titleTopic } from '../paperTitle';

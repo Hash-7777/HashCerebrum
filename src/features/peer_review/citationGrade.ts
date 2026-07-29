@@ -6,7 +6,7 @@
 
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import type { CitedClaim, FaithfulnessGrade } from './citationAudit';
-import { isContextTooLarge, isRateLimited } from './reviewSwarm';
+import { isContextTooLarge, isRateLimited, retryAfterMs } from '@core/llm/errorKind';
 
 export interface FaithfulnessItem {
   sentence: string;
@@ -93,13 +93,6 @@ function buildUserPrompt(batch: CitedClaim[]): string {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function retryAfterMs(err: unknown): number | null {
-  const match = (err instanceof Error ? err.message : String(err)).match(/try again in\s+([\d.]+)\s*(ms|s)?/i);
-  if (!match) return null;
-  const v = Number(match[1]);
-  if (!Number.isFinite(v)) return null;
-  return Math.min(match[2]?.toLowerCase() === 'ms' ? v : v * 1000, RATE_WAIT_CAP_MS);
-}
 
 /**
  * Grade every cited claim. Batched and rate-limit-aware; on an exhausted
@@ -134,7 +127,10 @@ export async function gradeCitationFaithfulness(
         if (isContextTooLarge(err)) break; // can't shrink a batch usefully here
         if (isRateLimited(err) && rateRetries < MAX_RATE_RETRIES) {
           rateRetries += 1;
-          const wait = retryAfterMs(err) ?? Math.min(RATE_WAIT_CAP_MS, 1_000 * 2 ** (rateRetries - 1));
+          const advertised = retryAfterMs(err);
+          const wait = advertised !== undefined
+            ? Math.min(advertised, RATE_WAIT_CAP_MS)
+            : Math.min(RATE_WAIT_CAP_MS, 1_000 * 2 ** (rateRetries - 1));
           await sleep(wait + Math.floor(Math.random() * 300));
           continue;
         }

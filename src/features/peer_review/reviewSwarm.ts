@@ -3,6 +3,7 @@
 // parsed into the full PaperReview shape.
 
 import { streamWithModelSafe } from '@core/llm/ProviderRegistry';
+import { isContextTooLarge, isRateLimited, retryAfterMs } from '@core/llm/errorKind';
 import { useAgentStore } from '@core/store/agentStore';
 import type { AgentReviewResult, PaperReview } from '@core/store/peerReviewStore';
 import { parseReviewResponse } from './reviewEngine';
@@ -30,18 +31,6 @@ const MAX_RATE_LIMIT_RETRIES = 4;
  *  the whole review, so we wait the smaller of the reported delay and this cap. */
 const RATE_LIMIT_WAIT_CAP_MS = 25_000;
 
-/** Parse a provider's suggested retry delay from a 429 message ("try again in
- *  8.7s", "Please try again in 13.635s") into milliseconds, capped. Returns
- *  null when no delay is advertised. */
-function retryAfterMs(err: unknown): number | null {
-  const m = err instanceof Error ? err.message : String(err);
-  const match = m.match(/try again in\s+([\d.]+)\s*(ms|s)?/i);
-  if (!match) return null;
-  const value = Number(match[1]);
-  if (!Number.isFinite(value)) return null;
-  const ms = match[2]?.toLowerCase() === 'ms' ? value : value * 1000;
-  return Math.min(ms, RATE_LIMIT_WAIT_CAP_MS);
-}
 
 /** Race a promise against a timeout rejection. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -168,42 +157,6 @@ export function reviewParts(text: string, maxParts: number = MAX_REVIEW_PARTS): 
   return chunkDocument(condenseTo(Math.floor(maxParts * CHUNK_CHARS * 0.5))).slice(0, maxParts);
 }
 
-// A provider rejecting the request because the prompt is physically too big for
-// the model's CONTEXT WINDOW (HTTP 413, "request too large", "context length").
-// This is recoverable by shrinking the document.
-export function isContextTooLarge(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return (
-    m.includes('413') ||
-    m.includes('request too large') ||
-    m.includes('reduce your message') ||
-    m.includes('context length') ||
-    m.includes('context_length') ||
-    m.includes('maximum context') ||
-    m.includes('too many tokens')
-  );
-}
-
-// A provider — or every provider in the failover chain — refusing because of a
-// RATE or QUOTA limit: requests-per-minute, tokens-per-minute, daily quota, or a
-// cooldown after a recent 429. Shrinking the prompt does NOT help here; only
-// waiting (or a fresh provider) does. Critically, a "tokens per minute" message
-// is a rate limit, NOT a context-size error — misclassifying it sent the old
-// code into a shrink loop that burned the whole timeout and failed every agent.
-export function isRateLimited(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return (
-    m.includes('429') ||
-    m.includes('rate limit') ||
-    m.includes('rate_limit') ||
-    m.includes('quota') ||
-    m.includes('requests per minute') ||
-    m.includes('tokens per minute') ||
-    m.includes('too many requests') ||
-    m.includes('cooling down') ||
-    m.includes('cooldown')
-  );
-}
 
 function bullets(block: string): string[] {
   // De-duplicate identical points: an agent that reviews a manuscript in several
@@ -426,12 +379,15 @@ export async function runReviewSwarm(
         }
         if (isRateLimited(err) && !acc && rateRetries < MAX_RATE_LIMIT_RETRIES) {
           rateRetries += 1;
-          // Prefer the provider's advertised cooldown ("try again in Xs",
-          // capped) over a blind exponential — it is the real time the TPM
-          // window needs to recover.
+          // Prefer the provider's advertised cooldown ("try again in Xs") over a
+          // blind exponential — it is the real time the TPM window needs to
+          // recover. Capped here rather than inside the parser: free tiers
+          // sometimes advertise a 195s wait, and stalling a review that long is
+          // worse than failing fast and letting the user re-run elsewhere.
           const advertised = retryAfterMs(err);
           const backoff = Math.min(RATE_LIMIT_WAIT_CAP_MS, 1_000 * 2 ** (rateRetries - 1));
-          const waitMs = (advertised ?? backoff) + Math.floor(Math.random() * 400);
+          const chosen = advertised === undefined ? backoff : Math.min(advertised, RATE_LIMIT_WAIT_CAP_MS);
+          const waitMs = chosen + Math.floor(Math.random() * 400);
           trace('tool_call', `[Peer Review] ${label}: rate-limited — pausing ${Math.round(waitMs / 1000)}s`);
           await sleep(waitMs, signal);
           continue;
