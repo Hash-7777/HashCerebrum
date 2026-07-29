@@ -32,6 +32,7 @@ import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow2D';
+import { applySwarmResult } from './assistantMessage';
 import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
 import { isMetaOrAppQuestion } from './swarm/paper';
 import { isConfidentGeneReport, isConfidentInteractionReport, looksLikeRefusalOrNonQuery } from './swarm/boss';
@@ -520,17 +521,7 @@ export function BrainMode() {
       setMessages((current) =>
         current.map((m) =>
           m.id === draftId
-            ? {
-                ...m,
-                content,
-                modelLabel: labelForModel(result.modelUsed),
-                isStreaming: false,
-                trace: traceEntries,
-                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
-                ...(result.manuscript ? { manuscript: result.manuscript } : {}),
-                ...(result.associations ? { associations: result.associations } : {}),
-                grounding: result.kind === 'research' ? 'evidence' : 'conversational',
-              }
+            ? applySwarmResult(m, result, content, traceEntries)
             : m,
         ),
       );
@@ -757,17 +748,7 @@ export function BrainMode() {
       setMessages((current) =>
         current.map((m) =>
           m.id === assistantId
-            ? {
-                ...m,
-                content: finalContent,
-                modelLabel: labelForModel(result.modelUsed),
-                isStreaming: false,
-                trace: traceEntries,
-                ...(result.kind === 'research' ? { citations: result.evidence.slice(0, 60) } : {}),
-                ...(result.manuscript ? { manuscript: result.manuscript } : {}),
-                ...(result.associations ? { associations: result.associations } : {}),
-                grounding: result.kind === 'research' ? 'evidence' : 'conversational',
-              }
+            ? applySwarmResult(m, result, finalContent, traceEntries)
             : m,
         ),
       );
