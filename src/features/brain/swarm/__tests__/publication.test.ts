@@ -7,10 +7,8 @@ import {
   assertPublicationReady,
   buildPublicationArtifact,
   normalizeManuscriptForPublication,
-  prismaFlowSvg,
   publicationMarkdown,
   referenceLinesForPublication,
-  sanitizeSvgForHtml,
 } from '../publication';
 
 describe('prismaFlowSvg', () => {
@@ -54,6 +52,7 @@ describe('prismaFlowSvg', () => {
   });
 });
 import { buildClaimLedger, extractEvidenceFromRecords } from '../evidenceExtraction';
+import { prismaFlowSvg, sanitizeSvgForHtml } from '../publicationFigures';
 
 const evidence: EvidenceItem[] = [
   {

@@ -24,3 +24,38 @@ export function recordText(record: EvidenceItem): string {
     record.url,
   ].filter(Boolean).join(' ');
 }
+
+// ── Record identity ─────────────────────────────────────────────────────────
+// One retrieved record can arrive from several sources with different titles,
+// so identity is taken from the strongest stable key it carries — DOI, then
+// PMID, then URL — and only falls back to normalised title plus year. Shared
+// because both the publication artifact and its figures count unique records,
+// and each counting them differently would be a quietly wrong number.
+
+export function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+export function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function normalizeDoi(doi: string): string {
+  return doi.trim().toLowerCase().replace(/^https?:\/\/doi\.org\//, '').replace(/^doi:/, '');
+}
+
+export function evidenceIdentity(record: EvidenceItem): string {
+  const doi = record.identifiers?.doi?.trim().toLowerCase();
+  if (doi) return `doi:${normalizeDoi(doi)}`;
+  const pmid = record.identifiers?.pmid?.trim().toLowerCase();
+  if (pmid) return `pmid:${pmid}`;
+  const url = record.url?.trim().toLowerCase();
+  if (url) return `url:${url}`;
+  return `title:${normalizeText(record.title).toLowerCase()}-${record.year ?? ''}`;
+}
+
