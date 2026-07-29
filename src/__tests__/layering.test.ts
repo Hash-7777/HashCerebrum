@@ -23,18 +23,34 @@ import { join, relative } from 'node:path';
 
 const SRC = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
-function sourceFiles(dir: string): string[] {
+function sourceFiles(dir: string, includeTests = false): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === '__tests__') continue;
+    if (entry === 'node_modules') continue;
+    if (entry === '__tests__' && !includeTests) continue;
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...sourceFiles(full));
-    else if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) out.push(full);
+    if (statSync(full).isDirectory()) out.push(...sourceFiles(full, includeTests));
+    else if (/\.tsx?$/.test(entry) && (includeTests || !/\.test\.tsx?$/.test(entry))) out.push(full);
   }
   return out;
 }
 
 const FILES = sourceFiles(SRC).map((f) => ({ path: relative(SRC, f), body: readFileSync(f, 'utf8') }));
+
+/**
+ * Modules that are unreachable from the app ON PURPOSE, because the test suite
+ * is their only consumer — an eval-metric harness, a fixture builder.
+ *
+ * Kept deliberately tiny. Folding every test into the reachability graph was
+ * tried and reverted: it made the check pass for scaffolding that has tests but
+ * no caller, which is precisely the thing this check exists to catch. A suite
+ * proves a module works; it never proves anything uses it.
+ */
+const TEST_ONLY_UTILITIES = new Set<string>([
+  // Ranking-quality measures, so retrieval changes can be measured on a
+  // labelled query set rather than guessed at. Imported by two test files.
+  'core/rag/search/evalMetrics.ts',
+]);
 
 /** Every module specifier the file imports from, static or dynamic. */
 function importsOf(body: string): string[] {
@@ -103,25 +119,11 @@ function resolveImport(spec: string, fromPath: string): string | null {
  * The rule for this list is that it only ever shrinks.
  */
 const KNOWN_UNREACHABLE = new Set<string>([
-  'core/citations/manager.ts',
+  // HIPAA Safe Harbor de-identification. Left in place deliberately rather than
+  // deleted with the rest of the unwired modules: it is a compliance surface for
+  // a medical app, and whether it should be wired into PDF import is a product
+  // decision, not a cleanup one.
   'core/compliance/deidentify.ts',
-  'core/llm/promptVersioning.ts',
-  'core/rag/agentic/semanticDrift.ts',
-  'core/rag/search/evalMetrics.ts',
-  'core/store/promptVersionStore.ts',
-  'core/store/ragSearch.ts',
-  'core/store/resourcesStore.ts',
-  'core/swarm/blackboard.ts',
-  'core/swarm/consensus.ts',
-  'core/swarm/livingReview.ts',
-  'core/swarm/marketplace.ts',
-  'core/telemetry/index.ts',
-  'features/brain/swarm/stats/metaAnalysis.ts',
-  'features/brain/swarm/stats/power.ts',
-  'lib/hash.ts',
-  'lib/log.ts',
-  'lib/result.ts',
-  'ui/shell/StatusBar.tsx',
 ]);
 
 describe('layering', () => {
@@ -160,6 +162,7 @@ describe('layering', () => {
       // Styles and asset modules are pulled in by CSS/bundler, not by an import
       // this walker can follow.
       .filter((p) => !p.startsWith('styles/') && !p.endsWith('.css'))
+      .filter((p) => !TEST_ONLY_UTILITIES.has(p))
       .filter((p) => !KNOWN_UNREACHABLE.has(p));
     expect(unreachable).toEqual([]);
   });

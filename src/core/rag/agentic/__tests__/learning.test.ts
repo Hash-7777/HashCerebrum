@@ -5,7 +5,6 @@ import { extractEntities, extractRelations, extractGeneSymbols, graphFromChunk, 
 import { updateReliabilityMap, flagRetraction } from '../sourceReliability';
 import { createEpisode, findSimilarEpisodes, hasSignificantGapChange } from '../episodicMemory';
 import { enqueueGap, resolveItem, topPending } from '../learningQueue';
-import { createDriftRecord, detectDriftAlerts, driftSummary } from '../semanticDrift';
 import type { RagChunk } from '../../types';
 import type { ExtractedClaim } from '../claimExtractor';
 import type { BeliefState } from '../types';
@@ -327,45 +326,5 @@ describe('topPending', () => {
     const top = topPending(queue, 1);
     expect(top.length).toBe(1);
     expect(top[0]!.concept).toBe('diabetes');
-  });
-});
-
-// ── Semantic Drift ──────────────────────────────────────────────────────────
-
-describe('createDriftRecord', () => {
-  it('creates a drift record', () => {
-    const record = createDriftRecord('long covid');
-    expect(record.term).toBe('long covid');
-    expect(record.snapshots).toEqual([]);
-  });
-});
-
-describe('detectDriftAlerts', () => {
-  it('detects drift above threshold', () => {
-    const record = createDriftRecord('term', 0.1);
-    record.snapshots = [
-      { year: 2020, driftScore: 0.0, sampleCount: 10 },
-      { year: 2021, driftScore: 0.5, sampleCount: 10 },
-    ];
-    const alerts = detectDriftAlerts([record]);
-    expect(alerts.length).toBe(1);
-    expect(alerts[0]!.term).toBe('term');
-  });
-
-  it('returns no alerts below threshold', () => {
-    const record = createDriftRecord('term', 0.5);
-    record.snapshots = [
-      { year: 2020, driftScore: 0.0, sampleCount: 10 },
-      { year: 2021, driftScore: 0.1, sampleCount: 10 },
-    ];
-    const alerts = detectDriftAlerts([record]);
-    expect(alerts.length).toBe(0);
-  });
-});
-
-describe('driftSummary', () => {
-  it('returns null when no alerts', () => {
-    const summary = driftSummary([]);
-    expect(summary).toBeNull();
   });
 });
