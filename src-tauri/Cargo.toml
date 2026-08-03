@@ -37,7 +37,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Paths — cross-platform data dirs (audit log, sqlite cache)
-dirs        = "5"
+dirs        = "6"
 shellexpand = "3"
 
 # HTTP — all external network goes through Rust, never the renderer
@@ -57,7 +57,7 @@ dashmap     = "6"
 uuid        = { version = "1", features = ["v4"] }
 
 # Hashing — audit-log chain (the name pays off) + cache keys + provenance hashes
-sha2 = "0.10"
+sha2 = "0.11"
 hex  = "0.4"
 
 # Logging — structured, never prints secrets
@@ -65,7 +65,7 @@ tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Error handling
-thiserror = "1"
+thiserror = "2"
 anyhow    = "1"
 
 # URL parsing for net guard host allowlist
@@ -75,15 +75,15 @@ url = "2"
 # the model for citation grounding. lopdf is pure-Rust, no native deps.
 # Pinned >=0.42 to clear RUSTSEC-2026-0187 (stack overflow on deeply nested
 # PDF objects); the load_mem/get_pages/extract_text API we use is unchanged.
-lopdf = "0.42"
+lopdf = "0.44"
 
 # Typst — embedded typesetting engine for journal-grade manuscript PDFs.
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
 # bundled fonts so no font files ship separately. Rendering is fully
 # offline — no network, no package downloads.
-typst-as-lib = "0.15"
-typst-pdf    = "0.14"
-typst-assets = { version = "0.14", features = ["fonts"] }
+typst-as-lib = "0.16"
+typst-pdf    = "0.15"
+typst-assets = { version = "0.15", features = ["fonts"] }
 
 [profile.release]
 strip         = true
