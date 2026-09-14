@@ -27,7 +27,8 @@ Thumbs.db
 
 # =============================================================
 # SECRETS — never commit ANY of these. Belt + suspenders.
-# Real keys live in the OS keychain via tauri-plugin-keyring.
+# Provider keys are entered in the app's Settings and never belong in the
+# repo; SECURITY.md states where the app keeps them.
 # =============================================================
 .env
 .env.*

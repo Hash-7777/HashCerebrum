@@ -32,7 +32,7 @@
     <text x="422" y="154" font-size="10.5" fill="#8b90a0" font-family="ui-monospace, monospace">capped reads · per-host rate limiter</text>
     <rect x="408" y="166" width="320" height="38" rx="8" fill="#22262f"/>
     <text x="422" y="184" font-weight="600" font-size="11.5" fill="#cfd3dc">Storage &amp; provenance</text>
-    <text x="422" y="198" font-size="10.5" fill="#8b90a0" font-family="ui-monospace, monospace">keychain · SQLite · hash-chained audit</text>
+    <text x="422" y="198" font-size="10.5" fill="#8b90a0" font-family="ui-monospace, monospace">export paths · SQLite · hash-chained audit</text>
   </g>
   <!-- CI gate -->
   <path d="M192 212 L192 252 L380 252" fill="none" stroke="#3a3f4b" stroke-width="1.5" stroke-dasharray="3 4"/>

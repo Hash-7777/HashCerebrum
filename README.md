@@ -24,7 +24,7 @@
 
 <div align="center">
 
-**Started 19 May 2026 · in active development ever since · 741 commits and counting**
+**Started 19 May 2026 · in active development ever since · 762 commits and counting**
 
 </div>
 
@@ -71,7 +71,7 @@ HashCerebrum has been built in the open-source spirit as a single-developer proj
 |---|---|
 | **First commit** | 19 May 2026 |
 | **Latest work** | July 2026 — ongoing |
-| **Commits** | 741 and counting |
+| **Commits** | 762 and counting |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
 | **Tests** | 1,117 frontend (Vitest) + 78 Rust (`cargo test`), all green; CI gates every push |

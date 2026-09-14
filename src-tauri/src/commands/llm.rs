@@ -4,7 +4,7 @@
 //! other outbound call.
 //!
 //! Keys themselves are not stored here — they live in the renderer (see
-//! src/platform/tauri keychain bundle) and arrive per call inside the
+//! the secrets store in src/platform/tauri) and arrive per call inside the
 //! headers map. This module never logs header values, so the key never
 //! reaches the audit log.
 
