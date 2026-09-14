@@ -1,154 +1,181 @@
 #!/usr/bin/env bash
 # =============================================================
-# HashCerebrum — pre-commit secret + safety scanner
+# HashCerebrum — pre-commit gate
 #
-# Blocks a commit that contains:
-#   1. Files whose names look like secrets (.env, *.pem, *.key, etc.)
-#   2. Content matching known secret shapes (sk-, sk-ant-, AKIA..., etc.)
-#   3. Files larger than 5 MB (likely committed-by-mistake binaries)
-#   4. Root-level audit/ or cache/ runtime state (not Rust source modules)
+# Refuses a commit that would put a secret, a private note, build output or an
+# oversized binary into this repository.
+#
+# Everything below judges only what is STAGED — the index, never the working
+# tree. An unstaged file is not going anywhere, and a staged file may differ
+# from what is on disk.
+#
+# Portability is part of correctness here. This runs under the stock macOS
+# /bin/bash 3.2 and BSD grep as well as GNU grep on Linux, so it uses POSIX
+# extended regexes only: no `grep -P`, no `\b`, no `\s`. An option the local
+# grep does not understand fails every match, and a scanner that matches
+# nothing reports "clean" — the most dangerous result it can give.
+# `src/__tests__/preCommitHook.test.ts` runs this file against planted cases so
+# that failure is caught by the suite instead of by a leak.
 #
 # Enable once per clone:
 #   git config core.hooksPath .githooks
 #
-# Bypass (only after reviewing the diff line-by-line):
+# Keys with no fixed prefix (several providers issue plain random strings)
+# cannot be recognised by shape. This gate is a second line; reading
+# `git diff --cached` before committing is the first.
+#
+# Bypass only after reading the diff line by line, and only when the
+# repository owner says so:
 #   git commit --no-verify
 # =============================================================
 
-set -u
+set -uo pipefail
 
-RED=$'\033[0;31m'
-YEL=$'\033[0;33m'
-GRN=$'\033[0;32m'
-RST=$'\033[0m'
-
-fail() { echo "${RED}✗ pre-commit:${RST} $*" >&2; exit 1; }
-warn() { echo "${YEL}⚠ pre-commit:${RST} $*" >&2; }
-ok()   { echo "${GRN}✓ pre-commit:${RST} $*" >&2; }
-
-staged_files() {
-  git diff --cached --name-only --diff-filter=ACMR
+fail=0
+problem() {
+  if [ "$fail" -eq 0 ]; then
+    printf '\npre-commit: this commit was refused.\n\n' >&2
+  fi
+  fail=1
+  printf '  - %s\n' "$1" >&2
 }
 
-# -------------------------------------------------------------
-# 1. Block files by name
-# -------------------------------------------------------------
-BLOCKED_NAMES_REGEX='(^|/)(\.env($|\.[^/]+$)|.*\.pem$|.*\.key$|.*\.p12$|.*\.pfx$|.*\.cer$|.*\.crt$|.*\.jks$|.*\.keystore$|id_rsa$|id_ed25519$|id_ecdsa$|.*\.gpg$|.*\.asc$|secrets/|credentials/|private/|SESSION_HANDOFF\.md$)'
-RUNTIME_STATE_REGEX='^(audit|cache)/'
+# Added, copied, modified and renamed-to paths. A deletion cannot introduce
+# anything.
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged" ] && exit 0
 
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  # Allow .env.example explicitly — that's a docs file
-  case "$f" in
-    .env.example|*/\.env.example) continue ;;
+# -------------------------------------------------------------
+# 1. Files that must never be committed, judged by name.
+#
+# .gitignore covers most of these, but `git add -f` overrides it. Checked by
+# name so it also holds for a file never seen before.
+# -------------------------------------------------------------
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  base="${file##*/}"
+
+  case "$file" in
+    *.local.md)
+      problem "$file is a local-only note and must never be committed." ;;
+    SESSION_HANDOFF.md|*/SESSION_HANDOFF.md|REMAINING_WORK.md|*/REMAINING_WORK.md|*_REPORT.md|*_AUDIT.md)
+      problem "$file is a handoff, progress or audit note, not a project file." ;;
+    secrets/*|*/secrets/*|credentials/*|*/credentials/*|private/*|*/private/*)
+      problem "$file is inside a secrets/credentials/private folder." ;;
+    audit/*|cache/*)
+      problem "$file is runtime state. The audit log and cache live in the app-data folder, not the repo." ;;
+    dist/*|node_modules/*|src-tauri/target/*|src-tauri/gen/*|*.app/*)
+      problem "$file is build output or a dependency. The repository holds sources." ;;
+    *\ 2/*)
+      problem "$file is inside an iCloud conflict-copy folder." ;;
   esac
-  if echo "$f" | grep -qE "$BLOCKED_NAMES_REGEX"; then
-    fail "blocked filename: $f
-        Filename matches secret / runtime-state pattern.
-        If this is intentional and safe, rename or remove from staging."
-  fi
-  if echo "$f" | grep -qE "$RUNTIME_STATE_REGEX"; then
-    fail "blocked runtime-state path: $f
-        Root-level audit/ and cache/ are runtime data. Source modules
-        under src-tauri/src/audit or src-tauri/src/cache are allowed."
-  fi
+
+  case "$base" in
+    .env.example) : ;;
+    .env|.env.*)
+      problem "$file may hold real secrets. Commit .env.example with placeholders instead." ;;
+    *.pem|*.key|*.p8|*.p12|*.pfx|*.cer|*.crt|*.jks|*.keystore|*.gpg|*.asc|*.mobileprovision|id_rsa|id_ed25519|id_ecdsa)
+      problem "$file is key or signing material." ;;
+    *.sqlite|*.sqlite-journal|*.sqlite-wal|*.sqlite-shm)
+      problem "$file is a database file, which is runtime data." ;;
+    *.dmg|*.deb|*.AppImage|*.msi|*.exe)
+      problem "$file is a built product, not a source." ;;
+    .DS_Store)
+      problem "$file is macOS junk." ;;
+    *\ 2.*)
+      problem "$file looks like an iCloud conflict copy." ;;
+  esac
 done <<EOF
-$(staged_files)
+$staged
 EOF
 
 # -------------------------------------------------------------
-# 2. Block large files (>5 MB) — usually committed-by-mistake binaries.
-#    Exception: licensed model assets under public/models/ (3D brain GLB and
-#    the bundled embedding-model ONNX weights). These must ship with the repo
-#    so a clone builds an app that works fully offline, with no extra download.
+# 2. Oversized files (> 5 MB), measured from the staged blob.
+#
+# Exception: the licensed model assets under public/models/ — the 3D brain and
+# the bundled embedding, rerank and NLI weights. They must ship so a clone
+# builds an app that works fully offline.
 # -------------------------------------------------------------
 MAX_BYTES=$((5 * 1024 * 1024))
-LARGE_FILE_ALLOWED_REGEX='^public/models/.*\.(glb|gltf|bin|onnx)$'
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  [ -f "$f" ] || continue
-  if echo "$f" | grep -qE "$LARGE_FILE_ALLOWED_REGEX"; then
-    continue
-  fi
-  bytes=$(wc -c <"$f" | tr -d ' ')
+LARGE_FILE_ALLOWED='^public/models/.*\.(glb|gltf|bin|onnx)$'
+
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  printf '%s\n' "$file" | grep -qE "$LARGE_FILE_ALLOWED" && continue
+  bytes="$(git cat-file -s ":$file" 2>/dev/null || echo 0)"
   if [ "$bytes" -gt "$MAX_BYTES" ]; then
-    fail "file >5 MB: $f ($bytes bytes)
-        Large binaries do not belong in git. If this is a model/asset,
-        place it under public/models/ (whitelisted) and add a LICENSE
-        next to it."
+    problem "$file is larger than 5 MB. Large binaries do not belong in git history; licensed model assets go under public/models/."
   fi
 done <<EOF
-$(staged_files)
+$staged
 EOF
 
 # -------------------------------------------------------------
-# 3. Scan content for secret-shaped strings
+# 3. Secret-shaped strings in the lines being ADDED.
 #
-# Patterns selected for high signal / low false positive:
-#   sk-[A-Za-z0-9_-]{20,}         — OpenAI live key
-#   sk-ant-[A-Za-z0-9_-]{20,}    — Anthropic live key
-#   AKIA[0-9A-Z]{16}             — AWS access key
-#   ASIA[0-9A-Z]{16}             — AWS STS
-#   ghp_[A-Za-z0-9]{30,}         — GitHub PAT
-#   gho_[A-Za-z0-9]{30,}         — GitHub OAuth
-#   ghs_[A-Za-z0-9]{30,}         — GitHub server-to-server
-#   xox[bp]-[A-Za-z0-9-]{20,}    — Slack
-#   -----BEGIN [A-Z ]*PRIVATE KEY----- — any private key
-#   eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}  — JWT
-#   (api[_-]?key|apikey|secret|password|token)\s*[:=]\s*['"][^'"\s]{16,}['"]
-#       — generic assignment with 16+ char value
+# Matched by pattern, never by storing a literal: writing a real secret here so
+# it could be compared against would itself be the leak.
+#
+# Only added lines are read. A matching line being removed is a leak being
+# cleaned up, and refusing that would be backwards.
+#
+# Each prefix must start a token — not follow a letter, digit, `_` or `-` — so
+# ordinary words that happen to contain one ("task-", "risk-") never match.
 # -------------------------------------------------------------
-SECRET_PATTERNS=(
-  'sk-[A-Za-z0-9_-]{20,}'
-  'sk-ant-[A-Za-z0-9_-]{20,}'
-  'AKIA[0-9A-Z]{16}'
-  'ASIA[0-9A-Z]{16}'
-  'ghp_[A-Za-z0-9]{30,}'
-  'gho_[A-Za-z0-9]{30,}'
-  'ghs_[A-Za-z0-9]{30,}'
-  'xox[bp]-[A-Za-z0-9-]{20,}'
-  '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-  'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}'
-  '(api[_-]?key|apikey|secret|password|token)[[:space:]]*[:=][[:space:]]*[\"'"'"'][^\"'"'"' [:space:]]{16,}[\"'"'"']'
-)
+added="$(git diff --cached --diff-filter=ACMR -U0 --no-color --no-ext-diff | grep '^+' | grep -v '^+++' || true)"
 
-hit_count=0
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  [ -f "$f" ] || continue
-
-  # Skip the hook itself + this file's regex examples — they would
-  # otherwise self-trigger on patterns in the source.
-  case "$f" in
-    .githooks/pre-commit) continue ;;
-    SECURITY.md|docs/SECURITY.md|.env.example) continue ;;
-  esac
-
-  # Skip pure-binary files quickly
-  if LC_ALL=C grep -qPI '^$|.' "$f" 2>/dev/null; then
-    :
-  else
-    continue
+START='(^|[^A-Za-z0-9_-])'
+check_pattern() {
+  if printf '%s\n' "$added" | grep -qE -- "$1"; then
+    problem "The staged changes contain what looks like $2."
   fi
+}
 
-  for pat in "${SECRET_PATTERNS[@]}"; do
-    if grep -nE "$pat" "$f" >/dev/null 2>&1; then
-      lines=$(grep -nE "$pat" "$f" | head -3)
-      warn "secret-shaped content in $f:"
-      echo "$lines" | sed 's/^/        /' >&2
-      hit_count=$((hit_count + 1))
-    fi
-  done
-done <<EOF
-$(staged_files)
-EOF
+check_pattern "${START}sk-ant-[A-Za-z0-9_-]{16,}"    "an Anthropic API key"
+check_pattern "${START}sk-[A-Za-z0-9_-]{20,}"        "an OpenAI-style API key (OpenAI, OpenRouter, DeepSeek, Moonshot, ...)"
+check_pattern "${START}gsk_[A-Za-z0-9]{20,}"         "a Groq API key"
+check_pattern "${START}csk-[A-Za-z0-9]{20,}"         "a Cerebras API key"
+check_pattern "${START}xai-[A-Za-z0-9]{20,}"         "an xAI API key"
+check_pattern "${START}nvapi-[A-Za-z0-9_-]{20,}"     "an NVIDIA API key"
+check_pattern "${START}fw_[A-Za-z0-9]{20,}"          "a Fireworks API key"
+check_pattern "${START}hf_[A-Za-z0-9]{30,}"          "a Hugging Face token"
+check_pattern "${START}AIza[A-Za-z0-9_-]{30,}"       "a Google API key"
+check_pattern "${START}gh[pousr]_[A-Za-z0-9]{30,}"   "a GitHub token"
+check_pattern "${START}A[KS]IA[0-9A-Z]{16}"          "an AWS access key id"
+check_pattern "${START}xox[abprs]-[A-Za-z0-9-]{10,}" "a Slack token"
+check_pattern 'BEGIN [A-Z ]*PRIVATE KEY'             "a private key block"
+check_pattern "${START}eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}" "a signed token (JWT)"
 
-if [ "$hit_count" -gt 0 ]; then
-  fail "$hit_count file(s) contain content that looks like a secret.
-        Move real keys to the OS keychain via the in-app Settings.
-        If these are documentation examples, redact them or add a
-        skip rule in .githooks/pre-commit."
+# A secret-named field assigned a long quoted literal.
+check_pattern '(api[_-]?key|apikey|secret|password|token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"'[:space:]]{16,}["'"'"']' \
+  "a secret-named field assigned a literal value"
+
+# A passphrase written into a file is the exact incident the commit rules were
+# written after. Matched on the shape of an assignment, never on a value: a
+# quoted literal in code or config, or an environment-style assignment of a
+# bare value to a PASSPHRASE variable.
+# A type annotation (`passphrase: string`) or a read from somewhere else
+# (`passphrase = prompt()`) is not a literal and is left alone.
+check_pattern '(passphrase|PASSPHRASE|Passphrase)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"'[:space:]]{4,}["'"'"']' \
+  "a passphrase being assigned a literal value"
+check_pattern '(^|[^A-Za-z0-9_])[A-Z_]*PASSPHRASE[A-Z_]*=[^[:space:]"'"'"'$]{4,}' \
+  "a passphrase being assigned a literal value"
+
+# -------------------------------------------------------------
+# 4. Report.
+# -------------------------------------------------------------
+if [ "$fail" -ne 0 ]; then
+  cat >&2 <<'MSG'
+
+Nothing has been committed. Unstage what should not be there:
+
+    git restore --staged <file>
+
+If this is a false alarm, change the content so it no longer looks like a
+secret. Bypassing with --no-verify is the repository owner's decision.
+MSG
+  exit 1
 fi
 
-ok "no secrets, no oversized files, no runtime-state files staged."
+printf 'pre-commit: no secrets, notes, build output or oversized files staged.\n' >&2
 exit 0

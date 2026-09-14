@@ -93,7 +93,7 @@ This is not a paid bug-bounty program; we offer recognition, not a monetary rewa
 
 These invariants are enforced in the codebase and CI, not just documented:
 
-- **No secrets in the repo.** API keys, tokens, certificates, and private keys are blocked by `.githooks/pre-commit` and `.gitignore`. Provider API keys are entered in Settings and held in the renderer's per-app WebKit `localStorage` inside the app's data directory (isolated by the Tauri bundle identifier) — never committed, never written to the audit log, never stored in the response cache. They are not encrypted at rest and the app has no OS-keychain path; see the trade-off stated in [docs/SECURITY.md](docs/SECURITY.md) invariant 4.
+- **No secrets in the repo.** Key files, local notes and build output are kept out by `.gitignore` and refused by name in `.githooks/pre-commit`, which also refuses staged lines shaped like a known provider key, token or private key (see [Pre-commit hook](#pre-commit-hook) for what it can and cannot recognise). Provider API keys are entered in Settings and held in the renderer's per-app WebKit `localStorage` inside the app's data directory (isolated by the Tauri bundle identifier) — never committed, never written to the audit log, never stored in the response cache. They are not encrypted at rest and the app has no OS-keychain path; see the trade-off stated in [docs/SECURITY.md](docs/SECURITY.md) invariant 4.
 - **No outbound HTTP from the renderer.** All external requests are initiated in Rust and gated through `security::guard::check` (SSRF denylist → host allowlist → rate limiter → audit). See [docs/SECURITY.md](docs/SECURITY.md).
 - **Hash-chained audit log.** Every privileged action is appended to a tamper-evident SHA-256 chain; `audit_log_verify` walks it and corruption is surfaced, not silently skipped.
 - **Strict CSP, `withGlobalTauri: false`.** The renderer cannot reach the runtime via `window.__TAURI__`; it must import the typed API. No external `script-src`/`connect-src`, no `'unsafe-eval'` (only `'wasm-unsafe-eval'`).
@@ -101,8 +101,15 @@ These invariants are enforced in the codebase and CI, not just documented:
 
 ## Pre-commit hook
 
-The repo ships a secret-scanning pre-commit hook at `.githooks/pre-commit`.
-Enable it once per clone:
+The repo ships a pre-commit hook at `.githooks/pre-commit`. It judges only what is staged and refuses:
+
+- lines shaped like a provider key or token with a known prefix (OpenAI-style, Anthropic, Groq, Cerebras, xAI, NVIDIA, Fireworks, Hugging Face, Google, GitHub, AWS, Slack), a JWT, a private key block, or a secret-named field or passphrase assigned a literal;
+- key and signing files, `.env` files other than `.env.example`, `*.local.md` notes and handoff files, build output, database files and iCloud conflict copies — by name, so `git add -f` cannot slip one past `.gitignore`;
+- files over 5 MB, except the licensed model assets under `public/models/`.
+
+Some providers issue keys with no fixed prefix, and those cannot be recognised by shape — reading `git diff --cached` before committing remains the first check. The hook itself is covered by `src/__tests__/preCommitHook.test.ts`, which runs it against planted cases on every test run.
+
+Git does not carry hooks into a clone, so enable it once per clone:
 
 ```sh
 git config core.hooksPath .githooks
