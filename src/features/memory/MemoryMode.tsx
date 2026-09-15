@@ -10,6 +10,7 @@ import { useLearningStore } from '@core/rag/agentic/learningStore';
 import { useProjectStore } from '@core/store/projectStore';
 import { useToastStore } from '@core/store/toastStore';
 import { Icon } from '@ui/icons';
+import { useLiteMode } from '@ui/hooks/useLiteMode';
 import { DeleteAllDialog } from './components/DeleteAllDialog';
 import { MemoryCard } from './components/MemoryCard';
 import { PrunePreview } from './components/PrunePreview';
@@ -52,8 +53,15 @@ export function MemoryMode() {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 180);
     return () => window.clearTimeout(timer);
   }, [search]);
-  // Graph is the default view — the topic map is the primary way to read memory.
-  const [view, setView] = useState<MemoryView>('graph');
+  // Graph is the default view — the topic map is the primary way to read memory —
+  // except in Lite mode, which keeps WebGL off: there memory opens as a list and
+  // the map stays one click away. Turning Lite on mid-session switches to the
+  // list too, since this mode stays mounted (hidden) and would keep its canvas.
+  const lite = useLiteMode();
+  const [view, setView] = useState<MemoryView>(() => (lite ? 'list' : 'graph'));
+  useEffect(() => {
+    if (lite) setView('list');
+  }, [lite]);
   // Scope: this project only, or the whole cross-project library (the deduped
   // "focused PubMed" of every trusted finding saved across projects).
   const [scope, setScope] = useState<'project' | 'library'>('project');

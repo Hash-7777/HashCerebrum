@@ -35,7 +35,7 @@ import type { WorkflowIntent } from './components/BrainWorkflow2D';
 import { applySwarmResult } from './assistantMessage';
 import { memoryChunksForTurn } from './memoryTopic';
 import { looksLikeRefusalOrNonQuery } from './swarm/boss';
-import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
+import { useLiteMode } from '@ui/hooks/useLiteMode';
 import { DrugInteractionDisclaimer, hasAckedDiDisclaimer } from './components/DrugInteractionDisclaimer';
 import { Composer } from './components/Composer';
 import { ChatHeader } from './components/ChatHeader';
@@ -67,9 +67,7 @@ const WELCOME_MESSAGE: ChatMessage = {
 export function BrainMode() {
   // Lite mode: skip the 3D brain entirely (no three.js, no GLB, no GPU) and show
   // the 2D agent panel instead. Auto-enabled on weak hardware; user-overridable.
-  const autoLowEnd = useLowEndDevice();
-  const litePref = useBrainModesStore((s) => s.lite);
-  const lite = litePref === 'on' || (litePref === 'auto' && autoLowEnd);
+  const lite = useLiteMode();
   const [selectedRegion, setSelectedRegion] = useState<RegionId | null>(null);
   const [hoveredRegion, setHoveredRegion] = useState<RegionId | null>(null);
   const modelGroups = useModelCatalogStore((s) => s.groups);

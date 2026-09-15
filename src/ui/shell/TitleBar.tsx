@@ -2,7 +2,7 @@ import { APP_NAME, APP_VERSION } from '@config/constants';
 import { Icon } from '@ui/icons';
 import { platform } from '@platform/index';
 import { useBrainModesStore } from '@core/store/brainModesStore';
-import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
+import { useLiteMode } from '@ui/hooks/useLiteMode';
 import logoMark from '@/assets/logo-mark.png';
 
 const maskStyle = {
@@ -30,10 +30,8 @@ export function TitleBar() {
   // 3D ⇄ 2D view toggle, surfaced in the toolbar for one-click access. The Lite
   // preference drives the Brain workspace: 'on' = 2D pipeline, 'off' = 3D brain,
   // 'auto' = 2D only on weak hardware. Clicking forces the opposite explicit mode.
-  const lite = useBrainModesStore((s) => s.lite);
   const setLite = useBrainModesStore((s) => s.setLite);
-  const autoLowEnd = useLowEndDevice();
-  const is2D = lite === 'on' || (lite === 'auto' && autoLowEnd);
+  const is2D = useLiteMode();
   const toggleView = () => setLite(is2D ? 'off' : 'on');
 
   return (
