@@ -206,11 +206,6 @@ function canonicalReferences(manuscript: Manuscript, evidence: EvidenceItem[]) {
 }
 
 
-// A PRISMA 2020-style study-selection flow built from the counts the pipeline
-// already knows: records identified (per source), duplicates removed, records
-// screened, and records included/cited — with exclusion side-boxes. Honestly
-// labelled as an automated screen (no dual independent reviewers), so it reads as
-// a real selection diagram rather than a decorative flow.
 function baselineCharacteristicsTable(baseline: BaselineCharacteristics): ManuscriptTable {
   return {
     id: 'table-baseline-characteristics',
