@@ -2,11 +2,11 @@
 // message, delegates research to topic specialists, and synthesizes one
 // cited answer; failover covers a rate-limited or dead-credit provider.
 //
-// The mode is split into small components (Composer, Transcript,
-// BrainCanvas, AgentPanel, SettingsPanel) so a crash in one stays
-// contained by FeatureBoundary instead of taking the workspace down.
+// The mode is split into small components (ChatHeader, Transcript, Composer,
+// BrainSidePanel with the 3D BrainCanvas and AgentPanel) so a crash in one
+// stays contained by FeatureBoundary instead of taking the workspace down.
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AgentId, RegionId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
 import { streamWithModelChain } from '@core/llm/ProviderRegistry';
@@ -30,26 +30,20 @@ import { classify } from '@core/topic/MeshClassifier';
 import type { EvidenceItem } from '@platform/index';
 import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 
-import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
-import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow2D';
+import { initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
+import type { WorkflowIntent } from './components/BrainWorkflow2D';
 import { applySwarmResult } from './assistantMessage';
 import { memoryChunksForTurn } from './memoryTopic';
 import { looksLikeRefusalOrNonQuery } from './swarm/boss';
-import { verifyAnswer } from './swarm/claimVerify';
-import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
 import { DrugInteractionDisclaimer, hasAckedDiDisclaimer } from './components/DrugInteractionDisclaimer';
-// Lazy so the heavy three.js / WebGL bundle and the 3D brain model load ONLY
-// when the canvas is actually rendered — never in Lite mode or on weak hardware.
-const BrainCanvas = lazy(() =>
-  import('./components/BrainCanvas').then((m) => ({ default: m.BrainCanvas })),
-);
 import { Composer } from './components/Composer';
-import { Icon } from '@ui/icons';
+import { ChatHeader } from './components/ChatHeader';
+import { BrainSidePanel } from './components/BrainSidePanel';
+import { useAnswerVerification } from './useAnswerVerification';
 import { ClaimLedgerPanel } from './components/ClaimLedgerPanel';
 import type { ClaimLedgerEntry } from './swarm/publicationTypes';
 import { Transcript, type ChatMessage } from './components/Transcript';
-import { BRAIN_MODEL } from './data/modelParts';
 import { SOURCE_DEFS } from './data/sources';
 import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchPipeline';
 import { runSwarm } from './swarm/runSwarm';
@@ -122,47 +116,7 @@ export function BrainMode() {
     };
   }, []);
 
-  // Fact-check finalized research answers once each: the offline NLI model checks
-  // whether every cited sentence is entailed by its source, and any that are not
-  // are attached to the message for a subtle "may not be fully supported" note.
-  // Path-agnostic (covers every finalize path), gated by the verify setting, and
-  // fail-open — it only annotates, never rewrites, and a no-op when the model is
-  // absent. The ref guard stops it re-running as the message list re-renders.
-  const verifiedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!useMemorySettingsStore.getState().verifyEnabled) return;
-    const target = messages.find(
-      (m) =>
-        m.role === 'assistant' &&
-        !m.isStreaming &&
-        (m.citations?.length ?? 0) > 0 &&
-        !verifiedRef.current.has(m.id),
-    );
-    if (!target) return;
-    verifiedRef.current.add(target.id);
-    let cancelled = false;
-    void verifyAnswer(target.content, target.citations ?? []).then((res) => {
-      // Record the result whenever the model actually checked something — even
-      // when nothing is unsupported — so the positive "% of claims verified"
-      // trust badge can render, not only the warning. A no-op run (no model, or
-      // no cited sentences) leaves the message untouched.
-      if (cancelled || res.checked === 0) return;
-      setMessages((current) =>
-        current.map((m) =>
-          m.id === target.id
-            ? {
-                ...m,
-                verification: { checked: res.checked, supported: res.checked - res.unsupported.length },
-                ...(res.unsupported.length > 0 ? { unsupportedClaims: res.unsupported } : {}),
-              }
-            : m,
-        ),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [messages]);
+  useAnswerVerification(messages, setMessages);
 
   const stopRun = () => {
     abortRef.current?.abort();
@@ -853,60 +807,20 @@ export function BrainMode() {
         />
       )}
       <section className="research-chat" aria-label="Brain research chat">
-        <header className="chat-header">
-          <div className="chat-header-row">
-            <div className="chat-head-left">
-              <h1 className="brain-title"><em>The</em> Brain</h1>
-              <div className={`brain-rule${isRunning ? ' is-running' : ''}`} aria-hidden="true"><span /></div>
-              <div className="chat-meta">
-                <span className="meta-item"><b>{String(turnCount).padStart(2, '0')}</b> turns</span>
-                {evidence.length > 0 && (
-                  <>
-                    <span className="meta-div" aria-hidden="true" />
-                    <span className="meta-item meta-accent"><b>{String(evidence.length).padStart(2, '0')}</b> evidence</span>
-                  </>
-                )}
-                {(draftProgress || isRunning) && (
-                  <>
-                    <span className="meta-div" aria-hidden="true" />
-                    <span className="meta-run">{draftProgress || 'running'}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            {turnCount > 0 && (
-              <div className="chat-export-actions">
-                <button
-                  type="button"
-                  className="export-btn"
-                  onClick={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
-                >
-                  <Icon name="document" size={13} /> Export MD
-                </button>
-                <button
-                  type="button"
-                  className="export-btn export-primary"
-                  onClick={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
-                >
-                  <Icon name="filePdf" size={13} /> Export PDF
-                </button>
-                <button
-                  type="button"
-                  className="export-btn export-clear"
-                  onClick={() => {
-                    clearActive();
-                    setMessages([WELCOME_MESSAGE]);
-                    setDataset(null);
-                    setEvidence([]);
-                  }}
-                  title="Clear workspace"
-                >
-                  <Icon name="close" size={12} /> Clear
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
+        <ChatHeader
+          isRunning={isRunning}
+          turnCount={turnCount}
+          evidenceCount={evidence.length}
+          draftProgress={draftProgress}
+          onExportMarkdown={() => exportChatMarkdown(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
+          onExportPdf={() => void exportChatPdf(messages, { title: exportTitle, mode: chatMode, project: activeProject?.name, messageCount: turnCount })}
+          onClear={() => {
+            clearActive();
+            setMessages([WELCOME_MESSAGE]);
+            setDataset(null);
+            setEvidence([]);
+          }}
+        />
 
         <FeatureBoundary name="Transcript">
           <Transcript
@@ -945,56 +859,15 @@ export function BrainMode() {
         </FeatureBoundary>
       </section>
 
-      <section className={`brain-side${lite ? ' brain-side--solo' : ''}`}>
-        {lite ? (
-          // Lite mode: no WebGL / 3D — a 2D pipeline workflow shows the live
-          // research process (rail slides to the active stage) above the agent
-          // panel, so weak or no-GPU hardware runs full-speed with no loss.
-          <>
-            <FeatureBoundary name="Pipeline (2D)">
-              <div className="brain-model-panel brain-model-panel--flat">
-                <BrainWorkflow2D statuses={agentStatuses} intent={activeIntent} />
-              </div>
-            </FeatureBoundary>
-            <FeatureBoundary name="Agents">
-              <AgentPanel statuses={agentStatuses} />
-            </FeatureBoundary>
-          </>
-        ) : (
-          <>
-            <FeatureBoundary name="Brain canvas" resetKey={BRAIN_MODEL.path}>
-              <div className="brain-model-panel">
-                <div className="brain-stage">
-                  <Suspense
-                    fallback={
-                      <div className="brain-loading" role="status" aria-live="polite">
-                        <span className="brain-loading-orb" aria-hidden="true" />
-                        <p className="brain-loading-label">Preparing the 3D brain…</p>
-                      </div>
-                    }
-                  >
-                    <BrainCanvas
-                      selectedRegion={selectedRegion}
-                      hoveredRegion={hoveredRegion}
-                      onSelectRegion={toggleRegion}
-                      onHoverRegion={setHoveredRegion}
-                    />
-                  </Suspense>
-                  <p className="brain-credit-line">
-                    {BRAIN_MODEL.source} · {BRAIN_MODEL.license}
-                  </p>
-                </div>
-              </div>
-            </FeatureBoundary>
-
-            <div className="source-panel">
-              <FeatureBoundary name="Agents">
-                <AgentPanel statuses={agentStatuses} />
-              </FeatureBoundary>
-            </div>
-          </>
-        )}
-      </section>
+      <BrainSidePanel
+        lite={lite}
+        agentStatuses={agentStatuses}
+        activeIntent={activeIntent}
+        selectedRegion={selectedRegion}
+        hoveredRegion={hoveredRegion}
+        toggleRegion={toggleRegion}
+        setHoveredRegion={setHoveredRegion}
+      />
 
       {claimLedgerOpen && pendingClaims && (
         <div className="claim-ledger-overlay">
