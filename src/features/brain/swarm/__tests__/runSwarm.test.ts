@@ -8,7 +8,7 @@ import {
   isNonCitableProceeding,
   mergeEvidence,
   rankEvidenceByRelevance,
-} from '../runSwarm';
+} from '../evidenceRanking';
 import type { SpecialistResult } from '../types';
 
 function makeRecord(partial: Partial<EvidenceItem> & { source: EvidenceItem['source'] }): EvidenceItem {
