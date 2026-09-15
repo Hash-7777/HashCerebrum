@@ -576,10 +576,10 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 238 | ~43,631 |
+| React/TypeScript app code (`src/`, excluding tests) | 238 | ~43,567 |
 | TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 110 | ~12,713 |
 | Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,709 |
-| **Total core source** | **391** | **~64,053** |
+| **Total core source** | **391** | **~63,989** |
 
 The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,117 Vitest tests plus 78 Rust tests). Layering is enforced rather than documented: a test walks the import graph on every run and fails if anything outside the platform adapter calls `invoke()`, if one feature imports another, if core reaches into a feature at runtime, or if a new module becomes unreachable from the entry point.
 

@@ -52,12 +52,3 @@ export interface LlmResponse {
    *  output hit the model's token cap — used to resume a capped generation). */
   finishReason?: string;
 }
-
-export interface LlmProvider {
-  id: LlmProviderId;
-  label: string;
-  defaultModel: string;
-  models: string[];
-  complete(req: LlmRequest): Promise<LlmResponse>;
-  stream?(req: LlmRequest, onToken: (t: string) => void): Promise<LlmResponse>;
-}

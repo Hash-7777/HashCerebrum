@@ -14,7 +14,7 @@ import {
   shouldRetrySameProvider,
   type FailoverCandidate,
 } from './failover';
-import { allDiscoveredModels, useModelCatalogStore } from '@core/store/modelCatalogStore';
+import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { OPENAI_COMPAT_CHAT_URL } from './providerEndpoints';
 import { getOllamaHost, getPrivacyLocalOnly } from './providerSettings';
 import { redactSecrets, secretValuesFromHeaders } from './secrets';
@@ -27,7 +27,7 @@ import {
   parseOllamaStreamLine,
   parseOpenAiStreamLine,
 } from './streamParsers';
-import type { LlmProvider, LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, LlmToolSpec } from './types';
+import type { LlmProviderId, LlmRequest, LlmResponse, LlmToolCall, LlmToolSpec } from './types';
 import {
   isJailbreakAttempt,
   isOffTopicQuestion,
@@ -754,41 +754,6 @@ export async function streamWithModelSafe(
   return streamWithModelChain(modelValue, req, opts, onProgress);
 }
 
-// Default-model resolver — used by BrainMode on mount. Order:
-//   1. If Ollama has a loaded model (warm via /api/ps), prefer that.
-//   2. Else, pick the first freshly discovered model in the dynamic catalog.
-//   3. Else fall back to the local default value.
-// This mirrors the HashCortX `defaultLLM()` UX so the user doesn't see
-// a "no key" wall on first launch when they already have Ollama running.
-export async function resolveDefaultModel(): Promise<string> {
-  // Ollama check — fast, no auth, fails closed on connection errors.
-  try {
-    const { status, body } = await platform().llm.httpGet('ollama', `${getOllamaHost()}/api/ps`, {});
-    if (status >= 200 && status < 300) {
-      try {
-        const data = JSON.parse(body) as Record<string, unknown>;
-        const loaded = Array.isArray(data.models) ? data.models : Array.isArray(data.processes) ? data.processes : [];
-        const first: unknown = loaded[0]?.model ?? loaded[0]?.name;
-        if (typeof first === 'string' && first.length > 0) {
-          return `local:ollama:${first}`;
-        }
-      } catch {
-        /* Ollama returned non-JSON — fall through */
-      }
-    }
-  } catch {
-    /* no local Ollama running — fall through */
-  }
-
-  const discovered = allDiscoveredModels();
-  const local = discovered.find((option) => parseModelRef(option.value).kind === 'local');
-  if (local) return local.value;
-  const cloud = discovered.find((option) => parseModelRef(option.value).kind === 'cloud');
-  if (cloud) return cloud.value;
-
-  return DEFAULT_MODEL;
-}
-
 export async function completeWithModel(modelValue: string, req: Omit<LlmRequest, 'model'>): Promise<LlmResponse> {
   const parsed = parseModelRef(modelValue || DEFAULT_MODEL);
   if (parsed.kind === 'cloud' && getPrivacyLocalOnly()) {
@@ -991,24 +956,4 @@ export async function completeWithModelChain(
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'unknown LLM error'));
-}
-
-export function getProvider(id: LlmProviderId): LlmProvider {
-  const def = PROVIDER_DEFS.find((provider) => provider.provider === id) ?? PROVIDER_DEFS[0]!;
-  const models = useModelCatalogStore
-    .getState()
-    .groups.find((group) => group.provider === id)
-    ?.models.map((model) => model.value) ?? [];
-  const defaultModel = models[0] ?? DEFAULT_MODEL;
-  return {
-    id,
-    label: def.label,
-    defaultModel,
-    models,
-    complete: (req: LlmRequest) => completeWithModel(defaultModel, req),
-  };
-}
-
-export function listProviders(): LlmProvider[] {
-  return PROVIDER_DEFS.map((provider) => getProvider(provider.provider));
 }
