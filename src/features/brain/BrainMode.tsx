@@ -20,8 +20,8 @@ import { useProjectStore } from '@core/store/projectStore';
 import { exportChatMarkdown, exportChatPdf } from './export/messageExport';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
-import { useRagStore, type NewRagChunk } from '@core/store/ragStore';
-import { classifyEvidenceStrength, getEmbeddingProvider } from '@core/rag';
+import { useRagStore } from '@core/store/ragStore';
+import { getEmbeddingProvider } from '@core/rag';
 import { recallTurns, rememberTurns } from './context/conversationMemory';
 import { updateRunningSummary } from './context/runningSummary';
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
@@ -33,9 +33,8 @@ import { FeatureBoundary } from '@ui/errors/FeatureBoundary';
 import { AgentPanel, initialAgentStatuses, type AgentStatus } from './components/AgentPanel';
 import { BrainWorkflow2D, type WorkflowIntent } from './components/BrainWorkflow2D';
 import { applySwarmResult } from './assistantMessage';
-import { citedEvidenceFor, memoryTopicLabel } from './memoryTopic';
-import { isMetaOrAppQuestion } from './swarm/paper';
-import { isConfidentGeneReport, isConfidentInteractionReport, looksLikeRefusalOrNonQuery } from './swarm/boss';
+import { memoryChunksForTurn } from './memoryTopic';
+import { looksLikeRefusalOrNonQuery } from './swarm/boss';
 import { verifyAnswer } from './swarm/claimVerify';
 import { useMemorySettingsStore } from '@core/store/memorySettingsStore';
 import { useLowEndDevice } from '@ui/hooks/useLowEndDevice';
@@ -538,41 +537,14 @@ export function BrainMode() {
         detail: `${result.kind} · ${labelForModel(result.modelUsed)}`,
         light: { intensity: result.kind === 'research' ? 0.74 : 0.52, ttlMs: 1800 },
       });
-      // Save memory (same logic as the synchronous path)
+      // Save memory through the same gate as the synchronous path. A background
+      // paper draft carries no drug/genetics focus, so none is passed.
       if (result.kind === 'research' && activeProjectId) {
         const runId = ensureResearchRun();
         runs.storeEvidence(runId, result.evidence);
         runs.storeSummary(runId, content, result.modelUsed);
-        const memoryTopic = memoryTopicLabel(cleanQuery);
-        const citableForMemory = citedEvidenceFor(content, result.evidence);
-        if (memoryTopic && citableForMemory.length > 0 && !isMetaOrAppQuestion(cleanQuery)) {
-          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
-            const strength = classifyEvidenceStrength([item.title, item.snippet ?? ''].join(' '), item.source);
-            return {
-              kind: 'evidence',
-              title: item.title,
-              text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
-              source: item.source,
-              runId,
-              query: memoryTopic,
-              ...(item.url ? { url: item.url } : {}),
-              ...(item.year != null ? { year: item.year } : {}),
-              ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
-              ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
-              ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
-              ...(strength ? { evidenceStrength: strength } : {}),
-            };
-          });
-          const answerChunk: NewRagChunk = {
-            kind: 'answer',
-            title: memoryTopic,
-            text: content,
-            source: 'answer',
-            runId,
-            query: memoryTopic,
-          };
-          useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
-        }
+        const chunks = memoryChunksForTurn({ question: cleanQuery, answer: content, evidence: result.evidence, runId });
+        if (chunks) useRagStore.getState().addChunks(activeProjectId, chunks);
       }
       setIsRunning(false);
     };
@@ -681,68 +653,17 @@ export function BrainMode() {
         runs.storeEvidence(runId, result.evidence);
         runs.storeSummary(runId, finalContent, result.modelUsed);
 
-        // Save this run into the active project's memory — but only as a
-        // valuable, subject-organised finding, not a dump of everything:
-        //   • skip meta / app-introspection turns,
-        //   • keep only the evidence the answer actually cited (drop the
-        //     off-topic retrieval that was never used, and skip turns that
-        //     cited nothing — refusals / no-evidence answers),
-        //   • file it under a clean subject topic, not the raw query string.
-        const memoryTopic = memoryTopicLabel(cleanQuery);
-        const citableForMemory = citedEvidenceFor(finalContent, result.evidence);
-        // The Drug-Interactions mode contributes to the shared memory ONLY when
-        // it reached a confident verdict (so the app is fed sure answers, not
-        // "insufficient evidence" reports), and tags its findings so its own
-        // retrieval stays isolated to this trusted domain.
-        // Tag findings to the mode's domain so its retrieval stays isolated,
-        // and only feed shared memory on a confident result (drug interactions:
-        // a clear verdict; genetics: a non-insufficient association band).
-        const memoryTag = turnDrugFocus ? 'drug_interactions' : turnGeneticsFocus ? 'genetics' : undefined;
-        const soloConfident = turnDrugFocus
-          ? isConfidentInteractionReport(finalContent)
-          : turnGeneticsFocus
-            ? isConfidentGeneReport(finalContent)
-            : true;
-        if (
-          activeProjectId &&
-          memoryTopic &&
-          citableForMemory.length > 0 &&
-          !isMetaOrAppQuestion(cleanQuery) &&
-          soloConfident
-        ) {
-          const evidenceChunks: NewRagChunk[] = citableForMemory.map((item) => {
-            const strength = classifyEvidenceStrength(
-              [item.title, item.snippet ?? ''].join(' '),
-              item.source,
-            );
-            return {
-              kind: 'evidence',
-              title: item.title,
-              text: [item.title, item.snippet ?? ''].filter(Boolean).join(' — '),
-              source: item.source,
-              runId,
-              query: memoryTopic,
-              // Carry the medical metadata forward so memory ranks by evidence
-              // strength + recency (search/ranking.ts), not just text overlap.
-              ...(item.url ? { url: item.url } : {}),
-              ...(item.year != null ? { year: item.year } : {}),
-              ...(item.identifiers?.pmid ? { pmid: item.identifiers.pmid } : {}),
-              ...(item.identifiers?.doi ? { doi: item.identifiers.doi } : {}),
-              ...(item.authors?.length ? { authors: item.authors.slice(0, 8) } : {}),
-              ...(strength ? { evidenceStrength: strength } : {}),
-              ...(memoryTag ? { tag: memoryTag } : {}),
-            };
-          });
-          const answerChunk: NewRagChunk = {
-            kind: 'answer',
-            title: memoryTopic,
-            text: finalContent,
-            source: 'answer',
+        // Save this run into the active project's memory — only as a valuable,
+        // subject-organised finding (see memoryChunksForTurn for the gate).
+        if (activeProjectId) {
+          const chunks = memoryChunksForTurn({
+            question: cleanQuery,
+            answer: finalContent,
+            evidence: result.evidence,
             runId,
-            query: memoryTopic,
-            ...(memoryTag ? { tag: memoryTag } : {}),
-          };
-          useRagStore.getState().addChunks(activeProjectId, [...evidenceChunks, answerChunk]);
+            ...(turnDrugFocus ? { focus: 'drug_interactions' as const } : turnGeneticsFocus ? { focus: 'genetics' as const } : {}),
+          });
+          if (chunks) useRagStore.getState().addChunks(activeProjectId, chunks);
         }
       }
       setMessages((current) =>

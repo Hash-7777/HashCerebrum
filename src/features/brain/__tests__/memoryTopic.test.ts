@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
-import { citedEvidenceFor, memoryTopicLabel } from '../memoryTopic';
+import { citedEvidenceFor, memoryChunksForTurn, memoryTopicLabel } from '../memoryTopic';
 
 function rec(title: string): EvidenceItem {
   return {
@@ -42,5 +42,46 @@ describe('memoryTopicLabel', () => {
 
   it('returns null when nothing meaningful remains', () => {
     expect(memoryTopicLabel('so what about it?')).toBeNull();
+  });
+});
+
+describe('memoryChunksForTurn', () => {
+  const evidence: EvidenceItem[] = [
+    { ...rec('Warfarin and NSAIDs bleeding cohort'), snippet: 'Bleeding risk rose.', year: 2021, identifiers: { pmid: '111', doi: '10.1/x' } },
+    rec('Uncited record'),
+  ];
+  const base = {
+    question: 'warfarin ibuprofen bleeding risk',
+    answer: 'Concomitant use raised bleeding risk [S1].',
+    evidence,
+    runId: 'run-1',
+  };
+
+  it('saves the cited evidence and the answer, filed under the subject label', () => {
+    const chunks = memoryChunksForTurn(base)!;
+    expect(chunks.map((c) => c.kind)).toEqual(['evidence', 'answer']);
+    expect(chunks[0]).toMatchObject({ title: 'Warfarin and NSAIDs bleeding cohort', runId: 'run-1', pmid: '111', doi: '10.1/x', year: 2021 });
+    expect(chunks[1]).toMatchObject({ text: base.answer, query: 'warfarin ibuprofen bleeding risk' });
+    expect(chunks.some((c) => 'tag' in c)).toBe(false);
+  });
+
+  it('saves nothing for a question about the app itself', () => {
+    expect(memoryChunksForTurn({ ...base, question: 'what model are you' })).toBeNull();
+  });
+
+  it('saves nothing when the answer cited no record', () => {
+    expect(memoryChunksForTurn({ ...base, answer: 'No relevant evidence was found.' })).toBeNull();
+  });
+
+  it('saves a drug-interaction turn only with a confident verdict, and tags it', () => {
+    expect(memoryChunksForTurn({ ...base, focus: 'drug_interactions', answer: 'Insufficient evidence to grade [S1].' })).toBeNull();
+    const chunks = memoryChunksForTurn({ ...base, focus: 'drug_interactions' })!;
+    expect(chunks.every((c) => c.tag === 'drug_interactions')).toBe(true);
+  });
+
+  it('saves a genetics turn only when its confidence band is above insufficient', () => {
+    expect(memoryChunksForTurn({ ...base, focus: 'genetics' })).toBeNull();
+    const chunks = memoryChunksForTurn({ ...base, focus: 'genetics', answer: 'Association confidence: 62% — moderate [S1].' })!;
+    expect(chunks.every((c) => c.tag === 'genetics')).toBe(true);
   });
 });
