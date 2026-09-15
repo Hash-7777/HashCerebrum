@@ -24,7 +24,7 @@
 
 <div align="center">
 
-**Started 19 May 2026 · in active development ever since · 762 commits and counting**
+**Started 19 May 2026 · in active development**
 
 </div>
 
@@ -65,18 +65,17 @@ Your research stays on your machine. HashCerebrum is a **local-first desktop app
 
 ## Project status
 
-HashCerebrum has been built in the open-source spirit as a single-developer project, in **active daily development** — not a one-off release.
+HashCerebrum has been built in the open-source spirit as a single-developer project, in **active development** — not a one-off release.
 
 | | |
 |---|---|
 | **First commit** | 19 May 2026 |
-| **Latest work** | July 2026 — ongoing |
-| **Commits** | 762 and counting |
+| **History** | every change is in the [commit log](https://github.com/Hash-7777/HashCerebrum/commits/main) |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
 | **Tests** | 1,117 frontend (Vitest) + 78 Rust (`cargo test`), all green; run in CI |
 
-Roughly two months of continuous work: the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened in this window. Development is continuing.
+Between May and July 2026 the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened. Development is continuing.
 
 ---
 
@@ -577,10 +576,10 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 248 | ~46,908 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 118 | ~12,919 |
-| Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,498 |
-| **Total core source** | **409** | **~67,325** |
+| React/TypeScript app code (`src/`, excluding tests) | 229 | ~43,514 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 110 | ~12,716 |
+| Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,709 |
+| **Total core source** | **382** | **~63,939** |
 
 The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,117 Vitest tests plus 78 Rust tests). Layering is enforced rather than documented: a test walks the import graph on every run and fails if anything outside the platform adapter calls `invoke()`, if one feature imports another, if core reaches into a feature at runtime, or if a new module becomes unreachable from the entry point.
 
