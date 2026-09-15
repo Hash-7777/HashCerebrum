@@ -12,6 +12,11 @@ updates:
       npm-minor-patch:
         patterns:
           - "*"
+        # three.js is pre-1.0 and its "minor" releases change the API, so each
+        # one arrives on its own and is checked against the 3D brain on screen.
+        exclude-patterns:
+          - "three"
+          - "@types/three"
         update-types:
           - "minor"
           - "patch"
