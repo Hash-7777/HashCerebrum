@@ -915,21 +915,3 @@ export async function preparePaperLedger(opts: {
     ...(opts.signal ? { signal: opts.signal } : {}),
   };
 }
-
-export async function runPaperPipeline(opts: {
-  question: string;
-  bossModel: string;
-  evidence: EvidenceItem[];
-  specialists: SpecialistResult[];
-  standard?: ManuscriptStandard;
-  dataset?: UploadedDatasetSummary | null;
-  onStage?: (stage: string) => void;
-  evidenceGap?: string;
-  mini?: boolean;
-  /** If provided, the pipeline pauses after building the claim ledger and
-   *  awaits the callback, allowing the user to curate claims before drafting. */
-  onClaimLedger?: (ledger: ClaimLedgerEntry[]) => Promise<ClaimLedgerEntry[]>;
-}): Promise<Manuscript> {
-  const prep = await preparePaperLedger(opts);
-  return compileManuscriptFromLedger(prep);
-}

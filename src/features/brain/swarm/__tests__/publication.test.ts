@@ -4,7 +4,6 @@ import type { EvidenceItem } from '@platform/index';
 import type { Manuscript } from '../manuscript';
 import type { UploadedDatasetSummary } from '../publicationTypes';
 import {
-  assertPublicationReady,
   buildPublicationArtifact,
   normalizeManuscriptForPublication,
   publicationMarkdown,
@@ -335,12 +334,11 @@ describe('publication artifact contract', () => {
     expect(normalized.sections[0]?.body.join(' ')).not.toContain('[2]');
   });
 
-  it('blocks publication export when required section depth is not met', () => {
+  it('marks the paper not export-ready when required section depth is not met', () => {
     const artifact = buildPublicationArtifact(manuscript, evidence);
 
     expect(artifact.validation.exportReady).toBe(false);
     expect(artifact.validation.blockers.some((issue) => issue.code === 'section-too-short')).toBe(true);
-    expect(() => assertPublicationReady(artifact)).toThrow(/publication validation/i);
   });
 
   it('flags a fabricated primary study (the tool only reviews literature)', () => {

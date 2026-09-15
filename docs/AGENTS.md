@@ -44,11 +44,11 @@ For full paper requests, `runSwarm` routes the retrieved records through the
 paper pipeline instead of asking a model to write a paper from a prompt:
 
 ```
-runPaperPipeline
+preparePaperLedger
   → extractEvidenceFromRecords
   → buildClaimLedger
   → buildPaperBlueprint
-  → compileManuscriptFromLedger
+compileManuscriptFromLedger
   → validatePaperPackage
   → buildPublicationArtifact
 ```
@@ -56,8 +56,9 @@ runPaperPipeline
 The paper pipeline is source-led. It stores an evidence extraction table, claim
 ledger, source-yield statistics, evidence-strength counts, extracted numeric
 statistics when traceable, and QA blockers/warnings in the manuscript artifact.
-PDF export is blocked when citations, sections, statistics, or source-backed
-findings fail validation.
+A paper that fails validation is not marked export-ready and carries an
+INCOMPLETE DRAFT banner inside the document; it still exports, so the warning
+travels with every copy.
 
 ## Adding tools to an agent
 

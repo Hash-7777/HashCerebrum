@@ -1036,12 +1036,6 @@ export function referenceLinesForPublication(
   });
 }
 
-export function assertPublicationReady(artifact: PublicationArtifact): void {
-  if (artifact.validation.exportReady) return;
-  const detail = artifact.validation.blockers.map((issue) => issue.message).join(' ');
-  throw new Error(`Manuscript failed publication validation. ${detail}`);
-}
-
 export function publicationMarkdown(
   manuscript: Manuscript,
   artifact: PublicationArtifact,

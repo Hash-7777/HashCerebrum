@@ -679,8 +679,8 @@ export async function buildMessagePdfBlob(message: ExportableMessage): Promise<B
     // A drafted manuscript always exports as a PDF. Publication-QA blockers
     // (e.g. thin evidence, an uncited section) are quality signals surfaced in
     // the pipeline, not a reason to deny the user the PDF they asked for — the
-    // document still typesets. Previously assertPublicationReady threw here,
-    // which silently downgraded a QA-flagged paper to an HTML download.
+    // document still typesets. A gate that once threw here silently downgraded
+    // a QA-flagged paper to an HTML download.
     const typstBase = normalizeManuscriptForPublication(message.manuscript, artifact, {
       includeSupplementalSection: false,
     });

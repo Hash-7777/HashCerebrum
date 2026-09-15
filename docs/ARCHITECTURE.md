@@ -70,7 +70,7 @@ prompt. `runSwarm` forces a source-led evidence-review path:
    sources for drug identity and safety, not primary clinical-effect evidence.
 4. `mergeEvidence()` de-duplicates and ranks records by source credibility,
    identifiers, recency, and available snippet detail.
-5. `runPaperPipeline()` extracts structured evidence rows with source markers,
+5. `preparePaperLedger()` extracts structured evidence rows with source markers,
    study design, population, exposure/intervention, comparator, outcomes,
    sample size, effect values, limitations, and trust status.
 6. `buildClaimLedger()` converts extracted rows into section-targeted claims.
@@ -80,10 +80,13 @@ prompt. `runSwarm` forces a source-led evidence-review path:
 8. `compileManuscriptFromLedger()` asks The Cerebrum to write each section from
    approved ledger claims only. The model may use only approved `[S#]` markers
    and may not invent statistics, trial outcomes, references, or pooled effects.
-9. `validatePaperPackage()` blocks export if sections are too thin, citations do
-   not resolve, the clinical-results section has no source-backed findings,
-   statistical claims are unsupported, inline citations and references disagree,
-   or the abstract overstates the body.
+9. `validatePaperPackage()` withholds export-ready status if sections are too
+   thin, citations do not resolve, the clinical-results section has no
+   source-backed findings, statistical claims are unsupported, inline citations
+   and references disagree, or the abstract overstates the body. After the last
+   repair pass, problems a repair could not fix are downgraded to warnings. A
+   paper that is not export-ready still exports, with an INCOMPLETE DRAFT banner
+   inside the document.
 10. `buildPublicationArtifact()` stores the manuscript, canonical Vancouver
     references, evidence extraction table, claim ledger, source-yield statistics,
     evidence-strength counts, extracted numeric-statistics table when present,

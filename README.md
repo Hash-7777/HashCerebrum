@@ -43,7 +43,7 @@ Your research stays on your machine. HashCerebrum is a **local-first desktop app
 ## Highlights
 
 - <img src="docs/assets/icon-lock.svg" width="16" align="center" alt=""> &nbsp;**Private by architecture** — the UI physically cannot reach the internet; only the Rust core can, and only to a fixed, audited allowlist. Point it at Ollama for **zero external calls**.
-- <img src="docs/assets/icon-cited.svg" width="16" align="center" alt=""> &nbsp;**No invented facts** — every claim carries a `[S#]` citation back to a real record; a validation gate blocks any paper whose statistics or citations don't resolve.
+- <img src="docs/assets/icon-cited.svg" width="16" align="center" alt=""> &nbsp;**No invented facts** — every claim carries a `[S#]` citation back to a real record; a citation outside the retrieved records is removed, and a statistic that contradicts the numbers its cited source reports is stripped.
 - <img src="docs/assets/icon-grounded.svg" width="16" align="center" alt=""> &nbsp;**Grounded, not guessed** — genes checked against **HGNC**, drugs against **RxNorm**; a made-up gene or drug is flagged, never scored.
 - <img src="docs/assets/icon-learn.svg" width="16" align="center" alt=""> &nbsp;**It learns** — persistent memory, belief updating, conflict detection, a knowledge graph, and consensus tracking — all on-device.
 - <img src="docs/assets/icon-graded.svg" width="16" align="center" alt=""> &nbsp;**Two graded clinical tools** — an A–X drug-interaction checker and a 0–100 % gene-disease association score computed **in code, never by the model**.
@@ -91,7 +91,7 @@ In medicine, two things matter more than anything else: **where your data goes**
 2. Retrieved records are extracted into a structured evidence table with study design, population, outcomes, and effect values
 3. A claim ledger maps each finding to a source marker and grades its evidence strength
 4. The manuscript compiler writes from approved ledger entries only — models may not reference `[S#]` markers they did not receive. Body sections are drafted **in parallel**, each on the model of the specialist that gathered its evidence, and the boss then writes the connective narrative (introduction, discussion, conclusion) from a digest of them — fewer calls, load spread across providers
-5. A validation gate blocks export unless citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list; any marker beyond the approved ledger is stripped before the gate so an over-cited draft can never end up blocked
+5. A validation gate marks a paper export-ready only when citations resolve, statistics are source-backed, sections meet depth minimums, and inline citations agree with the reference list; a paper that fails still exports, with an INCOMPLETE DRAFT banner inside the document. Any marker beyond the approved ledger is stripped before the gate, so an over-cited draft is never held back for it
 
 The result is an answer where **every sentence has a chain of custody back to a real publication** — and a clear record of exactly which databases were contacted to produce it.
 
@@ -576,10 +576,10 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 234 | ~43,579 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 110 | ~12,715 |
+| React/TypeScript app code (`src/`, excluding tests) | 234 | ~43,555 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 110 | ~12,713 |
 | Rust Tauri backend (`src-tauri/src/`) | 43 | ~7,709 |
-| **Total core source** | **387** | **~64,003** |
+| **Total core source** | **387** | **~63,977** |
 
 The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,117 Vitest tests plus 78 Rust tests). Layering is enforced rather than documented: a test walks the import graph on every run and fails if anything outside the platform adapter calls `invoke()`, if one feature imports another, if core reaches into a feature at runtime, or if a new module becomes unreachable from the entry point.
 
