@@ -24,12 +24,20 @@ on:
       - '**/*.png'
       - '**/*.jpg'
       - '**/*.jpeg'
+  # A weekly full run. The Rust job is skipped on changes that touch no Rust
+  # input, so without this a new RustSec advisory against an unchanged lockfile
+  # would stay invisible until the next Rust change.
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
 
-# Cancel an in-progress run when a newer commit lands on the same ref, so we
-# never keep paying for a build that a later push has already superseded.
+# A pull request's run is superseded by its next push, since each run diffs the
+# whole PR against its base. A push to main is never cancelled: each run only
+# looks at the commits of its own push, so cancelling one would leave any Rust
+# change in it unchecked. The event name keeps the weekly run in its own group.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read # lock GITHUB_TOKEN to read-only; no write surface exposed
@@ -41,6 +49,42 @@ env:
   ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
+  # Decides whether this run needs the Rust job: a clean Rust compile is most
+  # of this workflow's minutes, and a frontend-only change cannot alter what
+  # cargo builds. Anything unclear — the weekly run, a manual run, a release
+  # tag, a new branch, a base commit that no longer exists — runs it.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.diff.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Everything that can change what cargo builds, checks or audits.
+          rust_inputs='^(src-tauri/|rust-toolchain\.toml$|\.cargo/|\.github/workflows/ci\.yml$)'
+          base="$BEFORE"
+          if [ "$EVENT" = pull_request ]; then base="$PR_BASE"; fi
+          rust=true
+          if [ "$EVENT" = push ] || [ "$EVENT" = pull_request ]; then
+            case "$REF" in refs/tags/*) base="" ;; esac
+            if [ -n "$base" ] && [ "$base" != 0000000000000000000000000000000000000000 ] \
+              && git fetch --no-tags --depth=1 origin "$base"; then
+              if git diff --name-only "$base" HEAD | grep -qE "$rust_inputs"; then
+                rust=true
+              else
+                rust=false
+              fi
+            fi
+          fi
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "Rust job needed: $rust"
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -56,6 +100,8 @@ jobs:
       - run: npm run build:web
 
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

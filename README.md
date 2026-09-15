@@ -74,7 +74,7 @@ HashCerebrum has been built in the open-source spirit as a single-developer proj
 | **Commits** | 762 and counting |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
-| **Tests** | 1,117 frontend (Vitest) + 78 Rust (`cargo test`), all green; CI gates every push |
+| **Tests** | 1,117 frontend (Vitest) + 78 Rust (`cargo test`), all green; run in CI |
 
 Roughly two months of continuous work: the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened in this window. Development is continuing.
 
@@ -422,16 +422,16 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,117 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 78 Rust backend tests (security guard, network core, storage & provenance) — both gating CI on every push" width="760"></p>
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,117 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 78 Rust backend tests (security guard, network core, storage & provenance) — both run in CI" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
 | Frontend | `npm test` | 1,117 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
 | Backend | `cargo test` (in `src-tauri/`) | 78 tests — the network guard & SSRF denylist, the guarded DNS resolver, capped reads, export-path validation, rate limiting, and the tamper-evident audit log |
 | Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
-| Security | `cargo audit` | Dependency advisories, run in CI on every push |
+| Security | `npm audit` · `cargo audit` | Dependency advisories — npm on every push, cargo with the Rust job and weekly |
 
-Every push runs typecheck, the full Vitest suite, `build:web`, `cargo test`, and `cargo audit` — a change cannot merge unless all pass.
+Every push runs `npm audit`, typecheck, the full Vitest suite and `build:web`. The Rust job — `cargo fmt`, `clippy`, `cargo test` and `cargo audit` — runs whenever a change touches Rust code, the Rust toolchain or the workflow, on every release tag, and in a weekly full run so a new advisory against an unchanged lockfile still surfaces.
 
 ---
 
