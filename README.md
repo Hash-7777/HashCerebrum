@@ -484,10 +484,10 @@ winget install Rustlang.Rustup
 ```sh
 git clone https://github.com/Hash-7777/HashCerebrum.git
 cd HashCerebrum
-npm install
+ONNXRUNTIME_NODE_INSTALL=skip npm install
 ```
 
-The embedding model is committed, so there is no separate download step.
+The variable is optional: it skips the native Node build of the ONNX runtime (210 MB here), which the app never loads — its models run on the WebAssembly runtime in the renderer. On Windows PowerShell, run `$env:ONNXRUNTIME_NODE_INSTALL="skip"` before `npm install`. The embedding model is committed, so there is no separate download step.
 
 ### 3. Run or build
 

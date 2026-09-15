@@ -44,7 +44,9 @@ permissions:
 
 # onnxruntime-node (a hard dep of @huggingface/transformers) downloads a native
 # binary on install, which times out on CI. We only use onnxruntime-web (WASM),
-# so skip that download. Also pinned in .npmrc for local installs.
+# so skip that download. Local installs use the same variable (CONTRIBUTING.md);
+# it is not an .npmrc entry because npm 11 warns on unknown .npmrc keys and
+# says the next major will ignore them.
 env:
   ONNXRUNTIME_NODE_INSTALL: skip
 

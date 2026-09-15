@@ -37,7 +37,7 @@ When in doubt, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
 ## Getting set up
 
 ```bash
-npm ci                # install exact dependency versions
+ONNXRUNTIME_NODE_INSTALL=skip npm ci   # exact versions; skips an unused native runtime
 npm run dev           # run the full desktop app (Tauri)
 # or
 npm run dev:web       # run the frontend in a browser (mocked native layer)
