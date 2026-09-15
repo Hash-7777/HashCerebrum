@@ -27,12 +27,16 @@ describe('release security configuration', () => {
   });
 
   it('keeps production LLM code on the platform proxy instead of direct fetch', () => {
+    // The registry picks the model chain; the per-provider requests it makes
+    // live in providerTransports.ts. Neither may reach the network directly.
     const providerRegistry = readRepoFile('src/core/llm/ProviderRegistry.ts');
+    const providerTransports = readRepoFile('src/core/llm/providerTransports.ts');
     const modelDiscovery = readRepoFile('src/core/llm/modelDiscovery.ts');
 
     expect(providerRegistry).not.toContain('fetch(');
+    expect(providerTransports).not.toContain('fetch(');
     expect(modelDiscovery).not.toContain('fetch(');
-    expect(providerRegistry).toContain('platform().llm.httpPost');
+    expect(providerTransports).toContain('platform().llm.httpPost');
     expect(modelDiscovery).toContain('platform().llm.httpGet');
   });
 });
