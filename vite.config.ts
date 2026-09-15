@@ -56,18 +56,10 @@ export default defineConfig({
     minify: !process.env['TAURI_ENV_DEBUG'],
     sourcemap: !!process.env['TAURI_ENV_DEBUG'],
     chunkSizeWarningLimit: 1200,
-    rollupOptions: {
-      output: {
-        // Rollup 4 (Vite 8) requires manualChunks to be a function, not an object.
-      manualChunks(id: string) {
-          if (id.includes('/node_modules/@react-three/')) return 'r3f';
-          if (id.includes('/node_modules/three/')) return 'three';
-          if (id.includes('/node_modules/react-dom/') || id.includes('/node_modules/react/')) return 'react';
-          if (id.includes('/node_modules/zustand/')) return 'zustand';
-          if (id.includes('/node_modules/xlsx/')) return 'xlsx';
-          if (id.includes('/node_modules/jspdf/')) return 'jspdf';
-        },
-      },
-    },
+    // No manual vendor chunks. The desktop app ships its assets locally, so
+    // splitting vendors buys no caching, and the old groups cost start-up: they
+    // pulled three.js (with React, into one shared chunk) and jsPDF into what
+    // the entry preloads. The default split keeps them in the lazy chunks of
+    // the code that uses them — three.js with BrainCanvas, jsPDF with export.
   },
 });

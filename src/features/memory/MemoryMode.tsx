@@ -3,7 +3,7 @@
 // earlier research runs. Saving happens in BrainMode after a research run;
 // this view reads, searches, and prunes the same store.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { getChunkVectors, lexicalSearch, useRagStore, type RagChunk } from '@core/rag';
 import { getEmbeddingProvider } from '@core/rag/embeddings/workerClient';
 import { useLearningStore } from '@core/rag/agentic/learningStore';
@@ -13,9 +13,15 @@ import { Icon } from '@ui/icons';
 import { DeleteAllDialog } from './components/DeleteAllDialog';
 import { MemoryCard } from './components/MemoryCard';
 import { PrunePreview } from './components/PrunePreview';
-import { MemoryVectorGraph3D } from './graph/MemoryVectorGraph3D';
 import { planPrune } from './pruneMemory';
 import { importPdfFiles, summarizeImport } from './import/importPdfs';
+
+// Lazy so three.js loads only when the 3D memory map is actually shown. Every
+// mode is mounted, hidden, at start-up, so a static import here put three.js
+// into every launch — Lite mode and an empty memory included.
+const MemoryVectorGraph3D = lazy(() =>
+  import('./graph/MemoryVectorGraph3D').then((m) => ({ default: m.MemoryVectorGraph3D })),
+);
 
 const SEARCH_RESULT_LIMIT = 200;
 
@@ -451,7 +457,9 @@ export function MemoryMode() {
             </p>
           </div>
         ) : view === 'graph' ? (
-          <MemoryVectorGraph3D chunks={visible} onRemove={removeChunk} />
+          <Suspense fallback={<div className="memory-empty" role="status">Loading the memory map…</div>}>
+            <MemoryVectorGraph3D chunks={visible} onRemove={removeChunk} />
+          </Suspense>
         ) : (
           <div className="memory-list">
             {visible.map((chunk) => (
