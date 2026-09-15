@@ -36,9 +36,8 @@ serde_json = "1"
 # Time / dates — audit log timestamps
 chrono = { version = "0.4", features = ["serde"] }
 
-# Paths — cross-platform data dirs (audit log, sqlite cache)
-dirs        = "5"
-shellexpand = "3"
+# Paths — the home directory for the notch activity file (commands/notch.rs)
+dirs = "6"
 
 # HTTP — all external network goes through Rust, never the renderer
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream", "gzip"], default-features = false }
@@ -50,7 +49,6 @@ r2d2 = "0.8"
 r2d2_sqlite = { version = "0.25", features = ["bundled"] }
 
 # Async helpers
-async-trait = "0.1"
 futures     = "0.3"
 once_cell   = "1"
 dashmap     = "6"
@@ -66,7 +64,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Error handling
 thiserror = "1"
-anyhow    = "1"
 
 # URL parsing for net guard host allowlist
 url = "2"
