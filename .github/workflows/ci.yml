@@ -32,11 +32,12 @@ on:
   workflow_dispatch:
 
 # A pull request's run is superseded by its next push, since each run diffs the
-# whole PR against its base. A push to main is never cancelled: each run only
-# looks at the commits of its own push, so cancelling one would leave any Rust
-# change in it unchecked. The event name keeps the weekly run in its own group.
+# whole PR against its base. Every other run gets a group of its own commit:
+# a push run only diffs the commits of its own push, so it must never be
+# cancelled — and a shared group is not enough to prevent that, because GitHub
+# keeps one pending run per group and replaces it when the next one queues.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
