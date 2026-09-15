@@ -31,4 +31,4 @@ Please read CONTRIBUTING.md first. Keep one logical change per PR.
 - [ ] New behaviour has tests
 - [ ] Docs updated if behaviour changed
 - [ ] New dependencies/assets carry an AGPL-compatible license and are recorded
-      in `THIRDPARTY-LICENSES.md` / `docs/LICENSES.md`
+      in `THIRDPARTY-LICENSES.md` (run `npm run licenses`) / `docs/LICENSES.md`

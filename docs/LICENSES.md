@@ -130,6 +130,7 @@ Both trees were scanned end-to-end:
 - **npm — 132 packages.** No GPL/AGPL/LGPL/SSPL/BUSL/non-commercial licenses. Two non-obvious entries were verified by hand: `webgl-constants` (blank `license` field but ships an MIT `LICENSE`) and `rgbcolor` (`MIT OR feel-free`) — both permissive.
 - **Cargo — 756 crates.** No GPL/AGPL. The only copyleft mentions are benign: `r-efi` is `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (MIT/Apache is selected, LGPL irrelevant), and 5 crates are `MPL-2.0` (file-level copyleft, used unmodified). Everything else is MIT / Apache-2.0 / BSD / ISC / Zlib / Unicode-3.0 / Unlicense / 0BSD / BSL-1.0 / CC0.
 - **Embedding stack (added 2026-06).** `@huggingface/transformers` (Apache-2.0) and its transitive `onnxruntime-web` (MIT), plus the bundled embedding model (Apache-2.0 default / MIT fallback) — all permissive, no GPL/AGPL/non-commercial.
+- **Since this audit.** `@huggingface/transformers` also pulls in `sharp`, whose libvips binaries are `LGPL-3.0-or-later`. It is an optional, Node-only image library: the app bundle does not include it (checked 2026-09-15 by searching the built JavaScript), and LGPL-3.0 is compatible with AGPL-3.0 in any case. The current list, with every package's declared license, is in [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md).
 
 **Conclusion:** nothing in the project can force it to be open-sourced, and every dependency and asset grants commercial use. The only standing obligation is **attribution** — reproducing the third-party copyright/permission notices in the distributed app (see below).
 
@@ -139,8 +140,14 @@ Permissive licenses (MIT, BSD, Apache-2.0, OFL-1.1) require that their copyright
 and permission notices travel with any binary distribution; Apache-2.0 also
 requires retaining upstream `NOTICE` files. This is satisfied by shipping an
 aggregated `THIRD-PARTY-LICENSES` file in the app bundle and/or an in-app
-"Licenses" view. **Not yet generated** — to be produced before the first public
-release (e.g. via `license-checker` for npm and `cargo-about` for Rust).
+"Licenses" view.
+
+The package list is done: [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md)
+names every crate and npm package with its version and declared license, and
+`npm run licenses` regenerates it from the two lockfiles. It does not yet carry
+each package's own copyright lines and `NOTICE` files, so the full notice bundle
+is **still to be produced** before the first public release (e.g. via
+`cargo-about` for Rust and `license-checker` for npm).
 
 ## Project's own license
 
