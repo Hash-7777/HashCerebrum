@@ -204,7 +204,7 @@ fails the build on any moderate-or-higher advisory.
 crafted ZIP triggering a 4 GB allocation) reached the tree transitively through
 `@huggingface/transformers` → `onnxruntime-node` → `adm-zip@0.5.x`. They are
 resolved by an `overrides` entry in `package.json` pinning `adm-zip` to
-`^0.6.0`, the patched line.
+`^0.6.1`, the patched line.
 
 The override is used rather than `npm audit fix --force`, which resolves the
 advisory by **downgrading** `@huggingface/transformers` from `4.2.0` to `3.8.1`
@@ -242,7 +242,7 @@ inherited libvips CVEs on image decode) reached the tree through
 `@huggingface/transformers` → `sharp@0.34.x`. `npm audit` reports these as
 having no fix available, because `@huggingface/transformers` requires
 `sharp: ^0.34.5` and the patched line is `0.35.x` — a major bump that npm will
-not make on its own. An `overrides` entry pins `sharp` to `^0.35.3`.
+not make on its own. An `overrides` entry pins `sharp` to `^0.35.4`.
 
 The bump is safe here precisely because the app never runs `sharp`: it is
 the Node-only native image backend, and HashCerebrum's image work happens in
