@@ -1,19 +1,11 @@
-import { completeWithModelChain } from '@core/llm/ProviderRegistry';
-import {
-  isBillingDead as isCallBillingDead,
-  isContextTooLarge as isCallTooLarge,
-  isRateLimited as isCallRateLimited,
-  retryAfterMs as parseRetryAfterMs,
-} from '@core/llm/errorKind';
+import { isRateLimited as isCallRateLimited } from '@core/llm/errorKind';
 import { bus } from '@core/bus/EventBus';
 import type { EvidenceItem } from '@platform/index';
 import {
   parseAbstract,
   sectionBodyFromReply,
-  SECTION_PLAN,
   type Manuscript,
   type ManuscriptSection,
-  type SectionSpec,
 } from './manuscript';
 import { buildPublicationArtifact } from './publication';
 import type {
@@ -21,13 +13,10 @@ import type {
   EvidenceExtraction,
   ManuscriptStandard,
   PaperBlueprint,
-  PaperPackageQa,
   UploadedDatasetSummary,
-  ValidationIssue,
 } from './publicationTypes';
 import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
-import { assessRiskOfBias, formatRobSummary } from './riskOfBias';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
 import { applyHonestyPass } from './honestyGuard';
 import { neutralizeUnsupportedComparator } from './comparatorGuard';
@@ -35,9 +24,7 @@ import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
 import {
   abstractStatsDigest,
   buildClaimLedger,
-  CONTEXT_ONLY_SOURCES,
   extractEvidenceFromRecords,
-  formatBoundEffects,
 } from './evidenceExtraction';
 import {
   buildQuantEvidenceTable,
@@ -46,105 +33,21 @@ import {
 } from './statisticVerification';
 import { buildMethodsSection, deterministicMethodsNotes } from './methodsSection';
 import { extractExplicitTitle, keywordsFrom, titleTopic } from './paperTitle';
-import { clean } from './textNormalize';
+import {
+  validateDraftIdentifiers,
+  neutralizeUnverifiableNct,
+  claimSourceFidelity,
+} from './draftIntegrity';
+import { callModel } from './paperModelCall';
+import { SECTION_SYSTEM, specialistRoleDigest, buildSectionUserPrompt } from './sectionPrompt';
+import { buildPaperBlueprint, claimsForBlueprintSection } from './paperBlueprint';
+import { MAX_QA_REPAIR_PASSES, validatePaperPackage, repairableSectionNames } from './paperQa';
 
 
-const MAX_LEDGER_CLAIMS_PER_SECTION = 12;
-
-// ── C3: validate identifiers in draft prose ─────────────────────────────────
-// Scan drafted text for PMID / DOI / NCT tokens and flag any that do not
-// appear in the retrieved evidence set — prevents hallucinated citations.
-function validateDraftIdentifiers(
-  text: string,
-  evidence: EvidenceItem[],
-): string[] {
-  const issues: string[] = [];
-  const pmids = new Set(evidence.map((e) => e.identifiers?.pmid).filter(Boolean));
-  const dois = new Set(evidence.map((e) => e.identifiers?.doi).filter(Boolean));
-  const ncts = new Set(evidence.map((e) => e.identifiers?.nct).filter(Boolean));
-
-  for (const m of text.matchAll(/\bPMID:\s*(\d+)\b/gi)) {
-    if (!pmids.has(m[1])) issues.push(`PMID:${m[1]}`);
-  }
-  for (const m of text.matchAll(/\bDOI:\s*([\S]+)\b/gi)) {
-    if (!dois.has(m[1])) issues.push(`DOI:${m[1]}`);
-  }
-  for (const m of text.matchAll(/\b(NCT\d{8,})\b/gi)) {
-    if (!ncts.has(m[1])) issues.push(m[1]!);
-  }
-  return issues;
-}
-
-// Remove trial-registry identifiers the draft cited that are NOT in the retrieved
-// evidence — a hallucinated NCT presented as a real registered trial is a serious
-// integrity failure ("the completed clinical trial registered as NCT03596502…"
-// where no such record was retrieved). We strip the fabricated identifier and the
-// "registered as / (NCT…)" scaffolding around it, leaving the surrounding prose,
-// rather than assert a registry number the pipeline never saw. Verified NCTs (in
-// evidence) are untouched.
-export function neutralizeUnverifiableNct(text: string, badNcts: string[]): string {
-  let out = text;
-  for (const nct of badNcts) {
-    const esc = nct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out
-      // "(NCT123…)" or ", NCT123…," parenthetical/apposition
-      .replace(new RegExp(`\\s*[(\\[]\\s*${esc}\\s*[)\\]]`, 'gi'), '')
-      // "registered as/under NCT123…", "identifier NCT123…", "NCT number NCT123…"
-      .replace(new RegExp(`\\b(?:registered|identified|listed)\\s+(?:as|under)\\s+${esc}\\b`, 'gi'), 'a registered trial')
-      .replace(new RegExp(`\\b(?:trial|study|registry)\\s+(?:number|identifier|id)\\s+${esc}\\b`, 'gi'), 'trial')
-      // bare token
-      .replace(new RegExp(`\\b${esc}\\b`, 'gi'), '');
-  }
-  return out
-    .replace(/\s*,\s*,/g, ',')
-    .replace(/\(\s*\)/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([.,;:)])/g, '$1')
-    .trim();
-}
-
-// ── C6: claim↔source fidelity gate ──────────────────────────────────────────
-// Simple keyword overlap between a claim and its supporting source texts.
-// Flags claims whose wording drifts far from the evidence they cite.
-function claimSourceFidelity(
-  claim: string,
-  sourceTexts: string[],
-): { score: number; flag: boolean } {
-  const claimWords = new Set(
-    claim.toLowerCase().split(/\W+/).filter((w) => w.length > 3),
-  );
-  if (claimWords.size === 0) return { score: 0, flag: true };
-  let bestOverlap = 0;
-  for (const text of sourceTexts) {
-    const textWords = new Set(
-      text.toLowerCase().split(/\W+/).filter((w) => w.length > 3),
-    );
-    let overlap = 0;
-    for (const w of claimWords) {
-      if (textWords.has(w)) overlap++;
-    }
-    bestOverlap = Math.max(bestOverlap, overlap / claimWords.size);
-  }
-  return { score: bestOverlap, flag: bestOverlap < 0.15 };
-}
 const SECTION_TOKENS = 5800;
 // Brain Mini drafts shorter sections so a small / free model finishes quickly.
 const MINI_SECTION_TOKENS = 1600;
 const MAX_SECTION_PASSES = 2;
-const MAX_QA_REPAIR_SECTIONS = 4;
-const MAX_QA_REPAIR_PASSES = 2;
-/** When true, the pipeline allows export even with residual repairable blockers
- *  after all repair passes are exhausted — the manuscript is flagged with a
- *  prominent warning rather than being hard-blocked. This prevents free-tier
- *  rate-limit stalls from killing an otherwise usable draft. */
-const GRACEFUL_DEGRADATION = true;
-
-// Minimum trusted primary (non drug-label) records required before an
-// automated evidence-review draft is allowed to export. Raised from 3 to 5 to
-// reject thin "cheap research" drafts; deeper retrieval makes this easy to meet
-// for any genuine question.
-const MIN_PRIMARY_EVIDENCE = 5;
-
 // Visible marker prefixed to any section the pipeline could not properly draft
 // or repair, so an incomplete section is never silently shipped as if finished.
 const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
@@ -153,32 +56,6 @@ const SECTION_REVIEW_FLAG = '⚠ SECTION NEEDS REVIEW —';
 // left incomplete when a free-tier provider rate-limited mid-draft), so the
 // warning ships inside the document rather than only in the execution trace.
 export const INCOMPLETE_DRAFT_BANNER = '⚠ INCOMPLETE DRAFT';
-
-const SECTION_SYSTEM = `You are the HashCerebrum agent, a biomedical manuscript compiler. Write EXACTLY ONE SECTION per call.
-
-DEPTH — density, not length:
-- Cover every claim assigned to this section once, in depth: state the finding, explain mechanism/significance, place it in clinical context, note limitations, connect it to the broader question.
-- NEVER repeat a sentence, claim, or paragraph, and never restate the same point in different words to reach a length. When the assigned evidence is fully covered, STOP — a shorter, non-repetitive section is REQUIRED over a padded one. Repetition is the worst possible failure here.
-- If evidence is thin, write a transparent evidence-gap analysis rather than padding.
-
-INTEGRITY — this is a REVIEW of retrieved literature, NOT original research:
-- NEVER claim original data collection ("we conducted", "enrolled patients", "EHR analysis", "propensity-score matching", etc.).
-- Methods = automated search workflow ONLY. Describe the searches that actually ran (the sub-query concepts and the sources queried), not the user's question typed verbatim.
-- Report findings as what sources report ("study [S3] reported…"). Attribute every number.
-- NEVER claim a formal appraisal you did not run: do NOT write that records were "rated with GRADE certainty", assessed with "ROBINS-I" / "AMSTAR" / "Cochrane RoB", or "flagged for some concerns". You may only state that NO formal risk-of-bias or GRADE appraisal was applied.
-- A statistic belongs to ONE study: report an effect estimate together with the SAME study's confidence interval and p-value. NEVER pair an estimate from one record with a CI or p-value from another, and never call a confidence interval that crosses 1.0 "significant".
-- Do NOT state a specific total number of records or participants in prose (e.g. "60 records", "140 participants"); refer to the source-yield figure instead — invented counts contradict the deterministic figures.
-- Use ONE consistent population definition matching the question; do not drift between ≥60, ≥70, and ≥75.
-- Calibrate confidence to the evidence: for an abstract-only, low-certainty corpus, never assert a "confident" or "definitive" conclusion — hedge to what the retrieved evidence actually supports.
-
-FORMAT — deviations corrupt the pipeline:
-- Begin with the first word of the section body. No preamble, heading, number, or title.
-- Write ONLY this section. No other sections.
-- FORBIDDEN: numbered outlines, markdown headings, bullet lists, tables.
-- Use continuous academic prose paragraphs separated by blank lines.
-- Cite approved [S#] markers for every factual claim.
-- Do not invent PMIDs, DOIs, p-values, CIs, ORs, HRs, or pooled estimates.
-- Use numeric statistics ONLY from the extracted numeric support block or uploaded dataset.`;
 
 /**
  * Returns true when a model has clearly written a complete document structure
@@ -224,147 +101,12 @@ function extractSectionFromDocument(text: string, heading: string): string | nul
   return null;
 }
 
-// Topic-specific sections that must be earned by evidence. If the retrieval
-// produced no claim that actually targets one of these, the section is dropped
-// rather than padded with unrelated claims — which is how a pharmacology-free
-// asthma-education topic ended up with a fabricated PK/PD section the model
-// "supported" with citations to pharmacist-intervention papers.
-const EVIDENCE_GATED_HEADINGS = new Set([
-  'Mechanistic and Pharmacologic Evidence',
-  'Trial and Registry Evidence',
-]);
-
-function blueprintTitle(question: string): string {
-  const topic = titleTopic(question);
-  if (!topic) return 'Evidence Review of the Requested Biomedical Question';
-  // Strip leading article ("a", "an", "the") that survived question parsing.
-  const cleaned = topic.replace(/^(a|an|the)\s+/i, '').trim();
-  const titled = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  // When the topic is already a proper study or manuscript title (contains
-  // study-design terminology), use it directly rather than prepending a label.
-  if (/\b(study|trial|analysis|review|survey|cohort|cross[-\s]?sectional|randomized|randomised|assessment|evaluation|investigation|report|examination)\b/i.test(titled)) {
-    return titled;
-  }
-  return `Evidence Review: ${titled}`;
-}
-
-function claimIdsForSection(section: SectionSpec, ledger: ClaimLedgerEntry[]): string[] {
-  const direct = ledger.filter((entry) => entry.sectionTarget === section.heading);
-  if (direct.length > 0) return direct.slice(0, MAX_LEDGER_CLAIMS_PER_SECTION).map((entry) => entry.id);
-
-  if (section.heading === 'Introduction' || section.heading === 'Discussion' || section.heading === 'Conclusion') {
-    return ledger.slice(0, MAX_LEDGER_CLAIMS_PER_SECTION).map((entry) => entry.id);
-  }
-  if (section.heading === 'Methods' || section.heading === 'Limitations') {
-    return ledger.slice(0, Math.min(8, ledger.length)).map((entry) => entry.id);
-  }
-  return ledger.filter((entry) => entry.evidenceStrength !== 'context').slice(0, 8).map((entry) => entry.id);
-}
-
-// Brain Mini's reduced section set — a coherent shorter paper (about half the
-// drafting calls of the full plan) for low-quota / small local models.
-const MINI_SECTION_HEADINGS = new Set([
-  'Introduction',
-  'Methods',
-  'Evidence Base and Search Yield',
-  'Discussion',
-  'Conclusion',
-  'Declarations',
-]);
-
-
-export function buildPaperBlueprint(
-  question: string,
-  ledger: ClaimLedgerEntry[],
-  overrideTitle?: string,
-  mini = false,
-): PaperBlueprint {
-  const basePlan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
-  // Drop an evidence-gated section when no claim genuinely targets it, so the
-  // model is never asked to write (and fabricate citations for) a section the
-  // retrieval did not support.
-  const plan = basePlan.filter(
-    (section) =>
-      !EVIDENCE_GATED_HEADINGS.has(section.heading) ||
-      ledger.some(
-        (entry) => entry.sectionTarget === section.heading && entry.evidenceStrength !== 'context',
-      ),
-  );
-  return {
-    title: overrideTitle ?? blueprintTitle(question),
-    abstractIntent:
-      'Structured evidence-review abstract summarizing the automated search, source-backed findings, evidence strength, limitations, and clinical/research implications without unsupported statistics.',
-    sections: plan.map((section) => {
-      const requiredClaimIds = claimIdsForSection(section, ledger);
-      const requiredSourceMarkers = [
-        ...new Set(
-          requiredClaimIds.flatMap((id) => ledger.find((entry) => entry.id === id)?.supportingSources ?? []),
-        ),
-      ];
-      return {
-        heading: section.heading,
-        intent: section.instruction,
-        requiredClaimIds,
-        requiredSourceMarkers,
-        targetWords: section.targetWords,
-        minWords: section.minWords,
-      };
-    }),
-    requiredTables: [
-      'evidence extraction table',
-      'claim ledger',
-      'search/source-yield statistics',
-      'evidence-strength counts',
-      'extracted numeric-statistics table when source text contains numeric statistics',
-    ],
-    requiredFigures: ['source-yield figure', 'automated evidence-flow figure', 'evidence-year figure when dates are available'],
-  };
-}
-
-export interface PaperOutline {
-  title: string;
-  sections: { heading: string; intent: string; targetWords: string }[];
-}
-
-/**
- * The section plan a paper WILL follow, derived deterministically (no model
- * call, no tokens) so the user can preview and steer scope before committing to
- * a full drafting run. `intent` is a one-line summary of each section's job.
- */
-export function buildPaperOutline(question: string, mini = false): PaperOutline {
-  const plan = mini ? SECTION_PLAN.filter((section) => MINI_SECTION_HEADINGS.has(section.heading)) : SECTION_PLAN;
-  return {
-    title: blueprintTitle(question),
-    sections: plan.map((section) => {
-      const firstSentence = section.instruction.split(/(?<=[.!?])\s/)[0] ?? section.instruction;
-      return {
-        heading: section.heading,
-        intent: firstSentence.trim().slice(0, 180),
-        targetWords: section.targetWords,
-      };
-    }),
-  };
-}
-
 function wordCount(value: string): number {
   return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
 }
 
 function bodyWordCount(body: string[]): number {
   return wordCount(body.join(' '));
-}
-
-function issue(severity: ValidationIssue['severity'], code: string, message: string, section?: string): ValidationIssue {
-  return {
-    severity,
-    code,
-    message,
-    ...(section ? { section } : {}),
-  };
-}
-
-function citedSourceMarkers(text: string): string[] {
-  return [...text.matchAll(/\[S(\d+)\]/g)].map((match) => `[S${match[1]}]`);
 }
 
 // Remove inline [S#] markers a drafted section cites that are NOT in the approved
@@ -391,428 +133,6 @@ export function stripUnapprovedMarkers(
       .replace(/\s+([.,;:)])/g, '$1')
       .trim();
   return sections.map((section) => ({ ...section, body: section.body.map(clean) }));
-}
-
-function manuscriptText(manuscript: Manuscript): string {
-  return [
-    manuscript.title,
-    ...Object.values(manuscript.abstract),
-    ...manuscript.sections.flatMap((section) => [section.heading, ...section.body]),
-  ].join('\n\n');
-}
-
-function sectionText(manuscript: Manuscript, heading: string): string {
-  return manuscript.sections.find((section) => section.heading === heading)?.body.join(' ') ?? '';
-}
-
-export function validatePaperPackage(opts: {
-  manuscript?: Manuscript;
-  evidenceExtractions: EvidenceExtraction[];
-  claimLedger: ClaimLedgerEntry[];
-  paperBlueprint: PaperBlueprint;
-  repairPass?: number;
-}): PaperPackageQa {
-  const blockers: ValidationIssue[] = [];
-  const warnings: ValidationIssue[] = [];
-  const repairPass = opts.repairPass ?? 0;
-  const trustedEvidence = opts.evidenceExtractions.filter((item) => item.trusted);
-  const primaryEvidence = trustedEvidence.filter((item) => !CONTEXT_ONLY_SOURCES.has(item.source));
-  const numericCount = opts.evidenceExtractions.reduce(
-    (sum, item) => sum + item.effectValues.length + (item.sampleSize ? 1 : 0),
-    0,
-  );
-  const effectCount = opts.evidenceExtractions.reduce((sum, item) => sum + item.effectValues.length, 0);
-  const nonContextClaims = opts.claimLedger.filter((entry) => entry.evidenceStrength !== 'context');
-
-  if (opts.evidenceExtractions.length === 0) {
-    blockers.push(issue('blocker', 'no-evidence-extractions', 'No trusted records were retrieved for extraction.'));
-  }
-  if (opts.claimLedger.length === 0) {
-    blockers.push(issue('blocker', 'empty-claim-ledger', 'No source-backed claim ledger could be built.'));
-  }
-  if (primaryEvidence.length < MIN_PRIMARY_EVIDENCE) {
-    blockers.push(
-      issue(
-        'blocker',
-        'insufficient-trusted-evidence',
-        `Only ${primaryEvidence.length} trusted primary evidence record(s) were available; a publishable automated evidence-review draft requires at least ${MIN_PRIMARY_EVIDENCE} source-backed records.`,
-      ),
-    );
-  }
-  const distinctPrimarySources = new Set(primaryEvidence.map((item) => item.source)).size;
-  if (primaryEvidence.length >= MIN_PRIMARY_EVIDENCE && distinctPrimarySources < 2) {
-    warnings.push(
-      issue(
-        'warning',
-        'single-source-evidence-base',
-        `All primary evidence came from a single database (${distinctPrimarySources} distinct source); corroboration across independent databases would strengthen the review.`,
-      ),
-    );
-  }
-  if (nonContextClaims.length === 0) {
-    blockers.push(issue('blocker', 'no-primary-claims', 'The ledger contains no primary source-backed evidence claims.'));
-  }
-  if (effectCount === 0) {
-    warnings.push(
-      issue(
-        'warning',
-        'no-extracted-effect-statistics',
-        'No sample sizes, effect estimates, confidence intervals, or p-values were extractable from source text; statistics are limited to source-yield and evidence-strength counts.',
-      ),
-    );
-  }
-  if (!opts.claimLedger.some((entry) => entry.sectionTarget === 'Clinical Evidence and Safety Outcomes')) {
-    // After auto-routing, this should rarely trigger; if it still does on
-    // pass 0 it is repairable by auto-route. On later passes degrade to warning.
-    const severity: ValidationIssue['severity'] = repairPass >= MAX_QA_REPAIR_PASSES ? 'warning' : 'blocker';
-    blockers.push(
-      issue(
-        severity,
-        'no-source-backed-results',
-        'The clinical evidence section has no source-backed finding in the claim ledger.',
-        'Clinical Evidence and Safety Outcomes',
-      ),
-    );
-  }
-  if (!opts.claimLedger.some((entry) => entry.sectionTarget === 'Trial and Registry Evidence')) {
-    warnings.push(
-      issue(
-        'warning',
-        'no-trial-registry-claims',
-        'No clinical-trial or registry claim was found; the trial section must transparently describe the evidence gap.',
-        'Trial and Registry Evidence',
-      ),
-    );
-  }
-
-  for (const section of opts.paperBlueprint.sections) {
-    if (section.heading !== 'Declarations' && section.requiredClaimIds.length === 0) {
-      warnings.push(
-        issue(
-          'warning',
-          'blueprint-section-without-direct-claims',
-          `${section.heading} has no direct section-specific claim and will use the broader ledger with explicit limitations.`,
-          section.heading,
-        ),
-      );
-    }
-  }
-
-  if (opts.manuscript) {
-    const approvedMarkers = new Set(opts.claimLedger.flatMap((entry) => entry.supportingSources));
-    for (const cited of citedSourceMarkers(manuscriptText(opts.manuscript))) {
-      if (!approvedMarkers.has(cited)) {
-        const severity: ValidationIssue['severity'] = repairPass >= MAX_QA_REPAIR_PASSES && GRACEFUL_DEGRADATION ? 'warning' : 'blocker';
-        blockers.push(
-          issue(severity, 'citation-not-in-claim-ledger', `${cited} is cited but not present in the approved claim ledger.`),
-        );
-      }
-    }
-    const clinical = sectionText(opts.manuscript, 'Clinical Evidence and Safety Outcomes');
-    if (!/\[S\d+\]/.test(clinical)) {
-      const severity: ValidationIssue['severity'] = repairPass >= MAX_QA_REPAIR_PASSES && GRACEFUL_DEGRADATION ? 'warning' : 'blocker';
-      blockers.push(
-        issue(
-          severity,
-          'clinical-results-uncited',
-          'The clinical evidence section contains no source-backed inline citation.',
-          'Clinical Evidence and Safety Outcomes',
-        ),
-      );
-    }
-    const body = opts.manuscript.sections.map((section) => section.body.join(' ')).join(' ').toLowerCase();
-    const abstract = Object.values(opts.manuscript.abstract).join(' ').toLowerCase();
-    if (/\b(definitive|conclusive|proven|rules out|establishes safety)\b/.test(abstract) && /\b(limited|thin|insufficient|indirect|gap)\b/.test(body)) {
-      blockers.push(
-        issue(
-          'blocker',
-          'abstract-overstates-body',
-          'The abstract uses strong certainty language while the body describes limited or indirect evidence.',
-        ),
-      );
-    }
-  }
-
-  // Graceful degradation: after max repair passes, downgrade remaining
-  // repairable blockers to warnings so the draft is not permanently killed.
-  if (repairPass >= MAX_QA_REPAIR_PASSES && GRACEFUL_DEGRADATION) {
-    const repairableCodes = new Set(['section-too-short', 'section-missing-citation', 'unsupported-statistic', 'clinical-results-uncited', 'citation-not-in-claim-ledger', 'no-source-backed-results']);
-    for (let i = 0; i < blockers.length; i += 1) {
-      if (repairableCodes.has(blockers[i]!.code)) {
-        warnings.push({ ...blockers[i]!, severity: 'warning' });
-        blockers.splice(i, 1);
-        i -= 1;
-      }
-    }
-  }
-
-  const exportReady = blockers.length === 0;
-  return {
-    stage: exportReady ? 'export_ready' : 'blocked',
-    exportReady,
-    blockers,
-    warnings,
-    summary: [
-      `${trustedEvidence.length} trusted record(s) extracted`,
-      `${opts.claimLedger.length} source-backed claim(s) built`,
-      `${numericCount} extracted numeric statistic(s) or sample-size field(s)`,
-      exportReady ? 'Export gate passed' : 'Export gate blocked',
-    ],
-  };
-}
-
-function ledgerById(ledger: ClaimLedgerEntry[]): Map<string, ClaimLedgerEntry> {
-  return new Map(ledger.map((entry) => [entry.id, entry]));
-}
-
-function claimsForBlueprintSection(section: PaperBlueprint['sections'][number], ledger: ClaimLedgerEntry[]): ClaimLedgerEntry[] {
-  const byId = ledgerById(ledger);
-  const direct = section.requiredClaimIds.map((id) => byId.get(id)).filter((entry): entry is ClaimLedgerEntry => Boolean(entry));
-  if (direct.length > 0) return direct;
-  return ledger.slice(0, Math.min(MAX_LEDGER_CLAIMS_PER_SECTION, ledger.length));
-}
-
-function formatClaim(entry: ClaimLedgerEntry): string {
-  const numeric = entry.numericSupport.length > 0 ? ` Numeric support: ${entry.numericSupport.join('; ')}.` : '';
-  const limits = entry.contradictionNotes.length > 0 ? ` Limits: ${entry.contradictionNotes.join('; ')}.` : '';
-  return `${entry.id} (${entry.evidenceStrength}; ${entry.sectionTarget}; sources ${entry.supportingSources.join(', ')}): ${entry.claim}${numeric}${limits}`;
-}
-
-function formatExtraction(extraction: EvidenceExtraction): string {
-  const ids = Object.entries(extraction.identifiers)
-    .map(([key, value]) => `${key}:${value}`)
-    .join(', ');
-  const numeric = [
-    extraction.sampleSize ?? '',
-    ...extraction.effectValues.map((effect) => `${effect.label} ${effect.value} (${effect.sourceText})`),
-  ].filter(Boolean).join('; ');
-  const rob = formatRobSummary(assessRiskOfBias(extraction));
-  const bound = formatBoundEffects(extraction.boundEffects);
-  return [
-    `${extraction.sourceMarker} ${extraction.source.toUpperCase()} ${extraction.year ?? 'year not reported'} ${extraction.title}`,
-    `Identifiers: ${ids || 'not available'}`,
-    `Design: ${extraction.studyDesign}`,
-    `RoB: ${rob}`,
-    `Population: ${extraction.population}`,
-    `Exposure: ${extraction.exposureOrIntervention}`,
-    `Comparator: ${extraction.comparator}`,
-    `Outcomes: ${extraction.outcomes.join(', ') || 'not reported'}`,
-    ...(bound ? [`Bound effects (cite each as a unit; do NOT mix CIs/p-values across studies): ${bound}`] : []),
-    `Numeric: ${numeric || 'none extracted'}`,
-    `Key finding: ${extraction.keyFinding}`,
-    `Limits: ${extraction.limitations.join('; ') || 'none recorded'}`,
-  ].join(' | ');
-}
-
-function sourceYieldBlock(extractions: EvidenceExtraction[]): string {
-  const counts = new Map<string, number>();
-  for (const item of extractions) counts.set(item.source, (counts.get(item.source) ?? 0) + 1);
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([source, count]) => `${source}: ${count}`).join(', ');
-}
-
-function specialistRoleDigest(specialists: SpecialistResult[]): string {
-  const usable = specialists.filter((specialist) => specialist.evidence.length > 0 || specialist.findings.trim());
-  if (usable.length === 0) return 'No specialist role summaries were available beyond retrieved source records.';
-  return usable
-    .map(
-      (specialist) =>
-        `${specialist.label}: ${specialist.evidence.length} retrieved record(s). ${clean(specialist.findings).slice(0, 420)}`,
-    )
-    .join('\n');
-}
-
-const MIN_CALL_CHARS = 4_000;
-const MAX_CALL_RATE_RETRIES = 3;
-// Longest we will honor a provider's advertised cooldown. Free tiers sometimes
-// advertise very long waits (the trace showed a 195s cooldown); stalling the run
-// for minutes per call is worse than failing the section fast and letting the
-// user re-run on Auto / a less-limited provider, so we cap the wait.
-const MAX_RATE_WAIT_MS = 20_000;
-
-function callSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-
-async function callModel(
-  model: string,
-  system: string,
-  user: string,
-  maxTokens: number,
-  noPause = false,
-  signal?: AbortSignal,
-): Promise<string> {
-  if (signal?.aborted) throw new Error('Run stopped by user');
-  // Surface a silent boss-model failover in the trace so a mid-run provider
-  // outage is visible rather than only changing the model label afterwards.
-  const onProgress = (progress: { to: { shortLabel: string }; reason: string }) => {
-    bus.emit('agent:activity', {
-      agentId: 'boss',
-      phase: 'tool_call',
-      detail: `model unavailable — switched to ${progress.to.shortLabel} (${progress.reason.slice(0, 80)})`,
-    });
-  };
-
-  let content = user;
-  let tokenCap = maxTokens;
-  let rateRetries = 0;
-  for (;;) {
-    try {
-      const response = await completeWithModelChain(
-        model,
-        {
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content },
-          ],
-          temperature: 0.22,
-          maxTokens: tokenCap,
-        },
-        onProgress,
-      );
-      return response.content.trim();
-    } catch (err) {
-      if (isCallTooLarge(err) && content.length > MIN_CALL_CHARS) {
-        content = content.slice(0, Math.max(MIN_CALL_CHARS, Math.floor(content.length / 2)));
-        tokenCap = Math.min(tokenCap, 1500);
-        bus.emit('agent:activity', {
-          agentId: 'boss',
-          phase: 'tool_call',
-          detail: `section prompt too large — retrying smaller (${content.length} chars)`,
-        });
-        continue;
-      }
-      // Hard billing failure — the failover chain has already excluded the dead
-      // provider. If this surfaces here, every provider in the chain is dead.
-      // Surface immediately; do not stall in retry loops.
-      if (isCallBillingDead(err)) {
-        bus.emit('agent:activity', {
-          agentId: 'boss',
-          phase: 'error',
-          detail: `all providers billing-dead — section draft aborted`,
-        });
-        throw err;
-      }
-      // Brain Mini deliberately does NOT pause on rate limits — it fails fast
-      // (the section gets flagged) so a low-quota run never stalls in backoff.
-      if (isCallRateLimited(err) && !noPause && rateRetries < MAX_CALL_RATE_RETRIES) {
-        rateRetries += 1;
-        // Honor the provider's advertised cooldown when it states one (a short
-        // wait like 8s lets the next retry actually succeed); otherwise fall back
-        // to exponential backoff. Cap either so a very long advertised cooldown
-        // never stalls the whole run.
-        const advertised = parseRetryAfterMs(err);
-        const backoff = Math.min(8_000, 1_000 * 2 ** (rateRetries - 1));
-        const waitMs = Math.min(MAX_RATE_WAIT_MS, advertised ?? backoff) + Math.floor(Math.random() * 400);
-        bus.emit('agent:activity', {
-          agentId: 'boss',
-          phase: 'tool_call',
-          detail: `rate-limited — pausing ${Math.round(waitMs / 1000)}s before retry`,
-        });
-        await callSleep(waitMs);
-        continue;
-      }
-      throw err;
-    }
-  }
-}
-
-// Budgets (in characters) for the variable-size blocks of a section prompt. The
-// full drafting prompt was ~15k chars, which overflowed small (≈8k-token) models
-// — forcing the wasteful "retrying smaller" shrink loop — and, more importantly,
-// blew a free-tier tokens-per-minute quota so the run stalled and shipped
-// "blocked". Capping the blocks keeps the whole request small enough to fit on
-// the FIRST attempt and to stay under a per-minute budget. The claim ledger
-// (already capped at 12 claims) is kept in full because it is the instruction;
-// the extraction detail, digests, and repair body are the parts that grow.
-const SECTION_EXTRACTION_BUDGET = 5000;
-const SECTION_PRIOR_DIGEST_BUDGET = 1200;
-const SECTION_SPECIALIST_DIGEST_BUDGET = 900;
-const SECTION_CURRENT_BODY_BUDGET = 1600;
-
-function trimTo(text: string, budget: number): string {
-  return text.length <= budget ? text : `${text.slice(0, budget).trimEnd()}…`;
-}
-
-// Keep the most relevant extractions up to a character budget, ALWAYS keeping at
-// least the first, and note how many more remain in the evidence table so the
-// model knows the corpus is larger than the excerpt it was handed.
-function cappedExtractionBlock(relevant: EvidenceExtraction[]): string {
-  const lines: string[] = [];
-  let used = 0;
-  for (const extraction of relevant) {
-    const line = formatExtraction(extraction);
-    if (lines.length > 0 && used + line.length > SECTION_EXTRACTION_BUDGET) break;
-    lines.push(line);
-    used += line.length + 1;
-  }
-  const dropped = relevant.length - lines.length;
-  if (dropped > 0) {
-    lines.push(
-      `(+${dropped} further retrieved record(s) for this section are summarised in the evidence table and the source-yield counts above; cite only the [S#] listed here.)`,
-    );
-  }
-  return lines.join('\n');
-}
-
-// Assemble the section drafting prompt with every variable block capped to its
-// budget, so the request fits a small context window and a free-tier per-minute
-// token quota on the first attempt. Pure and deterministic — unit-tested for
-// size without a model call.
-export function buildSectionUserPrompt(opts: {
-  question: string;
-  section: PaperBlueprint['sections'][number];
-  claims: ClaimLedgerEntry[];
-  extractions: EvidenceExtraction[];
-  specialistDigest: string;
-  datasetBlock: string;
-  priorDigest: string;
-  currentBody?: string[];
-  evidenceGap?: string;
-  methodsNotes?: string;
-}): string {
-  const sourceMarkers = new Set(opts.claims.flatMap((claim) => claim.supportingSources));
-  const relevantExtractions = opts.extractions.filter((item) => sourceMarkers.has(item.sourceMarker));
-  const claimsBlock = opts.claims.map(formatClaim).join('\n');
-  const extractionBlock = cappedExtractionBlock(relevantExtractions);
-  const current = opts.currentBody?.length
-    ? `\nCurrent draft to repair:\n${trimTo(opts.currentBody.join('\n\n'), SECTION_CURRENT_BODY_BUDGET)}\n`
-    : '';
-  const gapNote = opts.evidenceGap ? `\nEVIDENCE GAP — MANDATORY HONESTY:\n${opts.evidenceGap}\n` : '';
-  const methodsNote =
-    opts.methodsNotes && opts.section.heading.toLowerCase() === 'methods'
-      ? `\nDETERMINISTIC PIPELINE FACTS — expand these; do not invent alternatives:\n${opts.methodsNotes}\n`
-      : '';
-  const hasSynthetic = opts.extractions.some((e) => e.sourceMarker.startsWith('[P'));
-  const syntheticIsolation = hasSynthetic
-    ? `
-AUTHOR-SUPPLIED TRIALS ([P#]):
-These trials were supplied by the user, not retrieved from a database. Describe them using ONLY their provided statistics and title. Do NOT import population details, eligibility criteria, or subgroup descriptions from retrieved [S#] sources into an [P#] trial description.`
-    : '';
-  return `Topic: ${opts.question}
-${gapNote}
-Section: ${opts.section.heading}
-Intent: ${opts.section.intent}
-Target: ${opts.section.targetWords} | Min: ${opts.section.minWords}
-Markers: ${[...sourceMarkers].join(', ') || '(none)'}
-${methodsNote}
-CLAIM LEDGER:
-${claimsBlock || 'No direct claims. Write a transparent evidence-gap section.'}
-
-EXTRACTIONS:
-${extractionBlock || 'No direct extractions.'}
-${syntheticIsolation}
-
-Source yield: ${sourceYieldBlock(opts.extractions)}
-
-Agents: ${trimTo(opts.specialistDigest, SECTION_SPECIALIST_DIGEST_BUDGET)}
-
-Dataset: ${opts.datasetBlock}
-
-Prior sections: ${trimTo(opts.priorDigest, SECTION_PRIOR_DIGEST_BUDGET)}
-${current}
-Write ${opts.section.heading} now. Start with the first sentence — no heading, no number. Cover each claim once, in depth; do NOT repeat, restate, or pad to reach a length. Every sentence must trace to a claim or extraction.
-STATISTICS LOCK: attach a hazard/odds/risk ratio, confidence interval, or p-value ONLY to the exact [S#] whose EXTRACTIONS above list that number. Never give a source a statistic it does not report, never cite the same source's estimate two different ways, and never invent a number to sound precise. If no effect sizes exist, state that limitation clearly, then compensate with rich contextual discussion.`;
 }
 
 async function draftLedgerSection(opts: {
@@ -1316,25 +636,6 @@ export function isSubstantiveAbstract(abstract: Manuscript['abstract']): boolean
   if (core.some((field) => field.length === 0)) return false;
   const words = Object.values(abstract).join(' ').split(/\s+/).filter(Boolean).length;
   return words >= 40;
-}
-
-function repairableSectionNames(issues: ValidationIssue[]): string[] {
-  const names = issues
-    .filter((issueItem) =>
-      issueItem.section &&
-      [
-        'section-too-short',
-        'section-missing-citation',
-        'unsupported-statistic',
-        'clinical-results-uncited',
-        'fabricated-primary-study',
-        'prompt-leakage',
-        'missing-required-section',
-        'model-owned-references',
-      ].includes(issueItem.code),
-    )
-    .map((issueItem) => issueItem.section!);
-  return [...new Set(names)].slice(0, MAX_QA_REPAIR_SECTIONS);
 }
 
 // Build the publication artifact without letting an exception abort assembly.

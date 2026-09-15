@@ -3,16 +3,15 @@ import type { EvidenceItem } from '@platform/index';
 import type { Manuscript } from '../manuscript';
 import { buildPublicationArtifact } from '../publication';
 import {
-  buildPaperBlueprint,
-  buildPaperOutline,
-  buildSectionUserPrompt,
   isSubstantiveAbstract,
   modelForSection,
-  neutralizeUnverifiableNct,
   shouldExpandSection,
   stripUnapprovedMarkers,
-  validatePaperPackage,
 } from '../paperPipeline';
+import { buildPaperBlueprint, buildPaperOutline } from '../paperBlueprint';
+import { buildSectionUserPrompt } from '../sectionPrompt';
+import { neutralizeUnverifiableNct } from '../draftIntegrity';
+import { validatePaperPackage } from '../paperQa';
 import {
   isBillingDead as isCallBillingDead,
   isRateLimited as isCallRateLimited,

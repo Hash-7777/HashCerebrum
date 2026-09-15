@@ -56,7 +56,7 @@ import { labelForModel, summarizeEvidence, TOPIC_THROTTLE_MS } from './researchP
 import { runSwarm } from './swarm/runSwarm';
 import { resolveIntent } from './swarm/intent';
 import { parseSlashCommands, type SlashEffort, type SlashIntent } from './composer/slashCommands';
-import { buildPaperOutline } from './swarm/paperPipeline';
+import { buildPaperOutline } from './swarm/paperBlueprint';
 import { summarizeDatasetText, summarizeDatasetXlsx } from './swarm/statistics';
 import type { BossPhase, SwarmCallbacks } from './swarm/types';
 import type { UploadedDatasetSummary } from './swarm/publicationTypes';
