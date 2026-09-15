@@ -78,7 +78,7 @@ lopdf = "0.42"
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
 # bundled fonts so no font files ship separately. Rendering is fully
 # offline — no network, no package downloads.
-typst-as-lib = "0.15"
+typst-as-lib = "0.16"
 typst-pdf    = "0.14"
 typst-assets = { version = "0.14", features = ["fonts"] }
 
