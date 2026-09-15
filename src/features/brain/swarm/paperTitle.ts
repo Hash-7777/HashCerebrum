@@ -34,7 +34,6 @@ const META_INSTRUCTION_WORDS = new Set([
   'build', 'using', 'reuse', 'leverage', 'incorporate',
 ]);
 
-// Common typos corrected before a token reaches a title or keyword list.
 const STRUCTURAL_WORDS = new Set(['a', 'an', 'the', 'me', 'on', 'of', 'for', 'to', 'with', 'in']);
 
 // Strip leading request/deliverable words ("make a full research paper about")
@@ -58,6 +57,7 @@ function stripTrailingMeta(text: string): string {
     .trim();
 }
 
+// Common typos corrected before a token reaches a title or keyword list.
 const TYPO_FIXES: Record<string, string> = {
   reaserch: 'research',
   reasearch: 'research',
@@ -106,6 +106,9 @@ export function titleTopic(question: string): string {
   return fixTypos(full || question.trim());
 }
 
+// Comparison / temporal / question words that describe the QUESTION, not the
+// medical subject, so they must never become keywords ("how does the effect
+// DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
 const NON_TOPIC_KEYWORDS = new Set([
   'differ', 'differs', 'differed', 'difference', 'differences', 'differential',
   'compare', 'compared', 'comparing', 'comparison', 'versus', 'change', 'changed', 'changes', 'changing',
@@ -152,6 +155,10 @@ const KEYWORD_PHRASE_STOP = new Set([
   'analysis', 'analyse', 'analyze',
 ]);
 
+// Keywords are drawn from the SUBJECT (instruction words stripped), with typos
+// corrected and instruction/deliverable words excluded — so a request like
+// "make a full reaserch paper about ..." yields the actual topic terms, never
+// "full" or "reaserch".
 export function keywordsFrom(question: string): string[] {
   // Split the subject text into PHRASES at connector/request words and keep each
   // run of consecutive content words as one keyword, so multi-word medical terms

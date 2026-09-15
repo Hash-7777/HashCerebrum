@@ -273,9 +273,6 @@ const MINI_SECTION_HEADINGS = new Set([
 ]);
 
 
-// Comparison / temporal / question words that describe the QUESTION, not the
-// medical subject, so they must never become keywords ("how does the effect
-// DIFFER … over the last DECADE" must not yield "differ"/"decade" as keywords).
 export function buildPaperBlueprint(
   question: string,
   ledger: ClaimLedgerEntry[],
@@ -349,13 +346,6 @@ export function buildPaperOutline(question: string, mini = false): PaperOutline 
   };
 }
 
-// Keywords are drawn from the SUBJECT (instruction words stripped), with typos
-// corrected and instruction/deliverable words excluded — so a request like
-// "make a full reaserch paper about ..." yields the actual topic terms, never
-// "full" or "reaserch".
-// Generic academic connective nouns that carry no indexing value on their own
-// — dropped so the keyword list reads as real subject terms ("asthma",
-// "pharmacist", "inhaler") rather than "role" / "approach" / "use".
 function wordCount(value: string): number {
   return value.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word)).length;
 }
