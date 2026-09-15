@@ -19,15 +19,15 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@core': path.resolve(__dirname, './src/core'),
-      '@agents': path.resolve(__dirname, './src/agents'),
-      '@modes': path.resolve(__dirname, './src/modes'),
-      '@features': path.resolve(__dirname, './src/features'),
-      '@platform': path.resolve(__dirname, './src/platform'),
-      '@ui': path.resolve(__dirname, './src/ui'),
-      '@lib': path.resolve(__dirname, './src/lib'),
-      '@config': path.resolve(__dirname, './src/config'),
+      '@': path.resolve(import.meta.dirname, './src'),
+      '@core': path.resolve(import.meta.dirname, './src/core'),
+      '@agents': path.resolve(import.meta.dirname, './src/agents'),
+      '@modes': path.resolve(import.meta.dirname, './src/modes'),
+      '@features': path.resolve(import.meta.dirname, './src/features'),
+      '@platform': path.resolve(import.meta.dirname, './src/platform'),
+      '@ui': path.resolve(import.meta.dirname, './src/ui'),
+      '@lib': path.resolve(import.meta.dirname, './src/lib'),
+      '@config': path.resolve(import.meta.dirname, './src/config'),
     },
   },
 
@@ -50,7 +50,9 @@ export default defineConfig({
   envPrefix: ['VITE_', 'TAURI_ENV_DEBUG'],
 
   build: {
-    target: process.env['TAURI_ENV_PLATFORM'] === 'windows' ? 'chrome105' : 'safari13',
+    // Safari 14 is the WebKit of macOS 11, the app's minimumSystemVersion in
+    // tauri.conf.json — the oldest engine a release can run on. Keep the two in step.
+    target: process.env['TAURI_ENV_PLATFORM'] === 'windows' ? 'chrome105' : 'safari14',
     // Vite 8 uses Rolldown + OXC (Rust-based). Passing true uses OXC minification;
     // 'esbuild' is no longer bundled and requires a separate install.
     minify: !process.env['TAURI_ENV_DEBUG'],
