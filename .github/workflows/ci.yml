@@ -58,7 +58,7 @@ jobs:
     outputs:
       rust: ${{ steps.diff.outputs.rust }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: diff
         env:
           EVENT: ${{ github.event_name }}
@@ -88,8 +88,8 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -104,7 +104,7 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -135,7 +135,7 @@ jobs:
       - run: cargo audit
         working-directory: ./src-tauri
 
-  # The two jobs above never invoke Tauri itself: `build:web` stops at the Vite
+  # The frontend and Rust jobs never invoke Tauri itself: `build:web` stops at the Vite
   # bundle, and cargo only compiles the library. Anything Tauri validates while
   # assembling the app — the capability set against its generated schema, the
   # icon set, the bundle identifier and config — is therefore invisible to CI,
@@ -151,8 +151,8 @@ jobs:
     needs: [frontend, rust]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'

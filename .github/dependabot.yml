@@ -19,3 +19,15 @@ updates:
       cargo-all:
         patterns:
           - "*"
+
+  # The workflow's actions. Grouped like the others so one PR carries every
+  # action bump, and each runs through CI before it can land.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      actions-all:
+        patterns:
+          - "*"
