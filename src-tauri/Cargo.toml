@@ -72,7 +72,7 @@ url = "2"
 # the model for citation grounding. lopdf is pure-Rust, no native deps.
 # Pinned >=0.42 to clear RUSTSEC-2026-0187 (stack overflow on deeply nested
 # PDF objects); the load_mem/get_pages/extract_text API we use is unchanged.
-lopdf = "0.42"
+lopdf = "0.45"
 
 # Typst — embedded typesetting engine for journal-grade manuscript PDFs.
 # typst-as-lib wraps the compiler as a library; typst-assets supplies the
