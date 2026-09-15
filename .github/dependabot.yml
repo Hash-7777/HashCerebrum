@@ -1,14 +1,20 @@
 version: 2
 updates:
+  # Minor and patch updates arrive together in one PR per ecosystem. A major
+  # upgrade is left out of the group and gets a PR of its own, so one
+  # migration that fails CI can no longer hold every safe update back with it.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
     groups:
-      npm-all:
+      npm-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
@@ -16,9 +22,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     groups:
-      cargo-all:
+      cargo-minor-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # The workflow's actions. Grouped like the others so one PR carries every
   # action bump, and each runs through CI before it can land.
