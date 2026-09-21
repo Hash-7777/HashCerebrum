@@ -80,7 +80,7 @@ lopdf = "0.42"
 # offline — no network, no package downloads.
 typst-as-lib = "0.15"
 typst-pdf    = "0.14"
-typst-assets = { version = "0.14", features = ["fonts"] }
+typst-assets = { version = "0.15", features = ["fonts"] }
 
 [profile.release]
 strip         = true
