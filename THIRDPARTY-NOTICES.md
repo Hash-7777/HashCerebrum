@@ -1934,7 +1934,7 @@ Applies to:
 - crate zune-core 0.5.1
 - crate zune-jpeg 0.5.15
 - npm @huggingface/transformers 4.2.0
-- npm dompurify 3.4.15
+- npm dompurify 3.4.17
 
 ```text
 Apache License
@@ -6629,7 +6629,7 @@ Applies to:
 
 - crate cssparser 0.36.0
 - crate cssparser-macros 0.6.1
-- npm dompurify 3.4.15
+- npm dompurify 3.4.17
 
 ```text
 Mozilla Public License Version 2.0
