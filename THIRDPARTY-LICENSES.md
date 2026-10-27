@@ -21,7 +21,7 @@ dependency change.
 
 ## Rust Dependencies
 
-The following 753 Rust crates are used by the Tauri backend (`src-tauri/`).
+The following 754 Rust crates are used by the Tauri backend (`src-tauri/`).
 Every crate in `Cargo.lock` is listed, including crates built only on other
 platforms or only for tests.
 
@@ -430,7 +430,7 @@ platforms or only for tests.
 | quick-xml | 0.38.4 | MIT |
 | quick-xml | 0.39.4 | MIT |
 | quinn | 0.11.9 | MIT OR Apache-2.0 |
-| quinn-proto | 0.11.15 | MIT OR Apache-2.0 |
+| quinn-proto | 0.11.18 | MIT OR Apache-2.0 |
 | quinn-udp | 0.5.14 | MIT OR Apache-2.0 |
 | quote | 1.0.45 | MIT OR Apache-2.0 |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
@@ -445,6 +445,7 @@ platforms or only for tests.
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
 | rand_core | 0.9.5 | MIT OR Apache-2.0 |
 | rand_core | 0.10.1 | MIT OR Apache-2.0 |
+| rand_pcg | 0.10.2 | MIT OR Apache-2.0 |
 | rangemap | 1.7.1 | MIT/Apache-2.0 |
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib |
 | rayon | 1.12.0 | MIT OR Apache-2.0 |
@@ -470,9 +471,9 @@ platforms or only for tests.
 | rustc-hash | 2.1.2 | Apache-2.0 OR MIT |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |
 | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
-| rustls | 0.23.45 | Apache-2.0 OR ISC OR MIT |
+| rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | rustls-pki-types | 1.14.1 | MIT OR Apache-2.0 |
-| rustls-webpki | 0.103.15 | ISC |
+| rustls-webpki | 0.103.16 | ISC |
 | rustversion | 1.0.22 | MIT OR Apache-2.0 |
 | rustybuzz | 0.20.1 | MIT |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
@@ -678,7 +679,7 @@ platforms or only for tests.
 | web_atoms | 0.2.4 | MIT OR Apache-2.0 |
 | webkit2gtk | 2.0.2 | MIT |
 | webkit2gtk-sys | 2.0.2 | MIT |
-| webpki-roots | 1.0.7 | CDLA-Permissive-2.0 |
+| webpki-roots | 1.0.10 | CDLA-Permissive-2.0 |
 | webview2-com | 0.38.2 | MIT |
 | webview2-com-macros | 0.8.1 | MIT |
 | webview2-com-sys | 0.38.2 | MIT |
@@ -1151,7 +1152,7 @@ manifests. `A OR B` means the package may be used under either.
 | License | Rust crates | NPM packages |
 |---------|-------------|--------------|
 | MIT | 157 | 231 |
-| MIT OR Apache-2.0 | 325 | 3 |
+| MIT OR Apache-2.0 | 326 | 3 |
 | Apache-2.0 OR MIT | 59 | 13 |
 | Apache-2.0 | 26 | 28 |
 | MIT/Apache-2.0 | 43 | 0 |
