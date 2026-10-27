@@ -22,7 +22,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build --bundles app",
     "icons": "node scripts/generate-icons.mjs",
-    "licenses": "node scripts/generate-third-party-licenses.mjs",
+    "licenses": "node scripts/generate-third-party-licenses.mjs && node scripts/generate-license-notices.mjs",
     "validate:brain-model": "node scripts/validate-brain-model.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

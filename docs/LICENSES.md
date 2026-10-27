@@ -138,16 +138,33 @@ Both trees were scanned end-to-end:
 
 Permissive licenses (MIT, BSD, Apache-2.0, OFL-1.1) require that their copyright
 and permission notices travel with any binary distribution; Apache-2.0 also
-requires retaining upstream `NOTICE` files. This is satisfied by shipping an
-aggregated `THIRD-PARTY-LICENSES` file in the app bundle and/or an in-app
-"Licenses" view.
+requires retaining upstream `NOTICE` files. **Done.** Two generated files cover
+it, both written by `npm run licenses`:
 
-The package list is done: [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md)
-names every crate and npm package with its version and declared license, and
-`npm run licenses` regenerates it from the two lockfiles. It does not yet carry
-each package's own copyright lines and `NOTICE` files, so the full notice bundle
-is **still to be produced** before the first public release (e.g. via
-`cargo-about` for Rust and `license-checker` for npm).
+- [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md) — the inventory. Every
+  crate and npm package in the two lockfiles with its version and declared
+  license, plus a count per license.
+- [`THIRDPARTY-NOTICES.md`](../THIRDPARTY-NOTICES.md) — the notices themselves,
+  reproduced word for word: each package's own `LICENSE`, `COPYING`, `NOTICE`
+  and `LICENSE.spdx` text. Identical text is printed once with every package
+  that ships it listed above it. Packages that publish no notice file at all
+  are listed separately with the license and authors their manifest declares,
+  so the gap is visible rather than hidden.
+
+The notices file is narrower than the inventory on purpose: it carries what a
+user receives. Every crate in `Cargo.lock` is in (one notices file ships with
+every platform's build), but on the npm side only packages whose code or assets
+the production frontend build actually includes — measured by running the real
+build, worker builds included — so build and test tooling and optional native
+packages stay out. It also covers the license files vendored next to the
+bundled fonts and model weights in `public/`.
+
+`src-tauri/tauri.conf.json` ships `LICENSE`, the inventory and the notices in
+the app bundle's resource folder, so a distributed build carries all three.
+
+**Before every release:** re-run `npm run licenses` and commit the result. The
+npm half is measured from the build, so app code changes — not only dependency
+changes — can change what has to be carried.
 
 ## Project's own license
 

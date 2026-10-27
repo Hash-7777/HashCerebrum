@@ -22,6 +22,12 @@
 package-lock.json   linguist-generated=true -diff
 Cargo.lock          linguist-generated=true -diff
 
+# Licence files — written by `npm run licenses`, never edited by hand. Diffs
+# stay available (a dependency change should be reviewable); they are only
+# marked generated so they do not drown a pull request's own changes.
+THIRDPARTY-LICENSES.md  linguist-generated=true
+THIRDPARTY-NOTICES.md   linguist-generated=true
+
 # Binary assets — Three.js models, icons. Never line-end converted.
 *.glb       binary
 *.gltf      binary

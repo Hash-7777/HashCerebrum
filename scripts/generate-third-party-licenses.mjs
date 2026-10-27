@@ -15,12 +15,10 @@
 // The output has no date, so re-running it on unchanged lockfiles changes
 // nothing and every diff is a real dependency change.
 
-import { execFileSync } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { byNameThenVersion, cargoPackages, npmLockPackages, ROOT } from './license-sources.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'THIRDPARTY-LICENSES.md');
 
 // Packages whose manifest has no licence field, checked by hand. Keyed by
@@ -45,24 +43,18 @@ function licenseFor(name, version, declared) {
 }
 
 function rustCrates() {
-  const json = execFileSync(
-    'cargo',
-    ['metadata', '--format-version', '1', '--locked', '--manifest-path', join(ROOT, 'src-tauri', 'Cargo.toml')],
-    { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] },
-  );
-  // A null source is a local path crate: HashCerebrum's own backend.
-  return JSON.parse(json)
-    .packages.filter((p) => p.source !== null)
-    .map((p) => ({ name: p.name, version: p.version, license: licenseFor(p.name, p.version, p.license) }));
+  return cargoPackages().map((p) => ({
+    name: p.name,
+    version: p.version,
+    license: licenseFor(p.name, p.version, p.license),
+  }));
 }
 
-async function npmPackages() {
-  const lock = JSON.parse(await readFile(join(ROOT, 'package-lock.json'), 'utf8'));
+function npmPackages() {
   const byKey = new Map();
-  for (const [path, entry] of Object.entries(lock.packages)) {
-    if (path === '') continue; // the root entry is HashCerebrum itself
-    const name = entry.name ?? path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length);
-    const key = `${name}@${entry.version}`;
+  for (const entry of npmLockPackages()) {
+    const { name, version } = entry;
+    const key = `${name}@${version}`;
     const kind = entry.dev ? 'dev' : 'runtime';
     // The same name@version can be installed at several paths; it is one row,
     // and runtime wins if any copy of it is.
@@ -71,30 +63,9 @@ async function npmPackages() {
       if (kind === 'runtime') seen.kind = 'runtime';
       continue;
     }
-    byKey.set(key, { name, version: entry.version, license: licenseFor(name, entry.version, entry.license), kind });
+    byKey.set(key, { name, version, license: licenseFor(name, version, entry.license), kind });
   }
   return [...byKey.values()];
-}
-
-// Numeric where both parts are numbers, so 0.10.0 sorts after 0.9.0.
-function compareVersions(a, b) {
-  const pa = a.split(/[.+-]/);
-  const pb = b.split(/[.+-]/);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
-    const x = pa[i] ?? '';
-    const y = pb[i] ?? '';
-    if (x === y) continue;
-    if (/^\d+$/.test(x) && /^\d+$/.test(y)) return Number(x) - Number(y);
-    return x < y ? -1 : 1;
-  }
-  return 0;
-}
-
-// Plain code-point order, not locale order, so the output is the same on
-// every machine.
-function byNameThenVersion(a, b) {
-  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
-  return compareVersions(a.version, b.version);
 }
 
 const cell = (text) => String(text).replace(/\|/g, '\\|');
@@ -123,6 +94,11 @@ respective licenses. HashCerebrum itself is licensed under the AGPL-3.0-or-later
 It is generated from \`src-tauri/Cargo.lock\` and \`package-lock.json\` by
 \`npm run licenses\`. Do not edit it by hand: re-run the script after any
 dependency change.
+
+This file is the inventory — what the project depends on, and under which
+license. The notices themselves, reproduced word for word for everything that
+ships inside the app, are in
+[\`THIRDPARTY-NOTICES.md\`](THIRDPARTY-NOTICES.md).
 
 ---
 
@@ -202,14 +178,16 @@ documentation or source distributions.
 
 ### Other Licenses
 
-Every other license in use is counted in the [License Summary](#license-summary).
-\`docs/LICENSES.md\` records the license review: which licenses were checked by
-hand and what each one requires.
+Every other license in use is counted in the [License Summary](#license-summary),
+and every notice text that ships with the app is reproduced in
+[\`THIRDPARTY-NOTICES.md\`](THIRDPARTY-NOTICES.md). \`docs/LICENSES.md\` records
+the license review: which licenses were checked by hand and what each one
+requires.
 `;
 }
 
 const rust = rustCrates().sort(byNameThenVersion);
-const npm = (await npmPackages()).sort(byNameThenVersion);
+const npm = npmPackages().sort(byNameThenVersion);
 
 if (missing.length > 0) {
   console.error(

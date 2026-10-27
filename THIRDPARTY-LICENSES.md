@@ -8,6 +8,11 @@ It is generated from `src-tauri/Cargo.lock` and `package-lock.json` by
 `npm run licenses`. Do not edit it by hand: re-run the script after any
 dependency change.
 
+This file is the inventory — what the project depends on, and under which
+license. The notices themselves, reproduced word for word for everything that
+ships inside the app, are in
+[`THIRDPARTY-NOTICES.md`](THIRDPARTY-NOTICES.md).
+
 ---
 
 ## Table of Contents
@@ -1235,6 +1240,8 @@ documentation or source distributions.
 
 ### Other Licenses
 
-Every other license in use is counted in the [License Summary](#license-summary).
-`docs/LICENSES.md` records the license review: which licenses were checked by
-hand and what each one requires.
+Every other license in use is counted in the [License Summary](#license-summary),
+and every notice text that ships with the app is reproduced in
+[`THIRDPARTY-NOTICES.md`](THIRDPARTY-NOTICES.md). `docs/LICENSES.md` records
+the license review: which licenses were checked by hand and what each one
+requires.

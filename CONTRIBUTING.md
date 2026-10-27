@@ -85,8 +85,10 @@ HashCerebrum is licensed under **AGPL-3.0-or-later**. By contributing, you agree
 that your contribution is licensed under the same terms. Do not add code or
 assets whose license is incompatible with AGPL-3.0, and record any new bundled
 asset's license in [`docs/LICENSES.md`](docs/LICENSES.md). After any dependency
-change, run `npm run licenses` to regenerate
-[`THIRDPARTY-LICENSES.md`](THIRDPARTY-LICENSES.md) from the lockfiles.
+change, run `npm run licenses`: it regenerates
+[`THIRDPARTY-LICENSES.md`](THIRDPARTY-LICENSES.md) (what we depend on) and
+[`THIRDPARTY-NOTICES.md`](THIRDPARTY-NOTICES.md) (the copyright and permission
+notices that ship with a release) and both are committed.
 
 ## Reporting bugs and requesting features
 
