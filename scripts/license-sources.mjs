@@ -46,6 +46,11 @@ export function npmLockPackages() {
       version: entry.version,
       license: entry.license,
       dev: !!entry.dev,
+      // npm installs an optional dependency only where its platform matches,
+      // so these are the native packages a web build never carries.
+      optional: !!entry.optional,
+      /** Declared runtime dependencies, by name. */
+      dependencies: entry.dependencies ?? {},
     }));
 }
 

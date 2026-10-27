@@ -83,14 +83,54 @@ async function bundledPackageDirs() {
   return dirs;
 }
 
+/**
+ * How npm resolves `dep` for the package installed at `from`: the nearest
+ * node_modules going up, which is where its code was loaded from.
+ */
+function resolveInstalled(lock, from, dep) {
+  let at = from;
+  for (;;) {
+    const candidate = at ? `${at}/node_modules/${dep}` : `node_modules/${dep}`;
+    if (lock.has(candidate)) return candidate;
+    if (!at) return null;
+    const up = at.lastIndexOf('/node_modules/');
+    at = up === -1 ? '' : at.slice(0, up);
+  }
+}
+
+/**
+ * The packages in the build, plus the runtime dependencies those packages
+ * declare, taken transitively.
+ *
+ * The declared dependencies are in because several packages publish a
+ * self-contained build: docx carries a zip library inside its own file, and
+ * the transformers package carries its template and tokenizer libraries the
+ * same way. That code reaches a user with no module path of its own to find
+ * it by, and the boundary cannot be read back out of a minified bundle — so
+ * the list errs towards carrying a notice that is not needed rather than
+ * dropping one that is.
+ *
+ * Left out: optional dependencies, which are the platform-native packages a
+ * web build never includes, and `@types/*`, which is type declarations with
+ * no code to ship.
+ */
 function bundledNpmPackages(dirs) {
-  const byPath = new Map(npmLockPackages().map((entry) => [entry.path, entry]));
-  return [...dirs]
-    .map((path) => {
-      const entry = byPath.get(path);
-      if (!entry) throw new Error(`${path} is in the build but not in package-lock.json`);
-      return { ...entry, dir: join(ROOT, path) };
-    })
+  const lock = new Map(npmLockPackages().map((entry) => [entry.path, entry]));
+  const paths = new Set(dirs);
+  for (const path of paths) {
+    const entry = lock.get(path);
+    if (!entry) throw new Error(`${path} is in the build but not in package-lock.json`);
+    for (const dep of Object.keys(entry.dependencies ?? {})) {
+      if (dep.startsWith('@types/')) continue;
+      const resolved = resolveInstalled(lock, path, dep);
+      if (!resolved) continue;
+      const installed = lock.get(resolved);
+      if (!installed || installed.dev || installed.optional) continue;
+      paths.add(resolved); // iterating a Set picks up what the loop adds
+    }
+  }
+  return [...paths]
+    .map((path) => ({ ...lock.get(path), dir: join(ROOT, path) }))
     .sort(byNameThenVersion);
 }
 
@@ -181,9 +221,13 @@ actually receives:
 
 - **Rust:** every crate in \`src-tauri/Cargo.lock\`, including crates that only
   build on other platforms, because one notice file ships with every build.
-- **npm:** only packages whose code or assets the production frontend build
-  includes. Build and test tooling, and optional native packages that never
-  reach a user, are left out.
+- **npm:** the packages whose code or assets the production frontend build
+  includes, together with the runtime dependencies those packages declare.
+  The declared dependencies are in because a package can publish a
+  self-contained build that carries a dependency's code inside its own file,
+  where nothing in the output names it. Build and test tooling, optional
+  native packages, and type-only packages are left out, so a name here is not
+  by itself proof that the code reached the bundle.
 - **Bundled assets:** the license files vendored next to the fonts and model
   weights in \`public/\`.
 
