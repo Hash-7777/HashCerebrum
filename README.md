@@ -393,7 +393,8 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 
 - **Six themes**, including a light **Parchment** reading theme, all with carefully tuned contrast across every panel, and a consistent, theme-aware look throughout (scrollbars included).
 - **Lite mode** drops the 3D brain for a lightweight 2D panel — no WebGL, no GPU, far less memory — so the full app runs at speed on low-RAM or GPU-less machines, with auto-detection for weak hardware. Memory mode opens as a list there, with the 3D map one click away. Every research feature is unchanged.
-- **Tabbed Settings** (Settings · APIs · Data & Privacy · Disclaimer · Licenses · Dev), with the **Licenses** tab carrying the app's own licence, the dependency list, and every third-party copyright notice the build ships — searchable, read straight from the files inside the app, assistant answers rendered as clean inline Markdown, and an in-app **developer error console** that surfaces runtime errors inside the app for debugging.
+- **Tabbed Settings** (Settings · APIs · Data & Privacy · Disclaimer · Licenses · Dev), assistant answers rendered as clean inline Markdown, and an in-app **developer error console** that surfaces runtime errors inside the app for debugging.
+- **Licenses tab.** The app's own licence, the full dependency list, and every third-party copyright notice the build carries — searchable by package, version or licence file, and read from the documents that ship inside the app.
 
 ---
 

@@ -18,6 +18,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HOOK = fileURLToPath(new URL('../../.githooks/pre-commit', import.meta.url));
+
+// Each case starts a repository and runs the hook, so every assertion waits on
+// several real git processes. The default per-test limit is tuned for pure
+// functions and is reached on a busy machine while the suite runs in parallel,
+// which turns this file into a flaky gate rather than a failing one.
+const GIT_TIMEOUT_MS = 30_000;
 const roots: string[] = [];
 
 function git(cwd: string, ...args: string[]): void {
@@ -63,7 +69,7 @@ afterAll(() => {
   for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('pre-commit hook — refuses', () => {
+describe('pre-commit hook — refuses', { timeout: GIT_TIMEOUT_MS }, () => {
   it.each(Object.entries(FAKE))('a staged %s', (_kind, secret) => {
     const r = runHook(repo(), { 'src/config.ts': `export const value = "${secret}";\n` });
     expect(r.status).toBe(1);
@@ -90,7 +96,7 @@ describe('pre-commit hook — refuses', () => {
   });
 });
 
-describe('pre-commit hook — allows', () => {
+describe('pre-commit hook — allows', { timeout: GIT_TIMEOUT_MS }, () => {
   it('ordinary code whose words merely contain a key prefix', () => {
     const r = runHook(repo(), {
       'src/a.css': '.task-assignment-and-scheduling-panel { color: red; }\n',
