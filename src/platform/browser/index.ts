@@ -244,6 +244,23 @@ export const browserPlatform: Platform = {
     purgeProjectData: async () => ({ audit_redacted: 0 }),
   },
 
+  // Browser dev has no resource folder. The dev server does serve the repo
+  // root, so the same documents load from there and the view can be worked on
+  // without the desktop shell.
+  licenses: {
+    read: async (document) => {
+      const name =
+        document === 'project'
+          ? 'LICENSE'
+          : document === 'inventory'
+            ? 'THIRDPARTY-LICENSES.md'
+            : 'THIRDPARTY-NOTICES.md';
+      const response = await fetch(`/${name}`);
+      if (!response.ok) throw new Error('The licence documents ship with the desktop app');
+      return response.text();
+    },
+  },
+
   env: {
     isTauri: false,
     platform: 'browser',

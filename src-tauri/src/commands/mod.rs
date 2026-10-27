@@ -10,6 +10,7 @@
 pub mod audit;
 pub mod cache;
 pub mod files;
+pub mod licenses;
 pub mod llm;
 pub mod manuscript;
 pub mod medical;

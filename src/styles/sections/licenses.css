@@ -1,0 +1,158 @@
+/* ── Licenses tab ─────────────────────────────────────────────
+   The attribution bundle, read inside the app. Notice text is other
+   people's copyright wording: it is never reflowed or restyled beyond
+   making it legible, and it keeps its own line breaks. */
+
+.settings-licenses {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius);
+  background: var(--hc-bg-card);
+  min-height: 0;
+}
+.settings-licenses > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-licenses > header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.settings-licenses > header span {
+  font-size: 10.5px;
+  color: var(--hc-fg-dim);
+  font-family: var(--hc-font-mono);
+}
+.settings-licenses > p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--hc-fg-dim);
+}
+
+.licenses-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.licenses-switch button {
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--hc-fg-dim);
+  background: transparent;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  cursor: pointer;
+}
+.licenses-switch button:hover {
+  color: var(--hc-fg);
+  border-color: var(--hc-border-strong);
+}
+.licenses-switch button[data-active='true'] {
+  color: var(--hc-fg);
+  border-color: var(--hc-accent);
+  background: color-mix(in srgb, var(--hc-accent) 12%, transparent);
+}
+
+.licenses-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  color: var(--hc-fg-dim);
+}
+.licenses-search input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--hc-fg);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.licenses-count,
+.licenses-empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--hc-fg-dim);
+}
+.licenses-count b {
+  color: var(--hc-fg);
+}
+
+.licenses-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* The list can run to hundreds of rows; it scrolls inside the tab rather
+     than stretching the settings panel. */
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.licenses-notice-head {
+  display: grid;
+  /* minmax(0,…) so a long package list can be cut instead of pushing the
+     file name out of the panel. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11px;
+  text-align: left;
+  color: var(--hc-fg);
+  background: transparent;
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  cursor: pointer;
+}
+.licenses-notice-head:hover {
+  border-color: var(--hc-border-strong);
+}
+.licenses-notice-packages {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An open notice shows every package it covers; a closed one stays one line. */
+.licenses-notice-head[aria-expanded='true'] .licenses-notice-packages {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.licenses-notice-files {
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--hc-fg-dim);
+  font-family: var(--hc-font-mono);
+}
+
+.licenses-text {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  max-height: 40vh;
+  overflow: auto;
+  font-family: var(--hc-font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--hc-fg);
+  background: var(--hc-bg);
+  border: 1px solid var(--hc-border);
+  border-radius: var(--hc-radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

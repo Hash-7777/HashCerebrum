@@ -72,6 +72,10 @@ export interface UsageLogRecord {
   cost?: number;
 }
 
+/** The three licence documents a build carries: the app's own licence, the
+ *  dependency inventory, and the third-party notices. */
+export type LicenseDocumentId = 'project' | 'inventory' | 'notices';
+
 export interface Platform {
   // Secrets — provider API keys. These live in the renderer's own storage
   // inside the app's private data directory, NOT in the OS keychain. Nothing
@@ -195,6 +199,13 @@ export interface Platform {
   // Compliance
   compliance: {
     purgeProjectData(projectId: string): Promise<Record<string, number>>;
+  };
+
+  // Licence documents — the attribution bundle that ships in the app's
+  // resource folder, read on demand for the in-app Licenses view. The
+  // document is named by this union, never by path.
+  licenses: {
+    read(document: LicenseDocumentId): Promise<string>;
   };
 
   // File saving. WKWebView ignores `<a download>` for blob URLs, so the desktop

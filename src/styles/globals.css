@@ -6,6 +6,7 @@
 @import './sections/brain-chat.css';
 @import './sections/brain-sources.css';
 @import './sections/settings-audit.css';
+@import './sections/licenses.css';
 @import './sections/memory.css';
 @import './sections/peerreview.css';
 @import './sections/execution-trace.css';

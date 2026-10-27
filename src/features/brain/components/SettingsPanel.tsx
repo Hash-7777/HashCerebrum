@@ -15,6 +15,7 @@ import { resetAllData } from '@core/store/resetData';
 import { Icon, type IconName } from '@ui/icons';
 import { AgentModelSettings } from './AgentModelSettings';
 import { AuditModal } from './AuditModal';
+import { LicensesPanel } from './LicensesPanel';
 import { ErrorConsole } from '@ui/errors/ErrorConsole';
 
 function formatBytes(bytes: number): string {
@@ -23,13 +24,14 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-type SettingsTab = 'settings' | 'apis' | 'data' | 'disclaimer' | 'dev';
+type SettingsTab = 'settings' | 'apis' | 'data' | 'disclaimer' | 'licenses' | 'dev';
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: IconName }[] = [
   { id: 'settings', label: 'Settings', icon: 'settings' },
   { id: 'apis', label: 'APIs', icon: 'database' },
   { id: 'data', label: 'Data & Privacy', icon: 'lock' },
   { id: 'disclaimer', label: 'Disclaimer', icon: 'alert' },
+  { id: 'licenses', label: 'Licenses', icon: 'book' },
   { id: 'dev', label: 'Dev', icon: 'activity' },
 ];
 
@@ -534,6 +536,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             </p>
           </section>
         )}
+
+        {tab === 'licenses' && <LicensesPanel />}
 
         {tab === 'dev' && (
           <section className="settings-developer" aria-label="Developer">

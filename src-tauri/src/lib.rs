@@ -39,6 +39,7 @@ use commands::{
     },
     cache::{cache_clear, cache_clear_expired, cache_stats},
     files::write_file_bytes,
+    licenses::read_license_document,
     llm::{llm_chat_stream, llm_chat_stream_abort, llm_http_get, llm_http_post},
     manuscript::render_manuscript_pdf,
     medical::{
@@ -124,6 +125,7 @@ pub fn run() {
             cache_clear,
             cache_clear_expired,
             purge_project_data,
+            read_license_document,
             telemetry::trace_read,
             swarm_start_job,
             swarm_cancel_job,

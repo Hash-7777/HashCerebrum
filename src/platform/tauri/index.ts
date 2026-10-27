@@ -236,6 +236,10 @@ export const tauriPlatform: Platform = {
       invoke<Record<string, number>>('purge_project_data', { projectId }),
   },
 
+  licenses: {
+    read: (document) => invoke<string>('read_license_document', { document }),
+  },
+
   env: {
     isTauri: true,
     platform: detectPlatform(),

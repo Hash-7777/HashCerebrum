@@ -160,7 +160,11 @@ packages stay out. It also covers the license files vendored next to the
 bundled fonts and model weights in `public/`.
 
 `src-tauri/tauri.conf.json` ships `LICENSE`, the inventory and the notices in
-the app bundle's resource folder, so a distributed build carries all three.
+the app bundle's resource folder, so a distributed build carries all three, and
+**Settings > Licenses** reads them from there: the notices are listed one row
+per notice and searchable by package, version or license file, and the other
+two documents open in full. The renderer names a document by a fixed enum
+(`read_license_document`), never by path.
 
 **Before every release:** re-run `npm run licenses` and commit the result. The
 npm half is measured from the build, so app code changes — not only dependency
