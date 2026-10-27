@@ -11,7 +11,7 @@
 
 import { platform } from '@platform/index';
 import { providerKeyName } from './modelCatalog';
-import { OPENAI_COMPAT_CHAT_URL } from './providerEndpoints';
+import { chatUrlFor } from './providerEndpoints';
 import { getOllamaHost } from './providerSettings';
 import { redactSecrets, secretValuesFromHeaders } from './secrets';
 import {
@@ -112,9 +112,17 @@ async function chatStream(
   }
 }
 
+// Cloudflare is the only provider that can be configured with a key and still
+// have no address, because its account id is part of the address.
+function endpointMissing(providerId: LlmProviderId): string {
+  return providerId === 'cloudflare'
+    ? 'Cloudflare needs its account id in Settings, alongside the key.'
+    : `No OpenAI-compatible endpoint configured for ${providerId}`;
+}
+
 export async function completeOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest): Promise<LlmResponse> {
-  const url = OPENAI_COMPAT_CHAT_URL[providerId];
-  if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
+  const url = chatUrlFor(providerId);
+  if (!url) throw new Error(endpointMissing(providerId));
   const key = await requireKey(providerId);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -331,8 +339,8 @@ export async function streamOllama(req: LlmRequest, opts: StreamOptions): Promis
 }
 
 export async function streamOpenAiCompatible(providerId: LlmProviderId, req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
-  const url = OPENAI_COMPAT_CHAT_URL[providerId];
-  if (!url) throw new Error(`No OpenAI-compatible endpoint configured for ${providerId}`);
+  const url = chatUrlFor(providerId);
+  if (!url) throw new Error(endpointMissing(providerId));
   const key = await requireKey(providerId);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

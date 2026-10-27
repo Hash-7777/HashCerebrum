@@ -4,6 +4,7 @@ import { useThemeStore, THEMES } from '@core/store/themeStore';
 import { useExportSettingsStore } from '@core/store/exportSettingsStore';
 import { CITATION_STYLES } from '@features/brain/export/citationStyles';
 import { getOllamaHost, getPrivacyLocalOnly, setOllamaHost, setPrivacyLocalOnly } from '@core/llm/ProviderRegistry';
+import { getCloudflareAccount, setCloudflareAccount } from '@core/llm/providerSettings';
 import { PROVIDER_DEFS, providerKeyName } from '@core/llm/modelCatalog';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useProjectStore } from '@core/store/projectStore';
@@ -48,6 +49,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [apiKeys, setApiKeys] = useState<Partial<Record<LlmProviderId, string>>>({});
   const [keyErrors, setKeyErrors] = useState<Partial<Record<LlmProviderId, string>>>({});
   const [host, setHost] = useState(getOllamaHost());
+  const [cloudflareAccount, setCloudflareAccountInput] = useState(getCloudflareAccount());
   const [localOnly, setLocalOnly] = useState(getPrivacyLocalOnly());
   const rerankEnabled = useMemorySettingsStore((s) => s.rerankEnabled);
   const toggleRerank = useMemorySettingsStore((s) => s.toggleRerank);
@@ -120,6 +122,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const saveHost = () => {
     setOllamaHost(host);
     setHost(getOllamaHost());
+  };
+
+  // Cloudflare puts the account id in the address, so a key on its own cannot
+  // reach it. Anything that is not thirty-two hex characters is not stored.
+  const saveCloudflareAccount = () => {
+    setCloudflareAccount(cloudflareAccount);
+    setCloudflareAccountInput(getCloudflareAccount());
   };
 
   const toggleLocalOnly = (value: boolean) => {
@@ -375,6 +384,25 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                       Remove
                     </button>
                   </div>
+                  {group.provider === 'cloudflare' && (
+                    <div>
+                      <input
+                        value={cloudflareAccount}
+                        spellCheck={false}
+                        placeholder="Cloudflare account id (32 characters)"
+                        aria-label="Cloudflare account id"
+                        onChange={(event) => setCloudflareAccountInput(event.target.value)}
+                      />
+                      <button type="button" onClick={saveCloudflareAccount}>
+                        Save
+                      </button>
+                    </div>
+                  )}
+                  {group.provider === 'cloudflare' && !getCloudflareAccount() && (
+                    <p className="provider-key-error">
+                      Cloudflare also needs the account id shown in its dashboard address.
+                    </p>
+                  )}
                   {providerError && <p className="provider-key-error">{providerError}</p>}
                 </section>
                 );

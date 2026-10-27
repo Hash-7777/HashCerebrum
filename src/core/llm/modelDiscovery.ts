@@ -8,7 +8,7 @@ import {
   type ModelOption,
 } from './modelCatalog';
 import { modelStrengthScore } from './modelRanking';
-import { OPENAI_COMPAT_MODELS_URL } from './providerEndpoints';
+import { modelsUrlFor } from './providerEndpoints';
 import { getOllamaHost } from './providerSettings';
 import { redactSecrets } from './secrets';
 import type { LlmProviderId } from './types';
@@ -104,6 +104,8 @@ function recordsFromList(data: unknown): unknown[] {
   if (!record) return asArray(data);
   if (Array.isArray(record.data)) return record.data;
   if (Array.isArray(record.models)) return record.models;
+  // Cloudflare answers in its own shape, with the list under `result`.
+  if (Array.isArray(record.result)) return record.result;
   return [];
 }
 
@@ -258,8 +260,14 @@ async function discoverAnthropic(key: string): Promise<ModelOption[]> {
 }
 
 async function discoverOpenAiCompatible(provider: LlmProviderId, key: string): Promise<ModelOption[]> {
-  const url = OPENAI_COMPAT_MODELS_URL[provider];
-  if (!url) throw new Error(`No model-list endpoint configured for ${provider}`);
+  const url = modelsUrlFor(provider);
+  if (!url) {
+    throw new Error(
+      provider === 'cloudflare'
+        ? 'Cloudflare needs its account id in Settings, alongside the key.'
+        : `No model-list endpoint configured for ${provider}`,
+    );
+  }
   const headers: Record<string, string> = {
     Accept: 'application/json',
     Authorization: `Bearer ${key}`,

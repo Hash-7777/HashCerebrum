@@ -15,7 +15,13 @@ export type LlmProviderId =
   | 'xai'
   | 'together'
   | 'fireworks'
-  | 'deepinfra';
+  | 'deepinfra'
+  | 'zai'
+  | 'qwen'
+  | 'huggingface'
+  | 'novita'
+  | 'venice'
+  | 'cloudflare';
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

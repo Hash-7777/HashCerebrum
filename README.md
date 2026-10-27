@@ -73,7 +73,7 @@ HashCerebrum has been built in the open-source spirit as a single-developer proj
 | **History** | every change is in the [commit log](https://github.com/Hash-7777/HashCerebrum/commits/main) |
 | **Version** | 1.1.0 |
 | **License** | GNU AGPL-3.0-or-later |
-| **Tests** | 1,157 frontend (Vitest) + 81 Rust (`cargo test`), all green; run in CI |
+| **Tests** | 1,166 frontend (Vitest) + 84 Rust (`cargo test`), all green; run in CI |
 
 Between May and July 2026 the network/security core, the anti-hallucination paper pipeline, on-device semantic memory, Smart Agentic RAG, the graded drug-interaction and gene-association checkers, and the 3D workspace were all built and hardened. Development is continuing.
 
@@ -410,9 +410,9 @@ Most research tools ask you to trust their pipeline. HashCerebrum lets you **aud
 | PDF typesetting | Embedded Typst engine (primary, fully offline) · jsPDF + embedded DejaVu Unicode font (fallback) |
 | PDF rendering | pdfjs-dist — uploaded papers rendered to canvas in Peer Review |
 | Embeddings | transformers.js (ONNX/WASM) · bundled MedEmbed-small model · in-Worker, offline |
-| LLM routing | 17 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
+| LLM routing | 23 providers with tier-based failover; the swarm spreads its agents across **distinct providers** and failover prefers a fresh provider, so one key is never burned into rate limits (pin all to one key for a paid provider) |
 | Agentic RAG | Query planner · coverage assessor · claim extractor · conflict detector · citation traverser · belief state · consensus timeline · knowledge graph · source reliability · episodic memory · learning queue · semantic drift |
-| Testing | Vitest (1,157 tests) + `cargo test` (81 tests) |
+| Testing | Vitest (1,166 tests) + `cargo test` (84 tests) |
 
 The Typst compiler runs in-process in Rust — no sidecar, no network, no font downloads. All bundled fonts ship inside the binary via `typst-assets`.
 
@@ -422,12 +422,12 @@ The Typst compiler runs in-process in Rust — no sidecar, no network, no font d
 
 The design principle is **determinism where it matters**: every decision that must be trustworthy — how a citation is renumbered, when a fabricated statistic is stripped, which intent a request maps to, whether a host is allowed on the network — is a *pure function* with a unit test, not a behaviour left to the model. That is what lets the app promise "no invented facts" and actually enforce it. There are **two test surfaces**: fast TypeScript unit tests over the pipeline and safety logic, and Rust tests over the guarded network / security / storage core.
 
-<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,157 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 81 Rust backend tests (security guard, network core, storage & provenance) — both run in CI" width="760"></p>
+<p align="center"><img src="docs/assets/testing-diagram.svg" alt="Two test surfaces — 1,166 Vitest frontend tests (swarm & pipeline, citation integrity, honesty guard) and 84 Rust backend tests (security guard, network core, storage & provenance) — both run in CI" width="760"></p>
 
 | Surface | Command | Covers |
 |---|---|---|
-| Frontend | `npm test` | 1,157 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
-| Backend | `cargo test` (in `src-tauri/`) | 81 tests — the network guard & SSRF denylist, the guarded DNS resolver, capped reads, export-path validation, rate limiting, and the tamper-evident audit log |
+| Frontend | `npm test` | 1,166 Vitest tests — swarm orchestration, citation integrity, the honesty guard, drug/gene/keyword extraction, intent + slash-command routing, export/renumber |
+| Backend | `cargo test` (in `src-tauri/`) | 84 tests — the network guard & SSRF denylist, the guarded DNS resolver, capped reads, export-path validation, rate limiting, and the tamper-evident audit log |
 | Types | `npm run typecheck` | Strict TypeScript with `exactOptionalPropertyTypes` across the app + node configs |
 | Security | `npm audit` · `cargo audit` | Dependency advisories — npm on every push, cargo with the Rust job and weekly |
 
@@ -515,7 +515,7 @@ The `npm run build` script delegates to `tauri build`, which produces the right 
 ### Checks
 
 ```sh
-npm test               # Vitest — 1,157 unit tests
+npm test               # Vitest — 1,166 unit tests
 npm run typecheck      # TypeScript strict — app + node configs
 npm run build:web      # Production Vite build (also runs typecheck)
 ```
@@ -577,12 +577,12 @@ src-tauri/
 
 | Layer | Files | Lines |
 |-------|-------|-------|
-| React/TypeScript app code (`src/`, excluding tests) | 250 | ~44,045 |
-| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 116 | ~13,520 |
-| Rust Tauri backend (`src-tauri/src/`) | 44 | ~7,828 |
-| **Total core source** | **410** | **~65,393** |
+| React/TypeScript app code (`src/`, excluding tests) | 250 | ~44,194 |
+| TypeScript/Vitest tests (`src/**/*.test.ts{x}`) | 117 | ~13,650 |
+| Rust Tauri backend (`src-tauri/src/`) | 44 | ~7,948 |
+| **Total core source** | **411** | **~65,792** |
 
-The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,157 Vitest tests plus 81 Rust tests). Layering is enforced rather than documented: a test walks the import graph on every run and fails if anything outside the platform adapter calls `invoke()`, if one feature imports another, if core reaches into a feature at runtime, or if a new module becomes unreachable from the entry point.
+The codebase is architected for long-term maintenance: strict TypeScript with `exactOptionalPropertyTypes`, feature-based folder boundaries, a single IPC surface for Tauri, and comprehensive test coverage (1,166 Vitest tests plus 84 Rust tests). Layering is enforced rather than documented: a test walks the import graph on every run and fails if anything outside the platform adapter calls `invoke()`, if one feature imports another, if core reaches into a feature at runtime, or if a new module becomes unreachable from the entry point.
 
 ---
 

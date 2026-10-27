@@ -127,6 +127,42 @@ export const PROVIDER_DEFS: ProviderDef[] = [
     keyName: 'llm.deepinfra',
     kind: 'cloud',
   },
+  {
+    provider: 'zai',
+    label: 'Z.ai (GLM)',
+    keyName: 'llm.zai',
+    kind: 'cloud',
+  },
+  {
+    provider: 'qwen',
+    label: 'Alibaba Qwen',
+    keyName: 'llm.qwen',
+    kind: 'cloud',
+  },
+  {
+    provider: 'huggingface',
+    label: 'Hugging Face',
+    keyName: 'llm.huggingface',
+    kind: 'cloud',
+  },
+  {
+    provider: 'novita',
+    label: 'Novita',
+    keyName: 'llm.novita',
+    kind: 'cloud',
+  },
+  {
+    provider: 'venice',
+    label: 'Venice',
+    keyName: 'llm.venice',
+    kind: 'cloud',
+  },
+  {
+    provider: 'cloudflare',
+    label: 'Cloudflare Workers AI',
+    keyName: 'llm.cloudflare',
+    kind: 'cloud',
+  },
 ];
 
 export const MODEL_GROUPS: ModelGroup[] = PROVIDER_DEFS.map((def) => {
