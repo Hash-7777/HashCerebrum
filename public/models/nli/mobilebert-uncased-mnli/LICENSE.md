@@ -13,5 +13,7 @@ This folder contains **MobileBERT (uncased) fine-tuned on MNLI**, exported to ON
   locally with `allowRemoteModels = false`, so it never contacts the network.
 
 The Apache-2.0 license permits commercial use, modification, and redistribution
-with attribution and retention of this notice. Full Apache-2.0 text:
+with attribution and retention of this notice. The project publishes no NOTICE
+file of its own (checked 2026-10-28). The full Apache-2.0 text ships with the
+app in `THIRDPARTY-NOTICES.md`, and is published at:
 https://www.apache.org/licenses/LICENSE-2.0
