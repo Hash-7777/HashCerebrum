@@ -645,6 +645,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                   <span className="eco-desc">Turns the MacBook notch into a live activity island, and says when a research run has finished.</span>
                 </button>
               </li>
+              <li>
+                <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/open-Hash-LMG')}>
+                  <span className="eco-name">Hash LMG</span>
+                  <span className="eco-desc">Describe a film in a sentence and have it designed, scored and rendered on your own machine.</span>
+                </button>
+              </li>
             </ul>
           </section>
         )}

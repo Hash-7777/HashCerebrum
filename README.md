@@ -186,6 +186,7 @@ Tauri v2 · Rust · React with strict TypeScript.
 | [**HashCortx**](https://github.com/Hash-7777/HashCortX) | The local-first AI workspace | MIT |
 | [**HashMeterAi**](https://github.com/Hash-7777/HashMeterAi) | An honest local meter for your AI usage | Apache-2.0 |
 | [**HashNotch**](https://github.com/Hash-7777/HashNotch) | Turns the MacBook notch into a live activity island | GPL-3.0 |
+| [**Hash LMG**](https://github.com/Hash-7777/open-Hash-LMG) | Describe a film in a sentence and have it designed, scored and rendered on your machine | GPL-3.0 |
 
 They connect through files on your disk, not a service: HashCerebrum records
 token counts for **HashMeterAi**, and posts a short "finished" notice, never a
