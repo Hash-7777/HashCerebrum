@@ -1,5 +1,6 @@
 const OLLAMA_HOST_KEY = 'hc.ollamaHost';
 const CLOUDFLARE_ACCOUNT_KEY = 'hc.cloudflareAccount';
+const MOONSHOT_HOST_KEY = 'hc.moonshotHost';
 const PRIVACY_LOCAL_KEY = 'hc.privacyLocalOnly';
 const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
 
@@ -46,4 +47,19 @@ export function setCloudflareAccount(value: string) {
   const account = normalizeCloudflareAccount(value);
   if (account) localStorage.setItem(CLOUDFLARE_ACCOUNT_KEY, account);
   else localStorage.removeItem(CLOUDFLARE_ACCOUNT_KEY);
+}
+
+// Moonshot runs two platforms with separate account systems, each at its own
+// address. A key minted on one is refused by the other, which reads exactly
+// like a wrong key — so the model list tries both and the one that answered is
+// remembered here, and every later request goes straight to it.
+export const MOONSHOT_HOSTS = ['https://api.moonshot.ai', 'https://api.moonshot.cn'] as const;
+
+export function getMoonshotHost(): string {
+  const saved = localStorage.getItem(MOONSHOT_HOST_KEY) ?? '';
+  return (MOONSHOT_HOSTS as readonly string[]).includes(saved) ? saved : MOONSHOT_HOSTS[0];
+}
+
+export function setMoonshotHost(host: string) {
+  if ((MOONSHOT_HOSTS as readonly string[]).includes(host)) localStorage.setItem(MOONSHOT_HOST_KEY, host);
 }

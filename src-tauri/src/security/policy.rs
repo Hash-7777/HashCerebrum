@@ -45,6 +45,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "api.cerebras.ai",
     "api.sambanova.ai",
     "api.moonshot.ai",
+    // Moonshot runs two platforms with separate accounts, each at its own host.
+    "api.moonshot.cn",
     "api.deepseek.com",
     "api.mistral.ai",
     "integrate.api.nvidia.com",

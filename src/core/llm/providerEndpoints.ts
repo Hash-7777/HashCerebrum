@@ -1,4 +1,4 @@
-import { getCloudflareAccount } from './providerSettings';
+import { getCloudflareAccount, getMoonshotHost } from './providerSettings';
 import type { LlmProviderId } from './types';
 
 export const OPENAI_COMPAT_CHAT_URL: Partial<Record<LlmProviderId, string>> = {
@@ -67,11 +67,13 @@ export function cloudflareEndpoint(route: 'chat' | 'models', account: string): s
 /** The chat address for a provider, or undefined when it is not configured. */
 export function chatUrlFor(provider: LlmProviderId): string | undefined {
   if (provider === 'cloudflare') return cloudflareEndpoint('chat', getCloudflareAccount());
+  if (provider === 'moonshot') return `${getMoonshotHost()}/v1/chat/completions`;
   return OPENAI_COMPAT_CHAT_URL[provider];
 }
 
 /** The model-list address for a provider, or undefined when it is not configured. */
 export function modelsUrlFor(provider: LlmProviderId): string | undefined {
   if (provider === 'cloudflare') return cloudflareEndpoint('models', getCloudflareAccount());
+  if (provider === 'moonshot') return `${getMoonshotHost()}/v1/models`;
   return OPENAI_COMPAT_MODELS_URL[provider];
 }

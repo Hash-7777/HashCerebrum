@@ -13,7 +13,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PROVIDER_DEFS } from '../modelCatalog';
 import { OPENAI_COMPAT_CHAT_URL, OPENAI_COMPAT_MODELS_URL, chatUrlFor, cloudflareEndpoint, modelsUrlFor } from '../providerEndpoints';
-import { normalizeCloudflareAccount, setCloudflareAccount } from '../providerSettings';
+import {
+  MOONSHOT_HOSTS,
+  normalizeCloudflareAccount,
+  setCloudflareAccount,
+  setMoonshotHost,
+} from '../providerSettings';
 import type { LlmProviderId } from '../types';
 
 // The settings module reads the browser's store; this file runs in node so it
@@ -120,5 +125,28 @@ describe('the Cloudflare account id', () => {
 
     setCloudflareAccount('not an account');
     expect(chatUrlFor('cloudflare')).toBeUndefined();
+  });
+});
+
+describe('Moonshot runs on two platforms', () => {
+  it('starts on the first and follows the one that answered', () => {
+    localStorage.clear();
+    expect(chatUrlFor('moonshot')).toBe('https://api.moonshot.ai/v1/chat/completions');
+
+    setMoonshotHost('https://api.moonshot.cn');
+    expect(chatUrlFor('moonshot')).toBe('https://api.moonshot.cn/v1/chat/completions');
+    expect(modelsUrlFor('moonshot')).toBe('https://api.moonshot.cn/v1/models');
+  });
+
+  it('ignores a host that is not one of the two', () => {
+    localStorage.clear();
+    setMoonshotHost('https://evil.example.com');
+    expect(chatUrlFor('moonshot')).toBe('https://api.moonshot.ai/v1/chat/completions');
+  });
+
+  it('has both platforms on the guard list', () => {
+    for (const host of MOONSHOT_HOSTS) {
+      expect(allowedHosts).toContain(new URL(host).host);
+    }
   });
 });

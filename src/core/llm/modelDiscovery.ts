@@ -9,8 +9,9 @@ import {
 } from './modelCatalog';
 import { modelStrengthScore } from './modelRanking';
 import { modelsUrlFor } from './providerEndpoints';
-import { getOllamaHost } from './providerSettings';
+import { getOllamaHost, MOONSHOT_HOSTS, setMoonshotHost } from './providerSettings';
 import { redactSecrets } from './secrets';
+import { asArray, asRecord, stringArray, stringField, supportsTextChat } from './modelFilters';
 import type { LlmProviderId } from './types';
 
 export type ProviderConnectionState = 'idle' | 'checking' | 'connected' | 'no-key' | 'unavailable' | 'error';
@@ -37,8 +38,6 @@ export interface ModelDiscoverySnapshot {
 
 const DEFAULT_MODEL_LIMIT = 60;
 const OPENROUTER_MODEL_LIMIT = 90;
-const NON_CHAT_MODEL = /\b(embed|embedding|rerank|moderation|safeguard|guard|image|tts|whisper|transcrib|realtime|ocr|sora|deep-research|computer-use|codex|babbage|davinci)\b/i;
-
 export function initialModelStatuses(): Record<LlmProviderId, ProviderModelStatus> {
   return Object.fromEntries(
     PROVIDER_DEFS.map((def) => [
@@ -51,24 +50,6 @@ export function initialModelStatuses(): Record<LlmProviderId, ProviderModelStatu
       },
     ]),
   ) as Record<LlmProviderId, ProviderModelStatus>;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function boolField(record: Record<string, unknown>, key: string): boolean | undefined {
-  const value = record[key];
-  return typeof value === 'boolean' ? value : undefined;
 }
 
 function redact(text: string, secret?: string): string {
@@ -107,39 +88,6 @@ function recordsFromList(data: unknown): unknown[] {
   // Cloudflare answers in its own shape, with the list under `result`.
   if (Array.isArray(record.result)) return record.result;
   return [];
-}
-
-function nestedRecord(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
-  return asRecord(record[key]);
-}
-
-function stringArray(value: unknown): string[] {
-  return asArray(value).filter((item): item is string => typeof item === 'string');
-}
-
-function supportsTextChat(provider: LlmProviderId, id: string, record: Record<string, unknown>): boolean {
-  if (NON_CHAT_MODEL.test(id)) return false;
-  if (boolField(record, 'archived') === true || boolField(record, 'deprecated') === true) return false;
-
-  if (provider === 'gemini') {
-    const methods = stringArray(record.supportedGenerationMethods).map((method) => method.toLowerCase());
-    return methods.some((method) => method === 'generatecontent' || method === 'streamgeneratecontent');
-  }
-
-  if (provider === 'mistral') {
-    const capabilities = nestedRecord(record, 'capabilities');
-    if (capabilities && boolField(capabilities, 'completion_chat') === false) return false;
-  }
-
-  if (provider === 'openrouter') {
-    const architecture = nestedRecord(record, 'architecture');
-    const modality = architecture ? stringField(architecture, 'modality') : undefined;
-    const outputModalities = architecture ? stringArray(architecture.output_modalities) : [];
-    if (outputModalities.length > 0 && !outputModalities.some((item) => item.toLowerCase() === 'text')) return false;
-    if (modality && !modality.toLowerCase().includes('text')) return false;
-  }
-
-  return true;
 }
 
 // Tool / function-calling support, read from the provider's model list where it
@@ -233,16 +181,26 @@ async function discoverOllama(): Promise<ProviderDiscoveryResult> {
 }
 
 async function discoverGemini(key: string): Promise<ModelOption[]> {
-  const data = await fetchJson(
-    'gemini',
-    'https://generativelanguage.googleapis.com/v1beta/models',
-    {
-      Accept: 'application/json',
-      'x-goog-api-key': key,
-    },
-    key,
-  );
-  return normalizeOptions('gemini', recordsFromList(data));
+  // Gemini answers a page at a time and will not say it has more unless asked:
+  // without this the list stops at its default page and the newest models are
+  // simply absent from the picker.
+  const MAX_PAGES = 10;
+  const headers = { Accept: 'application/json', 'x-goog-api-key': key };
+  const records: unknown[] = [];
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+    url.searchParams.set('pageSize', '1000');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const data = await fetchJson('gemini', url.toString(), headers, key);
+    records.push(...recordsFromList(data));
+    const next = asRecord(data)?.nextPageToken;
+    if (typeof next !== 'string' || next.length === 0) break;
+    pageToken = next;
+  }
+
+  return normalizeOptions('gemini', records);
 }
 
 async function discoverAnthropic(key: string): Promise<ModelOption[]> {
@@ -280,6 +238,35 @@ async function discoverOpenAiCompatible(provider: LlmProviderId, key: string): P
   return normalizeOptions(provider, recordsFromList(data));
 }
 
+/**
+ * Moonshot's two platforms are separate account systems at separate addresses,
+ * and a key from one is refused by the other exactly as a wrong key would be.
+ * The list is asked of each in turn, and the one that answers is remembered so
+ * every later request goes straight there.
+ */
+async function discoverMoonshot(key: string): Promise<ModelOption[]> {
+  let lastError: unknown;
+  for (const host of MOONSHOT_HOSTS) {
+    try {
+      const data = await fetchJson(
+        'moonshot',
+        `${host}/v1/models`,
+        { Accept: 'application/json', Authorization: `Bearer ${key}` },
+        key,
+      );
+      const models = normalizeOptions('moonshot', recordsFromList(data));
+      if (models.length > 0) {
+        setMoonshotHost(host);
+        return models;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return [];
+}
+
 export async function discoverProviderModels(provider: LlmProviderId): Promise<ProviderDiscoveryResult> {
   if (provider === 'ollama') return discoverOllama();
 
@@ -305,7 +292,9 @@ export async function discoverProviderModels(provider: LlmProviderId): Promise<P
         ? await discoverGemini(key)
         : provider === 'anthropic'
           ? await discoverAnthropic(key)
-          : await discoverOpenAiCompatible(provider, key);
+          : provider === 'moonshot'
+            ? await discoverMoonshot(key)
+            : await discoverOpenAiCompatible(provider, key);
     return {
       group: makeGroup(provider, models),
       status: makeStatus(provider, models.length > 0 ? 'connected' : 'unavailable', models.length),
