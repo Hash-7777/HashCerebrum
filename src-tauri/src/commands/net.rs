@@ -22,7 +22,7 @@ static HTTP_CLIENT: Lazy<Option<reqwest::Client>> = Lazy::new(|| {
         .dns_resolver(std::sync::Arc::new(
             crate::security::resolver::GuardedResolver,
         ))
-        .user_agent("HashCerebrum/1.1 (research-app; mailto:support@hashcerebrum.com)")
+        .user_agent(crate::commands::USER_AGENT)
         .build()
     {
         Ok(client) => Some(client),

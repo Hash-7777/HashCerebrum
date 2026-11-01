@@ -630,13 +630,19 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               <li>
                 <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashCortX')}>
                   <span className="eco-name">HashCortX</span>
-                  <span className="eco-desc">The local-first AI workspace — eleven modes, ten providers, zero telemetry.</span>
+                  <span className="eco-desc">The local-first AI workspace: every model in one place, agent teams, and a coding agent on your own files.</span>
                 </button>
               </li>
               <li>
                 <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashMeterAi')}>
                   <span className="eco-name">HashMeterAi</span>
                   <span className="eco-desc">See how much AI you really use — the honest local usage meter. Reads HashCerebrum's usage log.</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={() => void platform().openExternal('https://github.com/Hash-7777/HashNotch')}>
+                  <span className="eco-name">HashNotch</span>
+                  <span className="eco-desc">Turns the MacBook notch into a live activity island, and says when a research run has finished.</span>
                 </button>
               </li>
             </ul>

@@ -2,7 +2,7 @@
 // not here. These values fail loud if changed accidentally.
 
 export const APP_NAME = 'HashCerebrum';
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 // Hard caps — enforced by the type system in modes.ts and agents.ts.
 // Raising these requires updating the tuple literal AND the readme.

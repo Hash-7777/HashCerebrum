@@ -123,14 +123,18 @@ empty the fact-check is silently skipped.
 Vendoring + the upstream `LICENSE`/model-card files live next to the weights in
 `public/models/nli/` (see that folder's `README.md`).
 
-## Full dependency-license audit (2026-05-31)
+## Full dependency-license review
 
-Both trees were scanned end-to-end:
+Both trees are reviewed end to end, and the review is re-run with
+`npm run licenses`, which rebuilds the inventory and the notices from the
+lockfiles. Counts change with every dependency bump and are therefore kept in
+the generated [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md), not
+repeated here. What holds, and is checked on each pass:
 
-- **npm — 132 packages.** No GPL/AGPL/LGPL/SSPL/BUSL/non-commercial licenses. Two non-obvious entries were verified by hand: `webgl-constants` (blank `license` field but ships an MIT `LICENSE`) and `rgbcolor` (`MIT OR feel-free`) — both permissive.
-- **Cargo — 756 crates.** No GPL/AGPL. The only copyleft mentions are benign: `r-efi` is `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (MIT/Apache is selected, LGPL irrelevant), and 5 crates are `MPL-2.0` (file-level copyleft, used unmodified). Everything else is MIT / Apache-2.0 / BSD / ISC / Zlib / Unicode-3.0 / Unlicense / 0BSD / BSL-1.0 / CC0.
-- **Embedding stack (added 2026-06).** `@huggingface/transformers` (Apache-2.0) and its transitive `onnxruntime-web` (MIT), plus the bundled embedding model (Apache-2.0 default / MIT fallback) — all permissive, no GPL/AGPL/non-commercial.
-- **Since this audit.** `@huggingface/transformers` also pulls in `sharp`, whose libvips binaries are `LGPL-3.0-or-later`. It is an optional, Node-only image library: the app bundle does not include it (checked 2026-09-15 by searching the built JavaScript), and LGPL-3.0 is compatible with AGPL-3.0 in any case. The current list, with every package's declared license, is in [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md).
+- **npm.** No GPL-only, SSPL, BUSL or non-commercial licenses. Two non-obvious entries were checked by hand and stay checked: `webgl-constants` (blank `license` field, ships an MIT `LICENSE`) and `rgbcolor` (`MIT OR SEE LICENSE IN FEEL-FREE.md`) — both permissive. `jszip` is `MIT OR GPL-3.0-or-later`; MIT is the option taken.
+- **Cargo.** No GPL/AGPL. The only copyleft mentions are benign: `r-efi` is `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (MIT/Apache is selected, LGPL irrelevant), and five crates are `MPL-2.0` (file-level copyleft, used unmodified). Everything else is MIT / Apache-2.0 / BSD / ISC / Zlib / Unicode-3.0 / Unlicense / 0BSD / BSL-1.0 / CC0 / CDLA-Permissive-2.0.
+- **Embedding, reranking and fact-check stack.** `@huggingface/transformers` (Apache-2.0) and its transitive `onnxruntime-web` (MIT), plus the bundled embedding model (Apache-2.0 default / MIT fallback) — all permissive, no GPL/AGPL/non-commercial.
+- **The one weak-copyleft entry.** `@huggingface/transformers` also pulls in `sharp`, whose libvips binaries are `LGPL-3.0-or-later`. It is an optional, Node-only image library: the app bundle does not include it (checked 2026-09-15 by searching the built JavaScript), and LGPL-3.0 is compatible with AGPL-3.0 in any case. The current list, with every package's declared license, is in [`THIRDPARTY-LICENSES.md`](../THIRDPARTY-LICENSES.md).
 
 **Conclusion:** nothing in the project can force it to be open-sourced, and every dependency and asset grants commercial use. The only standing obligation is **attribution** — reproducing the third-party copyright/permission notices in the distributed app (see below).
 
