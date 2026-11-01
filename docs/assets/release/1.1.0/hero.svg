@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" width="1280" height="520" role="img" aria-label="HashCerebrum 1.1.0, the first release. Medical research cited to the paper, on your own machine.">
+  <defs>
+  <linearGradient id="rule" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#2fb8a0" stop-opacity="0"/>
+    <stop offset="0.5" stop-color="#2fb8a0" stop-opacity="0.85"/>
+    <stop offset="1" stop-color="#2fb8a0" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#1b6d60"/>
+    <stop offset="0.3" stop-color="#2fb8a0"/>
+    <stop offset="0.5" stop-color="#d8f3ec"/>
+    <stop offset="0.72" stop-color="#2fb8a0"/>
+    <stop offset="1" stop-color="#1b6d60"/>
+  </linearGradient>
+  <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+    <path d="M32 0H0V32" fill="none" stroke="#2fb8a0" stroke-opacity="0.06" stroke-width="1"/>
+  </pattern>
+  <radialGradient id="glow" cx="0.78" cy="0.48" r="0.44">
+    <stop offset="0" stop-color="#2fb8a0" stop-opacity="0.20"/>
+    <stop offset="0.55" stop-color="#2fb8a0" stop-opacity="0.05"/>
+    <stop offset="1" stop-color="#2fb8a0" stop-opacity="0"/>
+  </radialGradient>
+  </defs>
+  <rect width="1280" height="520" fill="#070a0c"/>
+  <rect width="1280" height="520" fill="url(#grid)"/>
+  <rect width="1280" height="520" fill="url(#glow)"/>
+
+  <g transform="translate(72,58)">
+    <circle cx="26" cy="26" r="25" fill="none" stroke="#2fb8a0" stroke-width="1.6"/>
+    <path d="M26 10 v32 M26 10 c-7 6 -11 13 -11 21 M26 10 c7 6 11 13 11 21" fill="none" stroke="#7fd8c6" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="16" cy="22" r="1.6" fill="#d8f3ec"/>
+    <circle cx="36" cy="22" r="1.6" fill="#d8f3ec"/>
+    <circle cx="26" cy="34" r="1.6" fill="#d8f3ec"/>
+    <path d="M44 44 l12 12" stroke="#2fb8a0" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+  <text x="144" y="86" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="22" font-weight="600" fill="#eef3f1" letter-spacing="0.2">HashCerebrum</text>
+  <text x="144" y="110" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="12.5" letter-spacing="3.2" fill="#2fb8a0">FIRST RELEASE</text>
+
+  <text x="985" y="330" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="196" font-weight="700" fill="url(#sheen)" opacity="0.92" letter-spacing="-6">1.1</text>
+  <text x="985" y="382" text-anchor="middle" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="13" letter-spacing="5" fill="#2fb8a0" fill-opacity="0.85">VERSION 1.1.0</text>
+
+  <text x="72" y="222" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="58" font-weight="700" fill="#eef3f1" letter-spacing="-1.6">Medical research,</text>
+  <text x="72" y="286" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="58" font-weight="700" fill="#eef3f1" letter-spacing="-1.6">cited to the paper.</text>
+  <text x="72" y="336" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="21" fill="#8fa3a0">Ask a clinical question. Every claim carries a citation to a real</text>
+  <text x="72" y="366" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="21" fill="#8fa3a0">publication, and the search runs on your own machine.</text>
+
+  <rect x="72" y="408" width="880" height="2" fill="url(#rule)"/>
+  <text x="180" y="440" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" fill="#7fd8c6" font-weight="500" letter-spacing="0.2">Cited to the paper</text>
+  <text x="422" y="440" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" fill="#7fd8c6" font-weight="500" letter-spacing="0.2">Runs on your machine</text>
+  <text x="652" y="440" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" fill="#7fd8c6" font-weight="500" letter-spacing="0.2">No telemetry</text>
+  <text x="868" y="440" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" fill="#7fd8c6" font-weight="500" letter-spacing="0.2">AGPL-3.0</text>
+</svg>
