@@ -44,27 +44,70 @@ function pruneUnusable(groups: ModelGroup[]): ModelGroup[] {
     .filter((group) => group.models.length > 0);
 }
 
-// How many of each provider's strongest models to liveness-probe on a refresh.
-// Groups are strength-sorted, so this covers the models actually offered to the
-// boss and specialists; anything past it is still caught at runtime.
-const PROBE_LIMIT = 16;
+// Each liveness probe is a real one-token request to the provider: it counts
+// against the user's rate limit, costs a fraction of a cent on a paid key, and
+// on a free tier with a small daily quota it spends requests the user wanted
+// for research. Probing is therefore kept small:
+//  - only each provider's strongest few models, which are the ones assigned to
+//    the boss and specialists (groups are strength-sorted);
+//  - never a free-tier endpoint;
+//  - at most once a day per model, remembered across launches.
+// Anything not probed is still caught at run time, where an unusable model is
+// retired for the session and failover moves on.
+const PROBE_LIMIT = 4;
 const PROBE_CONCURRENCY = 4;
+const PROBE_FRESH_MS = 24 * 60 * 60 * 1000;
+const PROBE_CACHE_KEY = 'hc_model_probe_ok_v1';
+const FREE_TIER_ENDPOINT = /:free\b/i;
 
-// Probe the top models of every connected cloud provider with a 1-token call and
-// drop the ones that come back definitively unusable. Runs in the background
-// after a refresh (never blocks the picker from showing) and only ever removes
-// models — a transient/busy failure leaves the model in place.
-async function probeConnectedGroups(): Promise<void> {
-  const groups = useModelCatalogStore.getState().groups;
-  const targets = groups
+type ProbeCache = Record<string, number>;
+
+function readProbeCache(): ProbeCache {
+  try {
+    const raw = localStorage.getItem(PROBE_CACHE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as ProbeCache) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeProbeCache(cache: ProbeCache): void {
+  try {
+    localStorage.setItem(PROBE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* storage unavailable — probes simply repeat next launch */
+  }
+}
+
+/** The models a refresh should probe: each cloud provider's strongest few, minus
+ *  free-tier endpoints and anything that answered within the last day. */
+export function probeTargets(groups: ModelGroup[], cache: ProbeCache, now: number): string[] {
+  return groups
     .filter((group) => group.provider !== 'ollama')
-    .flatMap((group) => group.models.slice(0, PROBE_LIMIT).map((m) => m.value));
+    .flatMap((group) => group.models.slice(0, PROBE_LIMIT).map((m) => m.value))
+    .filter((value) => !FREE_TIER_ENDPOINT.test(value))
+    .filter((value) => !(now - (cache[value] ?? 0) < PROBE_FRESH_MS));
+}
+
+// Probe with a 1-token call and drop the models that come back definitively
+// unusable. Runs in the background after a refresh (never blocks the picker
+// from showing) and only ever removes models — a transient/busy failure leaves
+// the model in place.
+async function probeConnectedGroups(): Promise<void> {
+  const cache = readProbeCache();
+  const now = Date.now();
+  const targets = probeTargets(useModelCatalogStore.getState().groups, cache, now);
   let condemned = false;
   for (let i = 0; i < targets.length; i += PROBE_CONCURRENCY) {
     const batch = targets.slice(i, i + PROBE_CONCURRENCY);
     const results = await Promise.all(batch.map((value) => probeModelUsable(value)));
-    if (results.includes('unusable')) condemned = true;
+    results.forEach((result, j) => {
+      if (result === 'ok') cache[batch[j]!] = now;
+      if (result === 'unusable') condemned = true;
+    });
   }
+  writeProbeCache(cache);
   if (condemned) {
     useModelCatalogStore.setState((state) => ({ ...state, groups: pruneUnusable(state.groups) }));
   }
