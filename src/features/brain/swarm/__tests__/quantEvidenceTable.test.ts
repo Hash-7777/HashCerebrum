@@ -113,6 +113,23 @@ describe('neutralizeUnverifiedStatistics', () => {
     const input = 'Overall the hazard ratio was around 1.05.';
     expect(neutralizeUnverifiedStatistics(input, qet).text).toBe(input);
   });
+
+  it('drops a sentence whose only object was the removed statistic, keeping its neighbours', () => {
+    const { text, removed } = neutralizeUnverifiedStatistics(
+      'Coupling worsened with exercise [S12]. The relationships were significant at p = 0.03 and p = 0.01 [S12]. Wedge pressure rose [S12].',
+      qet,
+    );
+    expect(removed.length).toBeGreaterThan(0);
+    expect(text).toBe('Coupling worsened with exercise [S12]. Wedge pressure rose [S12].');
+  });
+
+  it('keeps the sentence when removing the statistic leaves it whole', () => {
+    const { text } = neutralizeUnverifiedStatistics(
+      'The trial reported a neutral effect (hazard ratio 1.05) [S12].',
+      qet,
+    );
+    expect(text).toBe('The trial reported a neutral effect [S12].');
+  });
 });
 
 describe('abstractStatsDigest', () => {

@@ -28,6 +28,7 @@ import { extractEffectValues } from './effectExtraction';
 import { extractGeneSymbols } from './genetics/geneQueryReadiness';
 import { mentionsGene } from './genetics/associationConfidence';
 import { splitSentences } from './honestyGuard';
+import { isDamagedSentence } from './sentenceDamage';
 import type { EvidenceExtraction } from './publicationTypes';
 import { recordText } from './textNormalize';
 
@@ -111,6 +112,17 @@ export function findUnverifiedStatistics(
  * extraction gap. A paragraph with nothing to remove is returned byte-for-byte
  * unchanged. Returns the cleaned text and the removed statistics (for the trace).
  */
+/** The same tidy the callers apply, so the damage check sees what a reader would. */
+function tidyRemoval(text: string): string {
+  return text
+    .replace(/\(\s*[,;]?\s*\)/g, '')
+    // An opening bracket whose whole content (and closing bracket) was removed.
+    .replace(/\(\s*[,;]?\s*(?=\[S?\d|[.;,]|$)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:)])/g, '$1')
+    .trim();
+}
+
 export function neutralizeUnverifiedStatistics(
   text: string,
   qet: Map<string, Set<string>>,
@@ -133,7 +145,12 @@ export function neutralizeUnverifiedStatistics(
         out = next;
       }
     }
-    return out;
+    // When the statistic was the sentence's object ("significant at p = 0.03"),
+    // removing it leaves a hole; drop the sentence rather than ship a broken
+    // claim. Only a sentence this guard changed can be dropped.
+    if (out === sentence) return sentence;
+    const tidied = tidyRemoval(out);
+    return isDamagedSentence(tidied) ? '' : tidied;
   });
   if (removed.length === 0) return { text, removed }; // nothing changed — original preserved exactly
   const cleaned = sentences
@@ -210,7 +227,12 @@ export function neutralizeMisattributedGeneStatistics(
         out = next;
       }
     }
-    return out;
+    // When the statistic was the sentence's object ("significant at p = 0.03"),
+    // removing it leaves a hole; drop the sentence rather than ship a broken
+    // claim. Only a sentence this guard changed can be dropped.
+    if (out === sentence) return sentence;
+    const tidied = tidyRemoval(out);
+    return isDamagedSentence(tidied) ? '' : tidied;
   });
   if (removed.length === 0) return { text, removed };
   const cleaned = sentences

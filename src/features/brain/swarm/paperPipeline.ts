@@ -18,7 +18,8 @@ import type {
 import { datasetSummaryForPrompt } from './statistics';
 import type { SpecialistResult } from './types';
 import { parsePromptEffectRows, resetSyntheticIds, toSyntheticExtractions } from './promptEffectData';
-import { applyHonestyPass } from './honestyGuard';
+import { applyHonestyPass, splitSentences } from './honestyGuard';
+import { isDamagedSentence } from './sentenceDamage';
 import { neutralizeUnsupportedComparator } from './comparatorGuard';
 import { dedupeParagraphs, dedupeAcrossSections } from './dedupe';
 import {
@@ -116,9 +117,12 @@ function bodyWordCount(body: string[]): number {
 // QA-repair pass that would otherwise fix them can itself be rate-limited, so the
 // whole paper ends "blocked" with no output. Stripping the unapproved markers
 // deterministically keeps every legitimate ledger citation, lets the gate pass
-// without a model call, and guarantees the body and reference list agree. A marker
-// removed at the start of a sentence takes its trailing space; punctuation is
-// tidied afterwards.
+// without a model call, and guarantees the body and reference list agree.
+//
+// A marker used as a citation ("…a benefit [S9].") comes out cleanly. A marker
+// used as a noun ("The most recent record is [S9], which…", "[S9] supplies…")
+// cannot: removing it leaves a hole. Such a sentence is dropped whole — its
+// subject was a record the ledger does not approve, so it has no claim to keep.
 export function stripUnapprovedMarkers(
   sections: ManuscriptSection[],
   approvedMarkers: Set<string>,
@@ -126,13 +130,31 @@ export function stripUnapprovedMarkers(
   const approvedNums = new Set(
     [...approvedMarkers].map((m) => m.match(/\d+/)?.[0]).filter((n): n is string => Boolean(n)),
   );
-  const clean = (text: string): string =>
+  const tidy = (text: string): string =>
     text
-      .replace(/ ?\[S(\d+)\]/g, (full: string, n: string) => (approvedNums.has(n) ? full : ''))
-      .replace(/\s{2,}/g, ' ')
+      .replace(/[ \t]{2,}/g, ' ')
       .replace(/\s+([.,;:)])/g, '$1')
       .trim();
-  return sections.map((section) => ({ ...section, body: section.body.map(clean) }));
+  const cleanSentence = (sentence: string): string => {
+    const opensWithUnapproved = /^\s*\[S(\d+)\]/.exec(sentence);
+    if (opensWithUnapproved && !approvedNums.has(opensWithUnapproved[1]!)) return '';
+    const out = sentence.replace(/ ?\[S(\d+)\]/g, (full: string, n: string) => (approvedNums.has(n) ? full : ''));
+    if (out === sentence) return sentence;
+    const tidied = tidy(out);
+    return isDamagedSentence(tidied) ? '' : tidied;
+  };
+  const clean = (paragraph: string): string => {
+    const cited = [...paragraph.matchAll(/\[S(\d+)\]/g)].map((m) => m[1]!);
+    if (cited.every((n) => approvedNums.has(n))) return paragraph; // nothing to remove
+    // A marker written after the full stop ("…a benefit. [S9] Next…") belongs
+    // to the sentence before it; move it inside so the split keeps it there.
+    const placed = paragraph.replace(
+      /([.!?])((?:\s*\[S\d+\])+)(?=\s+[A-Z]|\s*$)/g,
+      (_m, stop: string, markers: string) => ` ${markers.trim()}${stop}`,
+    );
+    return tidy(splitSentences(placed).map(cleanSentence).filter((s) => s.trim()).join(' '));
+  };
+  return sections.map((section) => ({ ...section, body: section.body.map(clean).filter((p) => p.trim()) }));
 }
 
 async function draftLedgerSection(opts: {

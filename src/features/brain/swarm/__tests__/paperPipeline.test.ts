@@ -65,6 +65,45 @@ describe('stripUnapprovedMarkers', () => {
     const out = stripUnapprovedMarkers([{ heading: 'X', body: ['Claim [S95].'] }], approved);
     expect(out[0]!.body[0]).toBe('Claim.');
   });
+
+  it('drops a sentence whose subject was an unapproved record, keeping the rest', () => {
+    const out = stripUnapprovedMarkers(
+      [
+        {
+          heading: 'X',
+          body: [
+            'The earliest review is [S41], which frames the field. A pooled analysis reported benefit [S2]. [S42] supplies a second view.',
+          ],
+        },
+      ],
+      approved,
+    );
+    expect(out[0]!.body[0]).toBe('A pooled analysis reported benefit [S2].');
+  });
+
+  it('drops a sentence left with a dangling "with (" or empty separators', () => {
+    const out = stripUnapprovedMarkers(
+      [{ heading: 'X', body: ['Records span 2022 to 2026, with [S50] (a review, 2022) the earliest. Benefit held [S1].'] }],
+      approved,
+    );
+    expect(out[0]!.body[0]).toBe('Benefit held [S1].');
+  });
+
+  it('keeps a marker written after the full stop with its own sentence', () => {
+    const out = stripUnapprovedMarkers(
+      [{ heading: 'X', body: ['A benefit was reported. [S77] The next trial was neutral [S1].'] }],
+      approved,
+    );
+    expect(out[0]!.body[0]).toBe('A benefit was reported. The next trial was neutral [S1].');
+  });
+
+  it('removes a paragraph that had nothing left', () => {
+    const out = stripUnapprovedMarkers(
+      [{ heading: 'X', body: ['[S88] frames the whole field.', 'Kept [S1].'] }],
+      approved,
+    );
+    expect(out[0]!.body).toEqual(['Kept [S1].']);
+  });
 });
 
 describe('neutralizeUnverifiableNct', () => {
