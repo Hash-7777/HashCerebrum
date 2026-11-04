@@ -986,10 +986,11 @@
 .document-preview-resize.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
 .document-preview-resize.sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
 
-/* ── Drug-Interactions mode theme ─────────────────────────────────────────
-   A distinct clinical-violet accent so the mode reads as its own pharmacology
-   tool, not a copy of the green research workspace. Scoped to the mode root so
-   it retints the composer chips, Send button, eyebrow, and DI panel together. */
+/* ── Drug-interaction theme ──────────────────────────────────────────────
+   A distinct clinical-violet accent while a drug-interaction question is the
+   active intent, so the workspace reads as a pharmacology check, not a copy of
+   the green research view. Scoped to the workspace root so it retints the
+   composer chips, Send button, eyebrow, and DI panel together. */
 .brain-mode--drug {
   --accent: #9b8cff;
   --accent-strong: #b6abff;

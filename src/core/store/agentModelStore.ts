@@ -1,4 +1,4 @@
-// Per-agent model assignment. Each agent (boss + 5 specialists) runs on a
+// Per-agent model assignment. Each agent (the boss and every specialist) runs on a
 // model. By default a model is auto-assigned from the connected catalog —
 // the boss gets the strongest, specialists round-robin over the rest. The
 // user can pin a specific model per agent in Settings; only those manual

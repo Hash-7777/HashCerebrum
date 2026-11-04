@@ -366,8 +366,8 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     let specialist: SpecialistResult;
     try {
       specialist = await runSpecialist(
-        agentById('drug_interactions'),
-        modelFor('drug_interactions'),
+        agentById('pharmacist'),
+        modelFor('pharmacist'),
         interactionQuery,
         callbacks,
       );
@@ -393,14 +393,14 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       const stillUnverified: string[] = [];
       await Promise.all(
         unverified.map(async (drug) => {
-          callbacks.onToolCall('drug_interactions', 'RxNorm');
+          callbacks.onToolCall('pharmacist', 'RxNorm');
           try {
             const { results } = await med.rxnorm(drug);
-            callbacks.onToolResult('drug_interactions', 'RxNorm', results.length);
+            callbacks.onToolResult('pharmacist', 'RxNorm', results.length);
             if (results.length > 0) rxRecords.push(...results);
             else stillUnverified.push(drug);
           } catch {
-            callbacks.onToolResult('drug_interactions', 'RxNorm', 0);
+            callbacks.onToolResult('pharmacist', 'RxNorm', 0);
             stillUnverified.push(drug);
           }
         }),

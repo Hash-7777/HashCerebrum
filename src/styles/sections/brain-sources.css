@@ -13,7 +13,7 @@
   background: var(--ink-0);
   border-left: 1px solid var(--line);
 }
-/* Drug-Interactions mode has a single side widget (the grade key), so collapse
+/* A drug-interaction answer has a single side widget (the grade key), so collapse
    the two-row brain layout to one full-height row — otherwise the panel is
    crammed into the top half and its content overflows. */
 .brain-side--solo { grid-template-rows: 1fr; }

@@ -1,14 +1,13 @@
-// Agent roster — a six-slot tuple: one boss plus five topic specialists.
-// TypeScript enforces the cap (a seventh entry is a compile error). The
-// boss is the single agent the user talks to; it routes each message and
-// delegates research to the relevant specialists, then synthesizes.
+// Agent roster: one boss plus four topic specialists. TypeScript enforces the
+// MAX_AGENTS cap (an entry past it is a compile error). The boss is the single
+// agent the user talks to; it routes each message and delegates research to the
+// relevant specialists, then synthesizes.
 
 import type { MAX_AGENTS } from './constants';
 
 export type AgentId =
   | 'boss'
   | 'pharmacist'
-  | 'drug_interactions'
   | 'clinical_research'
   | 'evidence_synthesis'
   | 'genetics';
@@ -38,13 +37,21 @@ export interface AgentDef {
   /** Hint the boss uses when deciding which specialists a question needs. */
   topicHint: string;
   /** Tool names this agent may call. */
-  tools: string[];
+  tools: readonly string[];
   regionBinding: RegionId;
 }
 
-type Tuple<T, N extends number, A extends T[] = []> = A['length'] extends N
-  ? A
-  : Tuple<T, N, [...A, T]>;
+// A roster of at most N entries. The same shape as the mode registry's cap.
+type AtMost<T extends readonly unknown[], N extends number, A extends readonly unknown[] = []> =
+  A['length'] extends N
+    ? T extends readonly [] ? T : never
+    : T extends readonly [unknown, ...infer Rest]
+      ? AtMost<Rest, N, [...A, unknown]>
+      : T;
+
+const defineRoster = <const T extends readonly AgentDef[]>(
+  roster: T & (AtMost<T, typeof MAX_AGENTS> extends never ? never : unknown),
+) => roster;
 
 // The six guarded medical-source tools, plus project-memory retrieval.
 const MEDICAL_TOOLS = [
@@ -68,7 +75,7 @@ const GENETICS_TOOLS = [
   'openalex_query',
 ];
 
-export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
+export const AGENTS = defineRoster([
   {
     id: 'boss',
     label: 'HashCerebrum',
@@ -80,11 +87,10 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     regionBinding: 'frontal', // executive / planning
   },
   {
-    // The Pharmacist is the combined drug expert used in Brain mode — it covers
-    // both general pharmacology AND drug–drug interactions, so a brain research
-    // run delegates all medication questions to one capable specialist instead
-    // of two. (The standalone drug_interactions agent below is reserved for the
-    // dedicated Drug Interactions mode.)
+    // The one drug expert: general pharmacology AND drug–drug interactions. A
+    // research run delegates medication questions to it, and a drug-interaction
+    // question runs it alone, so both light the same region and the same row
+    // of the agent panel.
     id: 'pharmacist',
     label: 'Pharmacist',
     kind: 'specialist',
@@ -94,21 +100,6 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
       'drugs, medications, dosage, pharmacokinetics, pharmacodynamics, side effects, adverse effects, toxicology, drug interactions, contraindications, drug combinations, polypharmacy',
     tools: SPECIALIST_TOOLS,
     regionBinding: 'basal_ganglia', // neurochemistry
-  },
-  {
-    // Reserved for the dedicated Drug Interactions mode (runSwarm drugFocus
-    // path calls agentById('drug_interactions') directly). It is intentionally
-    // excluded from the Brain-mode planning pool so Brain routes drug questions
-    // to the Pharmacist instead.
-    id: 'drug_interactions',
-    label: 'Pharmacist',
-    kind: 'specialist',
-    specialty:
-      'Drug-drug interactions, contraindications, adverse drug events, and pharmacokinetic conflicts sourced from FDA labels and peer-reviewed safety literature.',
-    topicHint:
-      'drug interactions, contraindications, adverse drug reactions, drug combinations, polypharmacy, toxicology, FDA drug events',
-    tools: ['rag_search', 'openfda_query', 'rxnorm_lookup', 'pubmed_search', 'europepmc_fetch'],
-    regionBinding: 'amygdala', // threat and alarm processing
   },
   {
     id: 'clinical_research',
@@ -143,17 +134,14 @@ export const AGENTS: Tuple<AgentDef, typeof MAX_AGENTS> = [
     tools: GENETICS_TOOLS,
     regionBinding: 'cerebellum', // previously ambient; bound to the gene expert
   },
-];
+]);
 
 export const BOSS_AGENT: AgentDef = AGENTS[0];
 export const SPECIALIST_AGENTS: AgentDef[] = AGENTS.filter((agent) => agent.kind === 'specialist');
 
-// Brain-mode specialist pool: every specialist except drug_interactions, which
-// is reserved for the dedicated Drug Interactions mode (the Pharmacist covers
-// interactions inside Brain). Drives the boss's planner and the agent panel.
-export const BRAIN_SPECIALIST_AGENTS: AgentDef[] = SPECIALIST_AGENTS.filter(
-  (agent) => agent.id !== 'drug_interactions',
-);
+// The specialist pool the boss plans across and the agent panel lists: every
+// specialist, so whatever runs is always on the panel.
+export const BRAIN_SPECIALIST_AGENTS: AgentDef[] = SPECIALIST_AGENTS;
 export const BRAIN_AGENTS: AgentDef[] = [BOSS_AGENT, ...BRAIN_SPECIALIST_AGENTS];
 
 export function agentById(id: AgentId): AgentDef {

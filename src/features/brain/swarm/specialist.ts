@@ -34,7 +34,7 @@ function directSearchPlan(query: string, agent: AgentDef): DirectSearchPlan[] {
   return plans.filter((plan) => agent.tools.includes(plan.name));
 }
 
-function toolSpecs(toolNames: string[]): LlmToolSpec[] {
+function toolSpecs(toolNames: readonly string[]): LlmToolSpec[] {
   return toolNames
     .map((name) => toolRegistry.get(name))
     .filter((tool): tool is NonNullable<typeof tool> => !!tool)

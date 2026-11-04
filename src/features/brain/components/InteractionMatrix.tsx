@@ -1,5 +1,5 @@
 // Colour-coded pairwise interaction grid shown above the detailed grade cards
-// in Drug-Interactions mode. Drugs are numbered; row headers carry the name and
+// of a drug-interaction answer. Drugs are numbered; row headers carry the name and
 // number, column headers are the numbers alone, so long drug names never widen
 // the grid. Every cell is the A–X grade for that pair, parsed deterministically
 // from the report (see interactionMatrix.ts) so it always matches the cards.

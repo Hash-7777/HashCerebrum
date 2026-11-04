@@ -32,8 +32,8 @@ export interface RagChunk {
   authors?: string[];
   evidenceStrength?: EvidenceStrength;
 
-  // Domain tag. Findings saved by the Drug-Interactions mode are tagged
-  // 'drug_interactions' so that mode retrieves ONLY its own trusted findings,
+  // Domain tag. Findings saved by a drug-interaction run are tagged
+  // 'drug_interactions' so such runs retrieve ONLY their own trusted findings,
   // while the rest of the app can still read them. Absent on general findings.
   tag?: string;
 

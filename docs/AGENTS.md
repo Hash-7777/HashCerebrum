@@ -1,25 +1,26 @@
 # Agents
 
-HashCerebrum runs a fixed swarm of six agents: one boss and five
-specialists. Adding a seventh is a compile-time error (`AGENTS` tuple in
-`src/config/agents.ts`).
+HashCerebrum runs a fixed swarm of five agents: one boss and four
+specialists. The roster may never exceed six (`MAX_AGENTS`); an entry past the
+cap is a compile-time error (`AGENTS` in `src/config/agents.ts`).
 
 ## Roster
 
 | Agent               | Region binding | Role |
 |---------------------|----------------|------|
-| Boss (The Cerebrum) | Frontal        | Routes questions, delegates research, synthesizes findings |
-| Pharmacist          | Basal ganglia  | Drugs, dosing, pharmacokinetics, adverse effects **and** drug-drug/-food/-herb interactions (RxNorm / openFDA) — the combined drug expert in Brain mode |
+| Boss (HashCerebrum) | Frontal        | Routes questions, delegates research, synthesizes findings |
+| Pharmacist          | Basal ganglia  | Drugs, dosing, pharmacokinetics, adverse effects **and** drug-drug/-food/-herb interactions (RxNorm / openFDA) — the one drug expert |
 | Clinical research   | Parietal       | ClinicalTrials.gov cohorts and outcomes, plus trial statistics and effect sizes |
 | Evidence synthesis  | Hippocampus    | PubMed / Europe PMC / OpenAlex / Semantic Scholar — reviews, mechanisms, epidemiology, prevention, oral health |
 | Genetics            | Cerebellum     | GWAS Catalog / ClinVar — gene-variant ↔ disease associations with effect sizes |
-| Drug interactions   | Amygdala       | Drug-drug interactions, contraindications, adverse drug events — reserved for the dedicated Drug Interactions mode |
 
-In **Brain** mode the boss plans across the first five specialists (the
-`BRAIN_SPECIALIST_AGENTS` pool). The **Drug interactions** agent is excluded
-from that pool — it is invoked directly by the dedicated Drug Interactions mode,
-while the **Pharmacist** covers interactions inside Brain. Unbound regions
-(thalamus, temporal, occipital, brainstem) carry only topic-detection accents.
+There is one Brain mode. The boss plans across all four specialists (the
+`BRAIN_SPECIALIST_AGENTS` pool, which the agent panel lists). A drug-interaction
+question is an intent inside that mode: it runs the Pharmacist on its own and
+the boss writes a graded interaction report, so the region that lights is the
+Pharmacist's and the panel row is the Pharmacist's. Every agent event also
+lights the thalamus faintly, as a relay. The regions no agent claims
+(temporal, occipital, brainstem, amygdala) carry only topic-detection accents.
 
 ## Lifecycle
 

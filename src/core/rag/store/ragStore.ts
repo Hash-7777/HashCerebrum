@@ -99,8 +99,8 @@ interface RagStore {
   search: (projectId: string, query: string, limit?: number) => RagSearchHit[];
   /** Hybrid semantic+lexical search across all projects, active-weighted.
    *  When `tag` is given, only findings carrying that domain tag are searched
-   *  (the Drug-Interactions mode passes 'drug_interactions' to read only its
-   *  own trusted findings). */
+   *  (a drug-interaction run passes 'drug_interactions' to read only its own
+   *  trusted findings). */
   searchHybrid: (activeProjectId: string, query: string, limit?: number, tag?: string) => Promise<RagSearchHit[]>;
   chunksForProject: (projectId: string) => RagChunk[];
   removeChunk: (id: string) => void;

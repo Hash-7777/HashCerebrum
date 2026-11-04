@@ -298,7 +298,7 @@ export const Transcript = memo(function Transcript({
     deriveDocumentTitle(message.content, `HashCerebrum message ${index + 1}`);
 
   const exportableFor = (message: ChatMessage, index: number): ExportableMessage => {
-    // In Drug-Interactions mode, prepend the interaction-overview matrix as a
+    // For a drug-interaction answer, prepend the interaction-overview matrix as a
     // Markdown table so the exported PDF / Word / Markdown carries the table as
     // well as the cards — the same "table + report" the user sees on screen.
     let content = message.content;

@@ -182,9 +182,8 @@ export function fallbackPaperTasks(question: string): SpecialistTask[] {
     },
   ];
 
-  // The Pharmacist covers both pharmacology and drug interactions in Brain mode,
-  // so a single task handles either trigger (drug_interactions is reserved for
-  // the dedicated Drug Interactions mode).
+  // The Pharmacist covers both pharmacology and drug interactions, so a single
+  // task handles either trigger.
   if (
     /\b(drug|medication|medicine|dose|dosage|pharmacolog|pharmacokinetic|pharmacodynamic|toxicity|adverse|warfarin|nsaid|opioid|antibiotic|anticoagulant|statin|insulin|interaction|interactions|contraindicat|polypharmacy|co[-\s]?admin|combined with)\b/i.test(
       question,
