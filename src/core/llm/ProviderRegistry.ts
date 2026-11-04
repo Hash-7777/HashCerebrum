@@ -60,7 +60,7 @@ export async function streamWithModel(
 
 // Handed to the next model when a stream is cut off mid-answer, so the switch
 // is seamless instead of truncating (cf. switching Opus→Sonnet mid-task).
-const CONTINUE_INSTRUCTION =
+export const CONTINUE_INSTRUCTION =
   'Your previous response was cut off mid-stream. Continue it from exactly where it stopped. ' +
   'Begin by repeating, word for word, the last few words you wrote, then carry straight on. ' +
   'Do not restart, do not repeat anything earlier than those last words, and add no preamble.';
