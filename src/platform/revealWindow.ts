@@ -19,6 +19,9 @@ import type { Window } from '@tauri-apps/api/window';
 const SIZE_KEY = 'hc_win_size';
 const POS_KEY = 'hc_win_pos';
 const SAVE_INTERVAL_MS = 2000;
+// How long after the last move/resize event the geometry is written, so a drag
+// writes once when it ends rather than on every pixel.
+const SAVE_SETTLE_MS = 400;
 
 let started = false;
 
@@ -75,7 +78,7 @@ async function restoreGeometry(win: Window): Promise<void> {
 // Persist geometry by reading the live outer position + inner size every couple
 // of seconds (only writing when it actually changed), plus an immediate flush on
 // page unload so a move made in the last tick is not lost.
-function startPersistence(win: Window): void {
+export function startPersistence(win: Window): void {
   let lastX: number | undefined;
   let lastY: number | undefined;
   let lastW: number | undefined;
@@ -104,7 +107,21 @@ function startPersistence(win: Window): void {
     }
   };
 
-  setInterval(() => void save(), SAVE_INTERVAL_MS);
+  // Save when the window actually moves or resizes. Polling its geometry every
+  // couple of seconds woke the app (and crossed into the native side) for the
+  // whole session even while it sat untouched. The poll is kept only as a
+  // fallback for a shell that refuses the window events.
+  let settle: ReturnType<typeof setTimeout> | null = null;
+  const scheduleSave = () => {
+    if (settle !== null) clearTimeout(settle);
+    settle = setTimeout(() => {
+      settle = null;
+      void save();
+    }, SAVE_SETTLE_MS);
+  };
+  void Promise.all([win.onMoved(scheduleSave), win.onResized(scheduleSave)]).catch(() => {
+    setInterval(() => void save(), SAVE_INTERVAL_MS);
+  });
   window.addEventListener('pagehide', () => void save());
   window.addEventListener('beforeunload', () => void save());
 }

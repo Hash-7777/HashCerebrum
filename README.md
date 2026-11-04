@@ -37,7 +37,7 @@ to a real publication — or a full typeset paper. No account, no cloud storage,
 | **Every claim is traceable** | Answers cite `[S#]` back to a real record. A citation to something that was never retrieved is removed, and a figure that contradicts the source it cites is stripped. |
 | **Real sources, not a model's memory** | Searches PubMed, Europe PMC, OpenAlex, ClinicalTrials.gov, openFDA, RxNorm, Semantic Scholar, Crossref, the GWAS Catalog and ClinVar, and reads the papers it finds. |
 | **Yours alone, offline if you want** | Point it at a model on your own machine and the app makes no outside call at all — the search, ranking and fact-check models are in the app and run on your computer. |
-| **Readable to the last line** | AGPL-3.0-or-later. Strict TypeScript and Rust, 1,249 frontend tests and 84 Rust tests, all run in CI. |
+| **Readable to the last line** | AGPL-3.0-or-later. Strict TypeScript and Rust, 1,252 frontend tests and 84 Rust tests, all run in CI. |
 
 > **This is a research aid, not a medical device.** It does not diagnose, prescribe
 > or give clinical advice, and nothing it writes is a substitute for a qualified
