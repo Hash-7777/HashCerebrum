@@ -7,6 +7,7 @@ import {
   modelForSection,
   shouldExpandSection,
   stripUnapprovedMarkers,
+  fallbackObjective,
 } from '../paperPipeline';
 import { buildPaperBlueprint, buildPaperOutline } from '../paperBlueprint';
 import { buildSectionUserPrompt } from '../sectionPrompt';
@@ -994,5 +995,17 @@ describe('buildMethodsSection — statements the code backs', () => {
     expect(methods).toContain('DOI or PMID');
     expect(methods).toContain('normalised title and publication year');
     expect(methods).not.toContain('first author');
+  });
+});
+
+describe('fallbackObjective', () => {
+  it('does not repeat the document-type prefix inside the sentence', () => {
+    expect(fallbackObjective('Evidence Review: SGLT2 inhibitors in HFpEF')).toBe(
+      'To summarize source-backed evidence on SGLT2 inhibitors in HFpEF.',
+    );
+    expect(fallbackObjective('Evidence Review of statins in long COVID')).toBe(
+      'To summarize source-backed evidence on statins in long COVID.',
+    );
+    expect(fallbackObjective('A model-written title')).toBe('To summarize source-backed evidence on A model-written title.');
   });
 });

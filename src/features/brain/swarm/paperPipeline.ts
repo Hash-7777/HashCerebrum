@@ -588,7 +588,7 @@ async function draftAbstract(opts: {
   // statistic and is stripped by the honesty pass anyway.
   const fallback: Manuscript['abstract'] = {
     background: 'This evidence-review draft was generated from guarded biomedical source retrieval and structured extraction.',
-    objective: `To summarize source-backed evidence for ${opts.title.replace(/^Evidence Review of\s+/i, '')}.`,
+    objective: fallbackObjective(opts.title),
     methods: 'The pipeline retrieved records from guarded biomedical sources, extracted structured evidence, built a source-backed claim ledger, and blocked unsupported statistics.',
     results: 'The claim ledger organised the retrieved evidence by strength and captured the source-reported effect estimates; the accompanying evidence figures give the counts.',
     conclusions: 'The draft should be reviewed against full source records before submission or clinical use.',
@@ -649,6 +649,14 @@ ${digest}`,
   } catch {
     return fallback;
   }
+}
+
+/** The fallback abstract's objective. A title made by the fallback title path
+ *  starts "Evidence Review:" (or "Evidence Review of"); that prefix is the
+ *  document type, not the topic, so it is not repeated inside the sentence. */
+export function fallbackObjective(title: string): string {
+  const topic = title.replace(/^Evidence Review(?:\s+of|\s*:)\s*/i, '').trim() || 'the review question';
+  return `To summarize source-backed evidence on ${topic}.`;
 }
 
 // An abstract is substantive only when its core fields carry real content; a
