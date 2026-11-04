@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { MODES, type ModeId } from '@config/modes';
 import { useModeStore } from '@core/store/modeStore';
 import { useThemeStore, applyTheme } from '@core/store/themeStore';
-import { useModelCatalogStore } from '@core/store/modelCatalogStore';
+import { catalogIsStale, useModelCatalogStore } from '@core/store/modelCatalogStore';
 import { useResearchRunStore } from '@core/store/researchRunStore';
 import { useChatHistoryStore } from '@core/store/chatHistoryStore';
 import { useProjectStore } from '@core/store/projectStore';
@@ -84,6 +84,18 @@ export function AppShell() {
   // (e.g. on a low-RAM machine) never pays the ~33 MB model + WASM cost until
   // the user actually starts working; runs that need it stay fast because it
   // warms while they type their first query.
+  // Providers add and retire models; an app left open for days would otherwise
+  // keep offering the list it fetched at launch. Coming back to the window
+  // refreshes the lists once they are more than half a day old.
+  useEffect(() => {
+    const onFocus = () => {
+      const { lastFetchedAt, refreshing, refreshAll } = useModelCatalogStore.getState();
+      if (catalogIsStale(lastFetchedAt, refreshing, Date.now())) void refreshAll();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   useEffect(() => {
     let warmed = false;
     const warm = () => {

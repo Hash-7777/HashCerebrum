@@ -198,6 +198,19 @@ export const useModelCatalogStore = create<ModelCatalogStore>((set, get) => ({
   },
 }));
 
+/** How old the model lists may get in a long-running session before the next
+ *  return to the window refreshes them. */
+export const CATALOG_STALE_MS = 12 * 60 * 60 * 1000;
+
+/** Whether the lists are old enough to refresh: never fetched, or fetched more
+ *  than CATALOG_STALE_MS ago, and no refresh already running. */
+export function catalogIsStale(lastFetchedAt: string | null, refreshing: boolean, now: number): boolean {
+  if (refreshing) return false;
+  if (!lastFetchedAt) return true;
+  const at = Date.parse(lastFetchedAt);
+  return !Number.isFinite(at) || now - at > CATALOG_STALE_MS;
+}
+
 export function allDiscoveredModels(): ModelOption[] {
   return useModelCatalogStore.getState().groups.flatMap((group) => group.models);
 }
