@@ -29,7 +29,7 @@
 // it belongs below `prompt_injection` and `system_prompt_request`.
 
 import type { LlmMessage } from '@core/llm/types';
-import { appraisePriorWork, bossChat, identityAnswer, isIdentityQuestion } from './boss';
+import { appraisePriorWork, bossChat, IDENTITY_ANSWER, isIdentityQuestion } from './boss';
 import {
   HARMFUL_REQUEST_REFUSAL,
   isCodingRequest,
@@ -152,9 +152,9 @@ function modelAnswered(id: RoutingGateId, claims: (question: string) => boolean)
 }
 
 export const ROUTING_GATES: readonly RoutingGate[] = [
-  // Identity is answered with fixed text built from the app's own record of the
-  // model it calls, never from the model's description of itself.
-  deterministic('identity', isIdentityQuestion, (ctx) => identityAnswer(ctx.bossModel)),
+  // Identity is answered with a fixed, branded reply so the underlying language
+  // model is never disclosed.
+  deterministic('identity', isIdentityQuestion, IDENTITY_ANSWER),
 
   // Safety first, before any routing at all.
   deterministic('self_harm', isSelfHarmQuery, SELF_HARM_MESSAGE),

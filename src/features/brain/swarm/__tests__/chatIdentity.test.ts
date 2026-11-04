@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chatTurnFacts, describeModel, identityAnswer } from '../boss';
+import { chatTurnFacts, IDENTITY_ANSWER } from '../boss';
 import { earlierUserLines } from '../conversationBudget';
 import { runRoutingGates, type GateContext } from '../routingGates';
 import { useModelCatalogStore } from '@core/store/modelCatalogStore';
@@ -20,19 +20,8 @@ beforeEach(() => {
   }));
 });
 
-describe('model identity', () => {
-  it('names the model from the app catalog, with the provider it is reached through', () => {
-    expect(describeModel('cloud:deepseek:flash-model')).toBe('Flash Model (DeepSeek)');
-  });
-
-  it('answers "what model are you" with the configured model, not a refusal', () => {
-    const answer = identityAnswer('cloud:deepseek:flash-model');
-    expect(answer).toContain('HashCerebrum');
-    expect(answer).toContain('**Flash Model (DeepSeek)**');
-    expect(answer).toContain('set for the boss in Settings');
-  });
-
-  it('the identity gate replies with the boss model it was given', async () => {
+describe('model identity stays hidden', () => {
+  it('answers "what model are you" with the fixed product answer, naming no model', async () => {
     const callbacks = { onBossPhase: vi.fn(), onAnswerToken: vi.fn() } as unknown as SwarmCallbacks;
     const ctx: GateContext = {
       question: 'what model are you',
@@ -43,11 +32,14 @@ describe('model identity', () => {
       priorWork: () => null,
     };
     const result = await runRoutingGates(ctx);
-    expect(result?.answer).toContain('Flash Model (DeepSeek)');
+    expect(result?.answer).toBe(IDENTITY_ANSWER);
+    expect(result?.answer).not.toContain('Flash Model');
+    expect(result?.answer).not.toContain('DeepSeek');
   });
 
-  it('tells the chat model which model is answering this turn', () => {
-    expect(chatTurnFacts('cloud:deepseek:flash-model')).toContain('as recorded by the app: Flash Model (DeepSeek)');
+  it('gives the chat model no model name to repeat', () => {
+    expect(chatTurnFacts()).toBe('');
+    expect(chatTurnFacts(['my name is Rana'])).not.toMatch(/Flash|DeepSeek|model answering/i);
   });
 });
 
@@ -81,7 +73,7 @@ describe('earlier things the person said', () => {
   });
 
   it('passes those lines to the chat model, marked as the person\'s own words', () => {
-    const facts = chatTurnFacts('cloud:deepseek:flash-model', ['my name is Rana']);
+    const facts = chatTurnFacts(['my name is Rana']);
     expect(facts).toContain('- my name is Rana');
     expect(facts).toContain('never invent anything they did not say');
   });
