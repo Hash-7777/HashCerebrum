@@ -11,6 +11,7 @@ import {
   reconcileDirection,
   reconcileSentenceDirection,
   applyHonestyPass,
+  stripPlaceholderBrackets,
 } from '../honestyGuard';
 
 describe('stripFabricatedAppraisal', () => {
@@ -334,5 +335,23 @@ describe('applyHonestyPass — decimal integrity (regression)', () => {
     expect(out).toContain('0.84-0.95');
     expect(out).toContain('p=0.0003');
     expect(out).not.toMatch(/\d\.\s\d/); // no "0. 86" anywhere
+  });
+});
+
+describe('stripPlaceholderBrackets', () => {
+  it('drops a placeholder bracket and the dash left dangling after it', () => {
+    expect(
+      stripPlaceholderBrackets('One analysis examines safety in HFpEF [S25-adjacent record set] —— that is, the record [S3] concerns uric acid.'),
+    ).toBe('One analysis examines safety in HFpEF that is, the record [S3] concerns uric acid.');
+  });
+
+  it('keeps citation markers, single-token brackets and link text', () => {
+    const text = 'Uptake rose [S2][S4]; tracer [18F] was used; see [the trial registry](https://example.org).';
+    expect(stripPlaceholderBrackets(text)).toBe(text);
+  });
+
+  it('keeps line breaks so headings and lists survive', () => {
+    const text = '## Bottom line\n\n- First point [citation needed].\n- Second point [S1].';
+    expect(stripPlaceholderBrackets(text)).toBe('## Bottom line\n\n- First point.\n- Second point [S1].');
   });
 });

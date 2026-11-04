@@ -16,6 +16,7 @@ import type { LlmMessage } from '@core/llm/types';
 import { budgetConversation } from './conversationBudget';
 import type { EvidenceItem } from '@platform/index';
 import { formatEvidenceList } from './evidenceFormat';
+import { stripPlaceholderBrackets } from './honestyGuard';
 import type { AssociationConfidence, GeneAssociation } from './genetics/associationConfidence';
 import { paperSystemInstruction, type PaperRequest } from './paper';
 import { normalizeMedicalSpelling } from './queryNormalize';
@@ -933,7 +934,7 @@ Write the final, well-structured research answer now, citing [S#] markers (exact
     { onToken, signal },
     emitFailover,
   );
-  const synthesized = collapseMarkerRuns(stripLeakedSpecialistLabels(res.content));
+  const synthesized = collapseMarkerRuns(stripPlaceholderBrackets(stripLeakedSpecialistLabels(res.content)));
   // Never present a refusal as a synthesis: the caller would attach the retrieved
   // records to it as citations, making an apology look like a sourced finding.
   if (looksLikeRefusalOrNonQuery(synthesized)) {

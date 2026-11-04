@@ -132,6 +132,25 @@ export function stripCounterfactualDataset(text: string): string {
 // bracket that is real notation (an isotope label like [18F] or [11C]) is kept.
 const CITATION_MARKER_INNER = /^\s*S?\d+(?:\s*[,;&–—-]\s*S?\d+)*\s*$/i;
 
+/**
+ * The same removal for a Markdown answer: placeholder brackets go, citation
+ * markers, single-token brackets and link text ("[text](url)") stay, and line
+ * breaks are kept so headings and lists survive. Dashes left dangling where a
+ * bracket stood are tidied with it.
+ */
+export function stripPlaceholderBrackets(markdown: string): string {
+  return markdown
+    .replace(/[ \t]*\[([^\]\n]*)\](?!\()([ \t]*[—–]{1,2}(?=[ \t]))?/g, (full, inner: string) => {
+      const trimmed = inner.trim();
+      if (/^claim-/i.test(trimmed)) return '';
+      if (CITATION_MARKER_INNER.test(inner)) return full;
+      if (/\s/.test(trimmed)) return '';
+      return full;
+    })
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;:)])/g, '$1');
+}
+
 /** Remove scaffolding/placeholder brackets while keeping real [S#] citations. */
 export function stripNonSourceBrackets(text: string): string {
   return text
