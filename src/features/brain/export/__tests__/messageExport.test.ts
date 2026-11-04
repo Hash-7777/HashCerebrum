@@ -1,3 +1,4 @@
+import { formatReference } from '../citationStyles';
 import { describe, expect, it } from 'vitest';
 import type { EvidenceItem } from '@platform/index';
 import { buildChatMarkdownExport, buildExportHtml, buildMarkdownExport, deriveDocumentTitle, escapeHtml, markdownToHtml, renumberCitations, stripGeneratedReferenceSections, stripResidualSourceMarkers } from '../messageExport';
@@ -275,9 +276,35 @@ describe('buildChatMarkdownExport', () => {
     expect(md).not.toContain('[S2]');
     expect(md).not.toContain('[S9]');
     expect(md).not.toContain('Dangling [9]');
-    // The reference list holds exactly the two cited refs, in first-appearance order.
-    expect(md).toContain('1. A (2024). Ref two');
-    expect(md).toContain('2. A (2024). Ref one');
+    // The reference list holds exactly the two cited refs, in first-appearance order,
+    // in the citation style the other exports use.
+    expect(md).toContain(`1. ${formatReference(rec('Ref two'), 'vancouver')}`);
+    expect(md).toContain(`2. ${formatReference(rec('Ref one'), 'vancouver')}`);
+  });
+
+  it('names the journal in the chat citation list, not the database it came from', () => {
+    const messages = [
+      {
+        id: '1',
+        role: 'assistant' as const,
+        content: 'A finding [S1].',
+        citations: [
+          {
+            source: 'pubmed' as const,
+            title: 'An invented trial report.',
+            authors: ['Doe J'],
+            year: 2025,
+            identifiers: { journal: 'Journal of Invented Cardiology' },
+            fetchedAt: '2026-01-01T00:00:00Z',
+            provenanceHash: 'j1',
+          },
+        ],
+      },
+    ];
+    const md = buildChatMarkdownExport(messages, meta);
+    expect(md).toContain('Journal of Invented Cardiology');
+    expect(md).not.toMatch(/\.\. pubmed\./);
+    expect(md).not.toContain('report..');
   });
 
   it('includes manuscript and outline proposal metadata', () => {

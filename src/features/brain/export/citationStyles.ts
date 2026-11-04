@@ -41,6 +41,19 @@ function venueText(record: EvidenceItem): string {
   return venue && venue.trim() ? venue.trim() : SOURCE_LABELS[record.source];
 }
 
+/** A title or venue closed with exactly one full stop. Indexed titles often end
+ *  with their own full stop (PubMed's always do), and appending another printed
+ *  "Title.." in every reference; a title ending in ? or ! keeps that mark. */
+function closed(text: string): string {
+  const t = text.trim().replace(/[.\s]+$/, '');
+  return /[?!]$/.test(t) ? t : `${t}.`;
+}
+
+/** A title without trailing full stops, for styles that quote it. */
+function bare(text: string): string {
+  return text.trim().replace(/[.\s]+$/, '');
+}
+
 interface ParsedName {
   family: string;
   initials: string; // e.g. "J.A."
@@ -138,7 +151,7 @@ function vancouver(record: EvidenceItem): string {
       biblio = `${year}.`;
     }
   }
-  return `${vancouverAuthors(record)}. ${record.title}. ${venueText(record)}.${biblio ? ` ${biblio}` : ''}${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${vancouverAuthors(record)}. ${closed(record.title)} ${closed(venueText(record))}${biblio ? ` ${biblio}` : ''}${doi}${pmid}${url}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -160,7 +173,7 @@ function apaAuthors(record: EvidenceItem): string {
 
 function apa(record: EvidenceItem): string {
   const year = yearText(record);
-  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${record.title}. ${venueText(record)}.${trailingId(record)}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${apaAuthors(record)} (${year ?? 'n.d.'}). ${closed(record.title)} ${closed(venueText(record))}${trailingId(record)}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -189,7 +202,7 @@ function harvard(record: EvidenceItem): string {
       : record.identifiers?.pmid
         ? ` PMID: ${record.identifiers.pmid}.`
         : '';
-  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${record.title}', ${venueText(record)}.${avail}${pageSuffix(record)}${aheadOfPrintNote(record)}`
+  return `${harvardAuthors(record)} ${year ? `(${year})` : '(n.d.)'} '${bare(record.title)}', ${closed(venueText(record))}${avail}${pageSuffix(record)}${aheadOfPrintNote(record)}`
     .replace(/\s+/g, ' ')
     .trim();
 }

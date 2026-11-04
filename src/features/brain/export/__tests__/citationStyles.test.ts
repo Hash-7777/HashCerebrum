@@ -159,3 +159,31 @@ describe('referenceUrl — best link to the real paper', () => {
     expect(referenceUrl(rec({ title: 't', url: 'javascript:alert(1)' }))).toBeNull();
   });
 });
+
+describe('formatReference — titles that end in their own punctuation', () => {
+  const rec = (title: string): EvidenceItem =>
+    ({
+      source: 'pubmed',
+      title,
+      authors: ['Doe J'],
+      year: 2023,
+      identifiers: { journal: 'Journal of Invented Medicine.' },
+      fetchedAt: '2026-01-01T00:00:00Z',
+      provenanceHash: 't',
+    }) as EvidenceItem;
+
+  it('never prints a doubled full stop', () => {
+    for (const style of ['vancouver', 'apa', 'harvard'] as const) {
+      expect(formatReference(rec('An invented trial report.'), style)).not.toContain('..');
+    }
+  });
+
+  it('keeps a question mark that ends a title', () => {
+    const line = formatReference(rec('Is it time for a class I recommendation?'), 'vancouver');
+    expect(line).toContain('recommendation? Journal of Invented Medicine.');
+  });
+
+  it('does not quote a trailing full stop in Harvard', () => {
+    expect(formatReference(rec('An invented trial report.'), 'harvard')).toContain("'An invented trial report',");
+  });
+});

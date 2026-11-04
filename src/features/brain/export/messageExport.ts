@@ -751,14 +751,13 @@ export interface ChatExportMeta {
   messageCount: number;
 }
 
+// The whole-chat export lists each answer's sources in the citation style chosen
+// in Settings, the same formatter every other export uses, so a reference names
+// its journal rather than the database it was found through.
 function formatChatCitations(citations: EvidenceItem[] | undefined): string {
   if (!citations || citations.length === 0) return '';
-  const lines = citations.map((c, i) => {
-    const authors = c.authors.slice(0, 3).join(', ');
-    const etAl = c.authors.length > 3 ? ' et al.' : '';
-    const year = c.year ? ` (${c.year})` : '';
-    return `${i + 1}. ${authors}${etAl}${year}. ${c.title}. ${c.source}.`;
-  });
+  const style = currentCitationStyle();
+  const lines = citations.map((c, i) => `${i + 1}. ${formatReference(c, style)}`);
   return `\n\n### Citations\n\n${lines.join('\n\n')}`;
 }
 
