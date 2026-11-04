@@ -14,6 +14,8 @@ export interface RerankProvider {
   rerank(query: string, passages: string[]): Promise<number[]>;
 }
 
+import { IdleReaper, MODEL_WORKER_IDLE_MS } from '../workerIdle';
+
 interface Pending {
   resolve: (scores: number[]) => void;
   reject: (error: unknown) => void;
@@ -26,6 +28,17 @@ class WorkerRerankProvider implements RerankProvider {
   private warmPromise: Promise<void> | null = null;
   private seq = 0;
   private readonly pending = new Map<number, Pending>();
+  // Releases the worker, and the model memory it holds, after a quiet spell.
+  private readonly reaper = new IdleReaper(MODEL_WORKER_IDLE_MS, () => this.releaseIfIdle());
+
+  private releaseIfIdle(): void {
+    // Never while a request or a model load is in flight.
+    if (!this.worker || this.pending.size > 0 || (this.warmPromise && !this._ready)) return;
+    this.worker.terminate();
+    this.worker = null;
+    this._ready = false;
+    this.warmPromise = null;
+  }
 
   get ready(): boolean {
     return this._ready;
@@ -68,6 +81,7 @@ class WorkerRerankProvider implements RerankProvider {
         if (data?.type === 'ready') {
           this._ready = true;
           worker.removeEventListener('message', onReady);
+          this.reaper.arm();
           resolve();
         } else if (data?.type === 'load-error') {
           worker.removeEventListener('message', onReady);
@@ -88,6 +102,7 @@ class WorkerRerankProvider implements RerankProvider {
     if (!this._ready) await this.warmup();
     if (!this._ready) return [];
 
+    this.reaper.hold();
     const id = (this.seq += 1);
     return new Promise<number[]>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -101,6 +116,7 @@ class WorkerRerankProvider implements RerankProvider {
     const pending = this.pending.get(data.id);
     if (!pending) return;
     this.pending.delete(data.id);
+    if (this.pending.size === 0) this.reaper.arm();
     if (data.type === 'reranked' && Array.isArray(data.scores)) {
       pending.resolve(data.scores);
     } else if (data.type === 'rerank-error') {

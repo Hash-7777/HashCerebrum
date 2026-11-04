@@ -8,6 +8,7 @@
 // `ready` stays false and `embed` returns [], so callers fall back to lexical
 // search and nothing breaks.
 
+import { IdleReaper, MODEL_WORKER_IDLE_MS } from '../workerIdle';
 import type { EmbeddingProvider, EmbeddingVector } from '../types';
 
 interface Pending {
@@ -22,6 +23,17 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
   private warmPromise: Promise<void> | null = null;
   private seq = 0;
   private readonly pending = new Map<number, Pending>();
+  // Releases the worker, and the model memory it holds, after a quiet spell.
+  private readonly reaper = new IdleReaper(MODEL_WORKER_IDLE_MS, () => this.releaseIfIdle());
+
+  private releaseIfIdle(): void {
+    // Never while a request or a model load is in flight.
+    if (!this.worker || this.pending.size > 0 || (this.warmPromise && !this._ready)) return;
+    this.worker.terminate();
+    this.worker = null;
+    this._ready = false;
+    this.warmPromise = null;
+  }
 
   get ready(): boolean {
     return this._ready;
@@ -66,6 +78,7 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
         if (data?.type === 'ready') {
           this._ready = true;
           worker.removeEventListener('message', onReady);
+          this.reaper.arm();
           resolve();
         } else if (data?.type === 'load-error') {
           worker.removeEventListener('message', onReady);
@@ -86,6 +99,7 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
     if (!this._ready) await this.warmup();
     if (!this._ready) return [];
 
+    this.reaper.hold();
     const id = (this.seq += 1);
     return new Promise<EmbeddingVector[]>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -99,6 +113,7 @@ class WorkerEmbeddingProvider implements EmbeddingProvider {
     const pending = this.pending.get(data.id);
     if (!pending) return;
     this.pending.delete(data.id);
+    if (this.pending.size === 0) this.reaper.arm();
     if (data.type === 'embedded' && Array.isArray(data.vectors)) {
       pending.resolve(data.vectors.map((v) => Float32Array.from(v)));
     } else if (data.type === 'embed-error') {
