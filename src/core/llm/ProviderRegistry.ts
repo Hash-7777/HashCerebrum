@@ -62,8 +62,42 @@ export async function streamWithModel(
 // is seamless instead of truncating (cf. switching Opus→Sonnet mid-task).
 const CONTINUE_INSTRUCTION =
   'Your previous response was cut off mid-stream. Continue it from exactly where it stopped. ' +
-  'Do not repeat any text you already wrote, do not restart, and do not add any preamble — ' +
-  'resume seamlessly with the very next word.';
+  'Begin by repeating, word for word, the last few words you wrote, then carry straight on. ' +
+  'Do not restart, do not repeat anything earlier than those last words, and add no preamble.';
+
+// How much of a continuation is held back before it is joined to what was
+// already written. Enough to find the repeated words the continuation is asked
+// to open with; small enough that the pause is not noticeable.
+const JOIN_WINDOW_CHARS = 160;
+
+/**
+ * The text to append when a continuation leg (after a length stop or a
+ * mid-stream model switch) is joined to what was already written.
+ *
+ * The continuation is asked to open by repeating the last few words; when it
+ * does, that overlap is removed, which also mends a word cut in half. When it
+ * does not, a space is put back between two words: a new reply never starts with
+ * the space that separated them, which is how "summary" and "of" came out as
+ * "summaryof".
+ */
+export function joinContinuation(written: string, next: string): string {
+  const maxOverlap = Math.min(next.length, written.length, 300);
+  for (let k = maxOverlap; k >= 3; k -= 1) {
+    const head = next.slice(0, k);
+    if (!written.endsWith(head)) continue;
+    // The repeat must start where a word starts in what was written, so a
+    // continuation that merely begins with the same letters is not clipped.
+    const before = written.charAt(written.length - k - 1);
+    if (before === '' || /[\s([*_"'\u2014-]/.test(before)) return next.slice(k);
+  }
+  const trimmedNext = next.replace(/^[ \t]+/, '');
+  const lastChar = written.slice(-1);
+  const firstChar = trimmedNext.charAt(0);
+  if (!lastChar || !firstChar || /\s/.test(lastChar)) return trimmedNext;
+  const endsInWord = /[\p{L}\p{N}.,;:!?)\]*_]/u.test(lastChar);
+  const startsWord = /[\p{L}\p{N}(\[*_]/u.test(firstChar);
+  return endsInWord && startsWord ? ` ${trimmedNext}` : trimmedNext;
+}
 
 // Streaming variant of completeWithModelChain. On a retriable failure BEFORE any
 // token is emitted, it restarts fresh on the next model. On a retriable failure
@@ -152,6 +186,17 @@ export async function streamWithModelChain(
     if (maxTokensOverride !== undefined) legReq = { ...legReq, maxTokens: maxTokensOverride };
 
     let receivedThisLeg = false;
+    // On a continuation leg the opening text is held back until it can be joined
+    // cleanly to what was already written (see joinContinuation).
+    let joinPending: string | null = resuming ? '' : null;
+    const flushJoin = () => {
+      if (joinPending === null) return;
+      const joined = joinContinuation(acc, joinPending);
+      joinPending = null;
+      if (!joined) return;
+      acc += joined;
+      opts.onToken(joined);
+    };
     // First-token watchdog: abort this leg (but not the whole turn) if a cloud
     // model does not begin streaming in time, so failover picks a faster model.
     let firstTokenTimedOut = false;
@@ -175,6 +220,11 @@ export async function streamWithModelChain(
         onToken: (token) => {
           if (!receivedThisLeg && firstTokenTimer) clearTimeout(firstTokenTimer);
           receivedThisLeg = true;
+          if (joinPending !== null) {
+            joinPending += token;
+            if (joinPending.length >= JOIN_WINDOW_CHARS) flushJoin();
+            return;
+          }
           acc += token;
           opts.onToken(token);
         },
@@ -185,6 +235,7 @@ export async function streamWithModelChain(
         },
         signal: legController.signal,
       });
+      flushJoin();
       if (response.usage) {
         chainIn += response.usage.inputTokens;
         chainOut += response.usage.outputTokens;
@@ -231,6 +282,7 @@ export async function streamWithModelChain(
         failover: { attempted: switchedTo.length, switchedTo },
       };
     } catch (error) {
+      flushJoin();
       // A watchdog abort surfaces as a bare AbortError; translate it into a
       // retriable timeout so the chain fails over instead of giving up.
       if (firstTokenTimedOut && !opts.signal?.aborted) {

@@ -132,6 +132,21 @@ describe('model chain on an empty reply', () => {
     expect(calls[2]?.maxTokens).toBe(2200);
   });
 
+  it('streams: joins a length-stopped answer to its continuation without gluing words', async () => {
+    replies.push(
+      () => ({ content: 'This is a summary', toolCalls: [], finishReason: 'length' }),
+      () => ({ content: 'of the retrieved records.', toolCalls: [], finishReason: 'stop' }),
+    );
+    const shown: string[] = [];
+    const res = await streamWithModelChain(
+      'cloud:deepseek:thinker',
+      { messages: [{ role: 'user', content: 'summarise' }], maxTokens: 900 },
+      { onToken: (t) => shown.push(t) },
+    );
+    expect(res.content).toBe('This is a summary of the retrieved records.');
+    expect(shown.join('')).toBe(res.content);
+  });
+
   it('completes: an empty normal stop fails over instead of returning nothing', async () => {
     replies.push(
       () => ({ content: '', toolCalls: [], finishReason: 'stop' }),
