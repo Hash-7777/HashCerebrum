@@ -56,7 +56,7 @@ import { backfillLandmarkTrials } from './trialBackfill';
 import { backfillDrugInteractions } from './interactionBackfill';
 import { backfillNamedEntityEvidence } from './entityBackfill';
 import { expandDrugQuery } from './drugAliases';
-import { budgetConversation } from './conversationBudget';
+import { budgetConversation, earlierUserLines } from './conversationBudget';
 import { assembleContext } from '../context/assembleContext';
 import { historyTokenBudget } from '../context/tokenBudget';
 import type { SpecialistResult, SpecialistTask, SwarmCallbacks, SwarmOptions, SwarmResult } from './types';
@@ -316,6 +316,7 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
     signal,
     bossContext: buildBossContext,
     priorWork: () => mostRecentSubstantialAnswer(conversation),
+    earlierUserLines: async () => earlierUserLines(conversation, await buildBossContext()),
   });
   if (gated) return gated;
 
@@ -551,7 +552,14 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
 
   if (plan.mode === 'chat') {
     callbacks.onBossPhase('answering');
-    const chat = await bossChat(bossModel, question, bossContext, callbacks.onAnswerToken, signal);
+    const chat = await bossChat(
+      bossModel,
+      question,
+      bossContext,
+      callbacks.onAnswerToken,
+      signal,
+      earlierUserLines(conversation, bossContext),
+    );
     return { kind: 'chat', answer: chat.content, evidence: [], specialists: [], modelUsed: chat.modelUsed };
   }
 

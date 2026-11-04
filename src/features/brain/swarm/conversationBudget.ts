@@ -38,6 +38,35 @@ function clampAssistant(content: string, limit: number): string {
  * head-truncated; turns beyond `maxChars` (or `maxTurns`) are dropped, oldest
  * first. The latest turn is always kept even if it alone exceeds the budget.
  */
+/**
+ * Short things the person said earlier in the chat that fell outside the kept
+ * window — a name, a role, a constraint ("keep it at bench level"). Long turns
+ * are research questions the window and the recall already cover; these short
+ * ones are cheap and are exactly what a person expects a conversation partner to
+ * remember. Newest first until the budget is spent, returned oldest first.
+ */
+export function earlierUserLines(
+  conversation: LlmMessage[],
+  kept: LlmMessage[],
+  opts: { maxLineChars?: number; maxChars?: number } = {},
+): string[] {
+  const maxLine = opts.maxLineChars ?? 240;
+  const budget = opts.maxChars ?? 1200;
+  const keptText = new Set(kept.map((m) => m.content));
+  const out: string[] = [];
+  let total = 0;
+  for (let i = conversation.length - 1; i >= 0; i -= 1) {
+    const msg = conversation[i];
+    if (!msg || msg.role !== 'user') continue;
+    const line = msg.content.replace(/\s+/g, ' ').trim();
+    if (!line || line.length > maxLine || keptText.has(msg.content)) continue;
+    if (total + line.length > budget) break;
+    out.unshift(line);
+    total += line.length;
+  }
+  return out;
+}
+
 export function budgetConversation(
   conversation: LlmMessage[],
   opts: BudgetOptions,

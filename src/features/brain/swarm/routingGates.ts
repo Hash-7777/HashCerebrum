@@ -29,7 +29,7 @@
 // it belongs below `prompt_injection` and `system_prompt_request`.
 
 import type { LlmMessage } from '@core/llm/types';
-import { appraisePriorWork, bossChat, IDENTITY_ANSWER, isIdentityQuestion } from './boss';
+import { appraisePriorWork, bossChat, identityAnswer, isIdentityQuestion } from './boss';
 import {
   HARMFUL_REQUEST_REFUSAL,
   isCodingRequest,
@@ -78,6 +78,11 @@ export interface GateContext {
    * Lazy for the same reason: only the appraisal gate reads it.
    */
   priorWork: () => string | null;
+  /**
+   * Short things the person said earlier that fell outside the context window
+   * (see earlierUserLines). Optional so a caller with no history passes nothing.
+   */
+  earlierUserLines?: () => Promise<string[]>;
 }
 
 export interface RoutingGate {
@@ -96,12 +101,13 @@ export interface RoutingGate {
 function deterministic(
   id: RoutingGateId,
   claims: (question: string) => boolean,
-  message: string,
+  reply: string | ((ctx: GateContext) => string),
 ): RoutingGate {
   return {
     id,
     claims: (ctx) => claims(ctx.question),
     handle: async (ctx) => {
+      const message = typeof reply === 'function' ? reply(ctx) : reply;
       ctx.callbacks.onBossPhase('answering');
       ctx.callbacks.onAnswerToken(message);
       return {
@@ -132,6 +138,7 @@ function modelAnswered(id: RoutingGateId, claims: (question: string) => boolean)
         await ctx.bossContext(),
         ctx.callbacks.onAnswerToken,
         ctx.signal,
+        (await ctx.earlierUserLines?.()) ?? [],
       );
       return {
         kind: 'chat',
@@ -145,9 +152,9 @@ function modelAnswered(id: RoutingGateId, claims: (question: string) => boolean)
 }
 
 export const ROUTING_GATES: readonly RoutingGate[] = [
-  // Identity is answered with a fixed, branded reply so the underlying language
-  // model is never disclosed.
-  deterministic('identity', isIdentityQuestion, IDENTITY_ANSWER),
+  // Identity is answered with fixed text built from the app's own record of the
+  // model it calls, never from the model's description of itself.
+  deterministic('identity', isIdentityQuestion, (ctx) => identityAnswer(ctx.bossModel)),
 
   // Safety first, before any routing at all.
   deterministic('self_harm', isSelfHarmQuery, SELF_HARM_MESSAGE),

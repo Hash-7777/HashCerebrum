@@ -423,8 +423,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 </span>
               </header>
               <p>
-                Local-first. Your projects, saved findings, evidence cache, audit log, and API keys stay on
-                this device — no account, no cloud, no telemetry. The interface cannot make a network call;
+                Local-first. Your projects, saved findings, evidence cache, audit log, and provider keys stay on
+                this device — no account, no cloud storage, no telemetry. The interface cannot make a network call;
                 only the Rust core can, and only to the destinations below.
               </p>
               <ul className="settings-privacy-facts">
