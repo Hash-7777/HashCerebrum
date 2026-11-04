@@ -974,3 +974,25 @@ describe('shouldExpandSection', () => {
     expect(shouldExpandSection(600, 750, true)).toBe(false);
   });
 });
+
+describe('buildMethodsSection — statements the code backs', () => {
+  const methods = buildMethodsSection('SGLT2 inhibitors in heart failure', [], []).join(' ');
+
+  it('claims no language filter, because none is applied', () => {
+    expect(methods).not.toMatch(/English-language/i);
+    expect(methods).toContain('no language filter was applied');
+  });
+
+  it('names every source the pipeline can search', () => {
+    for (const name of ['PubMed', 'Europe PMC', 'OpenAlex', 'Semantic Scholar', 'ClinicalTrials.gov', 'openFDA', 'RxNorm', 'GWAS Catalog', 'ClinVar']) {
+      expect(methods).toContain(name);
+    }
+    expect(methods).not.toContain('no other database was queried');
+  });
+
+  it('describes de-duplication the way mergeEvidence does it', () => {
+    expect(methods).toContain('DOI or PMID');
+    expect(methods).toContain('normalised title and publication year');
+    expect(methods).not.toContain('first author');
+  });
+});

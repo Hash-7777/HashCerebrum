@@ -47,8 +47,8 @@ export function deterministicMethodsNotes(
     `EXTRACTED: ${extractionCount} structured evidence items. ` +
     `QUERY: "${question.replace(/"/g, "'")}". ` +
     `RUN DATE: ${runDate}. ` +
-    `DEDUPLICATION: identity hash on title + first author + year. ` +
-    `ELIGIBILITY: English-language biomedical records with title and abstract or structured metadata.`
+    `DEDUPLICATION: by DOI or PMID, then by normalised title + publication year. ` +
+    `ELIGIBILITY: biomedical records with a title and an abstract or structured metadata; no language filter.`
   );
 }
 
@@ -182,10 +182,10 @@ export function buildMethodsSection(
       'screening, no dual independent reviewers, and no consensus adjudication were involved; the entire ' +
       'retrieval, extraction, and synthesis workflow was executed programmatically and is described here ' +
       'exactly as it operated.',
-    `${sourcesSentence} The pipeline draws only from a fixed allowlist — PubMed/MEDLINE, Europe PMC, ` +
-      'OpenAlex, ClinicalTrials.gov, openFDA, and RxNorm — and no other database was queried; in ' +
-      'particular, Embase, Scopus, Cochrane CENTRAL, Ovid, and Web of Science were not searched, which ' +
-      'is a coverage limitation. The pipeline did not construct a fixed Boolean search string, restrict ' +
+    `${sourcesSentence} The pipeline can search only a fixed allowlist of public sources — PubMed/MEDLINE, ` +
+      'Europe PMC, OpenAlex, Semantic Scholar, ClinicalTrials.gov, openFDA, RxNorm, the GWAS Catalog and ' +
+      'ClinVar — and the records above came from those; Embase, Scopus, Cochrane CENTRAL, Ovid, and Web ' +
+      'of Science are not among them and were not searched, which is a coverage limitation. The pipeline did not construct a fixed Boolean search string, restrict ' +
       'results by a specific search date, or apply any machine-learning classifier, gradient-boosted ' +
       'screening model, labelled training set, or similarity threshold; each specialist issued concept ' +
       'key terms to the sources it owns, through free and keyless public interfaces, so the search can ' +
@@ -193,10 +193,11 @@ export function buildMethodsSection(
       'follow-up queries to PubMed for the primary reports of any landmark trials named by the retrieved ' +
       'reviews, so per-trial effect estimates are drawn from the trials themselves rather than only from ' +
       'pooled review figures.',
-    'Records were eligible when they were English-language biomedical items carrying a title and an ' +
-      `abstract or structured metadata. ${designSentence} Duplicate records were removed by record ` +
-      'identifier (DOI or PMID) and by an identity hash over title, first author, and publication year, ' +
-      'so the same study retrieved from more than one source was counted once, and retained records were ' +
+    'Records were eligible when they were biomedical items carrying a title and an abstract or ' +
+      'structured metadata; no language filter was applied, so records published in other languages ' +
+      `could be included. ${designSentence} Duplicate records were ` +
+      'removed by record identifier (DOI or PMID) and then by normalised title and publication year, so ' +
+      'the same study retrieved from more than one source was counted once, and retained records were ' +
       'ranked by how many distinct question concepts each one addressed, so multi-concept records led ' +
       'and single-concept noise sank. The full identification, de-duplication, and citation flow is ' +
       'shown in the study-selection figure, and a study sample size is never reused as a record count.',

@@ -9,15 +9,18 @@
 
 import type { EvidenceItem } from '@platform/index';
 import type { SpecialistResult } from './types';
+import { evidenceIdentity, normalizeText } from './textNormalize';
 
-function evidenceKey(record: EvidenceItem): string {
-  return (
-    record.url ||
-    record.identifiers?.pmid ||
-    record.identifiers?.doi ||
-    record.provenanceHash ||
-    `${record.source}-${record.title}`
-  );
+// The keys under which a record counts as already seen: its strongest
+// identifier (DOI, then PMID, then address — see evidenceIdentity) and its
+// normalised title with publication year. Keying on the address first, as this
+// once did, let the same paper through twice when two databases returned it,
+// since each serves it at its own address.
+function evidenceKeys(record: EvidenceItem): string[] {
+  const keys = [evidenceIdentity(record)];
+  const title = normalizeText(record.title ?? '').toLowerCase();
+  if (title.length >= 20) keys.push(`title:${title}-${record.year ?? ''}`);
+  return keys;
 }
 
 // Rank sources by clinical credibility so the most trustworthy records
@@ -317,16 +320,20 @@ export function isNonCitableProceeding(record: EvidenceItem): boolean {
 // so high-credibility evidence survives context-window truncation.
 // Conference-proceeding noise is filtered out before ranking.
 export function mergeEvidence(specialists: SpecialistResult[]): EvidenceItem[] {
+  // Rank first, then de-duplicate, so when two sources return the same study the
+  // copy kept is the better-scored one (the primary index over a mirror). The
+  // sort is stable, so equal scores keep their retrieval order.
+  const ranked = specialists
+    .flatMap((specialist) => specialist.evidence)
+    .filter((record) => !isNonCitableProceeding(record))
+    .sort((a, b) => evidenceScore(b) - evidenceScore(a));
   const seen = new Set<string>();
   const merged: EvidenceItem[] = [];
-  for (const specialist of specialists) {
-    for (const record of specialist.evidence) {
-      if (isNonCitableProceeding(record)) continue;
-      const key = evidenceKey(record);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(record);
-    }
+  for (const record of ranked) {
+    const keys = evidenceKeys(record);
+    if (keys.some((key) => seen.has(key))) continue;
+    for (const key of keys) seen.add(key);
+    merged.push(record);
   }
-  return merged.sort((a, b) => evidenceScore(b) - evidenceScore(a));
+  return merged;
 }
