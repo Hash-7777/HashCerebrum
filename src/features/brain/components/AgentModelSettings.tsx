@@ -34,7 +34,7 @@ export function AgentModelSettings() {
   );
 }
 
-function AgentModelRow({
+export function AgentModelRow({
   label,
   specialty,
   value,

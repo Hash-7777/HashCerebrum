@@ -4,6 +4,7 @@ import { platform } from '@platform/index';
 import { useBrainModesStore } from '@core/store/brainModesStore';
 import { useLiteMode } from '@ui/hooks/useLiteMode';
 import logoMark from '@/assets/logo-mark.png';
+import { AgentModelMenu } from '@features/brain/components/AgentModelMenu';
 
 const maskStyle = {
   WebkitMaskImage: `url(${logoMark})`,
@@ -43,6 +44,7 @@ export function TitleBar() {
       </div>
       <div className="spacer" />
       <div className="titlebar-right">
+        <AgentModelMenu />
         <button
           className="icon-btn view-toggle"
           type="button"
