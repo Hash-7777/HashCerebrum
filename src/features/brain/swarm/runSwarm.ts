@@ -426,6 +426,10 @@ export async function runSwarm(opts: SwarmOptions): Promise<SwarmResult> {
       signal,
       drugCandidates(researchQuestion),
     );
+    // A report that was never written cites nothing, so it lists no sources.
+    if (report.failed) {
+      return { kind: 'chat', answer: report.content, evidence: [], specialists: [specialist], modelUsed: report.modelUsed };
+    }
     return {
       kind: 'research',
       answer: report.content,

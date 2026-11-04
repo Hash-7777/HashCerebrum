@@ -19,6 +19,11 @@ export interface StreamParseResult {
   // final one). Anthropic splits it — input on message_start, output on
   // message_delta — so a field may arrive alone; callers merge across chunks.
   usage?: { inputTokens?: number; outputTokens?: number };
+  // True when the chunk carried the model's private reasoning instead of answer
+  // text. The reasoning itself is never shown; the flag only tells the caller the
+  // model is alive and working, so a slow first answer token is not mistaken for
+  // a stalled provider.
+  reasoning?: boolean;
 }
 
 export function parseToolArgs(args: unknown): Record<string, unknown> {
@@ -152,6 +157,8 @@ export function parseOpenAiStreamLine(line: string): StreamParseResult | null {
       choice?.delta?.tool_calls,
     );
     if (typeof choice?.finish_reason === 'string') result.finishReason = choice.finish_reason;
+    const thought = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning;
+    if (typeof thought === 'string' && thought.length > 0) result.reasoning = true;
     // With stream_options.include_usage the final chunk carries token counts
     // (and an empty choices array, so delta stays '').
     if (json.usage && typeof json.usage === 'object') {

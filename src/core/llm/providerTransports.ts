@@ -45,7 +45,7 @@ function usageResponse(
 }
 
 interface ProviderResponse<T = unknown> {
-  choices?: Array<{ message?: { content?: string; tool_calls?: T[] } }>;
+  choices?: Array<{ message?: { content?: string; tool_calls?: T[] }; finish_reason?: string }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
@@ -149,6 +149,8 @@ export async function completeOpenAiCompatible(providerId: LlmProviderId, req: L
     content: message.content || '',
     toolCalls: normalizeOpenAiToolCalls(message.tool_calls),
   };
+  const finish = data.choices?.[0]?.finish_reason;
+  if (typeof finish === 'string') result.finishReason = finish;
   if (data.usage) {
     result.usage = { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 };
   }
@@ -302,6 +304,9 @@ export async function completeGemini(req: LlmRequest): Promise<LlmResponse> {
 export interface StreamOptions {
   onToken: (delta: string) => void;
   signal?: AbortSignal | undefined;
+  /** Called when the model streams reasoning rather than answer text: it is
+   *  working, so the caller should not treat the wait as a stalled provider. */
+  onActivity?: () => void;
 }
 
 export async function streamOllama(req: LlmRequest, opts: StreamOptions): Promise<LlmResponse> {
@@ -372,6 +377,7 @@ export async function streamOpenAiCompatible(providerId: LlmProviderId, req: Llm
   await chatStream(providerId, url, headers, JSON.stringify(body), (line) => {
     const parsed = parseOpenAiStreamLine(line);
     if (!parsed) return;
+    if (parsed.reasoning) opts.onActivity?.();
     if (parsed.delta) {
       content += parsed.delta;
       opts.onToken(parsed.delta);

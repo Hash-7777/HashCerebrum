@@ -150,6 +150,37 @@ export function shouldRetrySameProvider(error: unknown): boolean {
   return SAME_PROVIDER_RETRY.test(message) && !QUOTA.test(message);
 }
 
+// ── Empty replies ────────────────────────────────────────────────────────────
+// A provider can answer "successfully" with no text and no tool call. The usual
+// cause is a model that reasons before it writes: the reasoning counts against
+// the output cap, the cap runs out before the first answer word, and the reply
+// ends with a length stop and nothing in it. A content filter can do the same
+// with a normal stop. Neither is an error the transport sees, so the chain has
+// to recognise it here — handing an empty string on reads to the user as "the
+// app produced nothing".
+
+export type EmptyReplyAction = 'none' | 'raise-budget' | 'fail-over';
+
+/** What the model chain should do with a reply. A length-stopped empty reply
+ *  gets one retry on the same model with a larger output cap; any other empty
+ *  reply (or one that stays empty after that retry) moves to another model. */
+export function emptyReplyAction(
+  reply: { content: string; toolCalls?: readonly unknown[]; finishReason?: string },
+  budgetAlreadyRaised: boolean,
+): EmptyReplyAction {
+  if (reply.content.trim().length > 0 || (reply.toolCalls?.length ?? 0) > 0) return 'none';
+  const stop = (reply.finishReason ?? '').toLowerCase();
+  const lengthStop = stop === 'length' || stop === 'max_tokens';
+  return lengthStop && !budgetAlreadyRaised ? 'raise-budget' : 'fail-over';
+}
+
+/** The output cap for the retry after a length-stopped empty reply: enough room
+ *  for the reasoning AND the answer, and never below the caller's own cap. */
+export function raisedTokenBudget(maxTokens: number | undefined): number {
+  const base = maxTokens ?? 2000;
+  return Math.min(16_000, Math.max(base * 3, 6000));
+}
+
 // ── Unusable-model registry ──────────────────────────────────────────────────
 // A single model that is gone or not accessible to this key (decommissioned,
 // renamed, retired, or not exposed to the account) should never be offered

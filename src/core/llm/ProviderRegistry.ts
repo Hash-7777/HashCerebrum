@@ -3,6 +3,7 @@ import { DEFAULT_MODEL, PROVIDER_DEFS, parseModelRef, providerKeyName } from './
 import {
   cooldownProvider,
   deadProvidersThisSession,
+  emptyReplyAction,
   findBestFailover,
   isBillingError,
   isHardProviderError,
@@ -11,6 +12,7 @@ import {
   isRetriableError,
   markModelUnusable,
   markProviderBillingDead,
+  raisedTokenBudget,
   shouldRetrySameProvider,
   type FailoverCandidate,
 } from './failover';
@@ -99,6 +101,10 @@ export async function streamWithModelChain(
   let acc = ''; // everything emitted so far, across every model leg
   let resuming = false; // true once we are continuing a cut-off response
   let lengthContinuations = 0; // bounded resumes after hitting a model output cap
+  // Set once an empty, length-stopped reply has been retried with a larger cap
+  // on the current model (see emptyReplyAction).
+  let budgetRaised = false;
+  let maxTokensOverride: number | undefined;
   // Real token usage summed across every leg — each failover/continuation is a
   // separate API call that costs its own input+output tokens.
   let chainIn = 0;
@@ -143,6 +149,7 @@ export async function streamWithModelChain(
         ...(req.tools?.length ? { tools: req.tools } : {}),
       };
     }
+    if (maxTokensOverride !== undefined) legReq = { ...legReq, maxTokens: maxTokensOverride };
 
     let receivedThisLeg = false;
     // First-token watchdog: abort this leg (but not the whole turn) if a cloud
@@ -171,6 +178,11 @@ export async function streamWithModelChain(
           acc += token;
           opts.onToken(token);
         },
+        // Reasoning before the first answer word means the model is working,
+        // not stalled: stand the first-token watchdog down for this leg.
+        onActivity: () => {
+          if (firstTokenTimer) clearTimeout(firstTokenTimer);
+        },
         signal: legController.signal,
       });
       if (response.usage) {
@@ -192,6 +204,24 @@ export async function streamWithModelChain(
         lengthContinuations += 1;
         resuming = true;
         continue; // same model continues from acc
+      }
+      const empty = acc.length === 0 && !opts.signal?.aborted ? emptyReplyAction(response, budgetRaised) : 'none';
+      if (empty === 'raise-budget') {
+        budgetRaised = true;
+        maxTokensOverride = raisedTokenBudget(req.maxTokens);
+        continue; // same model, room for its reasoning and the answer
+      }
+      if (empty === 'fail-over') {
+        const next = nextUsableModel(current, tried, hasKeySync, modelGroups, needsTools);
+        if (next) {
+          failovers++;
+          switchedTo.push(next.value);
+          onProgress?.({ from: current, to: next, attempt: failovers, reason: 'the model returned an empty reply' });
+          current = next.value;
+          budgetRaised = false;
+          maxTokensOverride = undefined;
+          continue;
+        }
       }
       if (measured) logModelUsage(current, { inputTokens: chainIn, outputTokens: chainOut });
       return {
@@ -379,6 +409,23 @@ export interface FailoverResult extends LlmResponse {
 }
 
 const MAX_FAILOVERS = 4;
+
+/** The best failover candidate whose provider is neither cooling down nor dead
+ *  for this session, or null. */
+function nextUsableModel(
+  current: string,
+  tried: Set<string>,
+  hasKeySync: (provider: LlmProviderId) => boolean,
+  modelGroups: Parameters<typeof findBestFailover>[3],
+  needsTools: boolean,
+): FailoverCandidate | null {
+  let next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
+  while (next && (isProviderOnCooldown(next.provider) || deadProvidersThisSession().has(next.provider))) {
+    tried.add(next.value);
+    next = findBestFailover(current, tried, hasKeySync, modelGroups, needsTools);
+  }
+  return next;
+}
 // First-token watchdog: how long a cloud model may take to emit its FIRST token
 // before we abandon the leg and fail over. An overloaded/slow provider otherwise
 // blocks the whole turn until the 600s HTTP timeout — the reason a trivial chat
@@ -450,6 +497,8 @@ export async function completeWithModelChain(
   const needsTools = (req.tools?.length ?? 0) > 0;
 
   let failovers = 0;
+  let budgetRaised = false;
+  let maxTokensOverride: number | undefined;
   while (failovers <= MAX_FAILOVERS) {
     // If the preferred model's provider is cooling down from a recent rate
     // limit / credit failure, fail over immediately rather than re-hitting it.
@@ -473,8 +522,27 @@ export async function completeWithModelChain(
     }
     tried.add(current);
     try {
-      const response = await completeWithModel(current, req);
+      const legReq = maxTokensOverride !== undefined ? { ...req, maxTokens: maxTokensOverride } : req;
+      const response = await completeWithModel(current, legReq);
       logModelUsage(current, response.usage);
+      const empty = emptyReplyAction(response, budgetRaised);
+      if (empty === 'raise-budget') {
+        budgetRaised = true;
+        maxTokensOverride = raisedTokenBudget(req.maxTokens);
+        continue;
+      }
+      if (empty === 'fail-over') {
+        const next = nextUsableModel(current, tried, hasKeySync, modelGroups, needsTools);
+        if (next) {
+          failovers++;
+          switchedTo.push(next.value);
+          onProgress?.({ from: current, to: next, attempt: failovers, reason: 'the model returned an empty reply' });
+          current = next.value;
+          budgetRaised = false;
+          maxTokensOverride = undefined;
+          continue;
+        }
+      }
       return {
         ...response,
         modelUsed: current,

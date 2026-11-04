@@ -10,6 +10,7 @@ import {
 } from '@core/llm/ProviderRegistry';
 import { BRAIN_SPECIALIST_AGENTS, type AgentId } from '@config/agents';
 import { bus } from '@core/bus/EventBus';
+import { labelForModelValue } from '@core/store/modelCatalogStore';
 import type { LlmMessage } from '@core/llm/types';
 import { budgetConversation } from './conversationBudget';
 import type { EvidenceItem } from '@platform/index';
@@ -452,6 +453,18 @@ export function unverifiedDrugMessage(unverified: string[]): string {
   );
 }
 
+/** The note shown when a report could not be written because the model chain
+ *  ended on an empty reply. By then the chain has retried what it could (more
+ *  room for a length-stopped reply, another model when one has a key), so the
+ *  note says what happened and what the user can change. */
+export function emptyReportNote(report: string, modelValue: string): string {
+  return (
+    `The ${report} could not be written: **${labelForModelValue(modelValue)}** returned no text, ` +
+    `and the app's retries did not get an answer. Send the question again, or pick a different model ` +
+    `for the boss in Settings. No grades or figures were produced, so nothing here should be relied on.`
+  );
+}
+
 // The interaction report's safety footer. Appended deterministically so the
 // disclaimer travels with the document on copy / export / print — never relying
 // on the model to remember it.
@@ -529,7 +542,7 @@ export async function synthesizeInteractionReport(
   onToken: (delta: string) => void,
   signal?: AbortSignal,
   namedDrugs: string[] = [],
-): Promise<{ content: string; modelUsed: string }> {
+): Promise<{ content: string; modelUsed: string; failed?: boolean }> {
   const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
   // The drugs the user actually named. Retrieval expands a brand to its generic
   // ingredients so the literature is found, but the GRADING must stay on the
@@ -602,17 +615,12 @@ Produce the graded interaction card(s) now, citing [S#] markers exactly as shown
     emitFailover,
   );
   const body = stripLeakedSpecialistLabels(res.content).trim();
-  // An empty body means the model returned no content on a "successful" reply —
-  // typically a provider safety filter blocking the pharmacology request (common
-  // with Gemini) or a silent rate-limit, neither of which the failover chain can
-  // catch. Explain it instead of shipping a bare disclaimer that reads as "no
-  // output".
+  // An empty body after the chain's own retries: explain it instead of shipping a
+  // bare disclaimer that reads as "no output", and flag it so the caller lists no
+  // sources under a report that was never written.
   if (!body) {
-    const note =
-      `The interaction report could not be generated: **${res.modelUsed}** returned an empty response. ` +
-      `This usually means the provider's safety filter blocked the drug-interaction request (Gemini models often do) or a silent rate limit. ` +
-      `Try again, or switch the boss model to **Auto** or a non-Gemini provider in Agent settings.`;
-    return { content: ensureInteractionDisclaimer(note), modelUsed: res.modelUsed };
+    const note = emptyReportNote('interaction report', res.modelUsed);
+    return { content: ensureInteractionDisclaimer(note), modelUsed: res.modelUsed, failed: true };
   }
   return {
     content: ensureInteractionDisclaimer(collapseMarkerRuns(body)),
@@ -786,10 +794,7 @@ Write the correlation report now, opening each gene's section with its header li
   // An empty body (safety filter / silent rate-limit returning a blank 200) would
   // otherwise ship just the header + disclaimer and read as "no output".
   if (!content) {
-    content =
-      `The correlation report could not be generated: **${res.modelUsed}** returned an empty response — ` +
-      `usually a provider safety filter or a silent rate limit. Try again, or switch the boss model to **Auto** ` +
-      `or a non-Gemini provider in Agent settings.`;
+    content = emptyReportNote('correlation report', res.modelUsed);
   }
   // A refusal is not a report. Prepending the deterministic confidence header to
   // one would dress "I'm sorry, I can't help with that" up as a scored, cited
