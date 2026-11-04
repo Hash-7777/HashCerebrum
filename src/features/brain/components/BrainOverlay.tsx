@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { agentForRegion, type RegionId } from '@config/agents';
 import { regionById } from '../data/regions';
+import { onBrainFrame } from './brainFrames';
 
 interface OverlayProps {
   cameraRef: React.MutableRefObject<THREE.Camera | null>;
@@ -41,6 +42,11 @@ function project(
   width: number,
   height: number,
 ) {
+  // The renderer refreshes these matrices during its render, which runs after
+  // the frame callbacks; refresh them here so the label matches the frame being
+  // drawn, including the last one before the scene goes still.
+  group?.updateWorldMatrix(true, false);
+  camera.updateMatrixWorld();
   const v = new THREE.Vector3(...anchor);
   if (group) v.applyMatrix4(group.matrixWorld);
   v.project(camera);
@@ -79,30 +85,26 @@ export function BrainOverlay({ cameraRef, containerRef, groupRef, hoveredRegion,
 
   const region = visibleId ? regionById(visibleId) : null;
 
-  // Track the camera without forcing React to repaint every animation frame.
+  // Follow the camera without forcing React to repaint. The label moves only
+  // when the brain canvas draws a frame (camera moved, brain rotated, canvas
+  // resized); while the scene is still, nothing is measured or written.
   useEffect(() => {
     if (!region) return;
-    let raf = 0;
-    const loop = () => {
+    const update = () => {
       const camera = cameraRef.current;
       const container = containerRef.current;
       const label = labelRef.current;
-      if (!camera || !container || !label) {
-        raf = requestAnimationFrame(loop);
-        return;
-      }
+      if (!camera || !container || !label) return;
       const rect = container.getBoundingClientRect();
       const width = rect.width;
       const height = rect.height;
       if (width === 0 || height === 0) {
         label.style.opacity = '0';
-        raf = requestAnimationFrame(loop);
         return;
       }
       const pos = project(camera, groupRef.current, region.anchor, width, height);
       if (!pos.visible) {
         label.style.opacity = '0';
-        raf = requestAnimationFrame(loop);
         return;
       }
       // Clamp the whole box — measured each frame so a late font/content
@@ -117,10 +119,14 @@ export function BrainOverlay({ cameraRef, containerRef, groupRef, hoveredRegion,
       );
       label.style.opacity = '1';
       label.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0)`;
-      raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    // Place it once now (the scene may already be still), then on every frame.
+    const first = requestAnimationFrame(update);
+    const off = onBrainFrame(update);
+    return () => {
+      cancelAnimationFrame(first);
+      off();
+    };
   }, [cameraRef, containerRef, groupRef, visibleId]);
 
   if (!region || !visibleId) return null;

@@ -7,6 +7,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { RegionId } from '@config/agents';
 import { useBrainStore } from '@core/store/brainStore';
 import { Icon } from '@ui/icons';
+import { emitBrainFrame } from './brainFrames';
 import { BRAIN_MODEL, PARTS_BY_NODE, primaryRegionForPart, type BrainModelPart } from '../data/modelParts';
 import { regionById } from '../data/regions';
 import { useWindowActive } from '@ui/hooks/useWindowActive';
@@ -308,6 +309,16 @@ interface SceneProps extends BrainCanvasProps {
   performanceMode: boolean;
 }
 
+// Broadcasts each rendered frame to listeners outside the canvas (the region
+// label overlay). Default priority on purpose: a positive priority would tell
+// R3F this component renders the scene itself, and the canvas would stop
+// drawing whenever the effect composer is off. Mounted after the brain model so
+// it runs after the model's own frame work.
+function FrameBroadcast() {
+  useFrame(() => emitBrainFrame());
+  return null;
+}
+
 function CameraCapture({ cameraRef }: { cameraRef: React.MutableRefObject<THREE.Camera | null> }) {
   const camera = useThree((state) => state.camera);
   useEffect(() => {
@@ -322,6 +333,7 @@ function BrainScene({ cameraRef, controlsRef, groupRef, performanceMode, ...prop
     <>
       <CameraCapture cameraRef={cameraRef} />
       <BrainModel {...props} groupRef={groupRef} rotateEnabled={rotateEnabled} performanceMode={performanceMode} />
+      <FrameBroadcast />
       {!performanceMode && (
         <EffectComposer multisampling={4} autoClear={false}>
           <Outline blur edgeStrength={3.4} pulseSpeed={0.25} visibleEdgeColor={0x3dd1bf} hiddenEdgeColor={0x1d2533} />
