@@ -21,7 +21,7 @@ to a real publication — or a full typeset paper. No account, no cloud storage,
 <img alt="macOS Apple Silicon" src="https://img.shields.io/badge/macOS%20Apple%20Silicon-2d333b?style=flat-square&logo=apple&logoColor=c9d1d9">
 <img alt="Windows 10" src="https://img.shields.io/badge/Windows%2010-2d333b?style=flat-square&logo=windows&logoColor=c9d1d9">
 <img alt="Built with Tauri v2" src="https://img.shields.io/badge/Tauri%20v2-2d333b?style=flat-square&logo=tauri&logoColor=c9d1d9">
-<img alt="Version 1.2.0" src="https://img.shields.io/badge/v1.2.0-2d333b?style=flat-square">
+<img alt="Version 1.3.0" src="https://img.shields.io/badge/v1.3.0-2d333b?style=flat-square">
 
 </div>
 
