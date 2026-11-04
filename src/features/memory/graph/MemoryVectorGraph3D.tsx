@@ -282,28 +282,57 @@ function Axes3D() {
   );
 }
 
+// How long the opening spin lasts before the graph comes to rest, and the frame
+// rate it spins at. The rotation is slow (a few degrees a second), so thirty
+// frames a second reads as smooth while costing half the drawing; and a graph
+// left open on screen should not keep the GPU busy indefinitely.
+export const SPIN_SECONDS = 20;
+const SPIN_FRAME_MS = 1000 / 30;
+
 // Gentle auto-rotation that conveys depth. Driven on-demand (the canvas is in
-// 'demand' frameloop) only while active AND the window is focused; when the user
-// stops it (perf toggle), focuses a node/cluster, leaves the mode, or
-// backgrounds the app, no frames render and the graph costs no GPU.
+// 'demand' frameloop) only while active AND the window is focused, and only for
+// SPIN_SECONDS after it starts; when the user stops it (perf toggle), focuses a
+// node/cluster, leaves the mode, backgrounds the app or the spin times out, no
+// frames render and the graph costs no GPU. Dragging still turns it by hand.
 function SceneSpin({ active }: { active: boolean }) {
   const { scene, invalidate } = useThree();
   const focused = useWindowActive();
+  const spinningRef = useRef(false);
   useFrame((_, delta) => {
-    if (active && focused) scene.rotation.y += Math.min(delta, 1 / 30) * 0.08;
+    if (spinningRef.current) scene.rotation.y += Math.min(delta, 1 / 15) * 0.08;
   });
   useEffect(() => {
     if (!active || !focused) return;
+    spinningRef.current = true;
     let raf = 0;
-    const loop = () => {
-      invalidate();
+    let last = 0;
+    const started = performance.now();
+    const loop = (now: number) => {
+      if (now - started > SPIN_SECONDS * 1000) {
+        spinningRef.current = false;
+        return;
+      }
+      if (now - last >= SPIN_FRAME_MS) {
+        last = now;
+        invalidate();
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      spinningRef.current = false;
+      cancelAnimationFrame(raf);
+    };
   }, [active, focused, invalidate]);
   return null;
 }
+
+// Two shared sphere geometries for every node in the graph, instead of one
+// geometry per node. Twelve segments is round at the size a node is drawn.
+const NODE_GEOMETRY = {
+  evidence: new THREE.SphereGeometry(0.12, 12, 12),
+  anchor: new THREE.SphereGeometry(0.16, 12, 12),
+};
 
 function Node({
   node,
@@ -321,10 +350,11 @@ function Node({
   const [hovered, setHovered] = useState(false);
   // Answers and imported library papers render a touch larger than evidence
   // passages so they stand out as the anchor points of a topic.
-  const r = node.chunk.kind === 'evidence' ? 0.12 : 0.16;
+  const geometry = node.chunk.kind === 'evidence' ? NODE_GEOMETRY.evidence : NODE_GEOMETRY.anchor;
   return (
     <group position={node.pos}>
       <mesh
+        geometry={geometry}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
@@ -336,7 +366,6 @@ function Node({
         }}
         scale={selected ? 1.9 : hovered ? 1.5 : 1}
       >
-        <sphereGeometry args={[r, 20, 20]} />
         {/* toneMapped=false + a strong emissive keeps every node vivid against
             the dark scene so the clusters and their colours read clearly. */}
         <meshStandardMaterial
