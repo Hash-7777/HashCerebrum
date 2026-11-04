@@ -147,7 +147,8 @@ export function hasGeneSignal(text: string): boolean {
   if (RS_RX.test(text)) return true;
   const tokens = text.split(/[^A-Za-z0-9-]+/);
   if (tokens.some((tok) => isVariantShape(tok, false))) return true;
-  return tokens.some((tok) => isGeneSymbolToken(tok, text));
+  if (tokens.some((tok) => isGeneSymbolToken(tok, text))) return true;
+  return framedGeneSymbols(text).length > 0;
 }
 
 /** Gene-symbol tokens named in the text (e.g. "MICA"), de-duplicated, order kept.
@@ -159,6 +160,7 @@ export function extractGeneSymbols(text: string): string[] {
     const t = tok.trim();
     if (isGeneSymbolToken(t, text) && !out.includes(t)) out.push(t);
   }
+  for (const symbol of framedGeneSymbols(text)) if (!out.includes(symbol)) out.push(symbol);
   return out;
 }
 
@@ -195,6 +197,25 @@ function claimedGeneShape(token: string): boolean {
   // A 2-char all-caps token with no digit is too ambiguous (ID, OR, NK…).
   if (allCaps && !hasDigit && t.length === 2) return false;
   return true;
+}
+
+/**
+ * Approved symbols typed in lower or mixed case and framed as a gene ("mica gene",
+ * "the gene mthfr"), returned in their official upper-case form. Lower case alone
+ * is not enough: many symbols are also English words (SET, REST, MET), so the
+ * token has to sit next to a gene noun before it is read as a gene.
+ */
+function framedGeneSymbols(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(CLAIMED_GENE_RX)) {
+    const token = (m[1] ?? m[2] ?? '').trim();
+    if (token.length < 2 || /^[A-Z0-9-]+$/.test(token)) continue; // all-caps is handled by shape
+    if (NON_DISEASE_WORDS.has(token.toLowerCase())) continue;
+    const upper = token.toUpperCase();
+    if (NON_GENE_CAPS.has(upper) || !geneLexicon().has(upper)) continue;
+    if (!out.includes(upper)) out.push(upper);
+  }
+  return out;
 }
 
 /**
@@ -238,11 +259,13 @@ export function extractRsIds(text: string): string[] {
  *  the asked disease. */
 export function diseaseTerms(text: string): string[] {
   const out: string[] = [];
+  const framed = new Set(framedGeneSymbols(text));
   for (const tok of text.split(/[^A-Za-z0-9-]+/)) {
     const original = tok.trim();
     const word = original.toLowerCase();
     if (word.length < 4 || !/[a-z]/.test(word)) continue;
     if (NON_DISEASE_WORDS.has(word)) continue;
+    if (framed.has(original.toUpperCase())) continue; // the named gene, typed in lower case
     if (geneLikeToken(original) || isVariantShape(original, true)) continue;
     if (!out.includes(word)) out.push(word);
   }
@@ -251,11 +274,13 @@ export function diseaseTerms(text: string): string[] {
 
 /** Does the text name a disease/phenotype (a topical content word)? */
 export function hasDiseaseSignal(text: string, gene?: string): boolean {
+  const framed = new Set(framedGeneSymbols(text));
   return text.split(/[^A-Za-z0-9-]+/).some((tok) => {
     const original = tok.trim();
     const word = original.toLowerCase();
     if (word.length < 4 || !/[a-z]/.test(word)) return false;
     if (NON_DISEASE_WORDS.has(word)) return false;
+    if (framed.has(original.toUpperCase())) return false;
     if (gene && word === gene.toLowerCase()) return false;
     // A gene symbol or variant/allele notation is not a disease, even when it isn't
     // the named gene.

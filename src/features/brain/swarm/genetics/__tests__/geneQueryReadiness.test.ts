@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  diseaseTerms,
   assessGeneQueryReadiness,
   clarificationMessage,
   extractGeneSymbols,
@@ -208,5 +209,32 @@ describe('assessGeneQueryReadiness', () => {
     const msg = clarificationMessage(assessGeneQueryReadiness('analyze a correlation'));
     expect(msg).toMatch(/- /);
     expect(msg.toLowerCase()).toContain('gene or variant');
+  });
+});
+
+describe('gene symbols typed in lower case', () => {
+  it('reads an approved symbol framed as a gene, in its official form', () => {
+    expect(extractGeneSymbols('mica gene and diabetes')).toEqual(['MICA']);
+    expect(extractGeneSymbols('what does the gene mthfr do in thrombosis')).toEqual(['MTHFR']);
+    expect(hasGeneSignal('mica gene and diabetes')).toBe(true);
+  });
+
+  it('asks nothing when the gene and the disease are both named', () => {
+    expect(assessGeneQueryReadiness('mica gene and diabetes').ready).toBe(true);
+  });
+
+  it('does not count the gene as the disease', () => {
+    expect(diseaseTerms('mica gene and diabetes')).toEqual(['diabetes']);
+    expect(hasDiseaseSignal('mica gene')).toBe(false);
+  });
+
+  it('leaves a lower-case symbol alone when nothing frames it as a gene', () => {
+    // MET and REST are approved symbols and ordinary English words.
+    expect(extractGeneSymbols('patients who met the criteria and could rest')).toEqual([]);
+    expect(hasGeneSignal('patients who met the criteria')).toBe(false);
+  });
+
+  it('still asks when no gene is named at all', () => {
+    expect(assessGeneQueryReadiness('the candidate gene for diabetes').hasGene).toBe(false);
   });
 });
