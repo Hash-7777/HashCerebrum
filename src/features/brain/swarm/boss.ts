@@ -163,6 +163,44 @@ export function pruneIrrelevantGenetics(plan: BossPlan, question: string): BossP
   };
 }
 
+// Words that mark a question as being about medicines, so the Pharmacist has
+// something to do. A named drug is found separately (drugCandidates).
+const DRUG_SIGNAL_RX =
+  /\b(drugs?|medications?|medicines?|pharmac\w*|dos(?:e|es|ing|age)|tablets?|prescri\w*|inhibitors?|agonists?|antagonists?|blockers?|statins?|antibiotics?|anticoagulants?|antiplatelets?|insulin|vaccines?|therap(?:y|ies)|treatments?|side[\s-]?effects?|adverse|toxicity|interactions?|contraindicat\w*|polypharmacy)\b/i;
+
+/** Drop the Pharmacist when the question names no medicine and asks nothing about
+ *  drugs. Like the genetics prune: a specialist with nothing in its field to look
+ *  for spends a model call and a database sweep returning records the answer
+ *  cannot use. Never returns an empty plan. Exported for testing. */
+export function pruneIrrelevantPharmacist(plan: BossPlan, question: string): BossPlan {
+  if (plan.mode !== 'research') return plan;
+  if (DRUG_SIGNAL_RX.test(question) || drugCandidates(question).length > 0) return plan;
+  const tasks = plan.tasks.filter((task) => task.agentId !== 'pharmacist');
+  if (tasks.length === plan.tasks.length) return plan;
+  return {
+    mode: 'research',
+    tasks: tasks.length > 0 ? tasks : [{ agentId: 'evidence_synthesis', subQuery: question }],
+  };
+}
+
+/** One task per specialist. A planner that hands the same specialist two
+ *  sub-questions would run it twice in parallel, over the same databases,
+ *  returning the same records twice at twice the cost; the sub-questions are
+ *  joined into one task instead. Order of first appearance is kept. */
+export function mergeTasksPerSpecialist(plan: BossPlan): BossPlan {
+  if (plan.mode !== 'research') return plan;
+  const byAgent = new Map<AgentId, string[]>();
+  for (const task of plan.tasks) {
+    const list = byAgent.get(task.agentId) ?? [];
+    if (!list.includes(task.subQuery)) list.push(task.subQuery);
+    byAgent.set(task.agentId, list);
+  }
+  return {
+    mode: 'research',
+    tasks: [...byAgent.entries()].map(([agentId, subQueries]) => ({ agentId, subQuery: subQueries.join(' Also: ') })),
+  };
+}
+
 // Decide chat vs. research and, for research, which specialists handle what.
 export async function planResearch(
   model: string,
@@ -194,7 +232,9 @@ or
   try {
     const resp = await completeWithModelChain(model, { messages, temperature: 0.1, maxTokens: 600 });
     const parsed = parsePlan(resp.content);
-    if (parsed) return pruneIrrelevantGenetics(parsed, question);
+    if (parsed) {
+      return mergeTasksPerSpecialist(pruneIrrelevantPharmacist(pruneIrrelevantGenetics(parsed, question), question));
+    }
   } catch {
     /* fall through to a safe default */
   }

@@ -64,6 +64,11 @@ const MEDICAL_TOOLS = [
   'semantic_scholar_search',
 ];
 const SPECIALIST_TOOLS = ['rag_search', ...MEDICAL_TOOLS];
+// The literature specialists do not get the drug-label and drug-name sources:
+// those answer drug questions, which belong to the Pharmacist, and a literature
+// agent that reaches for them on a clinical question spends calls on records it
+// cannot use.
+const LITERATURE_TOOLS = SPECIALIST_TOOLS.filter((tool) => tool !== 'openfda_query' && tool !== 'rxnorm_lookup');
 // The gene-expert specialist leans on the curated genetic databases plus
 // literature and project memory — not the full medical toolset.
 const GENETICS_TOOLS = [
@@ -109,7 +114,7 @@ export const AGENTS = defineRoster([
       'Registered clinical trials, study cohorts, trial outcomes, statistical analyses, effect sizes, confidence intervals, and quantitative figures from clinical and epidemiological literature.',
     topicHint:
       'clinical trials, study design, cohorts, interventions, trial results, statistics, data analysis, effect sizes, confidence intervals, p-values, sample size, hazard ratios, meta-analysis, figures, tables, quantitative results',
-    tools: SPECIALIST_TOOLS,
+    tools: LITERATURE_TOOLS,
     regionBinding: 'parietal', // integration
   },
   {
@@ -120,7 +125,7 @@ export const AGENTS = defineRoster([
       'Peer-reviewed literature, systematic reviews, evidence synthesis, epidemiology, prevention, vaccination, population health, and oral health.',
     topicHint:
       'published research, reviews, mechanisms, diagnosis, general medicine, epidemiology, prevention, vaccines, screening, population health, outbreaks, teeth, gums, oral health, dental procedures, periodontics, orthodontics',
-    tools: SPECIALIST_TOOLS,
+    tools: LITERATURE_TOOLS,
     regionBinding: 'hippocampus', // memory / recall
   },
   {

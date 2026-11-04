@@ -83,12 +83,13 @@ function callbacks() {
 }
 
 describe('runSpecialist', () => {
+  // The Pharmacist holds every source, so its fallback sweep covers them all.
   it('directly fetches source evidence when model tool planning fails', async () => {
     llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
     const cb = callbacks();
 
     const result = await runSpecialist(
-      agentById('evidence_synthesis'),
+      agentById('pharmacist'),
       'openrouter:test-model',
       'glioma biomarker trial safety',
       cb,
@@ -97,7 +98,13 @@ describe('runSpecialist', () => {
     expect(executedTools).toEqual(Object.keys(SOURCE_BY_TOOL));
     expect(result.evidence).toHaveLength(Object.keys(SOURCE_BY_TOOL).length);
     expect(result.error).toContain('planner unavailable');
-    expect(cb.onToolResult).toHaveBeenCalledWith('evidence_synthesis', 'pubmed_search', 1);
+    expect(cb.onToolResult).toHaveBeenCalledWith('pharmacist', 'pubmed_search', 1);
+  });
+
+  it('sweeps only the sources a literature specialist holds', async () => {
+    llmMocks.completeWithModelChain.mockRejectedValue(new Error('planner unavailable'));
+    await runSpecialist(agentById('evidence_synthesis'), 'openrouter:test-model', 'glioma biomarker trial safety', callbacks());
+    expect(executedTools).toEqual(Object.keys(SOURCE_BY_TOOL).filter((tool) => tool !== 'openfda_query' && tool !== 'rxnorm_lookup'));
   });
 });
 
