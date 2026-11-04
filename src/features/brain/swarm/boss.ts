@@ -576,7 +576,7 @@ export async function synthesizeInteractionReport(
   signal?: AbortSignal,
   namedDrugs: string[] = [],
 ): Promise<{ content: string; modelUsed: string; failed?: boolean }> {
-  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
+  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40, detail: { count: 12, chars: 900 } });
   // The drugs the user actually named. Retrieval expands a brand to its generic
   // ingredients so the literature is found, but the GRADING must stay on the
   // named drugs — otherwise a combination brand ("Panadol") is split into its
@@ -744,7 +744,7 @@ export async function synthesizeGeneCorrelationReport(
   onToken: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<{ content: string; modelUsed: string }> {
-  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40 });
+  const evidenceBlock = formatEvidenceList(evidence, { markerPrefix: 'S', maxItems: 40, detail: { count: 12, chars: 900 } });
   const findings = specialists
     .map((s) => (s.error ? `Error: ${s.error}` : s.findings.trim() || '(no findings)'))
     .join('\n\n');
@@ -868,7 +868,13 @@ export async function synthesize(
   // (PubMed-favoured, recency- and identifier-weighted), so the top slice is
   // the strongest evidence; the [S#] markers stay aligned with that order.
   const evidenceBlock =
-    formatEvidenceList(mergedEvidence, { markerPrefix: 'S', maxItems: 50 });
+    formatEvidenceList(mergedEvidence, {
+      markerPrefix: 'S',
+      maxItems: mini ? 20 : 50,
+      // The best-ranked records carry their results sentences, so the answer can
+      // quote the source's own figures instead of describing effects in words.
+      ...(mini ? {} : { detail: { count: 15, chars: 1100 } }),
+    });
   const specialistBlock = specialists
     .map((specialist) => {
       const body = specialist.error

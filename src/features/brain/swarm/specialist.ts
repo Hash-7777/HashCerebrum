@@ -6,7 +6,7 @@
 import { completeWithModelChain } from '@core/llm/ProviderRegistry';
 import { isHardProviderError } from '@core/llm/failover';
 import { tools as toolRegistry } from '@core/tools/ToolRegistry';
-import { formatEvidenceItem } from './evidenceFormat';
+import { formatEvidenceItem, formatEvidenceList } from './evidenceFormat';
 import type { AgentDef } from '@config/agents';
 import type { LlmMessage, LlmToolSpec } from '@core/llm/types';
 import type { EvidenceItem, MedicalSourceResult } from '@platform/index';
@@ -213,12 +213,12 @@ export async function runSpecialist(
     // Findings summary — use a compact context to avoid overflowing the model's
     // context window. The tool-loop history can be very long; rebuild a minimal
     // prompt from the collected evidence rather than forwarding all messages.
+    // The first records carry an excerpt of their results, not just a title: a
+    // summary written from titles alone can only say a topic was studied, and
+    // reads to the boss as "no findings".
     const evidenceSummary =
       evidence.length > 0
-        ? evidence
-            .slice(0, 20)
-            .map((rec, i) => `[${i + 1}] ${rec.title} (${rec.source}${rec.year ? `, ${rec.year}` : ''})`)
-            .join('\n')
+        ? formatEvidenceList(evidence, { maxItems: 20, snippetChars: 0, detail: { count: 10, chars: 700 } })
         : 'No records retrieved.';
     const summaryMessages: LlmMessage[] = [
       { role: 'system', content: systemPrompt(agent) },
